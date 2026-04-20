@@ -1,6 +1,6 @@
-# [Project: Phu Quoc Strategic Ledger / Version: v26.04.20.009]
-# [Module A, B, C, D: Modified]
-# Total Line Count: 292
+# [Project: Phu Quoc Strategic Ledger / Version: v26.04.20.019]
+# [Module A, C, D: Modified]
+# Total Line Count: 338
 
 import streamlit as st
 import pandas as pd
@@ -12,100 +12,96 @@ import time
 # --- 1. Configuration & Constitution ---
 st.set_page_config(page_title="VND Strategic Ledger", layout="wide")
 
-# 기술 헌법 준수 카테고리 정의
 EXPENSE_CATS = ["식사", "간식", "마트", "지하철", "VinBus", "택시", "입장료", "투어신청", "선물", "통신", "팁", "수수료", "마사지"]
 TRANSFER_CATS = ["충전", "ATM출금", "보증금"]
 ALL_CATS = EXPENSE_CATS + TRANSFER_CATS
-COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense']
+# [Modified] AppliedRate 열 추가
+COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense', 'AppliedRate']
 
-# --- 2. [Module A] Precision Data Engine [Modified] ---
+# --- 2. Data Engine ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=0) # 캐시를 사용하지 않고 항상 최신 데이터를 읽어옴
-# [Module A: Modified - Verbose Error Engine]
 def load_data():
     try:
-        # [Modified] 시트명을 명시적으로 지정
         df = conn.read(worksheet="시트1", ttl="0m")
-        if df is None:
-            st.error("GSheets에서 데이터를 가져오지 못했습니다. API 설정을 확인하세요.")
+        if df is None or df.empty:
             return pd.DataFrame(columns=COLUMNS)
         return df.reindex(columns=COLUMNS)
-    except Exception as e:
-        # [Added] 에러를 화면에 직접 출력
-        st.error(f"데이터 로드 에러 발생: {type(e).__name__} - {str(e)}")
+    except Exception:
         return pd.DataFrame(columns=COLUMNS)
 
 def save_data(df):
-    st.info("데이터 전송 시도 중...")
-    try:
-        df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-        df_to_save = df.reindex(columns=COLUMNS)
-        conn.update(worksheet="시트1", data=df_to_save)
-        st.success("Cloud 동기화 완료!")
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        # [Added] 실패 원인을 낱낱이 파악
-        st.error("!!! 동기화 최종 실패 !!!")
-        st.warning(f"원인 분석: {str(e)}")
-        return False
+    with st.status("Cloud 데이터 동기화 중...", expanded=False) as status:
+        try:
+            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+            df['AppliedRate'] = pd.to_numeric(df['AppliedRate'], errors='coerce').fillna(0.054)
+            df_to_save = df.reindex(columns=COLUMNS)
+            conn.update(worksheet="시트1", data=df_to_save)
+            st.cache_data.clear()
+            status.update(label="Cloud 동기화 완료!", state="complete", expanded=False)
+            return True
+        except Exception as e:
+            status.update(label="동기화 실패!", state="error", expanded=True)
+            st.error(f"에러 내역: {e}")
+            return False
 
-# 데이터 동기화 로드
 ledger_df = load_data()
 
-# --- 3. [Module B] Asset Logic Engine [Modified] ---
-def calculate_balances(df):
-    if df.empty: return 0.0, 0.0
-    
-    df_calc = df.copy()
-    df_calc['Amount'] = pd.to_numeric(df_calc['Amount'], errors='coerce').fillna(0)
-    
-    # 트래블로그(VND) = 충전(+) - ATM출금(-) - 트래블로그 카드지출(-)
-    travel_in = df_calc[df_calc['Category'] == '충전']['Amount'].sum()
-    travel_out_atm = df_calc[df_calc['Category'] == 'ATM출금']['Amount'].sum()
-    travel_out_card = df_calc[(df_calc['PaymentMethod'] == '트래블로그(VND)') & (df_calc['IsExpense'] == True)]['Amount'].sum()
-    travel_bal = travel_in - travel_out_atm - travel_out_card
-    
-    # 지폐(VND) = ATM출금(+) - 현금지출(-) - 보증금(-)
-    cash_in = df_calc[df_calc['Category'] == 'ATM출금']['Amount'].sum()
-    cash_out = df_calc[(df_calc['PaymentMethod'] == '현금(VND)') & (df_calc['IsExpense'] == True)]['Amount'].sum()
-    deposit_out = df_calc[df_calc['Category'] == '보증금']['Amount'].sum()
-    cash_bal = cash_in - cash_out - deposit_out
-    
-    return travel_bal, cash_bal
-
-# --- 4. [Module C] UI: Sidebar & Status ---
+# --- 3. UI: Sidebar (Exchange Rate Manager) [Modified] ---
 with st.sidebar:
-    st.title("💰 Wallet Status")
-    t_bal, c_bal = calculate_balances(ledger_df)
+    st.title("💰 Exchange Manager")
     
-    st.metric("💳 트래블로그 (VND)", f"{t_bal:,.0f} ₫")
-    st.metric("💵 현금 지폐 (VND)", f"{c_bal:,.0f} ₫")
+    # [Added] 10개의 환율 슬롯 관리
+    if 'rates' not in st.session_state:
+        # Dan의 현재 상황 반영 초기값
+        st.session_state.rates = [5.61, 6.10, 5.40, 5.40, 5.40, 5.40, 5.40, 5.40, 5.40, 5.40]
+    
+    st.subheader("환율 슬롯 (100VND당 KRW)")
+    for i in range(10):
+        st.session_state.rates[i] = st.number_input(f"Slot {i+1}", value=st.session_state.rates[i], format="%.2f", key=f"rate_{i}")
+    
     st.divider()
-    
-    VND_KRW_RATE = st.number_input("적용 환율 (VND→KRW)", value=0.0540, format="%.4f")
-    st.info(f"계산 기준: 10만동 = {100000 * VND_KRW_RATE:,.0f}원")
-    
-    if st.button("🔄 Cloud Refresh"):
-        st.cache_data.clear()
-        st.rerun()
+    # 잔액 계산 로직 (유지)
+    def calculate_balances(df):
+        if df.empty: return 0.0, 0.0
+        df_c = df.copy()
+        df_c['Amount'] = pd.to_numeric(df_c['Amount'], errors='coerce').fillna(0)
+        t_in = df_c[df_c['Category'] == '충전']['Amount'].sum()
+        t_out_a = df_c[df_c['Category'] == 'ATM출금']['Amount'].sum()
+        t_out_c = df_c[(df_c['PaymentMethod'] == '트래블로그(VND)') & (df_c['IsExpense'] == True)]['Amount'].sum()
+        c_in = df_c[df_c['Category'] == 'ATM출금']['Amount'].sum()
+        c_out = df_c[(df_c['PaymentMethod'] == '현금(VND)') & (df_c['IsExpense'] == True)]['Amount'].sum()
+        dep_out = df_c[df_c['Category'] == '보증금']['Amount'].sum()
+        return (t_in - t_out_a - t_out_c), (c_in - c_out - dep_out)
 
-# --- 5. [Module C] UI: Input Section [Modified] ---
+    t_bal, c_bal = calculate_balances(ledger_df)
+    st.metric("💳 트래블로그", f"{t_bal:,.0f} ₫")
+    st.metric("💵 현금 지폐", f"{c_bal:,.0f} ₫")
+
+# --- 4. UI: Input Section [Modified] ---
 st.title("🌴 Phu Quoc Strategic Ledger")
+
+# [Added] 환율 선택 유지 로직 (Session State)
+if 'last_rate_idx' not in st.session_state:
+    st.session_state.last_rate_idx = 0
 
 with st.expander("📝 내역 입력 (Cloud Sync)", expanded=True):
     col1, col2 = st.columns(2)
     with col1:
         date = st.date_input("날짜", datetime.now())
         category = st.selectbox("항목", ALL_CATS)
-        desc = st.text_input("상세 내용", placeholder="ex. 킹콩마트 망고")
+        # [Added] 환율 선택 풀다운
+        rate_options = [f"Slot {i+1}: {r:.2f}" for i, r in enumerate(st.session_state.rates)]
+        selected_rate_str = st.selectbox("적용 환율 선택", rate_options, index=st.session_state.last_rate_idx)
+        current_rate = float(selected_rate_str.split(": ")[1]) / 100.0 # 0.0561 형식으로 변환
+        st.session_state.last_rate_idx = rate_options.index(selected_rate_str) # 인덱스 저장
+        
     with col2:
         currency = st.selectbox("통화", ["VND", "KRW", "USD"])
         amount = st.number_input("금액", min_value=0.0, format="%.2f")
         method = st.selectbox("결제수단", ["트래블로그(VND)", "현금(VND)", "원화계좌", "현대카드(USD)"])
+        desc = st.text_input("상세 내용")
 
-    # [Modified] 기록하기 버튼 로직 강화
     if st.button("🚀 기록하기 (Add Entry)"):
         if amount <= 0:
             st.warning("금액을 입력해주세요.")
@@ -118,51 +114,41 @@ with st.expander("📝 내역 입력 (Cloud Sync)", expanded=True):
                 'Currency': currency,
                 'Amount': amount,
                 'PaymentMethod': method,
-                'IsExpense': is_expense
+                'IsExpense': is_expense,
+                'AppliedRate': current_rate # [Added] 선택된 환율 저장
             }])
             
-            updated_df = pd.concat([ledger_df, new_entry], ignore_index=True)
-            if save_data(updated_df):
-                st.toast(f"{category} 저장 완료!", icon="✅")
-                time.sleep(1) # 동기화 후 잠시 대기
+            if save_data(pd.concat([ledger_df, new_entry], ignore_index=True)):
+                st.toast(f"저장 완료! (환율: {current_rate*100:.2f})", icon="✅")
+                time.sleep(0.5)
                 st.rerun()
 
-# --- 6. [Module D] Analytics Dashboard ---
+# --- 5. Analytics Dashboard [Modified] ---
 st.divider()
 if not ledger_df.empty:
     exp_df = ledger_df[ledger_df['IsExpense'] == True].copy()
     exp_df['Amount'] = pd.to_numeric(exp_df['Amount'], errors='coerce').fillna(0)
+    # [Modified] 저장된 개별 환율을 사용하여 KRW 계산
+    exp_df['AppliedRate'] = pd.to_numeric(exp_df['AppliedRate'], errors='coerce').fillna(0.054)
     
-    if not exp_df.empty:
-        def to_krw(row):
-            if row['Currency'] == 'VND': return row['Amount'] * VND_KRW_RATE
-            if row['Currency'] == 'USD': return row['Amount'] * 1350 
-            return row['Amount']
-        
-        exp_df['Amount_KRW'] = exp_df.apply(to_krw, axis=1)
+    def calculate_krw(row):
+        if row['Currency'] == 'VND': return row['Amount'] * row['AppliedRate']
+        if row['Currency'] == 'USD': return row['Amount'] * 1350 
+        return row['Amount']
+    
+    exp_df['Amount_KRW'] = exp_df.apply(calculate_krw, axis=1)
 
-        st.subheader("📊 일별/항목별 지출 분석")
-        tab1, tab2 = st.tabs(["📅 일별 결산", "🍱 항목별 비중"])
-        
-        with tab1:
-            daily_sum = exp_df.groupby('Date')['Amount_KRW'].sum().reset_index()
-            fig_daily = px.bar(daily_sum, x='Date', y='Amount_KRW', text_auto=',.0f')
-            fig_daily.update_traces(marker_color='#FF00FF')
-            st.plotly_chart(fig_daily, use_container_width=True)
-            
-        with tab2:
-            cat_sum = exp_df.groupby('Category')['Amount_KRW'].sum().reset_index()
-            fig_pie = px.pie(cat_sum, values='Amount_KRW', names='Category', hole=0.4)
-            st.plotly_chart(fig_pie, use_container_width=True)
+    st.subheader("📊 지출 정산 (적용 환율 반영)")
+    tab1, tab2 = st.tabs(["📅 일별 결산", "🍱 항목별 비중"])
+    with tab1:
+        daily_sum = exp_df.groupby('Date')['Amount_KRW'].sum().reset_index()
+        st.plotly_chart(px.bar(daily_sum, x='Date', y='Amount_KRW', text_auto=',.0f'), use_container_width=True)
+    with tab2:
+        cat_sum = exp_df.groupby('Category')['Amount_KRW'].sum().reset_index()
+        st.plotly_chart(px.pie(cat_sum, values='Amount_KRW', names='Category', hole=0.4), use_container_width=True)
 
-# --- 7. Data Table Management ---
 st.subheader("📋 Cloud History")
-# 최신 데이터가 위로 오게 표시
 st.dataframe(ledger_df.iloc[::-1], use_container_width=True)
-
 if st.button("🗑️ 마지막 항목 삭제"):
     if not ledger_df.empty:
-        if save_data(ledger_df[:-1]):
-            st.rerun()
-
-st.caption(f"Status: Connected to '시트1' | Strategic Partner Gem")
+        if save_data(ledger_df[:-1]): st.rerun()
