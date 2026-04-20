@@ -22,35 +22,34 @@ COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMeth
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=0) # 캐시를 사용하지 않고 항상 최신 데이터를 읽어옴
+# [Module A: Modified - Verbose Error Engine]
 def load_data():
     try:
-        # [Modified] Dan의 시트명 "시트1"에 직접 연결
+        # [Modified] 시트명을 명시적으로 지정
         df = conn.read(worksheet="시트1", ttl="0m")
-        if df is None or df.empty:
+        if df is None:
+            st.error("GSheets에서 데이터를 가져오지 못했습니다. API 설정을 확인하세요.")
             return pd.DataFrame(columns=COLUMNS)
-        # 열 순서 강제 정렬 (ValueError 방지)
         return df.reindex(columns=COLUMNS)
-    except Exception:
+    except Exception as e:
+        # [Added] 에러를 화면에 직접 출력
+        st.error(f"데이터 로드 에러 발생: {type(e).__name__} - {str(e)}")
         return pd.DataFrame(columns=COLUMNS)
 
 def save_data(df):
-    # [Added] 동기화 상태 가시화
-    with st.status("Cloud 데이터 동기화 중...", expanded=False) as status:
-        try:
-            # 데이터 정제
-            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-            df_to_save = df.reindex(columns=COLUMNS)
-            
-            # Google Sheets 업데이트
-            conn.update(worksheet="시트1", data=df_to_save)
-            
-            status.update(label="Cloud 동기화 완료!", state="complete", expanded=False)
-            st.cache_data.clear() # 캐시 강제 삭제
-            return True
-        except Exception as e:
-            status.update(label="동기화 실패!", state="error", expanded=True)
-            st.error(f"에러 내역: {e}")
-            return False
+    st.info("데이터 전송 시도 중...")
+    try:
+        df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+        df_to_save = df.reindex(columns=COLUMNS)
+        conn.update(worksheet="시트1", data=df_to_save)
+        st.success("Cloud 동기화 완료!")
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        # [Added] 실패 원인을 낱낱이 파악
+        st.error("!!! 동기화 최종 실패 !!!")
+        st.warning(f"원인 분석: {str(e)}")
+        return False
 
 # 데이터 동기화 로드
 ledger_df = load_data()
