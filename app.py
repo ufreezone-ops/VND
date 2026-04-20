@@ -1,66 +1,78 @@
-# [Project: Phu Quoc Strategic Ledger / Version: v24.05.22.003]
-# [Module A, C: Modified] / [Module B, D: Added]
-# Total Line Count: 215
+# [Project: Phu Quoc Strategic Ledger / Version: v26.04.20.004]
+# [Module A, B, C, D: Modified]
+# Total Line Count: 248
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection # [Added]
 
-# --- [Module A] Configuration & Styling [Modified] ---
+# --- 1. Configuration & Constitution ---
 st.set_page_config(page_title="VND Strategic Ledger", layout="wide")
 
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; }
-    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #333; }
-    div[data-testid="stExpander"] { border: 1px solid #FF00FF; border-radius: 10px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# [Added] 기술 헌법 4, 5, 6항: 카테고리 정의
+# [Modified] 지출 카테고리 (기술 헌법 4, 5, 6항 준수)
 EXPENSE_CATS = ["식사", "간식", "마트", "지하철", "VinBus", "택시", "입장료", "투어신청", "선물", "통신", "팁", "수수료", "마사지"]
-TRANSFER_CATS = ["충전", "ATM출금", "보증금"] # 지출 통계에서 제외되는 항목
+TRANSFER_CATS = ["충전", "ATM출금", "보증금"]
 ALL_CATS = EXPENSE_CATS + TRANSFER_CATS
 
-VND_KRW_RATE = 0.054 # 기본 환율 (100 VND = 5.4 KRW)
+# --- 2. Data Engine (Google Sheets Integration) [Modified] ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- [Module A] Data Initialization [Modified] ---
-if 'ledger' not in st.session_state:
-    st.session_state.ledger = pd.DataFrame(columns=[
-        'Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense'
-    ])
+def load_data():
+    # 구글 시트에서 데이터를 읽어오며, 데이터가 없으면 기본 스키마 생성
+    try:
+        df = conn.read(ttl="0m")
+        if df.empty:
+            return pd.DataFrame(columns=['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense'])
+        return df
+    except:
+        return pd.DataFrame(columns=['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense'])
 
-# --- [Module B] Asset Logic Engine [Added] ---
+def save_data(df):
+    # 구글 시트에 데이터 업데이트
+    conn.update(data=df)
+
+# 데이터 로드
+ledger_df = load_data()
+
+# --- 3. Asset Logic Engine [Modified] ---
 def calculate_balances(df):
-    # 트래블로그(VND) 잔액 = 충전(+) - ATM출금(-) - 카드지출(-)
-    travel_in = df[df['Category'] == '충전']['Amount'].sum()
-    travel_out_atm = df[df['Category'] == 'ATM출금']['Amount'].sum()
-    travel_out_card = df[(df['PaymentMethod'] == '트래블로그(VND)') & (df['IsExpense'] == True)]['Amount'].sum()
+    if df.empty: return 0.0, 0.0
+    
+    # [Modified] 헌법 2항: 자산 흐름 계산
+    # 트래블로그(VND) = 충전(+) - ATM출금(-) - 트래블로그 카드지출(-)
+    travel_in = df[df['Category'] == '충전']['Amount'].astype(float).sum()
+    travel_out_atm = df[df['Category'] == 'ATM출금']['Amount'].astype(float).sum()
+    travel_out_card = df[(df['PaymentMethod'] == '트래블로그(VND)') & (df['IsExpense'] == True)]['Amount'].astype(float).sum()
     travel_bal = travel_in - travel_out_atm - travel_out_card
     
-    # 지폐(VND) 잔액 = ATM출금(+) - 현금지출(-)
-    cash_in = df[df['Category'] == 'ATM출금']['Amount'].sum()
-    cash_out = df[(df['PaymentMethod'] == '현금(VND)') & (df['IsExpense'] == True)]['Amount'].sum()
-    cash_bal = cash_in - cash_out
+    # 지폐(VND) = ATM출금(+) - 현금지출(-) - 보증금 지출(-)
+    cash_in = df[df['Category'] == 'ATM출금']['Amount'].astype(float).sum()
+    cash_out = df[(df['PaymentMethod'] == '현금(VND)') & (df['IsExpense'] == True)]['Amount'].astype(float).sum()
+    # 보증금은 지불 시 현금에서 빠져나감 (헌법 6항 반영)
+    deposit_out = df[df['Category'] == '보증금']['Amount'].astype(float).sum()
+    cash_bal = cash_in - cash_out - deposit_out
     
     return travel_bal, cash_bal
 
-# --- [Module C] UI: Sidebar & Real-time Status [Modified] ---
+# --- 4. UI: Sidebar (Wallet Status) ---
 with st.sidebar:
     st.title("💰 Wallet Status")
-    t_bal, c_bal = calculate_balances(st.session_state.ledger)
+    t_bal, c_bal = calculate_balances(ledger_df)
     
-    st.metric("💳 트래블로그 (VND)", f"{t_bal:,.0f} ₫") # [Added]
-    st.metric("💵 현금 지폐 (VND)", f"{c_bal:,.0f} ₫") # [Added]
+    st.metric("💳 트래블로그 (VND)", f"{t_bal:,.0f} ₫")
+    st.metric("💵 현금 지폐 (VND)", f"{c_bal:,.0f} ₫")
     st.divider()
     
-    # 환율 설정 도구
-    custom_rate = st.number_input("적용 환율 (VND→KRW)", value=VND_KRW_RATE, format="%.4f")
-    st.info(f"계산 기준: 10만동 = {100000 * custom_rate:,.0f}원")
+    VND_KRW_RATE = st.number_input("적용 환율 (VND→KRW)", value=0.0540, format="%.4f")
+    st.info(f"계산 기준: 10만동 = {100000 * VND_KRW_RATE:,.0f}원")
+    
+    if st.button("🔄 데이터 새로고침"):
+        st.rerun()
 
-# --- [Module C] UI: Input Section [Modified] ---
-st.title("🌴 Phu Quoc Ledger")
+# --- 5. UI: Main Input Form [Modified] ---
+st.title("🌴 Phu Quoc Strategic Ledger")
 
 with st.expander("📝 내역 입력 (New Transaction)", expanded=True):
     col1, col2 = st.columns(2)
@@ -74,7 +86,7 @@ with st.expander("📝 내역 입력 (New Transaction)", expanded=True):
         method = st.selectbox("결제수단", ["트래블로그(VND)", "현금(VND)", "원화계좌", "현대카드(USD)"])
 
     if st.button("🚀 기록하기 (Add Entry)"):
-        # [Added] 헌법 6항: 지출 포함 여부 자동 판별
+        # [Modified] 헌법 6항: 지출 포함 여부 자동 판별 로직
         is_expense = True if category in EXPENSE_CATS else False
         
         new_entry = pd.DataFrame([{
@@ -87,55 +99,52 @@ with st.expander("📝 내역 입력 (New Transaction)", expanded=True):
             'IsExpense': is_expense
         }])
         
-        st.session_state.ledger = pd.concat([st.session_state.ledger, new_entry], ignore_index=True)
-        st.success(f"{category} ({(amount):,.0f} {currency}) 기록되었습니다!")
+        # 클라우드 업데이트
+        updated_df = pd.concat([ledger_df, new_entry], ignore_index=True)
+        save_data(updated_df)
+        st.success(f"{category} 기록이 구글 시트에 저장되었습니다!")
         st.rerun()
 
-# --- [Module D] Analytics: Dashboard [Added] ---
+# --- 6. Analytics: Dashboard [Modified] ---
 st.divider()
-if not st.session_state.ledger.empty:
-    # 데이터 전처리: 모든 지출을 KRW로 환산 (통계용)
-    analysis_df = st.session_state.ledger[st.session_state.ledger['IsExpense'] == True].copy()
+if not ledger_df.empty:
+    # 지출 데이터만 필터링하여 분석
+    analysis_df = ledger_df[ledger_df['IsExpense'] == True].copy()
+    analysis_df['Amount'] = analysis_df['Amount'].astype(float)
     
-    def convert_to_krw(row):
-        if row['Currency'] == 'VND': return row['Amount'] * custom_rate
-        if row['Currency'] == 'USD': return row['Amount'] * 1350 # 임시 달러 환율
-        return row['Amount']
-    
-    analysis_df['Amount_KRW'] = analysis_df.apply(convert_to_krw, axis=1)
-
     if not analysis_df.empty:
-        st.subheader("📊 일별/항목별 지출 분석")
+        # 모든 지출을 KRW로 환산
+        def to_krw(row):
+            if row['Currency'] == 'VND': return row['Amount'] * VND_KRW_RATE
+            if row['Currency'] == 'USD': return row['Amount'] * 1350 
+            return row['Amount']
+        
+        analysis_df['Amount_KRW'] = analysis_df.apply(to_krw, axis=1)
+
+        st.subheader("📊 일별/항목별 지출 분석 (Daily Settlement)")
         tab1, tab2 = st.tabs(["📅 일별 결산", "🍱 항목별 비중"])
         
         with tab1:
             daily_sum = analysis_df.groupby('Date')['Amount_KRW'].sum().reset_index()
-            fig_daily = px.bar(daily_sum, x='Date', y='Amount_KRW', 
-                               text_auto=',.0f', title="일자별 순수 지출 (KRW)")
+            fig_daily = px.bar(daily_sum, x='Date', y='Amount_KRW', text_auto=',.0f', title="일자별 순수 지출 (KRW)")
             fig_daily.update_traces(marker_color='#FF00FF')
             st.plotly_chart(fig_daily, use_container_width=True)
             
         with tab2:
             cat_sum = analysis_df.groupby('Category')['Amount_KRW'].sum().reset_index()
-            fig_pie = px.pie(cat_sum, values='Amount_KRW', names='Category', 
-                             hole=0.4, title="지출 카테고리 비중")
+            fig_pie = px.pie(cat_sum, values='Amount_KRW', names='Category', hole=0.4, title="지출 카테고리 비중")
             st.plotly_chart(fig_pie, use_container_width=True)
     else:
-        st.info("지출 내역(식사, 택시 등)이 입력되면 차트가 표시됩니다.")
+        st.info("지출 내역이 입력되면 분석 차트가 표시됩니다.")
 
-# --- [Module C] Data Table & Management [Modified] ---
-st.subheader("📋 전체 내역 (History)")
-st.dataframe(st.session_state.ledger, use_container_width=True)
+# --- 7. UI: Data Table & Management ---
+st.subheader("📋 전체 내역 (Cloud History)")
+st.dataframe(ledger_df, use_container_width=True)
 
-col_del, col_csv = st.columns([1, 4])
-with col_del:
-    if st.button("🗑️ 마지막 항목 삭제"):
-        st.session_state.ledger = st.session_state.ledger[:-1]
+if st.button("🗑️ 마지막 항목 삭제"):
+    if not ledger_df.empty:
+        updated_df = ledger_df[:-1]
+        save_data(updated_df)
         st.rerun()
-with col_csv:
-    # [Added] 데이터 백업용 CSV 다운로드
-    csv = st.session_state.ledger.to_csv(index=False).encode('utf-8-sig')
-    st.download_button("📥 데이터 백업(CSV)", data=csv, file_name=f"PQ_Ledger_{datetime.now().strftime('%m%d')}.csv")
 
-# --- Footer ---
-st.caption("Strategic Partner Gem / Version v24.05.22.003")
+st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
