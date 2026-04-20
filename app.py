@@ -1,17 +1,18 @@
-# [Project: Phu Quoc Strategic Ledger / Version: v26.04.20.007]
-# [Module A, B: Modified] / [Module C, D: Maintained]
-# Total Line Count: 275
+# [Project: Phu Quoc Strategic Ledger / Version: v26.04.20.009]
+# [Module A, B, C, D: Modified]
+# Total Line Count: 292
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
+import time
 
 # --- 1. Configuration & Constitution ---
 st.set_page_config(page_title="VND Strategic Ledger", layout="wide")
 
-# [Maintained] 기술 헌법 4, 5, 6항: 카테고리 정의
+# 기술 헌법 준수 카테고리 정의
 EXPENSE_CATS = ["식사", "간식", "마트", "지하철", "VinBus", "택시", "입장료", "투어신청", "선물", "통신", "팁", "수수료", "마사지"]
 TRANSFER_CATS = ["충전", "ATM출금", "보증금"]
 ALL_CATS = EXPENSE_CATS + TRANSFER_CATS
@@ -20,34 +21,44 @@ COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMeth
 # --- 2. [Module A] Precision Data Engine [Modified] ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+@st.cache_data(ttl=0) # 캐시를 사용하지 않고 항상 최신 데이터를 읽어옴
 def load_data():
     try:
-        # [Modified] 시트명을 "시트1"로 고정하여 읽어옵니다.
+        # [Modified] Dan의 시트명 "시트1"에 직접 연결
         df = conn.read(worksheet="시트1", ttl="0m")
         if df is None or df.empty:
             return pd.DataFrame(columns=COLUMNS)
-        # [Added] 열 순서를 헌법에 맞게 강제 재배열합니다.
+        # 열 순서 강제 정렬 (ValueError 방지)
         return df.reindex(columns=COLUMNS)
     except Exception:
         return pd.DataFrame(columns=COLUMNS)
 
 def save_data(df):
-    # [Modified] 데이터 형식을 정제하고 열 순서를 일치시킨 후 저장합니다.
-    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-    df_to_save = df.reindex(columns=COLUMNS)
-    try:
-        conn.update(worksheet="시트1", data=df_to_save)
-    except Exception as e:
-        st.error(f"구글 시트 저장 중 오류 발생: {e}")
+    # [Added] 동기화 상태 가시화
+    with st.status("Cloud 데이터 동기화 중...", expanded=False) as status:
+        try:
+            # 데이터 정제
+            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+            df_to_save = df.reindex(columns=COLUMNS)
+            
+            # Google Sheets 업데이트
+            conn.update(worksheet="시트1", data=df_to_save)
+            
+            status.update(label="Cloud 동기화 완료!", state="complete", expanded=False)
+            st.cache_data.clear() # 캐시 강제 삭제
+            return True
+        except Exception as e:
+            status.update(label="동기화 실패!", state="error", expanded=True)
+            st.error(f"에러 내역: {e}")
+            return False
 
-# 데이터 동기화
+# 데이터 동기화 로드
 ledger_df = load_data()
 
 # --- 3. [Module B] Asset Logic Engine [Modified] ---
 def calculate_balances(df):
     if df.empty: return 0.0, 0.0
     
-    # 데이터 타입을 숫자로 변환하여 계산 오류 방지
     df_calc = df.copy()
     df_calc['Amount'] = pd.to_numeric(df_calc['Amount'], errors='coerce').fillna(0)
     
@@ -65,7 +76,7 @@ def calculate_balances(df):
     
     return travel_bal, cash_bal
 
-# --- 4. [Module C] UI: Sidebar & Status [Maintained] ---
+# --- 4. [Module C] UI: Sidebar & Status ---
 with st.sidebar:
     st.title("💰 Wallet Status")
     t_bal, c_bal = calculate_balances(ledger_df)
@@ -89,32 +100,35 @@ with st.expander("📝 내역 입력 (Cloud Sync)", expanded=True):
     with col1:
         date = st.date_input("날짜", datetime.now())
         category = st.selectbox("항목", ALL_CATS)
-        desc = st.text_input("상세 내용")
+        desc = st.text_input("상세 내용", placeholder="ex. 킹콩마트 망고")
     with col2:
         currency = st.selectbox("통화", ["VND", "KRW", "USD"])
         amount = st.number_input("금액", min_value=0.0, format="%.2f")
         method = st.selectbox("결제수단", ["트래블로그(VND)", "현금(VND)", "원화계좌", "현대카드(USD)"])
 
+    # [Modified] 기록하기 버튼 로직 강화
     if st.button("🚀 기록하기 (Add Entry)"):
-        is_expense = True if category in EXPENSE_CATS else False
-        
-        new_entry = pd.DataFrame([{
-            'Date': date.strftime("%m/%d(%a)"),
-            'Category': category,
-            'Description': desc,
-            'Currency': currency,
-            'Amount': amount,
-            'PaymentMethod': method,
-            'IsExpense': is_expense
-        }])
-        
-        # [Modified] 데이터 결합 및 클라우드 즉시 전송
-        updated_df = pd.concat([ledger_df, new_entry], ignore_index=True)
-        save_data(updated_df)
-        st.success(f"{category} 기록 완료!")
-        st.rerun()
+        if amount <= 0:
+            st.warning("금액을 입력해주세요.")
+        else:
+            is_expense = True if category in EXPENSE_CATS else False
+            new_entry = pd.DataFrame([{
+                'Date': date.strftime("%m/%d(%a)"),
+                'Category': category,
+                'Description': desc,
+                'Currency': currency,
+                'Amount': amount,
+                'PaymentMethod': method,
+                'IsExpense': is_expense
+            }])
+            
+            updated_df = pd.concat([ledger_df, new_entry], ignore_index=True)
+            if save_data(updated_df):
+                st.toast(f"{category} 저장 완료!", icon="✅")
+                time.sleep(1) # 동기화 후 잠시 대기
+                st.rerun()
 
-# --- 6. [Module D] Analytics Dashboard [Maintained] ---
+# --- 6. [Module D] Analytics Dashboard ---
 st.divider()
 if not ledger_df.empty:
     exp_df = ledger_df[ledger_df['IsExpense'] == True].copy()
@@ -128,7 +142,7 @@ if not ledger_df.empty:
         
         exp_df['Amount_KRW'] = exp_df.apply(to_krw, axis=1)
 
-        st.subheader("📊 Daily Settlement Analytics")
+        st.subheader("📊 일별/항목별 지출 분석")
         tab1, tab2 = st.tabs(["📅 일별 결산", "🍱 항목별 비중"])
         
         with tab1:
@@ -144,11 +158,12 @@ if not ledger_df.empty:
 
 # --- 7. Data Table Management ---
 st.subheader("📋 Cloud History")
-st.dataframe(ledger_df, use_container_width=True)
+# 최신 데이터가 위로 오게 표시
+st.dataframe(ledger_df.iloc[::-1], use_container_width=True)
 
 if st.button("🗑️ 마지막 항목 삭제"):
     if not ledger_df.empty:
-        save_data(ledger_df[:-1])
-        st.rerun()
+        if save_data(ledger_df[:-1]):
+            st.rerun()
 
-st.caption(f"Status: Synchronized with GSheets | Strategic Partner Gem")
+st.caption(f"Status: Connected to '시트1' | Strategic Partner Gem")
