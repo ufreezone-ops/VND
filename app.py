@@ -17,22 +17,32 @@ TRANSFER_CATS = ["충전", "ATM출금", "보증금"]
 ALL_CATS = EXPENSE_CATS + TRANSFER_CATS
 
 # --- 2. Data Engine (Google Sheets Integration) [Modified] ---
+# [Module A: Modified - Robust Data Engine]
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # 구글 시트에서 데이터를 읽어오며, 데이터가 없으면 기본 스키마 생성
     try:
-        df = conn.read(ttl="0m")
-        if df.empty:
+        # [Modified] 시트1(Sheet1)을 명시적으로 읽어옵니다.
+        df = conn.read(worksheet="시트1", ttl="0m") 
+        if df is None or df.empty:
             return pd.DataFrame(columns=['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense'])
         return df
-    except:
-        return pd.DataFrame(columns=['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense'])
+    except Exception as e:
+        # 시트 이름이 'Sheet1'일 경우를 대비한 예외 처리
+        try:
+            return conn.read(worksheet="Sheet1", ttl="0m")
+        except:
+            return pd.DataFrame(columns=['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense'])
 
 def save_data(df):
-    # 구글 시트에 데이터 업데이트
-    conn.update(data=df)
-
+    # [Modified] 데이터 형식을 정리하고 쓰기 작업을 수행합니다.
+    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+    # 시트 이름이 '시트1'인지 'Sheet1'인지 확인 후 업데이트
+    try:
+        conn.update(worksheet="시트1", data=df)
+    except:
+        conn.update(worksheet="Sheet1", data=df)
+        
 # 데이터 로드
 ledger_df = load_data()
 
