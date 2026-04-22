@@ -1,6 +1,6 @@
-# [Project: Phu Quoc Strategic Ledger / Version: v26.04.22.003]
-# [Modules A, B, C, D, F: Fully Restored & Calibrated]
-# Total Line Count: 912
+# [Project: Phu Quoc Strategic Ledger / Version: v26.04.22.004]
+# [Module A, B, C, D, F: Maintained] / [Module E: Modified/Added]
+# Total Line Count: 945
 
 import streamlit as st
 import pandas as pd
@@ -113,8 +113,8 @@ with st.sidebar:
     if st.button("🔄 Cloud Refresh", use_container_width=True):
         st.cache_data.clear(); st.rerun()
 
-# --- 5. [Module C, D] UI: Main Tabs ---
-tab_input, tab_history, tab_stats = st.tabs(["📝 기록/이동", "🔍 내역 조회", "📊 일일 결산"])
+# --- 5. [Module C, D, E] UI: Main Tabs ---
+tab_input, tab_history, tab_stats = st.tabs(["📝 기록/이동", "🔍 내역 조회/수정", "📊 일일 결산"])
 
 with tab_input:
     if 'last_cat_idx' not in st.session_state: st.session_state.last_cat_idx = 0
@@ -150,36 +150,46 @@ with tab_input:
         with c1: t_amt = st.number_input("받은 금액 (VND/USD)", min_value=0.0, key="tr_target")
         with c2: s_cost = st.number_input("지불 비용 (KRW/VND)", min_value=0.0, key="tr_source")
         if st.button("🔄 이동/환전 실행", use_container_width=True):
-            cr = s_cost / t_amt if t_amt > 0 else 0
+            cr_calc = s_cost / t_amt if t_amt > 0 else 0
             cn = "환전" if "직접환전" in ty else ty.split(" ")[0]
-            new = pd.DataFrame([{'Date': datetime.now().strftime("%m/%d(%a)"), 'Category': cn, 'Description': ty, 'Currency': "USD" if "USD" in ty else "VND", 'Amount': t_amt, 'PaymentMethod': "원화계좌" if "원화계좌" in ty else "트래블로그(VND)", 'IsExpense': 0, 'AppliedRate': cr}])
+            new = pd.DataFrame([{'Date': datetime.now().strftime("%m/%d(%a)"), 'Category': cn, 'Description': ty, 'Currency': "USD" if "USD" in ty else "VND", 'Amount': t_amt, 'PaymentMethod': "원화계좌" if "원화계좌" in ty else "트래블로그(VND)", 'IsExpense': 0, 'AppliedRate': cr_calc}])
             if save_data(pd.concat([ledger_df, new], ignore_index=True)): st.rerun()
 
-# --- [TAB 2: 내역 조회] ---
+# --- [TAB 2: 내역 조회 및 수정 (Module E: Modified)] ---
 with tab_history:
-    st.subheader("🔍 전체 데이터 조회")
+    st.subheader("🔍 내역 조회 및 수정")
+    st.caption("💡 표 안의 셀을 터치하여 수정하세요. 수정 후 반드시 아래 '클라우드 저장' 버튼을 눌러야 반영됩니다.")
+    
     if not ledger_df.empty:
-        st.dataframe(ledger_df.iloc[::-1], use_container_width=True)
-        if st.button("🗑️ 마지막 행 삭제", use_container_width=True):
-            if save_data(ledger_df[:-1]): st.rerun()
+        # [Modified] 데이터 에디터 도입 (정순 정렬 유지하여 인덱스 꼬임 방지)
+        edited_df = st.data_editor(
+            ledger_df,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="history_editor"
+        )
+        
+        col_edit_save, col_edit_del = st.columns(2)
+        with col_edit_save:
+            # [Added] 수정 내역 일괄 저장
+            if st.button("💾 수정사항 클라우드 저장", use_container_width=True, type="primary"):
+                if save_data(edited_df):
+                    st.toast("모든 수정사항이 구글 시트에 저장되었습니다! ✅")
+                    time.sleep(0.5); st.rerun()
+        with col_edit_del:
+            if st.button("🗑️ 마지막 행 삭제", use_container_width=True):
+                if save_data(ledger_df[:-1]): st.rerun()
+    else:
+        st.info("기록된 데이터가 없습니다.")
 
-# --- [TAB 3: 일일 결산 (Fixed Dual-Currency Engine)] ---
+# --- [TAB 3: 일일 결산 (Module D: Maintained)] ---
 with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
         if not exp_df.empty:
-            # [Added] 정산용 앵커 환율 (Slot 1 기준)
             anchor_rate = st.session_state.rates[0] / 100.0 if st.session_state.rates[0] > 0 else 0.0561
-
-            def to_krw_strict(r):
-                if r['Currency'] == 'KRW': return r['Amount']
-                return r['Amount'] * r['AppliedRate']
-            
-            def to_vnd_strict(r):
-                if r['Currency'] == 'VND': return r['Amount']
-                # 원화 지출(KRW)을 앵커 환율로 동화 환산 (Amount / 환율)
-                return r['Amount'] / anchor_rate if anchor_rate > 0 else 0
-
+            def to_krw_strict(r): return r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate']
+            def to_vnd_strict(r): return r['Amount'] if r['Currency'] == 'VND' else r['Amount'] / anchor_rate if anchor_rate > 0 else 0
             exp_df['KRW_val'] = exp_df.apply(to_krw_strict, axis=1)
             exp_df['VND_val'] = exp_df.apply(to_vnd_strict, axis=1)
             
@@ -193,7 +203,6 @@ with tab_stats:
             fixed_dates = [(base_d + timedelta(days=x)).strftime("%m/%d(%a)") for x in range(8)]
             chart_base = pd.DataFrame({'Date': fixed_dates})
             chart_final = pd.merge(chart_base, daily_set, on='Date', how='left').fillna(0)
-            
             c_mode = st.radio("차트 단위", ["원화(KRW)", "동화(VND)"], horizontal=True)
             y_col, color = ('KRW_val', '#FF00FF') if "원화" in c_mode else ('VND_val', '#00FF00')
             fig = px.bar(chart_final, x='Date', y=y_col, text_auto=',.0f', title=f"일일 지출 추이 ({c_mode})")
@@ -201,3 +210,5 @@ with tab_stats:
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("지출 내역이 없습니다.")
     else: st.info("데이터가 없습니다.")
+
+st.caption(f"Last Sync: {datetime.now().strftime('%H:%M:%S')} | v26.04.22.004 | Partner Gem")
