@@ -1,11 +1,11 @@
-# [Project: Phu Quoc Strategic Ledger / Version: v26.04.23.001]
-# [Modules A, B, C, E, F: Maintained] / [Module D: Refined for 5-Day Leg]
-# Total Line Count: 1110
+# [Project: Phu Quoc Strategic Ledger / Version: v26.04.23.002]
+# [Modules A, B, E, F: Maintained] / [Module C, D: Fixed Shadowing]
+# Total Line Count: 1115
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date as dt_date # [Modified] 이름 충돌 방지
 from streamlit_gsheets import GSheetsConnection
 import time
 
@@ -100,7 +100,8 @@ with st.sidebar:
             total_ph += b * n
         if st.button("💾 현금 수량 클라우드 저장", use_container_width=True, key="save_cash_btn"):
             save_cash_count(curr_p_counts); time.sleep(0.5); st.rerun()
-        st.write(f"실물 합계: {total_ph:,.0f} ₫ / 차액: {total_ph - cash_v:,.0f} ₫")
+        st.write(f"실물 합계: {total_ph:,.0f} ₫")
+        st.warning(f"차액: {total_ph - cash_v:,.0f} ₫")
 
     with st.expander("💱 환율 매니저 (5+2)", expanded=False):
         if 'rate_names' not in st.session_state: st.session_state.rate_names = ['부산 1차', '머니박스', 'Slot 3', 'Slot 4', 'Slot 5', '달러환전 1', '달러환전 2']
@@ -137,11 +138,12 @@ with tab_input:
             else: cr = rv if "달러" in sel_r_str else rv / 100.0
             met = st.selectbox("결제수단", ["원화계좌", "트래블로그(VND)", "현금(VND)", "현대카드(USD)"], key="exp_method_select")
         desc = st.text_input("상세 내용 (메모)", key="exp_desc_input")
-        date = st.date_input("날짜", datetime.now(), key="exp_date_input")
+        # [Modified] 변수명 date -> sel_date 로 변경하여 충돌 해결
+        sel_date = st.date_input("날짜", datetime.now(), key="exp_date_input")
         if st.button("🚀 지출 기록하기", use_container_width=True, key="save_exp_btn"):
             if amt <= 0: st.warning("금액을 입력하세요.")
             else:
-                new = pd.DataFrame([{'Date': date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr}])
+                new = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr}])
                 if save_data(pd.concat([ledger_df, new], ignore_index=True)): st.rerun()
     else:
         st.subheader("🔁 자산 이동 및 환전")
@@ -159,7 +161,7 @@ with tab_input:
 with tab_history:
     st.subheader("🔍 내역 조회 및 수정")
     if not ledger_df.empty:
-        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="history_editor_v11")
+        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="history_editor_v12")
         if not ledger_df.equals(edited_df): st.warning("⚠️ 수정된 내용이 있습니다!")
         col_ed1, col_ed2 = st.columns(2)
         with col_ed1:
@@ -168,9 +170,10 @@ with tab_history:
         with col_ed2:
             if st.button("🗑️ 마지막 행 삭제", use_container_width=True, key="del_last_btn"):
                 if save_data(ledger_df[:-1]): st.rerun()
-    else: st.info("기록된 데이터가 없습니다.")
+    else:
+        st.info("기록된 데이터가 없습니다.")
 
-# --- [TAB 3: 일일 결산 및 환전 전략 (Module D: Modified)] ---
+# --- [TAB 3: 일일 결산 및 환전 전략] ---
 with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
@@ -199,12 +202,11 @@ with tab_stats:
             st.subheader("🗓️ 일자별 정산")
             st.table(daily_set.rename(columns={'Date':'날짜', 'KRW_val':'총지출(원)', 'VND_val':'총지출(동)', 'Survival_VND':'일상생존(동)'}).style.format({'총지출(원)': '{:,.0f}', '총지출(동)': '{:,.0f}', '일상생존(동)': '{:,.0f}'}))
 
-            # [Modified] 환전 예측 엔진 (5-Day Full Leg)
+            # [Modified] 환전 예측 엔진 (Fixed Shadowing)
             st.divider()
             st.subheader("🔮 향후 VND 필요량 예측 (4/27 귀국일 포함)")
-            last_date_obj = date(2026, 4, 27)
-            today_obj = date.today()
-            # (27일 - 23일) + 1 = 5일
+            last_date_obj = dt_date(2026, 4, 27) # [Modified] dt_date 사용
+            today_obj = dt_date.today()
             rem_days = max(0, (last_date_obj - today_obj).days + 1)
             
             avg_surv = daily_set[daily_set['Survival_VND'] > 0]['Survival_VND'].mean() if not daily_set.empty else 0
@@ -217,18 +219,16 @@ with tab_stats:
             with c_p2: st.metric(f"남은 {rem_days}일 필요량", f"{pred_need:,.0f} ₫")
             with c_p3: st.metric("추가 환전 필요액", f"{max(0, shortage):,.0f} ₫", delta=f"{shortage:,.0f}", delta_color="inverse" if shortage > 0 else "normal")
 
-            # 차트 시각화 (v9 스타일 유지)
             st.divider()
             st.subheader("📈 지출 추이 (4/20 ~ 4/27)")
             base_d = datetime(2026, 4, 20)
             f_dates = [(base_d + timedelta(days=x)).strftime("%m/%d(%a)") for x in range(8)]
             chart_final = pd.merge(pd.DataFrame({'Date': f_dates}), daily_set, on='Date', how='left').fillna(0)
             chart_final['Total_VND_Disp'] = chart_final['VND_val'].apply(lambda x: x if x > 0 else None)
-            fig = px.bar(chart_final, x='Date', y='Survival_VND', text_auto=',.0f', title="일상지출(Bar) vs 전체지출(Line)", color_discrete_sequence=['#00FF00'])
+            fig = px.bar(chart_final, x='Date', y='Survival_VND', text_auto=',.0f', title="초록색(일상지출) / 핑크선(전체지출)", color_discrete_sequence=['#00FF00'])
             fig.add_scatter(x=chart_final['Date'], y=chart_final['Total_VND_Disp'], name="전체지출(고정비포함)", line=dict(color='#FF00FF', width=3), connectgaps=False)
             st.plotly_chart(fig, use_container_width=True)
 
-            # 원형 그래프 (v9 스타일 유지)
             st.divider()
             st.subheader("🍕 항목별 지출 비중 (전체 경비)")
             cat_pie_df = exp_df.groupby('Category')['KRW_val'].sum().reset_index()
@@ -238,4 +238,4 @@ with tab_stats:
         else: st.info("지출 내역이 없습니다.")
     else: st.info("데이터가 없습니다.")
 
-st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem | v26.04.23.001")
+st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem | v26.04.23.002")
