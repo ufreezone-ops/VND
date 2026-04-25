@@ -1,11 +1,11 @@
-# [Project: Phu Quoc Strategic Ledger / Version: v26.04.23.002]
-# [Modules A, B, E, F: Maintained] / [Module C, D: Fixed Shadowing]
-# Total Line Count: 1115
+# [Project: Phu Quoc Strategic Ledger / Version: v26.04.25.001]
+# [Modules A, B, C, E, F: Maintained] / [Module D: Modified for Mobile Width]
+# Total Line Count: 1128
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime, timedelta, date as dt_date # [Modified] 이름 충돌 방지
+from datetime import datetime, timedelta, date as dt_date
 from streamlit_gsheets import GSheetsConnection
 import time
 
@@ -138,7 +138,6 @@ with tab_input:
             else: cr = rv if "달러" in sel_r_str else rv / 100.0
             met = st.selectbox("결제수단", ["원화계좌", "트래블로그(VND)", "현금(VND)", "현대카드(USD)"], key="exp_method_select")
         desc = st.text_input("상세 내용 (메모)", key="exp_desc_input")
-        # [Modified] 변수명 date -> sel_date 로 변경하여 충돌 해결
         sel_date = st.date_input("날짜", datetime.now(), key="exp_date_input")
         if st.button("🚀 지출 기록하기", use_container_width=True, key="save_exp_btn"):
             if amt <= 0: st.warning("금액을 입력하세요.")
@@ -161,7 +160,7 @@ with tab_input:
 with tab_history:
     st.subheader("🔍 내역 조회 및 수정")
     if not ledger_df.empty:
-        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="history_editor_v12")
+        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="history_editor_v13")
         if not ledger_df.equals(edited_df): st.warning("⚠️ 수정된 내용이 있습니다!")
         col_ed1, col_ed2 = st.columns(2)
         with col_ed1:
@@ -170,10 +169,9 @@ with tab_history:
         with col_ed2:
             if st.button("🗑️ 마지막 행 삭제", use_container_width=True, key="del_last_btn"):
                 if save_data(ledger_df[:-1]): st.rerun()
-    else:
-        st.info("기록된 데이터가 없습니다.")
+    else: st.info("기록된 데이터가 없습니다.")
 
-# --- [TAB 3: 일일 결산 및 환전 전략] ---
+# --- [TAB 3: 일일 결산 및 환전 전략 (Module D: Modified for Chart UX)] ---
 with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
@@ -202,13 +200,12 @@ with tab_stats:
             st.subheader("🗓️ 일자별 정산")
             st.table(daily_set.rename(columns={'Date':'날짜', 'KRW_val':'총지출(원)', 'VND_val':'총지출(동)', 'Survival_VND':'일상생존(동)'}).style.format({'총지출(원)': '{:,.0f}', '총지출(동)': '{:,.0f}', '일상생존(동)': '{:,.0f}'}))
 
-            # [Modified] 환전 예측 엔진 (Fixed Shadowing)
+            # 환전 예측 엔진
             st.divider()
             st.subheader("🔮 향후 VND 필요량 예측 (4/27 귀국일 포함)")
-            last_date_obj = dt_date(2026, 4, 27) # [Modified] dt_date 사용
+            last_date_obj = dt_date(2026, 4, 27)
             today_obj = dt_date.today()
             rem_days = max(0, (last_date_obj - today_obj).days + 1)
-            
             avg_surv = daily_set[daily_set['Survival_VND'] > 0]['Survival_VND'].mean() if not daily_set.empty else 0
             pred_need = avg_surv * rem_days
             _, current_v, current_cash, _ = calculate_quad_balances(ledger_df)
@@ -219,23 +216,44 @@ with tab_stats:
             with c_p2: st.metric(f"남은 {rem_days}일 필요량", f"{pred_need:,.0f} ₫")
             with c_p3: st.metric("추가 환전 필요액", f"{max(0, shortage):,.0f} ₫", delta=f"{shortage:,.0f}", delta_color="inverse" if shortage > 0 else "normal")
 
+            # [Modified] 차트: 레이아웃 최적화 (범례 내부화 & 여백 제거)
             st.divider()
-            st.subheader("📈 지출 추이 (4/20 ~ 4/27)")
+            st.subheader("📈 지출 추이 분석 (Full-Width)")
             base_d = datetime(2026, 4, 20)
             f_dates = [(base_d + timedelta(days=x)).strftime("%m/%d(%a)") for x in range(8)]
             chart_final = pd.merge(pd.DataFrame({'Date': f_dates}), daily_set, on='Date', how='left').fillna(0)
             chart_final['Total_VND_Disp'] = chart_final['VND_val'].apply(lambda x: x if x > 0 else None)
-            fig = px.bar(chart_final, x='Date', y='Survival_VND', text_auto=',.0f', title="초록색(일상지출) / 핑크선(전체지출)", color_discrete_sequence=['#00FF00'])
-            fig.add_scatter(x=chart_final['Date'], y=chart_final['Total_VND_Disp'], name="전체지출(고정비포함)", line=dict(color='#FF00FF', width=3), connectgaps=False)
+            
+            fig = px.bar(chart_final, x='Date', y='Survival_VND', text_auto=',.0f', title="초록막대(일상) / 핑크선(전체)", color_discrete_sequence=['#00FF00'])
+            fig.add_scatter(x=chart_final['Date'], y=chart_final['Total_VND_Disp'], name="전체지출", line=dict(color='#FF00FF', width=3), connectgaps=False)
+            
+            # [Added] Plotly 레이아웃 정밀 튜닝
+            fig.update_layout(
+                margin=dict(l=0, r=0, t=40, b=0), # 좌우 여백 제거
+                showlegend=True,
+                legend=dict(
+                    orientation="h",       # 가로형 범례
+                    yanchor="top", y=0.99, # 상단 배치
+                    xanchor="left", x=0.01,# 좌측 배치
+                    bgcolor="rgba(0,0,0,0)"# 투명 배경
+                )
+            )
             st.plotly_chart(fig, use_container_width=True)
 
+            # [Modified] 원형 그래프 레이아웃 최적화
             st.divider()
-            st.subheader("🍕 항목별 지출 비중 (전체 경비)")
+            st.subheader("🍕 항목별 지출 비중 (Full-Width)")
             cat_pie_df = exp_df.groupby('Category')['KRW_val'].sum().reset_index()
-            fig_pie = px.pie(cat_pie_df, values='KRW_val', names='Category', hole=0.4, title="전체 경비 구성 (KRW 기준)")
+            fig_pie = px.pie(cat_pie_df, values='KRW_val', names='Category', hole=0.4, title="전체 경비 구성 (KRW)")
             fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            
+            # [Added] 원형 그래프 범례 내부화
+            fig_pie.update_layout(
+                margin=dict(l=0, r=0, t=40, b=0),
+                legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
+            )
             st.plotly_chart(fig_pie, use_container_width=True)
         else: st.info("지출 내역이 없습니다.")
     else: st.info("데이터가 없습니다.")
 
-st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem | v26.04.23.002")
+st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem | v26.04.25.001")
