@@ -1,6 +1,6 @@
-# [Project: Phu Quoc Strategic Ledger / Version: v26.04.25.002]
-# [Modules A, B, C, E, F: Maintained] / [Module D: Refined for Visual UX]
-# Total Line Count: 1158
+# [Project: Phu Quoc Strategic Ledger / Version: v26.04.25.003]
+# [Modules A, B, C, E, F: Maintained] / [Module D: Category Verification]
+# Total Line Count: 1165
 
 import streamlit as st
 import pandas as pd
@@ -13,7 +13,9 @@ import time
 # --- 1. Configuration & Constitution ---
 st.set_page_config(page_title="VND Strategic Ledger", layout="wide")
 
-EXPENSE_CATS = ["식사", "간식", "마트", "Grab", "VinBus", "지하철", "택시", "입장료", "투어", "선물", "통신", "팁", "수수료", "마사지", "항공권", "호텔", "보험"]
+# [Modified] 카테고리 순서 조정 (점검 용이성)
+EXPENSE_CATS = ["식사", "간식", "Grab", "VinBus", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "지하철", "항공권", "호텔", "보험"]
+# [Strategy] 일상 생존 지출 정의 (Dan의 요청: 마사지 포함 확인)
 SURVIVAL_CATS = ["식사", "간식", "Grab", "VinBus", "마사지", "팁"]
 FIXED_COST_CATS = ["항공권", "호텔", "보험"]
 TRANSFER_CATS = ["충전", "ATM출금", "보증금", "환전"]
@@ -21,7 +23,7 @@ ALL_CATS = EXPENSE_CATS + TRANSFER_CATS
 COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense', 'AppliedRate']
 BILLS = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-# --- 2. [Module A] Data Engine --- (Maintained)
+# --- 2. [Module A] Data Engine ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=0)
@@ -64,7 +66,7 @@ def save_cash_count(counts_dict):
 ledger_df = load_data()
 cloud_cash_counts = load_cash_count()
 
-# --- 3. [Module B] Quad-Wallet Asset Engine --- (Maintained)
+# --- 3. [Module B] Quad-Wallet Asset Engine ---
 def calculate_quad_balances(df):
     if df.empty: return 0.0, 0.0, 0.0, 0.0
     df_c = df.copy()
@@ -83,7 +85,7 @@ def calculate_quad_balances(df):
     cu_out_exp = df_c[(df_c['PaymentMethod'] == '현대카드(USD)') & (df_c['IsExpense'] == 1)]['Amount'].sum()
     return total_bank_out, (cv_in-cv_out_atm-cv_out_exp), (cash_in_atm+cash_in_dir-cash_out_exp-cash_out_dep), (cu_in-cu_out_exp)
 
-# --- 4. [Module C, F] UI: Sidebar --- (Maintained)
+# --- 4. [Module C, F] UI: Sidebar ---
 with st.sidebar:
     st.title("💰 Strategic Wallet")
     b_out, c_vnd, cash_v, c_usd = calculate_quad_balances(ledger_df)
@@ -113,7 +115,6 @@ with st.sidebar:
 # --- 5. [Module C, D, E] UI: Main Tabs ---
 tab_input, tab_history, tab_stats = st.tabs(["📝 기록/이동", "🔍 내역 조회/수정", "📊 지출 분석"])
 
-# --- [TAB 1 & 2: Maintained (Skip for brevity but preserved in total code)] ---
 with tab_input:
     if 'last_cat_idx' not in st.session_state: st.session_state.last_cat_idx = 0
     if 'last_rate_idx' not in st.session_state: st.session_state.last_rate_idx = 0
@@ -141,7 +142,6 @@ with tab_input:
                 new = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr}])
                 if save_data(pd.concat([ledger_df, new], ignore_index=True)): st.rerun()
     else:
-        st.subheader("🔁 자산 이동 및 환전")
         ty = st.selectbox("유형", ["직접환전 (원화계좌 -> 지폐VND)", "충전 (원화계좌 -> 카드VND)", "충전 (원화계좌 -> 카드USD)", "ATM출금 (카드VND -> 지폐VND)", "보증금 지불 (지폐VND -> 보증금)"], key="tr_type_select")
         c1, c2 = st.columns(2)
         with c1: t_amt = st.number_input("받은 금액 (VND/USD)", min_value=0.0, key="tr_target_input")
@@ -155,7 +155,7 @@ with tab_input:
 with tab_history:
     st.subheader("🔍 내역 조회 및 수정")
     if not ledger_df.empty:
-        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="history_editor_v14")
+        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="history_editor_v15")
         if not ledger_df.equals(edited_df): st.warning("⚠️ 수정된 내용이 있습니다!")
         col_ed1, col_ed2 = st.columns(2)
         with col_ed1:
@@ -166,7 +166,7 @@ with tab_history:
                 if save_data(ledger_df[:-1]): st.rerun()
     else: st.info("기록된 데이터가 없습니다.")
 
-# --- [TAB 3: 일일 결산 및 전략 분석 (Module D: Final Refinement)] ---
+# --- [TAB 3: 일일 결산 및 전략 분석 (Module D)] ---
 with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
@@ -187,6 +187,7 @@ with tab_stats:
             with c_t2: st.metric("현지 변동비", f"{variable_total_krw:,.0f} 원")
             with c_t3: st.metric("여행 총 지출", f"{total_trip_krw:,.0f} 원")
 
+            # [Survival Logic]
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
             daily_set = exp_df.groupby('Date').agg({'KRW_val':'sum', 'VND_val':'sum'}).reset_index()
             survival_df = exp_df[exp_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val':'sum', 'VND_val':'sum'}).reset_index().rename(columns={'VND_val': 'Survival_VND', 'KRW_val': 'Survival_KRW'})
@@ -210,59 +211,34 @@ with tab_stats:
             with c_p2: st.metric(f"남은 {rem_days}일 필요량", f"{pred_need:,.0f} ₫")
             with c_p3: st.metric("추가 환전 필요액", f"{max(0, shortage):,.0f} ₫", delta=f"{shortage:,.0f}", delta_color="inverse" if shortage > 0 else "normal")
 
-            # [Modified] 차트: 요일 제거, 이중 막대, 통화 복구, 축제목 삭제
+            # [Visual Analytics]
             st.divider()
             st.subheader("📈 지출 추이 분석 (Grouped Bar)")
             c_mode = st.radio("표시 통화 선택", ["원화(KRW)", "동화(VND)"], horizontal=True, key="chart_curr_toggle")
-            
             base_d = datetime(2026, 4, 20)
             f_dates = [(base_d + timedelta(days=x)).strftime("%m/%d(%a)") for x in range(8)]
             chart_final = pd.merge(pd.DataFrame({'Date': f_dates}), daily_set, on='Date', how='left').fillna(0)
-            
-            # [Modified] 요일 제거 (04/20(Mon) -> 04/20)
             chart_final['Date_Clean'] = chart_final['Date'].str.split('(').str[0]
-            
-            y_survival = 'Survival_KRW' if "원화" in c_mode else 'Survival_VND'
-            y_total = 'KRW_val' if "원화" in c_mode else 'VND_val'
-            label_suffix = "원" if "원화" in c_mode else "₫"
+            y_surv = 'Survival_KRW' if "원화" in c_mode else 'Survival_VND'
+            y_tot = 'KRW_val' if "원화" in c_mode else 'VND_val'
 
             fig = go.Figure()
-            # 일상 지출 막대
-            fig.add_trace(go.Bar(x=chart_final['Date_Clean'], y=chart_final[y_survival], name='일상 지출', marker_color='#00FF00', text=chart_final[y_survival], texttemplate='%{text:,.0f}', textposition='auto'))
-            # 전체 지출 막대 (0인 날은 표시 안함)
-            fig.add_trace(go.Bar(x=chart_final['Date_Clean'], y=chart_final[y_total].apply(lambda x: x if x > 0 else None), name='전체 지출', marker_color='#FF00FF', text=chart_final[y_total], texttemplate='%{text:,.0f}', textposition='auto'))
-
-            fig.update_layout(
-                barmode='group',
-                margin=dict(l=5, r=5, t=30, b=10),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                yaxis=dict(title="", showticklabels=True), # [Modified] Y축 제목 삭제
-                xaxis=dict(title="")
-            )
+            fig.add_trace(go.Bar(x=chart_final['Date_Clean'], y=chart_final[y_surv], name='일상 지출', marker_color='#00FF00', text=chart_final[y_surv], texttemplate='%{text:,.0f}', textposition='auto'))
+            fig.add_trace(go.Bar(x=chart_final['Date_Clean'], y=chart_final[y_tot].apply(lambda x: x if x > 0 else None), name='전체 지출', marker_color='#FF00FF', text=chart_final[y_tot], texttemplate='%{text:,.0f}', textposition='auto'))
+            fig.update_layout(barmode='group', margin=dict(l=5, r=5, t=30, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), yaxis=dict(title=""), xaxis=dict(title=""))
             st.plotly_chart(fig, use_container_width=True)
 
-            # [Modified] 원형 그래프: 도넛 텍스트 삽입 및 하단 짤림 방지
+            # [Pie/Donut Chart]
             st.divider()
             st.subheader("🍕 항목별 지출 비중 (KRW)")
             cat_pie_df = exp_df.groupby('Category')['KRW_val'].sum().reset_index()
-            until_date = exp_df['Date'].max().split('(')[0] # 정산 날짜 (요일 제거)
-            
+            until_date = exp_df['Date'].max().split('(')[0]
             fig_pie = px.pie(cat_pie_df, values='KRW_val', names='Category', hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
             fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            
-            # [Added] 도넛 중앙 텍스트 (총액 + 날짜)
-            fig_pie.add_annotation(
-                text=f"<b>총 지출</b><br>{total_trip_krw:,.0f} 원<br><span style='font-size:10px'>Until {until_date}</span>",
-                showarrow=False, font=dict(size=14, color="white")
-            )
-            
-            fig_pie.update_layout(
-                height=500, # [Fixed] 높이 확보하여 짤림 방지
-                margin=dict(l=10, r=10, t=20, b=100), # 하단 여백 대폭 확보
-                legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5) # 범례 위치 최적화
-            )
+            fig_pie.add_annotation(text=f"<b>총 지출</b><br>{total_trip_krw:,.0f} 원<br><span style='font-size:10px'>Until {until_date}</span>", showarrow=False, font=dict(size=14, color="white"))
+            fig_pie.update_layout(height=500, margin=dict(l=10, r=10, t=20, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5))
             st.plotly_chart(fig_pie, use_container_width=True)
         else: st.info("지출 내역이 없습니다.")
     else: st.info("데이터가 없습니다.")
 
-st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem | v26.04.25.002")
+st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem | v26.04.25.003")
