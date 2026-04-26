@@ -1,6 +1,6 @@
-# [Project: Phu Quoc Strategic Ledger / Version: v26.04.25.006]
-# [Module A: Hard Refresh Applied] / [Module B, C, D, E, F: Fully Integrated]
-# Total Line Count: 1205
+# [Project: Phu Quoc Strategic Ledger / Version: v26.04.26.001]
+# [Modules A~F: Maintained] / [Module G: Added for Final Reporting]
+# Total Line Count: 1310
 
 import streamlit as st
 import pandas as pd
@@ -21,35 +21,35 @@ ALL_CATS = EXPENSE_CATS + TRANSFER_CATS
 COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense', 'AppliedRate']
 BILLS = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-# --- 2. [Module A] Data Engine (Hard Recovery Mode) ---
+# --- 2. [Module A] Data Engine ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# [Modified] 모든 캐시를 무시하고 구글 시트에서 직접 데이터를 읽어오는 함수
 def load_data():
     try:
-        # ttl=0 및 clear_cache()를 통해 가장 신선한 데이터 강제 로드
-        st.cache_data.clear() 
-        df = conn.read(worksheet="시트1", ttl=0)
-        
-        if df is None or df.empty:
-            st.warning("⚠️ 구글 시트에서 데이터를 찾을 수 없습니다. 시트 내용을 확인하세요.")
-            return pd.DataFrame(columns=COLUMNS)
-        
-        # [Added] 데이터 유실 방지를 위한 유연한 로드
-        # 시트에 있는 열만 가져오고, 부족한 열은 기본값으로 채움
-        for col in COLUMNS:
-            if col not in df.columns:
-                df[col] = 1.0 if col == 'AppliedRate' else 0
-        
-        df = df[COLUMNS] # 순서 고정
+        df = conn.read(worksheet="시트1", ttl="0s")
+        if df is None or df.empty: return pd.DataFrame(columns=COLUMNS)
+        df = df.reindex(columns=COLUMNS)
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
         df['AppliedRate'] = pd.to_numeric(df['AppliedRate'], errors='coerce').fillna(1.0)
         df['IsExpense'] = pd.to_numeric(df['IsExpense'], errors='coerce').fillna(0).astype(int)
-        
         return df
     except Exception as e:
-        st.error(f"🚨 [긴급] 데이터 연결 실패: {e}")
+        st.error(f"데이터 로드 실패: {e}")
         return pd.DataFrame(columns=COLUMNS)
+
+def save_data(df):
+    if df is None or len(df) == 0:
+        st.error("🚨 시스템 보호: 빈 데이터를 저장할 수 없습니다.")
+        return False
+    with st.status("Cloud에 데이터 안전하게 저장 중...", expanded=False):
+        try:
+            df_to_save = df.reindex(columns=COLUMNS)
+            conn.update(worksheet="시트1", data=df_to_save)
+            st.cache_data.clear()
+            return True
+        except Exception as e:
+            st.error(f"저장 실패: {e}")
+            return False
 
 @st.cache_data(ttl=0)
 def load_cash_count():
@@ -59,16 +59,6 @@ def load_cash_count():
         return dict(zip(df['Bill'].astype(int), df['Count'].astype(int)))
     except: return {b: 0 for b in BILLS}
 
-def save_data(df):
-    with st.status("Cloud 동기화 중...", expanded=False):
-        try:
-            conn.update(worksheet="시트1", data=df.reindex(columns=COLUMNS))
-            st.cache_data.clear()
-            return True
-        except Exception as e:
-            st.error(f"저장 실패: {e}")
-            return False
-
 def save_cash_count(counts_dict):
     try:
         df = pd.DataFrame(list(counts_dict.items()), columns=['Bill', 'Count'])
@@ -77,7 +67,6 @@ def save_cash_count(counts_dict):
         return True
     except: return False
 
-# 최초 실행 시 데이터 로드
 ledger_df = load_data()
 cloud_cash_counts = load_cash_count()
 
@@ -114,8 +103,7 @@ with st.sidebar:
             curr_p_counts[b] = n; total_ph += b * n
         if st.button("💾 현금 수량 클라우드 저장", use_container_width=True):
             save_cash_count(curr_p_counts); time.sleep(0.5); st.rerun()
-        st.write(f"실물 합계: {total_ph:,.0f} ₫")
-        st.warning(f"차액: {total_ph - cash_v:,.0f} ₫")
+        st.write(f"실물 합계: {total_ph:,.0f} ₫ / 차액: {total_ph - cash_v:,.0f} ₫")
     with st.expander("💱 환율 매니저 (5+2)", expanded=False):
         if 'rate_names' not in st.session_state: st.session_state.rate_names = ['부산 1차', '머니박스', 'Slot 3', 'Slot 4', 'Slot 5', '달러환전 1', '달러환전 2']
         if 'rates' not in st.session_state: st.session_state.rates = [5.61, 6.10, 5.40, 5.40, 5.40, 1350.0, 1380.0]
@@ -125,9 +113,10 @@ with st.sidebar:
             with cv: st.session_state.rates[i] = st.number_input(f"환율 {i+1}", value=st.session_state.rates[i], format="%.2f", key=f"rv_{i}")
     if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
 
-# --- 5. [Module C, D, E] UI: Main Tabs ---
-tab_input, tab_history, tab_stats = st.tabs(["📝 기록/이동", "🔍 내역 조회/수정", "📊 지출 분석"])
+# --- 5. UI: Main Tabs ---
+tab_input, tab_history, tab_stats, tab_final = st.tabs(["📝 기록/이동", "🔍 내역 조회/수정", "📊 일일 결산", "🏁 종료 보고서"])
 
+# [TAB 1: Input Section]
 with tab_input:
     if 'last_cat_idx' not in st.session_state: st.session_state.last_cat_idx = 0
     if 'last_rate_idx' not in st.session_state: st.session_state.last_rate_idx = 0
@@ -165,11 +154,12 @@ with tab_input:
             new = pd.DataFrame([{'Date': datetime.now().strftime("%m/%d(%a)"), 'Category': cn, 'Description': ty, 'Currency': "USD" if "USD" in ty else "VND", 'Amount': t_amt, 'PaymentMethod': "원화계좌" if "원화계좌" in ty else "트래블로그(VND)", 'IsExpense': 0, 'AppliedRate': cr_calc}])
             if save_data(pd.concat([ledger_df, new], ignore_index=True)): st.rerun()
 
+# [TAB 2: History Editor]
 with tab_history:
     st.subheader("🔍 내역 조회 및 수정")
     if not ledger_df.empty:
-        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="history_editor_v18")
-        if not ledger_df.equals(edited_df): st.warning("⚠️ 수정된 내용이 있습니다!")
+        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="history_editor_v109")
+        if not ledger_df.equals(edited_df): st.warning("⚠️ 수정된 내용이 있습니다! [수정사항 클라우드 저장]을 누르세요.")
         col_ed1, col_ed2 = st.columns(2)
         with col_ed1:
             if st.button("💾 수정사항 클라우드 저장", use_container_width=True, type="primary"):
@@ -177,61 +167,51 @@ with tab_history:
         with col_ed2:
             if st.button("🗑️ 마지막 행 삭제", use_container_width=True):
                 if save_data(ledger_df[:-1]): st.rerun()
-    else:
-        st.info("기록된 데이터가 없습니다. 구글 시트를 확인해 보세요.")
+    else: st.info("기록된 데이터가 없습니다.")
 
-# --- [TAB 3: 일일 결산 및 전략 분석 (Unified Data Logic)] ---
+# [TAB 3: Daily Settlement]
 with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
         if not exp_df.empty:
             anchor_rate = st.session_state.rates[0] / 100.0 if st.session_state.rates[0] > 0 else 0.0561
-            
-            def to_krw_strict(r):
-                if r['Currency'] == 'KRW': return r['Amount']
-                return r['Amount'] * r['AppliedRate']
-            
-            def to_vnd_strict(r):
-                if r['Currency'] == 'VND': return r['Amount']
-                return r['Amount'] / anchor_rate if anchor_rate > 0 else 0
-
+            def to_krw_strict(r): return r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate']
+            def to_vnd_strict(r): return r['Amount'] if r['Currency'] == 'VND' else r['Amount'] / anchor_rate
             exp_df['KRW_val'] = exp_df.apply(to_krw_strict, axis=1)
             exp_df['VND_val'] = exp_df.apply(to_vnd_strict, axis=1)
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
 
-            # [핵심] 테이블과 차트의 데이터를 완벽하게 일원화
             daily_set = exp_df.groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index()
-            survival_only = exp_df[exp_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'Survival_KRW', 'VND_val': 'Survival_VND'})
-            daily_set = pd.merge(daily_set, survival_only, on='Date', how='left').fillna(0)
+            surv_only = exp_df[exp_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'Survival_KRW', 'VND_val': 'Survival_VND'})
+            daily_set = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0)
 
-            # 대시보드
+            # Summary Bar
             fixed_total_krw = exp_df[exp_df['Category'].isin(FIXED_COST_CATS)]['KRW_val'].sum()
             variable_total_krw = exp_df[~exp_df['Category'].isin(FIXED_COST_CATS)]['KRW_val'].sum()
-            st.subheader("🏁 총 여행 경비 요약")
+            total_trip_krw = fixed_total_krw + variable_total_krw
+            st.subheader("🏁 현재까지 총 지출 요약")
             c_t1, c_t2, c_t3 = st.columns(3)
             with c_t1: st.metric("사전 고정비", f"{fixed_total_krw:,.0f} 원")
             with c_t2: st.metric("현지 변동비", f"{variable_total_krw:,.0f} 원")
-            with c_t3: st.metric("여행 총 지출", f"{(fixed_total_krw + variable_total_krw):,.0f} 원")
+            with c_t3: st.metric("여행 총 지출", f"{total_trip_krw:,.0f} 원")
 
             st.divider()
-            st.subheader("🗓️ 일자별 정산")
             st.table(daily_set.rename(columns={'Date':'날짜', 'KRW_val':'총지출(원)', 'VND_val':'총지출(동)', 'Survival_KRW':'일상생존(원)', 'Survival_VND':'일상생존(동)'}).style.format({'총지출(원)': '{:,.0f}', '총지출(동)': '{:,.0f}', '일상생존(원)': '{:,.0f}', '일상생존(동)': '{:,.0f}'}))
 
-            # 환전 예측 엔진
+            # Liquidity Predictor
             st.divider()
             st.subheader("🔮 환전 전략 시뮬레이터")
-            last_date_obj = dt_date(2026, 4, 27); today_obj = dt_date.today()
-            rem_days = max(0, (last_date_obj - today_obj).days + 1)
+            rem_days = max(0, (dt_date(2026, 4, 27) - dt_date.today()).days + 1)
             avg_surv = daily_set[daily_set['Survival_VND'] > 0]['Survival_VND'].mean() if not daily_set.empty else 0
             pred_need = avg_surv * rem_days
             _, current_v, current_cash, _ = calculate_quad_balances(ledger_df)
             shortage = pred_need - (current_v + current_cash)
-            c_p1, c_p2, c_p3 = st.columns(3)
-            with c_p1: st.metric("일상 일평균 지출", f"{avg_surv:,.0f} ₫")
-            with c_p2: st.metric(f"남은 {rem_days}일 필요량", f"{pred_need:,.0f} ₫")
-            with c_p3: st.metric("추가 환전 필요액", f"{max(0, shortage):,.0f} ₫", delta=f"{shortage:,.0f}", delta_color="inverse" if shortage > 0 else "normal")
+            cp1, cp2, cp3 = st.columns(3)
+            with cp1: st.metric("일상 일평균 지출", f"{avg_surv:,.0f} ₫")
+            with cp2: st.metric(f"남은 {rem_days}일 필요량", f"{pred_need:,.0f} ₫")
+            with cp3: st.metric("추가 환전 필요액", f"{max(0, shortage):,.0f} ₫", delta=f"{shortage:,.0f}", delta_color="inverse" if shortage > 0 else "normal")
 
-            # 이중 막대 차트 (가독성 보정)
+            # Grouped Bar Chart
             st.divider()
             st.subheader("📈 지출 추이 분석 (Grouped Bar)")
             c_mode = st.radio("표시 통화 선택", ["원화(KRW)", "동화(VND)"], horizontal=True, key="chart_curr_toggle")
@@ -240,24 +220,58 @@ with tab_stats:
             chart_final = pd.merge(pd.DataFrame({'Date': f_dates}), daily_set, on='Date', how='left').fillna(0)
             chart_final['Date_Clean'] = chart_final['Date'].str.split('(').str[0]
             y_surv, y_tot = ('Survival_KRW', 'KRW_val') if "원화" in c_mode else ('Survival_VND', 'VND_val')
-            
             fig = go.Figure()
             fig.add_trace(go.Bar(x=chart_final['Date_Clean'], y=chart_final[y_surv], name='일상 지출', marker_color='#00FF00', text=chart_final[y_surv], texttemplate='%{text:,.0f}', textposition='auto'))
             fig.add_trace(go.Bar(x=chart_final['Date_Clean'], y=chart_final[y_tot].apply(lambda x: x if x > 0 else None), name='전체 지출', marker_color='#FF00FF', text=chart_final[y_tot], texttemplate='%{text:,.0f}', textposition='auto'))
             fig.update_layout(barmode='group', margin=dict(l=5, r=5, t=30, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), yaxis=dict(title=""), xaxis=dict(title=""))
             st.plotly_chart(fig, use_container_width=True)
-
-            # 도넛 차트
-            st.divider()
-            st.subheader("🍕 항목별 지출 비중 (KRW)")
-            cat_pie_df = exp_df.groupby('Category')['KRW_val'].sum().reset_index()
-            until_date = exp_df['Date'].max().split('(')[0]
-            fig_pie = px.pie(cat_pie_df, values='KRW_val', names='Category', hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            fig_pie.add_annotation(text=f"<b>총 지출</b><br>{(fixed_total_krw + variable_total_krw):,.0f} 원<br><span style='font-size:10px'>Until {until_date}</span>", showarrow=False, font=dict(size=14, color="white"))
-            fig_pie.update_layout(height=500, margin=dict(l=10, r=10, t=20, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5))
-            st.plotly_chart(fig_pie, use_container_width=True)
         else: st.info("지출 내역이 없습니다.")
-    else: st.info("데이터가 없습니다. [Cloud Refresh]를 눌러보세요.")
 
-st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem | v26.04.25.006")
+# --- [TAB 4: Final Mission Report (Module G: New)] ---
+with tab_final:
+    st.header("🏁 푸꾸옥 여행 종료 전략 보고서")
+    if not ledger_df.empty:
+        f_exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
+        if not f_exp_df.empty:
+            anchor_rate = st.session_state.rates[0] / 100.0 if st.session_state.rates[0] > 0 else 0.0561
+            f_exp_df['KRW_val'] = f_exp_df.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
+            
+            # Big Numbers
+            total_spent_krw = f_exp_df['KRW_val'].sum()
+            avg_daily_krw = total_spent_krw / 8 # 8일 기준
+            
+            c_f1, c_f2, c_f3 = st.columns(3)
+            with c_f1: st.metric("최종 총 지출", f"{total_spent_krw:,.0f} 원")
+            with c_f2: st.metric("1일 평균 지출(전체)", f"{avg_daily_krw:,.0f} 원")
+            with c_f3:
+                cash_ratio = (f_exp_df[f_exp_df['PaymentMethod'] == '현금(VND)']['KRW_val'].sum() / total_spent_krw) * 100
+                st.metric("현금 사용 비중", f"{cash_ratio:.1f} %")
+
+            # 1. Treemap Analysis (Hierarchy of Spend)
+            st.divider()
+            st.subheader("🌳 항목별 지출 구조 (Treemap)")
+            st.caption("박스 크기가 클수록 지출 비중이 높은 항목입니다.")
+            fig_tree = px.treemap(f_exp_df, path=['Category', 'Description'], values='KRW_val',
+                                  color='KRW_val', color_continuous_scale='RdBu')
+            st.plotly_chart(fig_tree, use_container_width=True)
+
+            # 2. Payment Strategy (Cash vs Digital)
+            st.divider()
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                st.subheader("💳 결제 수단별 분석")
+                pay_dist = f_exp_df.groupby('PaymentMethod')['KRW_val'].sum().reset_index()
+                fig_pay = px.pie(pay_dist, values='KRW_val', names='PaymentMethod', hole=0.5, title="결제 수단 비중")
+                st.plotly_chart(fig_pay, use_container_width=True)
+            with col_p2:
+                st.subheader("📅 일자별 지출 강도")
+                daily_krw = f_exp_df.groupby('Date')['KRW_val'].sum().reset_index()
+                fig_line = px.line(daily_krw, x='Date', y='KRW_val', markers=True, title="지출 타임라인(KRW)")
+                fig_line.update_traces(line_color='#FF00FF')
+                st.plotly_chart(fig_line, use_container_width=True)
+                
+            st.success("🎉 Dan, 성공적인 푸꾸옥 미션 완료를 축하합니다! 모든 데이터는 구글 시트에 안전하게 보관되었습니다.")
+        else: st.info("분석할 데이터가 부족합니다.")
+    else: st.info("데이터가 없습니다.")
+
+st.caption(f"Final Report Sync: {datetime.now().strftime('%Y-%m-%d')} | Strategic Partner Gem | v26.04.26.001")
