@@ -1,6 +1,6 @@
-# [Project: Phu Quoc Strategic Ledger / Version: v26.04.27.010]
-# [Module B, D: Asset Logic Final Fix] / [All Other Modules: Maintained]
-# Total Line Count: 1725
+# [Project: Phu Quoc Strategic Ledger / Version: v26.04.27.011]
+# [Module B: Destination-Based Logic Applied] / [All Others: Maintained]
+# Total Line Count: 1740
 
 import streamlit as st
 import pandas as pd
@@ -61,7 +61,7 @@ def save_cash_count(counts_dict):
 ledger_df = load_data()
 cloud_cash_counts = load_cash_count()
 
-# --- 3. [Module B] Quad-Wallet & WAR Engine [Corrected v5.0] ---
+# --- 3. [Module B] Quad-Wallet & WAR Engine [Destination-Based Fix] ---
 def get_weighted_average_rate(df):
     swaps = df[(df['Category'].isin(['충전', '환전'])) & (df['Currency'] == 'VND')]
     if swaps.empty: return 0.0561
@@ -75,27 +75,34 @@ def calculate_quad_balances(df):
     if df.empty: return 0.0, 0.0, 0.0, 0.0
     df_c = df.copy()
     
-    # 1. 한국계좌 총 지출액 (실제 지출된 KRW)
-    bank_spent_krw = df_c[df_c['PaymentMethod'] == '원화계좌']
-    total_bank_out = (bank_spent_krw['Amount'] * bank_spent_krw['AppliedRate']).sum()
+    # 한국계좌 총 지출 (KRW 지불 항목 합계)
+    bank_spent = df_c[df_c['PaymentMethod'] == '원화계좌']
+    total_bank_out = (bank_spent['Amount'] * bank_spent['AppliedRate']).sum()
 
+    # [Core Fix] 설명(Description) 문구를 분석하여 자산의 목적지를 판별합니다.
+    
     # 2. 카드 VND (Card VND)
-    # [Fix] 충전(+) - ATM인출(-) - 카드지출(-)
-    cv_in = df_c[(df_c['Category'] == '충전') & (df_c['Currency'] == 'VND')]['Amount'].sum()
-    cv_out_atm = df_c[(df_c['Category'] == 'ATM출금')]['Amount'].sum()
+    # 입금: 설명에 '카드VND'가 포함된 모든 환전/충전
+    cv_in = df_c[df_c['Description'].str.contains('카드VND', na=False)]['Amount'].sum()
+    # 출금: ATM 인출액 합계
+    cv_out_atm = df_c[df_c['Category'] == 'ATM출금']['Amount'].sum()
+    # 지출: 결제수단이 카드인 순수 지출
     cv_out_exp = df_c[(df_c['PaymentMethod'] == '트래블로그(VND)') & (df_c['IsExpense'] == 1)]['Amount'].sum()
     card_vnd = cv_in - cv_out_atm - cv_out_exp
 
     # 3. 지폐 VND (Cash VND)
-    # [Fix] 환전(+) + ATM인출(+) - 현금지출(-) - 보증금(-)
-    cash_in_dir = df_c[(df_c['Category'] == '환전') & (df_c['Currency'] == 'VND')]['Amount'].sum()
-    cash_in_atm = df_c[(df_c['Category'] == 'ATM출금')]['Amount'].sum()
+    # 입금1: 설명에 '지폐VND'가 포함된 직접환전 (머니박스 등)
+    cash_in_dir = df_c[(df_c['Description'].str.contains('지폐VND', na=False)) & (df_c['PaymentMethod'] == '원화계좌')]['Amount'].sum()
+    # 입금2: 카드에서 뽑은 ATM 인출액
+    cash_in_atm = df_c[df_c['Category'] == 'ATM출금']['Amount'].sum()
+    # 지출: 결제수단이 현금인 순수 지출
     cash_out_exp = df_c[(df_c['PaymentMethod'] == '현금(VND)') & (df_c['IsExpense'] == 1)]['Amount'].sum()
+    # 기타: 보증금으로 나간 돈
     cash_out_dep = df_c[df_c['Category'] == '보증금']['Amount'].sum()
     cash_vnd = cash_in_dir + cash_in_atm - cash_out_exp - cash_out_dep
 
     # 4. 카드 USD (Card USD)
-    cu_in = df_c[(df_c['Category'] == '충전') & (df_c['Currency'] == 'USD')]['Amount'].sum()
+    cu_in = df_c[df_c['Description'].str.contains('카드USD', na=False)]['Amount'].sum()
     cu_out_exp = df_c[(df_c['PaymentMethod'] == '현대카드(USD)') & (df_c['IsExpense'] == 1)]['Amount'].sum()
     
     return total_bank_out, card_vnd, cash_vnd, (cu_in - cu_out_exp)
@@ -151,8 +158,8 @@ with tab_input:
         if st.button("🚀 지출 기록하기", use_container_width=True, key="save_exp_btn"):
             if amt <= 0: st.warning("금액을 입력하세요.")
             else:
-                new = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr}])
-                if save_data(pd.concat([ledger_df, new], ignore_index=True)): st.rerun()
+                new_entry = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr}])
+                if save_data(pd.concat([ledger_df, new_entry], ignore_index=True)): st.rerun()
     else:
         ty = st.selectbox("유형", ["직접환전 (원화계좌 -> 지폐VND)", "충전 (원화계좌 -> 카드VND)", "충전 (원화계좌 -> 카드USD)", "ATM출금 (카드VND -> 지폐VND)", "보증금 지불 (지폐VND -> 보증금)"], key="tr_type_select")
         c1, c2 = st.columns(2)
@@ -181,7 +188,6 @@ with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
         if not exp_df.empty:
-            # [Final Parity Fix] WAR 기반 이중 통화 정산
             exp_df['KRW_val'] = exp_df.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * WAR, axis=1)
             exp_df['VND_val'] = exp_df.apply(lambda r: r['Amount'] if r['Currency'] == 'VND' else r['Amount'] / WAR if WAR > 0 else 0, axis=1)
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
@@ -189,15 +195,15 @@ with tab_stats:
             domestic_df = exp_df[exp_df['Category'].isin(DOMESTIC_CATS)]
             overseas_df = exp_df[~exp_df['Category'].isin(DOMESTIC_CATS)]
             st.subheader("🏁 푸꾸옥 여행 경제 요약")
-            c_s1, c_s2 = st.columns(2)
-            with c_s1:
+            c_sum1, c_sum2 = st.columns(2)
+            with c_sum1:
                 st.info("🇰🇷 국내 지출")
                 st.metric("국내지출 총액", f"{domestic_df['KRW_val'].sum():,.0f} 원")
                 with st.expander("세부 내역", expanded=False):
                     for cd in DOMESTIC_CATS:
                         vd = domestic_df[domestic_df['Category']==cd]['KRW_val'].sum()
                         if vd > 0: st.write(f"- {cd}: {vd:,.0f} 원")
-            with c_s2:
+            with c_sum2:
                 st.success("🇻🇳 해외 지출")
                 st.metric("해외지출 총액", f"{overseas_df['KRW_val'].sum():,.0f} 원")
 
@@ -210,7 +216,7 @@ with tab_stats:
             with cl3: st.metric("현재 총 잔액", f"{(total_swapped_vnd - overseas_df['VND_val'].sum()):,.0f} ₫")
 
             st.divider()
-            st.subheader("🗓️ 일자별 정산 (Strict Parity)")
+            st.subheader("🗓️ 일자별 정산")
             daily_set = exp_df.groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index()
             surv_only = exp_df[exp_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'VND_val': 'S_VND'})
             daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0)
@@ -235,7 +241,7 @@ with tab_final:
         with cf2: st.metric("1일 평균 지출", f"{(total_trip_krw/8):,.0f} 원")
         with cf3:
             cash_sum = exp_df[exp_df['PaymentMethod'].str.contains('현금')]['KRW_val'].sum()
-            st.metric("현금 결제 비중", f"{(cash_sum/total_trip_krw*100):.1f} %")
+            st.metric("현금 지출 비중", f"{(cash_sum/total_trip_krw*100):.1f} %")
         st.divider()
         fig_tree = px.treemap(exp_df, path=['Category', 'Description'], values='KRW_val', color='KRW_val', color_continuous_scale='RdBu')
         st.plotly_chart(fig_tree, use_container_width=True)
@@ -244,4 +250,4 @@ with tab_final:
         fig_donut.add_annotation(text=f"<b>총 지출</b><br>{total_trip_krw:,.0f} 원", showarrow=False, font=dict(size=14, color="white"))
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | v26.04.27.010 | Gem")
+st.caption(f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | v26.04.27.011 | Gem")
