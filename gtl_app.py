@@ -1,4 +1,4 @@
-# [Project: Global Travel Ledger (GTL) / Version: v26.04.28.009]
+# [Project: Global Travel Ledger (GTL) / Version: v26.04.28.002]
 # [Strategic Partner: Gem / Core: Full-Stack FIFO Platform]
 
 import streamlit as st
@@ -112,7 +112,6 @@ with st.sidebar:
     t_bal = sum(current_inventory["트래블로그(VND)"].values())
     c_bal = sum(current_inventory["현금(VND)"].values())
     
-    # 예산 인출액 (원화계좌 지출)
     total_bank_out = (ledger_df[ledger_df['PaymentMethod'] == '원화계좌']['Amount'] * ledger_df[ledger_df['PaymentMethod'] == '원화계좌']['AppliedRate']).sum()
 
     st.metric("🏦 인출한 총 원화 (예산)", f"{total_bank_out:,.0f} 원")
@@ -146,9 +145,11 @@ with tab_in:
             if curr == TRAVEL_CURRENCY: st.caption(f"💡 권장 환율: **{calc_rate:.5f}**")
         desc = st.text_input("내용", key="in_desc")
         s_date = st.date_input("날짜", datetime.now(), key="in_date")
-        if st.button("🚀 기록하기", use_container_width=True):
-            new = pd.DataFrame([{'Date': s_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': calc_rate}])
-            if save_data(pd.concat([ledger_df, new], ignore_index=True)): st.rerun()
+        if st.button("🚀 지출 기록하기", use_container_width=True):
+            if amt <= 0: st.warning("금액을 입력하세요.")
+            else:
+                new = pd.DataFrame([{'Date': s_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': calc_rate}])
+                if save_data(pd.concat([ledger_df, new], ignore_index=True)): st.rerun()
     else:
         ty = st.selectbox("유형", ["충전 (원화계좌 -> 카드VND)", "직접환전 (원화계좌 -> 지폐VND)", "ATM출금 (카드VND -> 지폐VND)"])
         c1, c2 = st.columns(2)
@@ -164,7 +165,7 @@ with tab_in:
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     if not ledger_df.empty:
-        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_v9")
+        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_v102")
         if not ledger_df.equals(edited_df):
             st.warning("⚠️ 수정된 내용이 있습니다!")
             if st.button("💾 수정사항 저장", type="primary"):
@@ -175,14 +176,12 @@ with tab_his:
 
 with tab_rpt:
     if not ledger_df.empty:
-        # FIFO 기반 실질 가치 계산
         exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
         if not exp_df.empty:
             exp_df['KRW_val'] = exp_df.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
             exp_df['VND_val'] = exp_df.apply(lambda r: r['Amount'] if r['Currency'] == 'VND' else r['Amount'] / r['AppliedRate'] if r['AppliedRate']>0 else 0, axis=1)
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
 
-            # [Added] 1. 인벤토리 상세 현황 (FIFO 배분 결과 시각화)
             st.subheader("📦 현재 환율별 재고 현황 (FIFO)")
             for wallet, batches in current_inventory.items():
                 active_batches = {r: q for r, q in batches.items() if q > 0}
@@ -191,35 +190,35 @@ with tab_rpt:
                     inv_data = [{"환율": f"{r:.4f}", "잔액": f"{q:,.0f} ₫", "원화가치": f"{r*q:,.0f} 원"} for r, q in active_batches.items()]
                     st.table(inv_data)
 
-            # 2. 일자별 정산
             st.divider()
             st.subheader("🗓️ 일자별 정산")
             daily_set = exp_df.groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index()
             surv_only = exp_df[exp_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'VND_val': 'S_VND'})
             daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0)
-            st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총지출(원)','VND_val':'총지출(동)','S_KRW':'일상경비(원)','S_VND':'일상경비(동)'}).style.format('{:,.0f}'))
+            
+            # [Core Fix] 날짜 제외, 숫자 컬럼만 지정하여 포맷팅
+            st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총지출(원)','VND_val':'총지출(동)','S_KRW':'일상경비(원)','S_VND':'일상경비(동)'}).style.format({
+                '총지출(원)': '{:,.0f}', '총지출(동)': '{:,.0f}', '일상경비(원)': '{:,.0f}', '일상경비(동)': '{:,.0f}'
+            }))
 
-            # 3. 지출 추이 (이중 막대)
             st.divider()
             st.subheader("📈 지출 추이 분석")
             c_mode = st.radio("통화", ["원화(KRW)", "동화(VND)"], horizontal=True)
             y_s, y_t = ('S_KRW', 'KRW_val') if "원화" in c_mode else ('S_VND', 'VND_val')
             fig = go.Figure()
-            fig.add_trace(go.Bar(x=daily_table['Date'], y=daily_table[y_s], name='일상경비', marker_color='#00FF00'))
-            fig.add_trace(go.Bar(x=daily_table['Date'], y=daily_table[y_t], name='전체지출', marker_color='#FF00FF'))
+            fig.add_trace(go.Bar(x=daily_table['Date'], y=daily_table[y_s], name='일상경비', marker_color='#00FF00', text=daily_table[y_s], texttemplate='%{text:,.0f}', textposition='auto'))
+            fig.add_trace(go.Bar(x=daily_table['Date'], y=daily_table[y_t].apply(lambda x: x if x > 0 else None), name='전체지출', marker_color='#FF00FF', text=daily_table[y_t], texttemplate='%{text:,.0f}', textposition='auto'))
             fig.update_layout(barmode='group', margin=dict(l=0, r=0, t=30, b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
             st.plotly_chart(fig, use_container_width=True)
 
 with tab_final:
     if not ledger_df.empty and not exp_df.empty:
         st.header("🏁 최종 전략 리포트")
-        # 1. 트리맵 (Greens)
         st.subheader("🌳 지출 구조 상세 (Treemap)")
         fig_tree = px.treemap(exp_df, path=['Category', 'Description'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
         fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원")
         st.plotly_chart(fig_tree, use_container_width=True)
 
-        # 2. 도넛 차트
         st.divider()
         st.subheader("🍕 카테고리별 비중")
         cat_pie = exp_df.groupby('Category')['KRW_val'].sum().reset_index()
@@ -228,6 +227,6 @@ with tab_final:
         fig_donut.add_annotation(text=f"<b>총 지출</b><br>{exp_df['KRW_val'].sum():,.0f} 원", showarrow=False, font=dict(size=16))
         fig_donut.update_layout(height=500, margin=dict(l=10, r=10, t=50, b=50), legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5))
         st.plotly_chart(fig_donut, use_container_width=True)
-    else: st.info("보고서를 생성할 데이터가 없습니다.")
+    else: st.info("보고서를 생성할 데이터가 부족합니다.")
 
-st.caption(f"GTL Platform Build: {datetime.now().strftime('%Y-%m-%d')} | Strategic Partner Gem | v26.04.28.009")
+st.caption(f"GTL Platform v1.02 | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
