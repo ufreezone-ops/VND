@@ -1,5 +1,5 @@
-# [Project: Global Travel Ledger (GTL) / Version: v26.04.28.002]
-# [Strategic Partner: Gem / Core: Full-Stack FIFO Platform]
+# [Project: Global Travel Ledger (GTL) / Version: v26.04.28.004]
+# [Strategic Partner: Gem / Core: Fixed Budget Calculation]
 
 import streamlit as st
 import pandas as pd
@@ -106,13 +106,20 @@ def auto_calc_fifo_rate(amount, method):
     if remaining > 0: total_cost_krw += remaining * max(available.keys())
     return total_cost_krw / amount if amount > 0 else 0
 
-# --- 4. [Module C] UI: Sidebar & Cash Counter ---
+# --- 4. [Module C] UI: Sidebar & Corrected Budget Logic [Modified] ---
 with st.sidebar:
     st.title("💰 Wallet Status")
     t_bal = sum(current_inventory["트래블로그(VND)"].values())
     c_bal = sum(current_inventory["현금(VND)"].values())
     
-    total_bank_out = (ledger_df[ledger_df['PaymentMethod'] == '원화계좌']['Amount'] * ledger_df[ledger_df['PaymentMethod'] == '원화계좌']['AppliedRate']).sum()
+    # [Modified Logic] 통화가 KRW이면 그대로 합산, VND이면 환율 곱해서 합산
+    bank_actions = ledger_df[ledger_df['PaymentMethod'] == '원화계좌']
+    total_bank_out = 0
+    for _, row in bank_actions.iterrows():
+        if row['Currency'] == 'KRW':
+            total_bank_out += row['Amount']
+        else:
+            total_bank_out += row['Amount'] * row['AppliedRate']
 
     st.metric("🏦 인출한 총 원화 (예산)", f"{total_bank_out:,.0f} 원")
     st.divider()
@@ -165,7 +172,7 @@ with tab_in:
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     if not ledger_df.empty:
-        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_v102")
+        edited_df = st.data_editor(ledger_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_v103")
         if not ledger_df.equals(edited_df):
             st.warning("⚠️ 수정된 내용이 있습니다!")
             if st.button("💾 수정사항 저장", type="primary"):
@@ -196,7 +203,6 @@ with tab_rpt:
             surv_only = exp_df[exp_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'VND_val': 'S_VND'})
             daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0)
             
-            # [Core Fix] 날짜 제외, 숫자 컬럼만 지정하여 포맷팅
             st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총지출(원)','VND_val':'총지출(동)','S_KRW':'일상경비(원)','S_VND':'일상경비(동)'}).style.format({
                 '총지출(원)': '{:,.0f}', '총지출(동)': '{:,.0f}', '일상경비(원)': '{:,.0f}', '일상경비(동)': '{:,.0f}'
             }))
@@ -229,4 +235,4 @@ with tab_final:
         st.plotly_chart(fig_donut, use_container_width=True)
     else: st.info("보고서를 생성할 데이터가 부족합니다.")
 
-st.caption(f"GTL Platform v1.02 | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v1.03 | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
