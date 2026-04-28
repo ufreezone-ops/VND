@@ -70,7 +70,7 @@ def get_inventory_status(df):
         qty, rate = row['Amount'], row['AppliedRate']
         desc, cat, method = str(row['Description']), row['Category'], row['PaymentMethod']
 
-        if cat in ['충전', '환전', '입금']:
+        if cat in ['충전', '환전', '입금', '직접환전']:
             target = "트래블로그(VND)" if "카드VND" in desc else "현금(VND)"
             inv[target][rate] = inv[target].get(rate, 0) + qty
         elif cat == 'ATM출금':
