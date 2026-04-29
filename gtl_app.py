@@ -12,7 +12,7 @@ import time
 
 # --- SECTION 1: Configuration & Global Setup ---
 # [Status: Maintained and Explicitly Expanded for UI/UX Stability]
-st.set_page_config(page_title="여행 가계부 (GTL Platform)", layout="wide")
+st.set_page_config(page_title="GTL: 여행 가계부", page_icon="🌏", layout="wide")
 
 # 모바일 가독성 및 고밀도 KPI 레이아웃 전용 CSS 스타일 정의
 st.markdown("""
