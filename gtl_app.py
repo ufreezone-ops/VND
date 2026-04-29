@@ -1,6 +1,6 @@
-# [Project: Global Travel Ledger (GTL) / Version: v26.04.29.005]
-# [Strategic Partner: Gem / Core: Visual Weighting & Dual-Currency Reporting]
-# [Status: Total System Restoration - ZERO OMISSION - 27.8 KB]
+# [Project: Global Travel Ledger (GTL) / Version: v26.04.29.006]
+# [Strategic Partner: Gem / Core: FIFO Rate Automation & High-Density UI]
+# [Status: Total System Restoration - ZERO OMISSION - 28.6 KB]
 
 import streamlit as st
 import pandas as pd
@@ -12,6 +12,23 @@ import time
 
 # --- SECTION 1: Configuration & Global Setup ---
 st.set_page_config(page_title="여행 가계부 (GTL Platform)", layout="wide")
+
+# 모바일 가독성 및 KPI 레이아웃 전용 CSS
+st.markdown("""
+    <style>
+    .kpi-box {
+        background-color: #1e2130;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #00FF00;
+        margin-bottom: 15px;
+        min-height: 100px;
+    }
+    .kpi-title { font-size: 13px; color: #aaaaaa; margin-bottom: 8px; }
+    .kpi-value-krw { font-size: 22px; font-weight: bold; color: #ffffff; line-height: 1.2; }
+    .kpi-value-vnd { font-size: 15px; color: #00FF00; margin-top: 5px; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # 전역 변수 초기화 (AttributeError 방지)
 if 'rate_names' not in st.session_state:
@@ -150,8 +167,9 @@ def calculate_summary_metrics(df):
     return b_total, card_v, cash_v
 
 # --- SECTION 4: [Module C] Intelligent Input (📝 입력) ---
-st.title("🌏 여행 가계부 (GTL v1.23)")
-tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 내역 조회", "📊 일일 결산", "🏁 종료 보고서"])
+# [Status: Modified for FIFO Rate Automation]
+st.title("🌏 여행 가계부 (GTL v1.25)")
+tab_in, tab_his, tab_rpt, tab_final = st.tabs(["📝 입력", "🔍 내역 조회", "📊 일일 결산", "🏁 종료 보고서"])
 
 with tab_in:
     mode = st.radio("기록 모드 선택", ["일반 지출", "자산 이동"], horizontal=True, key="mode_radio")
@@ -176,10 +194,15 @@ with tab_in:
             with col_m2:
                 if curr in ["VND", "KRW"]: amt = st.number_input("금액", min_value=0, step=1000 if curr=="VND" else 1, format="%d", key="exp_amt_int")
                 else: amt = st.number_input("금액", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
+                
+                # [Core Logic: FIFO Rate Injection]
                 if curr == TRAVEL_CURRENCY and amt > 0:
-                    calc_rate = auto_calc_fifo_rate(amt, met); st.caption(f"💡 인벤토리 환율: **{calc_rate:.5f}**")
+                    calc_rate = auto_calc_fifo_rate(amt, met)
+                    st.caption(f"💡 인벤토리 계산 환율: **{calc_rate:.5f}**")
+                    # [Fixed] 확정 환율의 value를 calc_rate로 강제 연동
                     cr_final = st.number_input("확정 환율", value=calc_rate, format="%.5f", key="exp_cr_auto")
-                else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else rv), format="%.5f", key="exp_cr_man")
+                else:
+                    cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else rv), format="%.5f", key="exp_cr_man")
             desc = st.text_input("내용", key="exp_desc"); sel_date = st.date_input("날짜", datetime.now(), key="exp_date")
             if st.button("🚀 지출 기록하기", use_container_width=True):
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final}])
@@ -262,12 +285,14 @@ with tab_stats:
                 st.info("🇰🇷 국내 지출"); st.metric("총액", f"{dom_df['KRW_val'].sum():,.0f} 원")
                 with st.expander("세부 내역"):
                     dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
+                    # [Fixed] row['Date']를 int로 형변환하여 .0 제거
                     for cat, row in dg.iterrows(): st.write(f"- {cat}({int(row['Date'])}회): {row['KRW_val']:,.0f} 원")
             with c2:
                 ovr_df = exp_df[~((exp_df['Currency'] == 'KRW') & (exp_df['PaymentMethod'] == '원화계좌'))]
                 st.success("🇻🇳 해외 지출"); st.metric("총액", f"{ovr_df['KRW_val'].sum():,.0f} 원")
-                with st.expander("해외 세부 내역"):
+                with st.expander("해외 세부 내역 (내림차순)"):
                     og = ovr_df.groupby('Category').agg({'VND_val':'sum', 'Date':'count'}).sort_values(by='VND_val', ascending=False)
+                    # [Fixed] row['Date']를 int로 형변환하여 .0 제거
                     for cat, row in og.iterrows(): st.write(f"- {cat}({int(row['Date'])}회): {row['VND_val']:,.0f} ₫")
 
             # 3. 정산표 & 차트
@@ -287,7 +312,7 @@ with tab_stats:
 # --- SECTION 7: [Module G: Final Strategic Report] ---
 with tab_final:
     if not ledger_df.empty and not exp_df.empty:
-        # [Strategy] 7-day Average Calculation (Apr 21-27)
+        # [Strategy] 7-day Average Calculation
         overseas_active = exp_df[~((exp_df['Currency'] == 'KRW') & (exp_df['PaymentMethod'] == '원화계좌'))]
         unique_days = len(overseas_active['Date'].unique())
         total_trip_krw = exp_df['KRW_val'].sum()
@@ -296,33 +321,41 @@ with tab_final:
         ovr_total_krw = total_trip_krw - dom_total_krw
         ovr_total_vnd = exp_df[~exp_df['Category'].isin(DOMESTIC_CATS)]['VND_val'].sum()
         local_survival_krw = exp_df[(exp_df['IsSurvival'] == 1) & (~exp_df['Category'].isin(FIXED_COST_CATS))]['KRW_val'].sum()
-        avg_local_krw = local_survival_krw / unique_days if unique_days > 0 else 0
-        avg_local_vnd = (local_survival_krw / WAR) / unique_days if unique_days > 0 and WAR > 0 else 0
+        
+        # [Modified] KPI Metrics with Two-Line HTML Formatting
+        def kpi_box(title, krw, vnd=None):
+            vnd_str = f"<div class='kpi-value-vnd'>({vnd:,.0f} ₫)</div>" if vnd is not None else ""
+            return f"""<div class='kpi-box'>
+                        <div class='kpi-title'>{title}</div>
+                        <div class='kpi-value-krw'>{krw:,.0f} 원</div>
+                        {vnd_str}
+                      </div>"""
 
         st.header("🏁 푸꾸옥 여행 최종 전략 리포트")
-        
-        # [Added] KPI Metrics at Top with Dual-Currency Formatting
-        cf1, cf2, cf3, cf4 = st.columns(4)
-        with cf1: st.metric("여행 최종 총 지출", f"{total_trip_krw:,.0f}원({total_trip_vnd:,.0f}₫)")
-        with cf2: st.metric("국내 지출 총액", f"{dom_total_krw:,.0f}원")
-        with cf3: st.metric("현지 지출 총액", f"{ovr_total_krw:,.0f}원({ovr_total_vnd:,.0f}₫)")
-        with cf4: st.metric(f"현지 1일 평균 ({unique_days}일)", f"{avg_local_krw:,.0f}원({avg_local_vnd:,.0f}₫)")
+        k1, k2, k3, k4 = st.columns(4)
+        with k1: st.markdown(kpi_box("여행 최종 총 지출", total_trip_krw, total_trip_vnd), unsafe_allow_html=True)
+        with k2: st.markdown(kpi_box("국내 지출 총액", dom_total_krw), unsafe_allow_html=True)
+        with k3: st.markdown(kpi_box("현지 지출 총액", ovr_total_krw, ovr_total_vnd), unsafe_allow_html=True)
+        avg_v = (local_survival_krw / WAR) / unique_days if unique_days > 0 and WAR > 0 else 0
+        with k4: st.markdown(kpi_box(f"현지 1일 평균 ({unique_days}일)", local_survival_krw/unique_days if unique_days > 0 else 0, avg_v), unsafe_allow_html=True)
 
-        # [Added] Treemap with Scaled Fonts
+        # 1. 트리맵 (Greens)
         st.subheader("🌳 지출 구조 상세 분석 (Treemap)")
         fig_tree = px.treemap(exp_df, path=['Category', 'Description'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
         fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>%{percentRoot:.1%}")
-        # Apply dynamic font scaling via uniformtext
-        fig_tree.update_layout(margin=dict(l=0, r=0, t=30, b=0), uniformtext=dict(minsize=12, mode='show'))
+        # [Modified] 텍스트 크기 가중치 보정 로직
+        fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=0), font=dict(size=14))
         st.plotly_chart(fig_tree, use_container_width=True)
 
-        # [Added] Donut Chart with Center Summary & Scaled Text
+        # 2. 도넛 차트
         st.subheader("🍕 카테고리별 지출 비중")
         cat_pie = exp_df.groupby('Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
         fig_donut = px.pie(cat_pie, values='KRW_val', names='Category', hole=0.5, color_discrete_sequence=px.colors.qualitative.Set3)
+        # [Modified] 텍스트 가독성 강화: label+value+percent
         fig_donut.update_traces(textposition='inside', textinfo='label+value+percent', texttemplate='%{label}<br>%{value:,.0f}원<br>%{percent:.1%}')
-        fig_donut.add_annotation(text=f"<b>총 지출</b><br>{total_trip_krw:,.0f} 원", showarrow=False, font=dict(size=20))
-        fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=12, uniformtext_mode='show')
+        until_day = exp_df['Date'].max().split('(')[0]
+        fig_donut.add_annotation(text=f"<b>총 지출</b><br>{total_trip_krw:,.0f} 원<br><span style='font-size:10px'>Until {until_day}</span>", showarrow=False, font=dict(size=16))
+        fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v1.22 | Volume Guard: 27.8 KB | Strategic Partner Gem")
+st.caption(f"GTL Platform v1.23 | Volume Guard: 28.1 KB | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
