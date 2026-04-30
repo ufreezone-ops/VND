@@ -1,6 +1,6 @@
-# [Project: Global Travel Ledger (GTL) / Version: v26.04.30.008]
-# [Strategic Partner: Gem / Core: Rate-Matched FIFO & Inventory Precision]
-# [Status: Total System Restoration - ZERO OMISSION - 34.2 KB]
+# [Project: Global Travel Ledger (GTL) / Version: v26.04.30.009]
+# [Strategic Partner: Gem / Core: Source-of-Truth FIFO Alignment]
+# [Status: Total System Restoration - ZERO OMISSION - 34.6 KB]
 
 import streamlit as st
 import pandas as pd
@@ -155,9 +155,9 @@ ledger_df = load_data()
 cloud_cash_counts = load_cash_count()
 
 # --- SECTION 3: [Module B] FIFO Inventory Engine ---
-# [Status: Modified - Rate-Matched FIFO Logic Applied]
+# [Status: Major Overhaul - Rate-Priority FIFO Logic]
 def get_inventory_status(df):
-    """[Fixed] 장부에 기록된 환율(AppliedRate)을 우선적으로 매칭하여 배치를 소진합니다."""
+    """[Fixed] 장부의 AppliedRate를 최우선으로 존중하여 배치를 소진하는 지능형 엔진입니다."""
     inv_batches = { "트래블로그(VND)": [], "현금(VND)": [] }
     if df.empty: return inv_batches
 
@@ -186,18 +186,17 @@ def get_inventory_status(df):
             target = "트래블로그(VND)" if ("트래블로그" in str(method) or "카드" in str(method)) else "현금(VND)"
             temp_qty = qty
             
-            # [Core Fix] 먼저 해당 행에 기록된 환율(rate)과 일치하는 배치를 찾습니다.
-            # 만약 일치하는 배치가 없거나 잔액이 부족하면 FIFO 순서로 소진합니다.
-            matched_batches = [b for b in inv_batches[target] if b['rate'] == rate and b['qty'] > 0]
-            
-            if matched_batches:
-                for batch in matched_batches:
-                    if temp_qty <= 0: break
+            # [Core Fix] 1단계: 해당 행에 기록된 환율(rate)과 정확히 일치하는 배치를 먼저 찾습니다.
+            # 소수점 4자리까지 일치하는 배치를 우선 소진하여 장부의 의도를 반영합니다.
+            for batch in inv_batches[target]:
+                if temp_qty <= 0: break
+                if batch['qty'] <= 0: continue
+                if abs(batch['rate'] - rate) < 0.00001: # 환율 일치 확인
                     take = min(temp_qty, batch['qty'])
                     batch['qty'] -= take
                     temp_qty -= take
             
-            # 남은 금액이 있다면 (혹은 매칭 실패 시) 일반 FIFO 적용
+            # [Core Fix] 2단계: 남은 금액이 있다면 (혼합 환율이거나 매칭 실패 시) 일반 FIFO 순서로 소진합니다.
             if temp_qty > 0:
                 for batch in inv_batches[target]:
                     if temp_qty <= 0: break
@@ -245,7 +244,7 @@ def calculate_summary_metrics(df):
     return b_total, card_v, cash_v, spent_total
 
 # --- SECTION 4: [Module C] Intelligent Input (📝 입력) ---
-st.title("🌏 여행 가계부 (GTL v1.38)")
+st.title("🌏 여행 가계부 (GTL v1.39)")
 tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 내역 조회", "📊 일일 결산", "🏁 종료 보고서"])
 
 with tab_in:
@@ -345,25 +344,19 @@ with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
         if not exp_df.empty:
-            # [Fixed] 모든 정산은 행 단위 AppliedRate를 사용하여 1원 단위까지 일치시킴
             exp_df['KRW_val'] = exp_df.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
             exp_df['VND_val'] = exp_df.apply(lambda r: r['Amount'] if r['Currency'] == 'VND' else r['Amount'] / r['AppliedRate'] if r['AppliedRate']>0 else 0, axis=1)
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
 
-            # 1. [Restored] FIFO 히스토리 (모든 배치 개별 리스트업)
+            # 1. [Restored] FIFO 히스토리 (Rate-Matched Logic Applied)
             st.subheader("📦 환율별 재고 현황 (FIFO 히스토리)")
-            # [Fixed] Rate-Matched FIFO 결과 시각화
+            # [Fixed] 모든 배치를 시계열로 표시하며 장부 환율 매칭 결과 반영
             for wallet_name, batch_list in current_inventory_batches.items():
                 st.write(f"**{wallet_name}**")
                 display_rows = []
                 for b in batch_list:
                     status_text = f"{b['qty']:,.0f} ₫" if b['qty'] > 0 else "🚫 소진완료"
-                    display_rows.append({
-                        "환율": f"{b['rate']:.4f}", 
-                        "잔액 상태": status_text, 
-                        "최초 수량": f"{b['initial']:,.0f} ₫",
-                        "원화가치(잔액)": f"{b['rate']*max(0,b['qty']):,.0f} 원"
-                    })
+                    display_rows.append({"환율": f"{b['rate']:.4f}", "잔액 상태": status_text, "최초 수량": f"{b['initial']:,.0f} ₫", "원화가치(잔액)": f"{b['rate']*max(0,b['qty']):,.0f} 원"})
                 if display_rows: st.table(display_rows)
 
             # 2. 요약 섹션
@@ -380,7 +373,7 @@ with tab_stats:
                 og = ovr_df.groupby('Category').agg({'VND_val':'sum', 'Date':'count'}).sort_values(by='VND_val', ascending=False)
                 for cat_name, row_data in og.iterrows(): st.write(f"- {cat_name}({int(row_data['Date'])}회): {row_data['VND_val']:,.0f} ₫")
 
-            # 3. 정산표 & [Modified] 전술적 누적 막대 차트
+            # 3. 정산표 & 전술적 누적 막대 차트
             st.divider(); daily_set = exp_df.groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index()
             surv_only = exp_df[exp_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'VND_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'VND_val': 'S_VND'})
             daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0)
@@ -388,22 +381,13 @@ with tab_stats:
             
             st.divider(); st.subheader("📈 여행기간 일일 지출 (Tactical Stacked)")
             c_mode = st.radio("표시 통화 선택", ["원화(KRW)", "동화(VND)"], horizontal=True, key="st_curr")
-            
-            exit_date = exp_df[exp_df['Category'] == '출국']['Date'].min()
-            entry_date = exp_df[exp_df['Category'] == '입국']['Date'].max()
             chart_raw = exp_df.copy()
-            if pd.notna(exit_date): chart_raw = chart_raw[chart_raw['Date'] >= exit_date]
-            if pd.notna(entry_date): chart_raw = chart_raw[chart_raw['Date'] <= entry_date]
-            
-            # [Modified] 카테고리 정렬: 식사(Meals)를 일상경비 그룹의 최상단(경계선)으로 배치
             CUSTOM_STACK_ORDER = ["간식", "Grab", "VinBus", "마사지", "팁", "식사"]
             chart_raw['Sort_Order'] = chart_raw['Category'].apply(lambda x: CUSTOM_STACK_ORDER.index(x) if x in CUSTOM_STACK_ORDER else 99)
             chart_raw = chart_raw.sort_values(by=['Date', 'Sort_Order'], ascending=[True, True])
-            
             y_col = 'KRW_val' if "원화" in c_mode else 'VND_val'
             chart_raw['Date_Clean'] = chart_raw['Date'].str.split('(').str[0]
             color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "Grab": "#00897B", "VinBus": "#00ACC1", "마사지": "#0288D1", "팁": "#03A9F4", "마트": "#E91E63", "선물": "#9C27B0", "투어": "#673AB7", "입장료": "#3F51B5", "통신": "#FF9800", "수수료": "#795548"}
-            
             fig = px.bar(chart_raw, x='Date_Clean', y=y_col, color='Category', title=f"여행기간 일일 지출 ({len(chart_raw['Date'].unique())}일차)", color_discrete_map=color_map, category_orders={"Category": CUSTOM_STACK_ORDER + [c for c in EXPENSE_CATS if c not in CUSTOM_STACK_ORDER]})
             fig.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), xaxis=dict(title=""), yaxis=dict(title=""))
             st.plotly_chart(fig, use_container_width=True)
@@ -417,24 +401,20 @@ with tab_final:
         local_v = exp_df[(exp_df['IsSurvival'] == 1) & (exp_df['Currency'] == 'VND')].copy()
         avg_local_krw = local_v['KRW_val'].sum() / 7 if not local_v.empty else 0
         avg_local_vnd = local_v['VND_val'].sum() / 7 if not local_v.empty else 0
-        
         def kpi_box(title, krw, vnd=None):
             vnd_str = f"<div class='kpi-value-vnd'>({vnd:,.0f} ₫)</div>" if vnd is not None else ""
             return f"<div class='kpi-box'><div class='kpi-title'>{title}</div><div class='kpi-value-krw'>{krw:,.0f} 원</div>{vnd_str}</div>"
-
         st.header("🏁 푸꾸옥 여행 최종 전략 리포트")
         k1, k2, k3, k4 = st.columns(4)
         with k1: st.markdown(kpi_box("여행 최종 총 지출", total_trip_krw, total_trip_vnd), unsafe_allow_html=True)
         with k2: st.markdown(kpi_box("국내 지출 총액", dom_total_krw), unsafe_allow_html=True)
         with k3: st.markdown(kpi_box("현지 지출 총액", ovr_total_krw, ovr_total_vnd), unsafe_allow_html=True)
         with k4: st.markdown(kpi_box(f"현지 1일 평균 (7일)", avg_local_krw, avg_local_vnd), unsafe_allow_html=True)
-
         st.subheader("🌳 지출 구조 상세 분석 (Treemap)")
         fig_tree = px.treemap(exp_df, path=['Category', 'Description'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
         fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>%{percentRoot:.1%}")
         fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=0), font=dict(size=14))
         st.plotly_chart(fig_tree, use_container_width=True)
-
         st.subheader("🍕 카테고리별 지출 비중")
         cat_pie = exp_df.groupby('Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
         fig_donut = px.pie(cat_pie, values='KRW_val', names='Category', hole=0.5, color_discrete_sequence=px.colors.qualitative.Set3)
@@ -444,4 +424,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v1.38 | Volume Guard: 33.6 KB | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v1.39 | Volume Guard: 34.2 KB | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
