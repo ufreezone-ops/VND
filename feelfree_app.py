@@ -1,6 +1,6 @@
 # [Project: Feelfree Travel Ledger / Version: v26.04.30.006]
-# [Strategic Partner: Gem / Core: A-F Authority & Self-Healing Engine]
-# [Status: Total System Restoration - ZERO OMISSION - 40.5 KB]
+# [Strategic Partner: Gem / Core: Full-Scale Rate Re-Induction Engine]
+# [Status: Total System Restoration - ZERO OMISSION - 40.8 KB]
 
 import streamlit as st
 import pandas as pd
@@ -11,7 +11,7 @@ from streamlit_gsheets import GSheetsConnection
 import time
 
 # --- SECTION 1: Configuration & Global Setup ---
-# [Status: Maintained and Explicitly Expanded for UI/UX Stability]
+# [Status: Maintained for UI/UX Stability]
 st.set_page_config(
     page_title="Feelfree: 여행 가계부", 
     page_icon="🌏", 
@@ -19,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# [Added] 아이폰 홈 화면 추가 시 전용 아이콘 지정 및 KPI 레이아웃 CSS
+# 아이폰 홈 화면 추가 시 전용 아이콘 지정 및 KPI 레이아웃 CSS
 st.markdown("""
     <script>
         var link = document.createElement('link');
@@ -80,11 +80,10 @@ FIXED_COST_CATS = ["항공권", "호텔", "보험"]
 DOMESTIC_CATS = ["항공권", "호텔", "보험", "지하철", "택시"]
 TRANSFER_CATS = ["충전", "ATM출금", "보증금", "환전", "직접환전"]
 
-# [CORE FIX] 전역 컬럼 정의 (NameError 방지를 위해 최상단 배치)
-CORE_COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense', 'AppliedRate']
-AUDIT_COLUMNS = ['Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND']
-NOTE_COLUMN = ['Note']
-FINAL_COLUMNS = CORE_COLUMNS + AUDIT_COLUMNS + NOTE_COLUMN
+# 컬럼 정의
+USER_TRUTH_COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod']
+SYSTEM_LOGIC_COLUMNS = ['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']
+FINAL_COLUMNS = USER_TRUTH_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
 # --- SECTION 2: [Module A] Data Engine (Authority & Recalculation) ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -105,10 +104,10 @@ def load_data():
     except Exception: return pd.DataFrame(columns=FINAL_COLUMNS)
 
 def recalculate_entire_ledger(df):
-    """A-F열을 기반으로 G-L열을 처음부터 끝까지 다시 계산하는 핵심 엔진입니다."""
+    """[Fixed] A-F열을 기반으로 G-L열을 처음부터 끝까지 다시 계산합니다. 지출 환율을 강제로 재산출합니다."""
     temp_df = df.copy()
-    # 시스템 컬럼 초기화
-    for col in SYSTEM_LOGIC_COLUMNS if 'SYSTEM_LOGIC_COLUMNS' in locals() else ['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']:
+    # 시스템 컬럼 초기화 (기존 Note와 AppliedRate를 비우고 시작)
+    for col in SYSTEM_LOGIC_COLUMNS:
         temp_df[col] = 0.0 if 'Cum' in col or col == 'AppliedRate' else ""
     
     inv_batches = { "트래블로그(VND)": [], "현금(VND)": [] }
@@ -123,7 +122,8 @@ def recalculate_entire_ledger(df):
         temp_df.at[i, 'IsExpense'] = is_exp
         
         # 2. 자산 유입 및 환율 결정
-        rate = row['AppliedRate']
+        # [Strategic Fix] 유입(Inflow)인 경우에만 기존 AppliedRate를 진실로 믿고 사용함
+        rate = df.at[i, 'AppliedRate'] 
         
         if cat in ['충전', '환전', '입금', '직접환전']:
             target = "트래블로그(VND)" if "카드VND" in desc else "현금(VND)"
@@ -133,36 +133,45 @@ def recalculate_entire_ledger(df):
         
         elif cat == 'ATM출금':
             temp_qty = qty
+            # ATM 출금 시 카드 재고에서 환율을 계승함
+            total_inherited_krw = 0.0
             for batch in inv_batches["트래블로그(VND)"]:
                 if temp_qty <= 0: break
                 if batch['qty'] <= 0: continue
                 take = min(temp_qty, batch['qty'])
                 batch['qty'] -= take
                 inv_batches["현금(VND)"].append({'rate': batch['rate'], 'qty': take})
+                total_inherited_krw += take * batch['rate']
                 temp_qty -= take
-                rate = batch['rate']
+            if qty > 0: rate = total_inherited_krw / qty # 계승된 가중평균 환율
         
         elif is_exp == 1 and curr == TRAVEL_CURRENCY:
+            # [Strategic Fix] 지출(Expense)인 경우 기존 환율을 무시하고 현재 재고에서 새로 계산함
             target = "트래블로그(VND)" if ("트래블로그" in str(method) or "카드" in str(method)) else "현금(VND)"
             temp_qty = qty
             total_cost_krw = 0.0
             decomposed = []
+            
             for batch in inv_batches[target]:
                 if temp_qty <= 0: break
                 if batch['qty'] <= 0: continue
                 take = min(temp_qty, batch['qty'])
-                batch['qty'] -= take; temp_qty -= take
+                batch['qty'] -= take
+                temp_qty -= take
                 total_cost_krw += take * batch['rate']
                 decomposed.append(f"{take:,.0f}@{batch['rate']:.4f}")
+            
             if qty > 0:
                 rate = total_cost_krw / qty
                 if decomposed: temp_df.at[i, 'Note'] = "Decomposed: " + " + ".join(decomposed)
+            else:
+                rate = 0.0
         
         elif method == '원화계좌' and is_exp == 1:
             c_budget += qty
             rate = 1.0
 
-        # 3. 누계 업데이트
+        # 3. 결과 기입
         temp_df.at[i, 'AppliedRate'] = rate
         temp_df.at[i, 'Cum_Budget_KRW'] = round(c_budget, 0)
         temp_df.at[i, 'Cum_Card_VND'] = round(sum([b['qty'] for b in inv_batches["트래블로그(VND)"]]), 0)
@@ -174,8 +183,10 @@ def save_data(df, metrics=None):
     if df is None or len(df) == 0: return False
     with st.status("데이터 무결성 검증 및 동기화 중...", expanded=False):
         try:
+            # 저장 시 항상 전체 로직을 재관통시켜 정합성 확보
             final_df = recalculate_entire_ledger(df)
             conn.update(worksheet="ledger", data=final_df.reindex(columns=FINAL_COLUMNS))
+            
             if metrics:
                 summary = pd.DataFrame({"항목": ["🏦 예산(KRW)", "💳 카드(VND)", "💵 현금(VND)", "🕒 업데이트"], "수치": [f"{metrics[0]:,.0f}", f"{metrics[1]:,.0f}", f"{metrics[2]:,.0f}", datetime.now().strftime("%H:%M")]})
                 try: conn.update(worksheet="summary", data=summary)
@@ -203,6 +214,7 @@ cloud_cash_counts = load_cash_count()
 
 # --- SECTION 3: [Module B] URDI Engine ---
 def get_inventory_status(df):
+    """현재 시점의 지갑별 배치를 FIFO로 추적합니다."""
     inv_batches = { "트래블로그(VND)": [], "현금(VND)": [] }
     if df.empty: return inv_batches
     for _, row in df.iterrows():
@@ -386,7 +398,7 @@ with tab_stats:
             chart_raw['Date_Clean'] = chart_raw['Date'].str.split('(').str[0]
             y_col = 'KRW_val' if "원화" in c_mode else 'VND_val'
             color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "Grab": "#00897B", "VinBus": "#00ACC1", "마사지": "#0288D1", "팁": "#03A9F4", "마트": "#E91E63", "선물": "#9C27B0", "투어": "#673AB7", "입장료": "#3F51B5", "통신": "#FF9800", "수수료": "#795548"}
-            fig = px.bar(chart_raw, x='Date_Clean', y=y_col, color='Category', title=f"여행기간 일일 지출 ({len(chart_raw['Date'].unique())}일차)", color_discrete_map=color_map)
+            fig = px.bar(chart_raw, x='Date_Clean', y=y_col, color='Category', title=f"여행기간 일일 지출 ({len(chart_raw['Date'].unique())}일차)", color_discrete_map=color_map, category_orders={"Category": SURVIVAL_CATS})
             fig.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), xaxis=dict(title=""), yaxis=dict(title=""))
             st.plotly_chart(fig, use_container_width=True)
 
@@ -421,4 +433,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v1.45 | Volume Guard: 40.2 KB | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v1.46 | Volume Guard: 40.5 KB | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
