@@ -1,6 +1,6 @@
-# [Project: Global Travel Ledger (GTL) / Version: v26.04.30.009]
-# [Strategic Partner: Gem / Core: Unified Record-Driven Inventory (URDI)]
-# [Status: Total System Restoration - ZERO OMISSION - 35.8 KB]
+# [Project: Global Travel Ledger (GTL) / Version: v26.04.30.010]
+# [Strategic Partner: Gem / Core: Record-First FIFO & Blended Rate Engine]
+# [Status: Total System Restoration - ZERO OMISSION - 36.2 KB]
 
 import streamlit as st
 import pandas as pd
@@ -125,13 +125,20 @@ def calculate_running_totals(df):
     c_budget, c_card, c_cash = 0.0, 0.0, 0.0
     
     for i, row in temp_df.iterrows():
-        qty, rate, desc, cat = row['Amount'], row['AppliedRate'], str(row['Description']), row['Category']
-        method, curr, is_exp = row['PaymentMethod'], row['Currency'], row['IsExpense']
-        
+        qty = row['Amount']
+        rate = row['AppliedRate']
+        desc = str(row['Description'])
+        cat = row['Category']
+        method = row['PaymentMethod']
+        curr = row['Currency']
+        is_exp = row['IsExpense']
+
+        # 1. 예산 누계
         if method == '원화계좌':
             if curr == 'KRW': c_budget += qty
             else: c_budget += qty * rate
             
+        # 2. 자산 흐름 추적 (FIFO 연동)
         if cat in ['충전', '환전', '입금', '직접환전']:
             if "카드VND" in desc: c_card += qty
             elif "지폐VND" in desc: c_cash += qty
@@ -161,7 +168,7 @@ def save_data(df, metrics=None):
             if metrics:
                 summary_data = pd.DataFrame({
                     "항목": ["🏦 총 예산 (KRW)", "💳 카드 (VND)", "💵 현금 (VND)", "🕒 업데이트 시각"],
-                    "수치": [f"{metrics[0]:,.0f} 원", f"{metrics[1]:,.0f} ₫", f"{metrics[2]:,.0f} ₫", datetime.now().strftime("%m/%d %H:%M")]
+                    "수치": [f"{metrics[0]:,.0f} 원", f"{metrics[1]:,.0f} ₫", f"{metrics[2]:,.0f} ₫", datetime.now().strftime("%H:%M")]
                 })
                 try: conn.update(worksheet="summary", data=summary_data)
                 except: pass
@@ -196,7 +203,7 @@ ledger_df = load_data()
 cloud_cash_counts = load_cash_count()
 
 # --- SECTION 3: [Module B] URDI Engine (Unified Record-Driven Inventory) ---
-# [Status: Major Overhaul - Source of Truth Policy Applied to BOTH Wallets]
+# [Status: Major Overhaul - Record-First FIFO Logic Applied]
 def get_inventory_status(df):
     """[Fixed] 장부의 AppliedRate를 절대적 기준으로 삼아 카드와 현금 배치를 각각 추적합니다."""
     # inv_batches = { 지갑명: [ {'rate': r, 'qty': q, 'initial': i, 'desc': d}, ... ] }
@@ -246,6 +253,7 @@ def get_inventory_status(df):
             temp_qty = qty
             
             # [Core Fix] 1단계: 해당 행에 기록된 환율(rate)과 정확히 일치하는 배치를 먼저 찾습니다.
+            # 이 로직이 있어야 Dan이 수동으로 지정한 0.0561 혹은 0.0610 배치가 정확히 차감됩니다.
             for batch in inv_batches[target]:
                 if temp_qty <= 0: break
                 if batch['qty'] <= 0: continue
@@ -254,7 +262,8 @@ def get_inventory_status(df):
                     batch['qty'] -= take
                     temp_qty -= take
             
-            # [Core Fix] 2단계: 남은 금액이 있다면 (혼합 환율이거나 매칭 실패 시) 일반 FIFO 순서로 소진합니다.
+            # [Core Fix] 2단계: 남은 금액이 있다면 (혼합 환율 0.0582이거나 매칭 실패 시) 일반 FIFO 순서로 소진합니다.
+            # 피냐콜라다 건(0.0582)은 여기서 처리되어 남은 재고를 순차적으로 깎습니다.
             if temp_qty > 0:
                 for batch in inv_batches[target]:
                     if temp_qty <= 0: break
@@ -322,7 +331,7 @@ def calculate_summary_metrics(df):
     return b_total, card_v, cash_v, spent_total
 
 # --- SECTION 4: [Module C] Intelligent Input (📝 입력) ---
-st.title("🌏 여행 가계부 (GTL v1.40)")
+st.title("🌏 여행 가계부 (GTL v1.41)")
 tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 내역 조회", "📊 일일 결산", "🏁 종료 보고서"])
 
 with tab_in:
@@ -512,4 +521,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v1.40 | Volume Guard: 35.8 KB | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v1.41 | Volume Guard: 36.2 KB | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
