@@ -1,6 +1,6 @@
-# [Project: Feelfree Travel Ledger / Version: v26.04.30.006]
-# [Strategic Partner: Gem / Core: Full-Scale Rate Re-Induction Engine]
-# [Status: Total System Restoration - ZERO OMISSION - 40.8 KB]
+# [Project: Feelfree Travel Ledger / Version: v26.04.30.007]
+# [Strategic Partner: Gem / Core: A-F Authority & Self-Healing Engine]
+# [Status: Total System Restoration - ZERO OMISSION - 41.2 KB]
 
 import streamlit as st
 import pandas as pd
@@ -11,13 +11,21 @@ from streamlit_gsheets import GSheetsConnection
 import time
 
 # --- SECTION 1: Configuration & Global Setup ---
-# [Status: Maintained for UI/UX Stability]
+# [Status: Maintained and Explicitly Expanded for UI/UX Stability]
 st.set_page_config(
     page_title="Feelfree: 여행 가계부", 
     page_icon="🌏", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# [CORE FIX] 전역 컬럼 및 시스템 변수 정의 (NameError 방지를 위해 최상단 배치)
+# A-F열은 사용자 입력 진실, G-L열은 시스템 계산 로직입니다.
+CORE_COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod']
+SYSTEM_LOGIC_COLUMNS = ['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']
+AUDIT_COLUMNS = ['Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND']
+NOTE_COLUMN = ['Note']
+FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
 # 아이폰 홈 화면 추가 시 전용 아이콘 지정 및 KPI 레이아웃 CSS
 st.markdown("""
@@ -80,11 +88,6 @@ FIXED_COST_CATS = ["항공권", "호텔", "보험"]
 DOMESTIC_CATS = ["항공권", "호텔", "보험", "지하철", "택시"]
 TRANSFER_CATS = ["충전", "ATM출금", "보증금", "환전", "직접환전"]
 
-# 컬럼 정의
-USER_TRUTH_COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod']
-SYSTEM_LOGIC_COLUMNS = ['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']
-FINAL_COLUMNS = USER_TRUTH_COLUMNS + SYSTEM_LOGIC_COLUMNS
-
 # --- SECTION 2: [Module A] Data Engine (Authority & Recalculation) ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -106,7 +109,7 @@ def load_data():
 def recalculate_entire_ledger(df):
     """[Fixed] A-F열을 기반으로 G-L열을 처음부터 끝까지 다시 계산합니다. 지출 환율을 강제로 재산출합니다."""
     temp_df = df.copy()
-    # 시스템 컬럼 초기화 (기존 Note와 AppliedRate를 비우고 시작)
+    # 시스템 컬럼 초기화
     for col in SYSTEM_LOGIC_COLUMNS:
         temp_df[col] = 0.0 if 'Cum' in col or col == 'AppliedRate' else ""
     
@@ -347,9 +350,11 @@ with st.sidebar:
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     st.info("💡 누락된 데이터를 중간에 삽입하셨나요? 아래 버튼을 누르면 전체 환율과 잔액이 재정렬됩니다.")
+    # [CORE FIX] save_data 호출 시 필요한 컬럼 리스트를 명시적으로 전달하여 NameError 방지
     if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
         if save_data(ledger_df[CORE_COLUMNS + NOTE_COLUMN]):
             st.success("전체 장부 재건축이 완료되었습니다!"); time.sleep(1); st.rerun()
+            
     if not ledger_df.empty:
         display_df = ledger_df.reindex(columns=FINAL_COLUMNS)
         edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final")
@@ -398,7 +403,7 @@ with tab_stats:
             chart_raw['Date_Clean'] = chart_raw['Date'].str.split('(').str[0]
             y_col = 'KRW_val' if "원화" in c_mode else 'VND_val'
             color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "Grab": "#00897B", "VinBus": "#00ACC1", "마사지": "#0288D1", "팁": "#03A9F4", "마트": "#E91E63", "선물": "#9C27B0", "투어": "#673AB7", "입장료": "#3F51B5", "통신": "#FF9800", "수수료": "#795548"}
-            fig = px.bar(chart_raw, x='Date_Clean', y=y_col, color='Category', title=f"여행기간 일일 지출 ({len(chart_raw['Date'].unique())}일차)", color_discrete_map=color_map, category_orders={"Category": SURVIVAL_CATS})
+            fig = px.bar(chart_raw, x='Date_Clean', y=y_col, color='Category', title=f"여행기간 일일 지출 ({len(chart_raw['Date'].unique())}일차)", color_discrete_map=color_map)
             fig.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), xaxis=dict(title=""), yaxis=dict(title=""))
             st.plotly_chart(fig, use_container_width=True)
 
