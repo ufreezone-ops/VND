@@ -1,6 +1,6 @@
-# [Project: Feelfree Travel Ledger / Version: v26.04.30.007]
-# [Strategic Partner: Gem / Core: A-F Authority & Self-Healing Engine]
-# [Status: Total System Restoration - ZERO OMISSION - 41.2 KB]
+# [Project: Feelfree Travel Ledger / Version: v26.05.01.001]
+# [Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
+# [Status: Total System Restoration - ZERO OMISSION - 41.5 KB]
 
 import streamlit as st
 import pandas as pd
@@ -107,11 +107,17 @@ def load_data():
     except Exception: return pd.DataFrame(columns=FINAL_COLUMNS)
 
 def recalculate_entire_ledger(df):
-    """[Fixed] A-F열을 기반으로 G-L열을 처음부터 끝까지 다시 계산합니다. 지출 환율을 강제로 재산출합니다."""
+    """[Fixed v2.0] A-F열을 기반으로 G-L열을 처음부터 끝까지 다시 계산합니다. 지출 환율을 강제로 재산출합니다."""
     temp_df = df.copy()
-    # 시스템 컬럼 초기화
-    for col in SYSTEM_LOGIC_COLUMNS:
-        temp_df[col] = 0.0 if 'Cum' in col or col == 'AppliedRate' else ""
+    
+    # [Strategic Fix] 시스템 컬럼 초기화 (기존 AppliedRate를 지출 항목에 대해서만 0으로 밀어버림)
+    for i, row in temp_df.iterrows():
+        if row['Category'] in EXPENSE_CATS:
+            temp_df.at[i, 'AppliedRate'] = 0.0
+        temp_df.at[i, 'Note'] = ""
+        temp_df.at[i, 'Cum_Budget_KRW'] = 0.0
+        temp_df.at[i, 'Cum_Card_VND'] = 0.0
+        temp_df.at[i, 'Cum_Cash_VND'] = 0.0
     
     inv_batches = { "트래블로그(VND)": [], "현금(VND)": [] }
     c_budget = 0.0
@@ -125,7 +131,7 @@ def recalculate_entire_ledger(df):
         temp_df.at[i, 'IsExpense'] = is_exp
         
         # 2. 자산 유입 및 환율 결정
-        # [Strategic Fix] 유입(Inflow)인 경우에만 기존 AppliedRate를 진실로 믿고 사용함
+        # 유입(Inflow)인 경우에만 기존 AppliedRate를 진실로 믿고 사용함
         rate = df.at[i, 'AppliedRate'] 
         
         if cat in ['충전', '환전', '입금', '직접환전']:
@@ -136,7 +142,6 @@ def recalculate_entire_ledger(df):
         
         elif cat == 'ATM출금':
             temp_qty = qty
-            # ATM 출금 시 카드 재고에서 환율을 계승함
             total_inherited_krw = 0.0
             for batch in inv_batches["트래블로그(VND)"]:
                 if temp_qty <= 0: break
@@ -146,7 +151,7 @@ def recalculate_entire_ledger(df):
                 inv_batches["현금(VND)"].append({'rate': batch['rate'], 'qty': take})
                 total_inherited_krw += take * batch['rate']
                 temp_qty -= take
-            if qty > 0: rate = total_inherited_krw / qty # 계승된 가중평균 환율
+            if qty > 0: rate = total_inherited_krw / qty
         
         elif is_exp == 1 and curr == TRAVEL_CURRENCY:
             # [Strategic Fix] 지출(Expense)인 경우 기존 환율을 무시하고 현재 재고에서 새로 계산함
@@ -350,7 +355,6 @@ with st.sidebar:
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     st.info("💡 누락된 데이터를 중간에 삽입하셨나요? 아래 버튼을 누르면 전체 환율과 잔액이 재정렬됩니다.")
-    # [CORE FIX] save_data 호출 시 필요한 컬럼 리스트를 명시적으로 전달하여 NameError 방지
     if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
         if save_data(ledger_df[CORE_COLUMNS + NOTE_COLUMN]):
             st.success("전체 장부 재건축이 완료되었습니다!"); time.sleep(1); st.rerun()
@@ -438,4 +442,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v1.46 | Volume Guard: 40.5 KB | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v1.46 | Volume Guard: 41.2 KB | Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
