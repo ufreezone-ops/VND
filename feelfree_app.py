@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.01.006]
+#[Project: Feelfree Travel Ledger / Version: v26.05.01.007]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Chart Decoupling & Sidebar Inventory Upgraded - 49.1 KB]
+#[Status: Mobile UI Optimization & Sidebar Inventory Split - 49.3 KB]
 
 import streamlit as st
 import pandas as pd
@@ -26,11 +26,9 @@ SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_V
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
 #[Modified] 업데이트 로그
-VERSION = "v26.05.01.006"
-UPDATE_LOG_TEXT = """* `[Modified]` 차트 디커플링: 사전 결제(항공/숙박 등 고래)와 현지 지출(식비/교통 등 새우) 차트를 분리하여 스케일 붕괴 문제 해결.
-* `[Modified]` UI 개편: '환율별 재고 현황(FIFO)'을 사이드바의 아코디언 UI로 이동하여 접근성 극대화.
-* `[Removed]` 불필요한 기능 제거: 내역 조회 탭의 '마지막 행 삭제' 버튼 영구 폐기.
-* `[Planned]` 영수증 첨부 AI 비전(Vision) 로드맵 스케치 완료."""
+VERSION = "v26.05.01.007"
+UPDATE_LOG_TEXT = """* `[Modified]` UI 개편: 사이드바의 통합 환율/외화 배치를 각 지갑(카드/현금) 잔액 바로 밑으로 분리 및 밀착 배치.
+* `[Modified]` UI 개편: 모바일 환경의 수평 공간 확보를 위해 메인 탭 이름 간소화(입력, 조회, 일일, 리포트)."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -195,7 +193,7 @@ cloud_cash_counts = load_cash_count()
 # --- SECTION 3:[Module B] URDI Engine ---
 def get_inventory_status(df):
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True) if not df.empty else df
-    inv_batches = { "트래블로그(VND)":[], "현금(VND)":[], "트래블로그(USD)": [], "현금(USD)":[] }
+    inv_batches = { "트래블로그(VND)":[], "현금(VND)":[], "트래블로그(USD)":[], "현금(USD)":[] }
     if temp_df.empty: return inv_batches
     for _, row in temp_df.iterrows():
         qty, rate, desc, cat, method, curr = row['Amount'], row['AppliedRate'], str(row['Description']), row['Category'], row['PaymentMethod'], row['Currency']
@@ -261,23 +259,38 @@ with st.sidebar:
     st.caption(f"VND 가중평균: 100₫ = {WAR_VND*100:.2f}원")
     st.divider()
     
+    # [Modified] 지갑별 메트릭 바로 아래에 환율 배치 현황을 개별 부착
     st.metric("💳 카드 VND 잔액", f"{card_val:,.0f} ₫")
+    if current_inventory_batches.get("트래블로그(VND)"):
+        with st.expander("↳ 카드 환율 배치", expanded=False):
+            for b in current_inventory_batches["트래블로그(VND)"]:
+                status = f"{b['qty']:,.0f}" if b['qty'] > 0 else "소진"
+                st.caption(f"• {b['rate']:.4f}원 : {status}₫")
+
     st.metric("💵 현금 VND 잔액", f"{cash_val:,.0f} ₫")
+    if current_inventory_batches.get("현금(VND)"):
+        with st.expander("↳ 현금 환율 배치", expanded=False):
+            for b in current_inventory_batches["현금(VND)"]:
+                status = f"{b['qty']:,.0f}" if b['qty'] > 0 else "소진"
+                st.caption(f"• {b['rate']:.4f}원 : {status}₫")
     
     usd_card = sum([b['qty'] for b in current_inventory_batches["트래블로그(USD)"]])
     usd_cash = sum([b['qty'] for b in current_inventory_batches["현금(USD)"]])
     if usd_card > 0 or usd_cash > 0:
-        st.divider(); st.metric("💳 카드 USD 잔액", f"${usd_card:,.2f}"); st.metric("💵 현금 USD 잔액", f"${usd_cash:,.2f}")
-
-    # [Added] 환율별 재고 현황 (결산 탭에서 사이드바로 이동)
-    with st.expander("📦 환율별 재고 현황 (FIFO)", expanded=True):
-        inv_hist = get_inventory_status(ledger_df)
-        for wallet, batches in inv_hist.items():
-            if not batches: continue 
-            st.markdown(f"**{wallet}**")
-            for b in batches:
-                status = f"{b['qty']:,.0f}" if b['qty'] > 0 else "소진"
-                st.caption(f"↳ {b['rate']:.4f}원 : {status}")
+        st.divider()
+        st.metric("💳 카드 USD 잔액", f"${usd_card:,.2f}")
+        if current_inventory_batches.get("트래블로그(USD)"):
+            with st.expander("↳ USD 카드 배치", expanded=False):
+                for b in current_inventory_batches["트래블로그(USD)"]:
+                    status = f"{b['qty']:,.2f}" if b['qty'] > 0 else "소진"
+                    st.caption(f"• {b['rate']:.2f}원 : ${status}")
+        
+        st.metric("💵 현금 USD 잔액", f"${usd_cash:,.2f}")
+        if current_inventory_batches.get("현금(USD)"):
+            with st.expander("↳ USD 현금 배치", expanded=False):
+                for b in current_inventory_batches["현금(USD)"]:
+                    status = f"{b['qty']:,.2f}" if b['qty'] > 0 else "소진"
+                    st.caption(f"• {b['rate']:.2f}원 : ${status}")
 
     with st.expander("💵 실물 지폐 정산기"):
         total_ph = sum([b * st.number_input(f"{b:,.0f} ₫", min_value=0, step=1, value=int(cloud_cash_counts.get(b,0)), key=f"p_{b}") for b in BILLS])
@@ -287,7 +300,8 @@ with st.sidebar:
 
 # --- SECTION 4:[Module C] Intelligent Input (📝 입력) ---
 st.title("🌏 Feelfree: 글로벌 여행 가계부")
-tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 내역 조회", "📊 일일 결산", "🏁 종료 보고서"])
+#[Modified] 탭 이름 간소화 (모바일 최적화)
+tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 리포트"])
 
 with tab_in:
     mode = st.radio("기록 모드 선택",["일반 지출", "자산 이동", "환불(취소)", "출입국"], horizontal=True, key="mode_radio")
@@ -297,7 +311,6 @@ with tab_in:
         cat = st.radio("항목 선택", EXPENSE_CATS, index=st.session_state.last_cat_idx, horizontal=True, key="exp_cat")
         st.session_state.last_cat_idx = EXPENSE_CATS.index(cat)
         
-        # [Modified] 향후 영수증 업로드를 위한 UI 레이아웃 준비
         col_desc, col_receipt = st.columns([3, 1])
         with col_desc:
             desc = st.text_input("내용 (상호명 및 상세메모)", placeholder="예: 안바카페 - 소고기버거, 반미정식", key="exp_desc")
@@ -306,11 +319,11 @@ with tab_in:
             
         col_m1, col_m2 = st.columns(2)
         with col_m1:
-            curr = st.selectbox("통화", ["VND", "KRW", "USD"], key="exp_curr")
+            curr = st.selectbox("통화",["VND", "KRW", "USD"], key="exp_curr")
             met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌"] if curr != "KRW" else ["원화계좌"]
             met = st.selectbox("결제수단", met_options, index=0, key="exp_met")
         with col_m2:
-            amt = st.number_input("금액", min_value=0, step=1000 if curr=="VND" else 1, format="%d", key="exp_amt_int") if curr in ["VND", "KRW"] else st.number_input("금액", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
+            amt = st.number_input("금액", min_value=0, step=1000 if curr=="VND" else 1, format="%d", key="exp_amt_int") if curr in["VND", "KRW"] else st.number_input("금액", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
             if curr in [TRAVEL_CURRENCY, 'USD'] and amt > 0:
                 calc_rate = auto_calc_fifo_rate(amt, met, curr)
                 st.caption(f"💡 {curr} 인벤토리 계산 환율: **{calc_rate:.5f}**")
@@ -374,7 +387,6 @@ with tab_in:
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
 # --- SECTION 6:[Module D, E: History & Settlement] ---
-# [Modified] 마지막 행 삭제 버튼 완전 제거
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
@@ -423,19 +435,16 @@ with tab_stats:
             daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0)
             st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총(원)','VND_val':'총(동)','S_KRW':'일상(원)','S_VND':'일상(동)'}).style.format({c: '{:,.0f}' for c in['총(원)','총(동)','일상(원)','일상(동)']}))
             
-            #[Added] 고래와 새우 차트 분리 렌더링
             c_mode = st.radio("표시 통화 선택",["원화(KRW)", "동화(VND)"], horizontal=True, key="st_curr")
             y_col = 'KRW_val' if "원화" in c_mode else 'VND_val'
             color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "Grab": "#00897B", "VinBus": "#00ACC1", "마사지": "#0288D1", "팁": "#03A9F4", "마트": "#E91E63", "선물": "#9C27B0", "투어": "#673AB7", "입장료": "#3F51B5", "통신": "#FF9800", "수수료": "#795548", "항공권": "#D32F2F", "호텔": "#1976D2", "보험": "#FBC02D"}
             
-            # Chart 1: 사전 결제 (고래)
             if not dom_df.empty:
                 dom_df['Date_Clean'] = dom_df['Date'].str.split('(').str[0]
                 fig1 = px.bar(dom_df, x='Date_Clean', y=y_col, color='Category', title=f"🛫 사전 결제 및 고정 지출", color_discrete_map=color_map)
                 fig1.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
                 st.plotly_chart(fig1, use_container_width=True)
             
-            # Chart 2: 현지 체류 (새우)
             if not ovr_df.empty:
                 ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
                 fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=f"🚶‍♂️ 현지 체류 일일 지출 흐름 ({len(ovr_df['Date'].unique())}일차)", color_discrete_map=color_map)
@@ -473,4 +482,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.01.006 | Volume Guard: 49.1 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.01.007 | Volume Guard: 49.3 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
