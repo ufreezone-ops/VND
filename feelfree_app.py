@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.01.004]
+#[Project: Feelfree Travel Ledger / Version: v26.05.01.005]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: NaN Bug Fixed & GSheets Auto-Chronicler Deployed - 48.3 KB]
+#[Status: Daily Chart Logic Refined (Excluding Domestic) - 48.3 KB]
 
 import streamlit as st
 import pandas as pd
@@ -22,15 +22,13 @@ st.set_page_config(
 TZ_KST = timezone(timedelta(hours=9))
 TZ_ICT = timezone(timedelta(hours=7))
 
-CORE_COLUMNS = ['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod']
+CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod']
 SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
-# [Added] GSheets 기반 Auto Chronicler Protocol
-VERSION = "v26.05.01.004"
-UPDATE_LOG_TEXT = """* `[Fixed]` NaN 연쇄 붕괴 버그 해결: 장부 재계산 시 환율(AppliedRate) 컬럼 누락 문제 수정 및 파괴된 데이터 스마트 복구 로직 탑재.
-* `[Added]` GSheets 버전 로거: .md 파일 대신 구글 시트 내 `version_log` 탭을 자동 생성하여 시스템 진화 기록 영구 보존.
-* `[Modified]` UI 다듬기: 일반 지출 항목에서 입국/출국 완전 제거."""
+# [Modified] 업데이트 로그 변경
+VERSION = "v26.05.01.005"
+UPDATE_LOG_TEXT = """* `[Modified]` 일일 결산 차트 로직 고도화: 날짜 기반 텍스트 필터링의 오류를 제거하고, `[통화=KRW & 결제수단=원화계좌]` 데이터를 원천 배제하여 순수 현지 체류 지출만 차트에 표시되도록 수정."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -74,7 +72,7 @@ st.markdown("""
     div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
     .stTabs[data-baseweb="tab-list"] { gap: 15px; padding-bottom: 10px; }
     .stTabs [data-baseweb="tab"] { background-color: #1c1f2b; border-radius: 8px 8px 0 0; padding: 12px 25px; color: #ffffff; }
-    .stTabs [aria-selected="true"] { background-color: #00FF00 !important; color: #000000 !important; font-weight: bold; }
+    .stTabs[aria-selected="true"] { background-color: #00FF00 !important; color: #000000 !important; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -93,7 +91,6 @@ DOMESTIC_CATS =["항공권", "호텔", "보험", "지하철", "택시"]
 TRANSFER_CATS =["충전", "ATM출금", "보증금", "환전", "직접환전"]
 
 # --- SECTION 2:[Module A] Data Engine ---
-# [변경] (Modified): 결측치 복구(Smart Recovery) 및 데이터 정규화 로직 픽스
 def load_data():
     try:
         df = conn.read(worksheet="ledger", ttl="0s")
@@ -101,7 +98,6 @@ def load_data():
         df = df.dropna(subset=['Date', 'Category'], how='any')
         df = df.reindex(columns=FINAL_COLUMNS)
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-        # [Fixed] 결측치를 1.0이 아닌 0.0으로 채워 복구 로직이 감지할 수 있게 함
         df['AppliedRate'] = pd.to_numeric(df['AppliedRate'], errors='coerce').fillna(0.0)
         df['IsExpense'] = pd.to_numeric(df['IsExpense'], errors='coerce').fillna(0).astype(int)
         df['Note'] = df['Note'].fillna("").astype(str)
@@ -131,8 +127,7 @@ def recalculate_entire_ledger(df):
         
         rate = temp_df.at[i, 'AppliedRate'] 
         
-        # [Fixed] Smart Recovery: 망가진 외환 인입 환율을 자동으로 부활시킴
-        if cat in ['충전', '환전', '입금', '직접환전', '환불']:
+        if cat in['충전', '환전', '입금', '직접환전', '환불']:
             if curr == 'VND' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0):
                 rate = 0.0561
             elif curr == 'USD' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0):
@@ -340,7 +335,7 @@ with tab_in:
         ty = st.selectbox("유형",["직접환전 (원화계좌 -> 지폐)", "충전 (원화계좌 -> 카드)", "ATM출금 (카드 -> 지폐)"], key="tr_type")
         c1, c2 = st.columns(2)
         with c1:
-            curr_tr = st.selectbox("대상 통화", ["VND", "USD"], key="tr_curr")
+            curr_tr = st.selectbox("대상 통화",["VND", "USD"], key="tr_curr")
             t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0, step=1000 if curr_tr=="VND" else 10, format="%d" if curr_tr=="VND" else "%.2f", key="tr_target")
             if "ATM" in ty:
                 inherited_r = auto_calc_fifo_rate(t_amt, f"트래블로그({curr_tr})", curr_tr)
@@ -380,18 +375,16 @@ with tab_in:
 
     else:
         st.subheader("✈️ 출입국 일정 기록")
-        io_type = st.radio("구분", ["출국", "입국"], horizontal=True, key="io_radio")
+        io_type = st.radio("구분",["출국", "입국"], horizontal=True, key="io_radio")
         desc = st.text_input("내용 (메모)", placeholder="편명, 시간 등", key="io_desc")
         if st.button("🚀 일정 기록 완료", use_container_width=True):
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': io_type, 'Description': desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': ''}])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
 # --- SECTION 6:[Module D, E: History & Settlement] ---
-# [변경] (Modified): 환율(AppliedRate) 기둥 누락 버그 해결
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
-        # [Fixed] 특정 컬럼만 잘라내지 않고 ledger_df 원본 전체를 넘겨 환율 파괴를 막음
         if save_data(ledger_df):
             st.success("데이터 정합성 복구 및 전체 장부 재건축이 완료되었습니다!"); time.sleep(1); st.rerun()
             
@@ -403,11 +396,12 @@ with tab_his:
         with col_ed1:
             if not display_df.equals(edited_df) and st.button("💾 수정사항 저장"):
                 b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
-                if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun() # [Fixed] 원본 전체 전달
+                if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
         with col_ed2:
             if st.button("🗑️ 마지막 행 삭제", use_container_width=True):
-                if save_data(display_df[:-1]): st.rerun() # [Fixed] 원본 전체 전달
+                if save_data(display_df[:-1]): st.rerun()
 
+# [변경] (Modified): 일일 결산 탭의 차트 로직에서 사전 결제 내역 배제
 with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
@@ -450,16 +444,16 @@ with tab_stats:
             daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0)
             st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총(원)','VND_val':'총(동)','S_KRW':'일상(원)','S_VND':'일상(동)'}).style.format({c: '{:,.0f}' for c in['총(원)','총(동)','일상(원)','일상(동)']}))
             
-            exit_date = exp_df[exp_df['Category'] == '출국']['Date'].min()
-            chart_raw = exp_df.copy()
-            if pd.notna(exit_date): chart_raw = chart_raw[chart_raw['Date'] >= exit_date]
-            c_mode = st.radio("표시 통화 선택",["원화(KRW)", "동화(VND)"], horizontal=True, key="st_curr")
-            chart_raw['Date_Clean'] = chart_raw['Date'].str.split('(').str[0]
-            y_col = 'KRW_val' if "원화" in c_mode else 'VND_val'
-            color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "Grab": "#00897B", "VinBus": "#00ACC1", "마사지": "#0288D1", "팁": "#03A9F4", "마트": "#E91E63", "선물": "#9C27B0", "투어": "#673AB7", "입장료": "#3F51B5", "통신": "#FF9800", "수수료": "#795548"}
-            fig = px.bar(chart_raw, x='Date_Clean', y=y_col, color='Category', title=f"여행기간 일일 지출 ({len(chart_raw['Date'].unique())}일차)", color_discrete_map=color_map)
-            fig.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), xaxis=dict(title=""), yaxis=dict(title=""))
-            st.plotly_chart(fig, use_container_width=True)
+            # [Modified] 차트 렌더링 시 사전 결제(원화계좌 지출) 내역을 완전히 분리
+            chart_raw = ovr_df.copy() # 현지 지출 내역만 복사
+            if not chart_raw.empty:
+                c_mode = st.radio("표시 통화 선택",["원화(KRW)", "동화(VND)"], horizontal=True, key="st_curr")
+                chart_raw['Date_Clean'] = chart_raw['Date'].str.split('(').str[0]
+                y_col = 'KRW_val' if "원화" in c_mode else 'VND_val'
+                color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "Grab": "#00897B", "VinBus": "#00ACC1", "마사지": "#0288D1", "팁": "#03A9F4", "마트": "#E91E63", "선물": "#9C27B0", "투어": "#673AB7", "입장료": "#3F51B5", "통신": "#FF9800", "수수료": "#795548"}
+                fig = px.bar(chart_raw, x='Date_Clean', y=y_col, color='Category', title=f"현지 여행기간 일일 지출 ({len(chart_raw['Date'].unique())}일차)", color_discrete_map=color_map)
+                fig.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), xaxis=dict(title=""), yaxis=dict(title=""))
+                st.plotly_chart(fig, use_container_width=True)
 
 with tab_final:
     if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
@@ -492,4 +486,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.01.004 | Volume Guard: 48.3 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.01.005 | Volume Guard: 48.3 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
