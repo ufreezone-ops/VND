@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.01.005]
+#[Project: Feelfree Travel Ledger / Version: v26.05.01.006]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Daily Chart Logic Refined (Excluding Domestic) - 48.3 KB]
+#[Status: Chart Decoupling & Sidebar Inventory Upgraded - 49.1 KB]
 
 import streamlit as st
 import pandas as pd
@@ -11,7 +11,6 @@ from streamlit_gsheets import GSheetsConnection
 import time
 
 # --- SECTION 1: Configuration & Global Setup ---
-# [Status: Maintained]
 st.set_page_config(
     page_title="Feelfree: 여행 가계부", 
     page_icon="🌏", 
@@ -26,19 +25,20 @@ CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'Payment
 SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
-# [Modified] 업데이트 로그 변경
-VERSION = "v26.05.01.005"
-UPDATE_LOG_TEXT = """* `[Modified]` 일일 결산 차트 로직 고도화: 날짜 기반 텍스트 필터링의 오류를 제거하고, `[통화=KRW & 결제수단=원화계좌]` 데이터를 원천 배제하여 순수 현지 체류 지출만 차트에 표시되도록 수정."""
+#[Modified] 업데이트 로그
+VERSION = "v26.05.01.006"
+UPDATE_LOG_TEXT = """* `[Modified]` 차트 디커플링: 사전 결제(항공/숙박 등 고래)와 현지 지출(식비/교통 등 새우) 차트를 분리하여 스케일 붕괴 문제 해결.
+* `[Modified]` UI 개편: '환율별 재고 현황(FIFO)'을 사이드바의 아코디언 UI로 이동하여 접근성 극대화.
+* `[Removed]` 불필요한 기능 제거: 내역 조회 탭의 '마지막 행 삭제' 버튼 영구 폐기.
+* `[Planned]` 영수증 첨부 AI 비전(Vision) 로드맵 스케치 완료."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def auto_update_log_to_gsheets():
     try:
         log_df = conn.read(worksheet="version_log", ttl="0s")
-        if log_df is None or log_df.empty:
-            log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
-    except:
-        log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
+        if log_df is None or log_df.empty: log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
+    except: log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
     
     if VERSION not in log_df['Version'].values:
         new_log = pd.DataFrame([{"Version": VERSION, "Date": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"), "Log": UPDATE_LOG_TEXT}])
@@ -57,15 +57,7 @@ st.markdown("""
     </script>
     <style>
     .main { background-color: #0e1117; }
-    .kpi-box {
-        background-color: #1e2130;
-        padding: 20px;
-        border-radius: 15px;
-        border-left: 8px solid #00FF00;
-        margin-bottom: 20px;
-        min-height: 130px;
-        box-shadow: 4px 6px 15px rgba(0,0,0,0.5);
-    }
+    .kpi-box { background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 8px solid #00FF00; margin-bottom: 20px; min-height: 130px; box-shadow: 4px 6px 15px rgba(0,0,0,0.5); }
     .kpi-title { font-size: 15px; color: #cccccc; margin-bottom: 10px; font-weight: 600; }
     .kpi-value-krw { font-size: 26px; font-weight: bold; color: #ffffff; line-height: 1.1; }
     .kpi-value-vnd { font-size: 18px; color: #00FF00; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
@@ -109,12 +101,8 @@ def recalculate_entire_ledger(df):
     temp_df = temp_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
     
     for i, row in temp_df.iterrows():
-        if row['Category'] in EXPENSE_CATS:
-            temp_df.at[i, 'AppliedRate'] = 0.0
-        temp_df.at[i, 'Note'] = ""
-        temp_df.at[i, 'Cum_Budget_KRW'] = 0.0
-        temp_df.at[i, 'Cum_Card_VND'] = 0.0
-        temp_df.at[i, 'Cum_Cash_VND'] = 0.0
+        if row['Category'] in EXPENSE_CATS: temp_df.at[i, 'AppliedRate'] = 0.0
+        temp_df.at[i, 'Note'] = ""; temp_df.at[i, 'Cum_Budget_KRW'] = 0.0; temp_df.at[i, 'Cum_Card_VND'] = 0.0; temp_df.at[i, 'Cum_Cash_VND'] = 0.0
     
     inv_batches = { "트래블로그(VND)":[], "현금(VND)":[], "트래블로그(USD)":[], "현금(USD)":[] }
     c_budget = 0.0
@@ -128,14 +116,11 @@ def recalculate_entire_ledger(df):
         rate = temp_df.at[i, 'AppliedRate'] 
         
         if cat in['충전', '환전', '입금', '직접환전', '환불']:
-            if curr == 'VND' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0):
-                rate = 0.0561
-            elif curr == 'USD' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0):
-                rate = 1350.0
+            if curr == 'VND' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = 0.0561
+            elif curr == 'USD' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = 1350.0
 
             target = f"트래블로그({curr})" if ("카드" in desc or "카드" in method or "트래블로그" in method) else f"현금({curr})"
-            if curr != 'KRW': 
-                inv_batches[target].append({'rate': rate, 'qty': qty})
+            if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
             
             if method == '원화계좌':
                 if cat == '환불': c_budget -= qty if curr == 'KRW' else qty * rate
@@ -143,16 +128,12 @@ def recalculate_entire_ledger(df):
         
         elif cat == 'ATM출금':
             temp_qty = qty; total_inherited_krw = 0.0
-            target_from = f"트래블로그({curr})"
-            target_to = f"현금({curr})"
+            target_from = f"트래블로그({curr})"; target_to = f"현금({curr})"
             for batch in inv_batches[target_from]:
                 if temp_qty <= 0: break
                 if batch['qty'] <= 0: continue
-                take = min(temp_qty, batch['qty'])
-                batch['qty'] -= take
-                inv_batches[target_to].append({'rate': batch['rate'], 'qty': take})
-                total_inherited_krw += take * batch['rate']
-                temp_qty -= take
+                take = min(temp_qty, batch['qty']); batch['qty'] -= take
+                inv_batches[target_to].append({'rate': batch['rate'], 'qty': take}); total_inherited_krw += take * batch['rate']; temp_qty -= take
             if qty > 0: rate = total_inherited_krw / qty if total_inherited_krw > 0 else 0.0561
         
         elif is_exp == 1 and curr in [TRAVEL_CURRENCY, 'USD']:
@@ -161,9 +142,7 @@ def recalculate_entire_ledger(df):
             for batch in inv_batches[target]:
                 if temp_qty <= 0: break
                 if batch['qty'] <= 0: continue
-                take = min(temp_qty, batch['qty'])
-                batch['qty'] -= take
-                temp_qty -= take
+                take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                 total_cost_krw += take * batch['rate']
                 decomposed.append(f"{take:,.0f}@{batch['rate']:.4f}")
             if qty > 0:
@@ -172,8 +151,7 @@ def recalculate_entire_ledger(df):
             else: rate = 0.0
         
         elif method == '원화계좌' and is_exp == 1:
-            c_budget += qty
-            rate = 1.0
+            c_budget += qty; rate = 1.0
 
         temp_df.at[i, 'AppliedRate'] = rate
         temp_df.at[i, 'Cum_Budget_KRW'] = round(c_budget, 0)
@@ -214,7 +192,7 @@ def save_cash_count(counts_dict):
 ledger_df = load_data()
 cloud_cash_counts = load_cash_count()
 
-# --- SECTION 3: [Module B] URDI Engine ---
+# --- SECTION 3:[Module B] URDI Engine ---
 def get_inventory_status(df):
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True) if not df.empty else df
     inv_batches = { "트래블로그(VND)":[], "현금(VND)":[], "트래블로그(USD)": [], "현금(USD)":[] }
@@ -225,14 +203,12 @@ def get_inventory_status(df):
             target = f"트래블로그({curr})" if ("카드" in desc or "카드" in method or "트래블로그" in method) else f"현금({curr})"
             if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty, 'initial': qty})
         elif cat == 'ATM출금':
-            temp_qty = qty
-            target_from = f"트래블로그({curr})"; target_to = f"현금({curr})"
+            temp_qty = qty; target_from = f"트래블로그({curr})"; target_to = f"현금({curr})"
             for batch in inv_batches[target_from]:
                 if temp_qty <= 0: break
                 if batch['qty'] <= 0: continue
                 take = min(temp_qty, batch['qty']); batch['qty'] -= take
-                inv_batches[target_to].append({'rate': batch['rate'], 'qty': take, 'initial': take})
-                temp_qty -= take
+                inv_batches[target_to].append({'rate': batch['rate'], 'qty': take, 'initial': take}); temp_qty -= take
         elif row['IsExpense'] == 1 and curr in[TRAVEL_CURRENCY, 'USD']:
             target = f"트래블로그({curr})" if ("트래블로그" in str(method) or "카드" in str(method)) else f"현금({curr})"
             temp_qty = qty
@@ -254,7 +230,6 @@ def auto_calc_fifo_rate(amount, method, curr="VND"):
     target = f"트래블로그({curr})" if ("트래블로그" in str(method) or "카드" in str(method)) else f"현금({curr})"
     temp_inv = get_inventory_status(ledger_df)
     available_batches =[b for b in temp_inv[target] if b['qty'] > 0]
-    
     if not available_batches: return WAR_USD if curr == 'USD' else WAR_VND
     total_cost_krw, remaining = 0.0, amount
     for batch in available_batches:
@@ -294,6 +269,16 @@ with st.sidebar:
     if usd_card > 0 or usd_cash > 0:
         st.divider(); st.metric("💳 카드 USD 잔액", f"${usd_card:,.2f}"); st.metric("💵 현금 USD 잔액", f"${usd_cash:,.2f}")
 
+    # [Added] 환율별 재고 현황 (결산 탭에서 사이드바로 이동)
+    with st.expander("📦 환율별 재고 현황 (FIFO)", expanded=True):
+        inv_hist = get_inventory_status(ledger_df)
+        for wallet, batches in inv_hist.items():
+            if not batches: continue 
+            st.markdown(f"**{wallet}**")
+            for b in batches:
+                status = f"{b['qty']:,.0f}" if b['qty'] > 0 else "소진"
+                st.caption(f"↳ {b['rate']:.4f}원 : {status}")
+
     with st.expander("💵 실물 지폐 정산기"):
         total_ph = sum([b * st.number_input(f"{b:,.0f} ₫", min_value=0, step=1, value=int(cloud_cash_counts.get(b,0)), key=f"p_{b}") for b in BILLS])
         if st.button("💾 현금 수량 저장"): save_cash_count({b: st.session_state[f"p_{b}"] for b in BILLS}); st.rerun()
@@ -311,6 +296,14 @@ with tab_in:
     if mode == "일반 지출":
         cat = st.radio("항목 선택", EXPENSE_CATS, index=st.session_state.last_cat_idx, horizontal=True, key="exp_cat")
         st.session_state.last_cat_idx = EXPENSE_CATS.index(cat)
+        
+        # [Modified] 향후 영수증 업로드를 위한 UI 레이아웃 준비
+        col_desc, col_receipt = st.columns([3, 1])
+        with col_desc:
+            desc = st.text_input("내용 (상호명 및 상세메모)", placeholder="예: 안바카페 - 소고기버거, 반미정식", key="exp_desc")
+        with col_receipt:
+            st.info("📸 영수증 첨부 준비중")
+            
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             curr = st.selectbox("통화", ["VND", "KRW", "USD"], key="exp_curr")
@@ -324,7 +317,6 @@ with tab_in:
                 cr_final = st.number_input("확정 환율", value=float(calc_rate), format="%.5f", key=f"exp_cr_auto_{met}_{amt}")
             else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else 0.0561), format="%.5f", key=f"exp_cr_man_{curr}")
             
-        desc = st.text_input("내용 (메모)", key="exp_desc")
         if st.button("🚀 지출 기록하기", use_container_width=True):
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': ''}])
             b_now, card_now, cash_now, _ = calculate_summary_metrics(ledger_df)
@@ -362,7 +354,7 @@ with tab_in:
         st.subheader("🔙 결제 취소 및 환불 (Rollback)")
         col_r1, col_r2 = st.columns(2)
         with col_r1:
-            r_curr = st.selectbox("취소된 통화", ["VND", "KRW", "USD"], key="rf_curr")
+            r_curr = st.selectbox("취소된 통화",["VND", "KRW", "USD"], key="rf_curr")
             r_met = st.selectbox("돌려받을 지갑",[f"현금({r_curr})", f"트래블로그({r_curr})", "원화계좌"] if r_curr != "KRW" else ["원화계좌"], key="rf_met")
             r_amt = st.number_input("환불 금액", min_value=0.0, step=1.0, format="%.2f", key="rf_amt")
         with col_r2:
@@ -382,6 +374,7 @@ with tab_in:
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
 # --- SECTION 6:[Module D, E: History & Settlement] ---
+# [Modified] 마지막 행 삭제 버튼 완전 제거
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
@@ -392,16 +385,10 @@ with tab_his:
         display_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
         display_df = display_df.reindex(columns=FINAL_COLUMNS)
         edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final")
-        col_ed1, col_ed2 = st.columns(2)
-        with col_ed1:
-            if not display_df.equals(edited_df) and st.button("💾 수정사항 저장"):
-                b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
-                if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
-        with col_ed2:
-            if st.button("🗑️ 마지막 행 삭제", use_container_width=True):
-                if save_data(display_df[:-1]): st.rerun()
+        if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
+            b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
+            if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
 
-# [변경] (Modified): 일일 결산 탭의 차트 로직에서 사전 결제 내역 배제
 with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
@@ -418,24 +405,16 @@ with tab_stats:
             exp_df['VND_val'] = exp_df.apply(lambda r: r['Amount'] if r['Currency'] == 'VND' else r['Amount'] / WAR_VND if WAR_VND>0 else 0, axis=1)
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
             
-            st.subheader("📦 환율별 재고 현황 (FIFO 히스토리)")
-            inv_hist = get_inventory_status(ledger_df)
-            for wallet, batches in inv_hist.items():
-                if not batches: continue 
-                st.write(f"**{wallet}**")
-                display_rows = [{"환율": f"{b['rate']:.4f}", "잔액 상태": (f"{b['qty']:,.2f}" if b['qty'] > 0 else "🚫 소진완료"), "최초 수량": f"{b['initial']:,.2f}", "원화가치(잔액)": f"{b['rate']*max(0,b['qty']):,.0f} 원"} for b in batches]
-                if display_rows: st.table(display_rows)
-            
             st.subheader("🏁 여행 경제 요약")
             c1, c2 = st.columns(2)
             with c1:
                 dom_df = exp_df[((exp_df['Currency'] == 'KRW') & (exp_df['PaymentMethod'] == '원화계좌')) & (~exp_df['Category'].isin(['입국','출국']))]
-                st.info("🇰🇷 국내 지출"); st.metric("총액", f"{dom_df['KRW_val'].sum():,.0f} 원")
+                st.info("🇰🇷 사전 결제 및 고정 지출"); st.metric("총액", f"{dom_df['KRW_val'].sum():,.0f} 원")
                 dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
                 for cat_name, row_data in dg.iterrows(): st.write(f"- {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
             with c2:
                 ovr_df = exp_df[~((exp_df['Currency'] == 'KRW') & (exp_df['PaymentMethod'] == '원화계좌'))]
-                st.success("🇻🇳 현지 지출 (USD 포함)"); st.metric("총액 (원화환산)", f"{ovr_df['KRW_val'].sum():,.0f} 원")
+                st.success("🇻🇳 현지 체류 지출 (USD 포함)"); st.metric("총액 (원화환산)", f"{ovr_df['KRW_val'].sum():,.0f} 원")
                 og = ovr_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
                 for cat_name, row_data in og.iterrows(): st.write(f"- {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
             
@@ -444,16 +423,24 @@ with tab_stats:
             daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0)
             st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총(원)','VND_val':'총(동)','S_KRW':'일상(원)','S_VND':'일상(동)'}).style.format({c: '{:,.0f}' for c in['총(원)','총(동)','일상(원)','일상(동)']}))
             
-            # [Modified] 차트 렌더링 시 사전 결제(원화계좌 지출) 내역을 완전히 분리
-            chart_raw = ovr_df.copy() # 현지 지출 내역만 복사
-            if not chart_raw.empty:
-                c_mode = st.radio("표시 통화 선택",["원화(KRW)", "동화(VND)"], horizontal=True, key="st_curr")
-                chart_raw['Date_Clean'] = chart_raw['Date'].str.split('(').str[0]
-                y_col = 'KRW_val' if "원화" in c_mode else 'VND_val'
-                color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "Grab": "#00897B", "VinBus": "#00ACC1", "마사지": "#0288D1", "팁": "#03A9F4", "마트": "#E91E63", "선물": "#9C27B0", "투어": "#673AB7", "입장료": "#3F51B5", "통신": "#FF9800", "수수료": "#795548"}
-                fig = px.bar(chart_raw, x='Date_Clean', y=y_col, color='Category', title=f"현지 여행기간 일일 지출 ({len(chart_raw['Date'].unique())}일차)", color_discrete_map=color_map)
-                fig.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), xaxis=dict(title=""), yaxis=dict(title=""))
-                st.plotly_chart(fig, use_container_width=True)
+            #[Added] 고래와 새우 차트 분리 렌더링
+            c_mode = st.radio("표시 통화 선택",["원화(KRW)", "동화(VND)"], horizontal=True, key="st_curr")
+            y_col = 'KRW_val' if "원화" in c_mode else 'VND_val'
+            color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "Grab": "#00897B", "VinBus": "#00ACC1", "마사지": "#0288D1", "팁": "#03A9F4", "마트": "#E91E63", "선물": "#9C27B0", "투어": "#673AB7", "입장료": "#3F51B5", "통신": "#FF9800", "수수료": "#795548", "항공권": "#D32F2F", "호텔": "#1976D2", "보험": "#FBC02D"}
+            
+            # Chart 1: 사전 결제 (고래)
+            if not dom_df.empty:
+                dom_df['Date_Clean'] = dom_df['Date'].str.split('(').str[0]
+                fig1 = px.bar(dom_df, x='Date_Clean', y=y_col, color='Category', title=f"🛫 사전 결제 및 고정 지출", color_discrete_map=color_map)
+                fig1.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                st.plotly_chart(fig1, use_container_width=True)
+            
+            # Chart 2: 현지 체류 (새우)
+            if not ovr_df.empty:
+                ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
+                fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=f"🚶‍♂️ 현지 체류 일일 지출 흐름 ({len(ovr_df['Date'].unique())}일차)", color_discrete_map=color_map)
+                fig2.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                st.plotly_chart(fig2, use_container_width=True)
 
 with tab_final:
     if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
@@ -486,4 +473,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.01.005 | Volume Guard: 48.3 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.01.006 | Volume Guard: 49.1 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
