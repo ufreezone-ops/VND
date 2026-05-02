@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.02.004]
+#[Project: Feelfree Travel Ledger / Version: v26.05.02.005]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Phase 2 Deployed (ImgBB API Receipt Linking) & Sidebar UX - 51.2 KB]
+#[Status: Post-Attachment UI & 1-Click Mobile Receipt Deployed - 52.8 KB]
 
 import streamlit as st
 import pandas as pd
@@ -27,13 +27,12 @@ CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'Payment
 SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
-#[Added] ImgBB API Key
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 
 #[Modified] 업데이트 로그
-VERSION = "v26.05.02.004"
-UPDATE_LOG_TEXT = """* `[Added]` Phase 2 영수증 링킹 완료: ImgBB API 통신 모듈을 탑재하여, 스마트폰으로 촬영한 영수증이 클라우드에 자동 업로드되고 장부에 URL로 맵핑됨.
-* `[Modified]` 사이드바 UX: 현장 사용성을 고려하여 현금(Cash) 잔액을 카드(Card) 잔액보다 상단으로 배치."""
+VERSION = "v26.05.02.005"
+UPDATE_LOG_TEXT = """* `[Added]` 영수증 사후 첨부: 내역 조회 탭에 기존 내역을 선택하여 영수증 사진만 일괄 추가할 수 있는 아코디언 기능 신설 (삭제/재입력 불필요).
+* `[Modified]` 모바일 UX 픽스: 영수증 URL 열을 '🔗 보기' 형태의 하이퍼링크로 변경하고, 편집 기능을 잠가 모바일에서 터치 시 셀 활성화 없이 즉각 열리도록 1-Click 구현."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -86,14 +85,26 @@ DOMESTIC_CATS =["항공권", "호텔", "보험", "지하철", "택시"]
 TRANSFER_CATS =["충전", "ATM출금", "보증금", "환전", "직접환전"]
 
 # --- SECTION 2:[Module A] Data Engine ---
+# [Modified] 이미지 업로드 함수 전진 배치 (조회 탭에서도 써야 함)
+def upload_image_to_imgbb(image_file):
+    url = "https://api.imgbb.com/1/upload"
+    try:
+        payload = {
+            "key": IMGBB_API_KEY,
+            "image": base64.b64encode(image_file.read()).decode("utf-8")
+        }
+        res = requests.post(url, data=payload)
+        if res.status_code == 200:
+            return res.json()['data']['url']
+    except Exception as e:
+        st.error(f"이미지 서버 통신 오류: {e}")
+    return ""
+
 def load_data():
     try:
         df = conn.read(worksheet="ledger", ttl="0s")
         if df is None or df.empty: return pd.DataFrame(columns=FINAL_COLUMNS)
-        
-        if 'Receipt_URL' not in df.columns:
-            df['Receipt_URL'] = ""
-            
+        if 'Receipt_URL' not in df.columns: df['Receipt_URL'] = ""
         df = df.dropna(subset=['Date', 'Category'], how='any')
         df = df.reindex(columns=FINAL_COLUMNS)
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
@@ -265,7 +276,6 @@ with st.sidebar:
     st.title("💰 Wallet Status")
     b_val, card_val, cash_val, spent_val = calculate_summary_metrics(ledger_df)
     
-    # [Modified] 현금 지갑을 최상단으로 끌어올림
     st.metric("💵 현금 VND 잔액", f"{cash_val:,.0f} ₫")
     if current_inventory_batches.get("현금(VND)"):
         with st.expander("↳ 현금 환율 배치", expanded=False):
@@ -311,21 +321,6 @@ with st.sidebar:
     if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
 
 # --- SECTION 4:[Module C] Intelligent Input (📝 입력) ---
-# [Added] ImgBB 클라우드 전송 함수
-def upload_image_to_imgbb(image_file):
-    url = "https://api.imgbb.com/1/upload"
-    try:
-        payload = {
-            "key": IMGBB_API_KEY,
-            "image": base64.b64encode(image_file.read()).decode("utf-8")
-        }
-        res = requests.post(url, data=payload)
-        if res.status_code == 200:
-            return res.json()['data']['url']
-    except Exception as e:
-        st.error(f"이미지 서버 통신 오류: {e}")
-    return ""
-
 st.title("🌏 Feelfree: 글로벌 여행 가계부")
 tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 리포트"])
 
@@ -341,27 +336,25 @@ with tab_in:
         with col_desc:
             desc = st.text_input("내용 (상호명 및 상세메모)", placeholder="예: 안바카페 - 소고기버거, 반미정식", key="exp_desc")
         with col_receipt:
-            # [Modified] 영수증 사진 업로더 UI (카메라 연동)
             uploaded_file = st.file_uploader("📸 영수증 사진", type=['png', 'jpg', 'jpeg'], key="exp_receipt")
             
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             curr = st.selectbox("통화",["VND", "KRW", "USD"], key="exp_curr")
-            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌"] if curr != "KRW" else ["원화계좌"]
+            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌"] if curr != "KRW" else["원화계좌"]
             met = st.selectbox("결제수단", met_options, index=0, key="exp_met")
         with col_m2:
             amt = st.number_input("금액", min_value=0, step=1000 if curr=="VND" else 1, format="%d", key="exp_amt_int") if curr in["VND", "KRW"] else st.number_input("금액", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
-            if curr in [TRAVEL_CURRENCY, 'USD'] and amt > 0:
+            if curr in[TRAVEL_CURRENCY, 'USD'] and amt > 0:
                 calc_rate = auto_calc_fifo_rate(amt, met, curr)
                 st.caption(f"💡 {curr} 인벤토리 계산 환율: **{calc_rate:.5f}**")
                 cr_final = st.number_input("확정 환율", value=float(calc_rate), format="%.5f", key=f"exp_cr_auto_{met}_{amt}")
             else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else 0.0561), format="%.5f", key=f"exp_cr_man_{curr}")
             
         if st.button("🚀 지출 기록하기", use_container_width=True):
-            # [Added] 사진이 있으면 클라우드로 쏘고 URL을 받아옴
             receipt_url = ""
             if uploaded_file is not None:
-                with st.spinner("📸 영수증을 클라우드로 안전하게 전송 중입니다..."):
+                with st.spinner("📸 영수증을 클라우드로 전송 중입니다..."):
                     receipt_url = upload_image_to_imgbb(uploaded_file)
                     if receipt_url: st.toast("✅ 영수증 링킹 완료!")
             
@@ -424,6 +417,36 @@ with tab_in:
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     
+    #[Added] 누락 영수증 사후 일괄 추가 아코디언 UI
+    with st.expander("📸 누락된 영수증 일괄 추가 (Post-Attachment)", expanded=False):
+        if not ledger_df.empty:
+            temp_sort = ledger_df.sort_values(by='Date', kind='mergesort', ascending=False)
+            options =[]
+            option_mapping = {}
+            for i, row in temp_sort.iterrows():
+                # 영수증 존재 여부 시각적 표시
+                has_receipt = "✅" if str(row.get('Receipt_URL', '')).startswith('http') else "❌"
+                label = f"[{has_receipt}] {row['Date']} | {row['Category']} - {row['Description']} ({row['Amount']:,.0f}{row['Currency']})"
+                options.append(label)
+                option_mapping[label] = i # ledger_df 원본 인덱스 매핑
+            
+            sel_item = st.selectbox("영수증을 연결할 내역을 선택하세요", options)
+            post_file = st.file_uploader("📸 영수증 사진 촬영/선택", type=['png', 'jpg', 'jpeg'], key="post_receipt")
+            
+            if st.button("🔗 선택한 내역에 영수증 업로드 및 연결", use_container_width=True):
+                if post_file and sel_item:
+                    with st.spinner("클라우드 전송 중..."):
+                        url = upload_image_to_imgbb(post_file)
+                        if url:
+                            target_idx = option_mapping[sel_item]
+                            ledger_df.at[target_idx, 'Receipt_URL'] = url
+                            b_now, card_now, cash_now, _ = calculate_summary_metrics(ledger_df)
+                            if save_data(ledger_df, metrics=[b_now, card_now, cash_now]):
+                                st.success("영수증이 성공적으로 연결되었습니다!")
+                                time.sleep(1); st.rerun()
+                else:
+                    st.warning("사진을 먼저 첨부해주세요.")
+
     search_query = st.text_input("🔎 검색어 입력 (입력 후 Enter를 누르면 모바일 키보드가 내려갑니다)", placeholder="상호명, 메모, 카테고리 등", key="his_search")
     edit_mode = st.toggle("✏️ 장부 직접 수정 모드 켜기", value=False, key="his_edit_toggle")
 
@@ -435,6 +458,9 @@ with tab_his:
         display_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
         display_df = display_df.reindex(columns=FINAL_COLUMNS)
         
+        # [Modified] 1-Click 모바일 URL 렌더링 세팅 (수정 불가 처리)
+        link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
+        
         if search_query.strip():
             mask = (
                 display_df['Category'].str.contains(search_query, case=False, na=False) |
@@ -443,17 +469,18 @@ with tab_his:
             )
             filtered_df = display_df[mask]
             st.info(f"🔎 '{search_query}' 검색 결과: 총 {len(filtered_df)}건 (데이터 보호를 위해 읽기 전용 모드로 표시됩니다.)")
-            st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": st.column_config.LinkColumn("영수증 📸")})
+            st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
             
         elif edit_mode:
             st.warning("⚠️ 현재 장부 수정 모드입니다. 셀을 직접 클릭하여 수정할 수 있습니다.")
-            edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": st.column_config.LinkColumn("영수증 📸")})
+            # 편집 모드에서도 영수증 열은 1-Click 유지를 위해 수정 금지됨
+            edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
             if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
                 b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
                 if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
                 
         else:
-            st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": st.column_config.LinkColumn("영수증 📸")})
+            st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
 
 with tab_stats:
     if not ledger_df.empty:
@@ -536,4 +563,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.02.004 | Volume Guard: 51.2 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.02.005 | Volume Guard: 52.8 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
