@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.02.002]
+#[Project: Feelfree Travel Ledger / Version: v26.05.02.003]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Mobile Crash Fixed (Read-Only Default + Edit Toggle) - 50.0 KB]
+#[Status: Sidebar UX Reordered & Receipt Uploader UI Prepared - 50.4 KB]
 
 import streamlit as st
 import pandas as pd
@@ -21,14 +21,15 @@ st.set_page_config(
 TZ_KST = timezone(timedelta(hours=9))
 TZ_ICT = timezone(timedelta(hours=7))
 
-CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod']
+#[Modified] Phase 2 준비: Receipt_URL 컬럼 스키마 예비 확장 (데이터베이스 파괴 방지를 위해 꼬리에 배치)
+CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'Receipt_URL']
 SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
-#[Modified] 업데이트 로그 변경
-VERSION = "v26.05.02.002"
-UPDATE_LOG_TEXT = """* `[Fixed]` 모바일 렌더링 크래시 픽스: 내역 조회 탭 진입 시 무거운 데이터 에디터 대신 가벼운 읽기 전용(dataframe) 모드로 기본 렌더링되도록 수정하여 하위 탭 백지화 현상 해결.
-* `[Added]` 스마트 수정 토글: 모바일 화면 오터치(데이터 파괴) 방지를 위해, '장부 직접 수정 모드 켜기' 스위치를 추가하여 필요 시에만 편집기가 열리도록 UX 고도화."""
+#[Modified] 업데이트 로그
+VERSION = "v26.05.02.003"
+UPDATE_LOG_TEXT = """* `[Modified]` 사이드바 UX 최적화: 현장 실용성 강화를 위해 지갑 잔액 및 배치 현황을 총 예산 위로 끌어올림.
+* `[Added]` Phase 2 영수증 링킹 준비: 입력 탭에 사진 촬영/업로드 UI 장착 및 `Receipt_URL` DB 스키마 예비 공사 완료."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -85,12 +86,18 @@ def load_data():
     try:
         df = conn.read(worksheet="ledger", ttl="0s")
         if df is None or df.empty: return pd.DataFrame(columns=FINAL_COLUMNS)
+        
+        # [Modified] 과거 장부에 Receipt_URL이 없으면 빈 값으로 자동 생성 (에러 방지)
+        if 'Receipt_URL' not in df.columns:
+            df['Receipt_URL'] = ""
+            
         df = df.dropna(subset=['Date', 'Category'], how='any')
         df = df.reindex(columns=FINAL_COLUMNS)
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
         df['AppliedRate'] = pd.to_numeric(df['AppliedRate'], errors='coerce').fillna(0.0)
         df['IsExpense'] = pd.to_numeric(df['IsExpense'], errors='coerce').fillna(0).astype(int)
         df['Note'] = df['Note'].fillna("").astype(str)
+        df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
         return df
     except Exception: return pd.DataFrame(columns=FINAL_COLUMNS)
 
@@ -246,6 +253,7 @@ def calculate_summary_metrics(df):
     return b_total, card_v, cash_v, spent_total
 
 # --- SECTION 5: [Sidebar] ---
+# [Modified] 지갑 잔액을 상단으로, 총 예산을 하단으로 위치 역전
 with st.sidebar:
     st.title("⚙️ GTL Settings")
     tz_sel = st.radio("📍 현재 위치 (Timezone)",["🇰🇷 한국 (KST)", "🇻🇳 베트남 (ICT)"], horizontal=True, index=0 if "Seoul" in str(st.session_state.current_tz) else 1)
@@ -254,10 +262,6 @@ with st.sidebar:
     st.divider()
     st.title("💰 Wallet Status")
     b_val, card_val, cash_val, spent_val = calculate_summary_metrics(ledger_df)
-    st.metric("🏦 총 예산 (환전포함)", f"{b_val:,.0f} 원")
-    st.metric("💸 지출총액 (잔액제외)", f"{spent_val:,.0f} 원")
-    st.caption(f"VND 가중평균: 100₫ = {WAR_VND*100:.2f}원")
-    st.divider()
     
     st.metric("💳 카드 VND 잔액", f"{card_val:,.0f} ₫")
     if current_inventory_batches.get("트래블로그(VND)"):
@@ -291,6 +295,12 @@ with st.sidebar:
                     status = f"{b['qty']:,.2f}" if b['qty'] > 0 else "소진"
                     st.caption(f"• {b['rate']:.2f}원 : ${status}")
 
+    st.divider()
+    st.metric("🏦 총 예산 (환전포함)", f"{b_val:,.0f} 원")
+    st.metric("💸 지출총액 (잔액제외)", f"{spent_val:,.0f} 원")
+    st.caption(f"VND 가중평균: 100₫ = {WAR_VND*100:.2f}원")
+
+    st.divider()
     with st.expander("💵 실물 지폐 정산기"):
         total_ph = sum([b * st.number_input(f"{b:,.0f} ₫", min_value=0, step=1, value=int(cloud_cash_counts.get(b,0)), key=f"p_{b}") for b in BILLS])
         if st.button("💾 현금 수량 저장"): save_cash_count({b: st.session_state[f"p_{b}"] for b in BILLS}); st.rerun()
@@ -313,23 +323,25 @@ with tab_in:
         with col_desc:
             desc = st.text_input("내용 (상호명 및 상세메모)", placeholder="예: 안바카페 - 소고기버거, 반미정식", key="exp_desc")
         with col_receipt:
-            st.info("📸 영수증 첨부 준비중")
+            #[Modified] 카메라 및 파일 업로더 UI 활성화 (API 연동 전까지 저장은 보류됨)
+            uploaded_file = st.file_uploader("📸 영수증 사진", type=['png', 'jpg', 'jpeg'], key="exp_receipt")
             
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             curr = st.selectbox("통화",["VND", "KRW", "USD"], key="exp_curr")
-            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌"] if curr != "KRW" else ["원화계좌"]
+            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌"] if curr != "KRW" else["원화계좌"]
             met = st.selectbox("결제수단", met_options, index=0, key="exp_met")
         with col_m2:
             amt = st.number_input("금액", min_value=0, step=1000 if curr=="VND" else 1, format="%d", key="exp_amt_int") if curr in["VND", "KRW"] else st.number_input("금액", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
-            if curr in [TRAVEL_CURRENCY, 'USD'] and amt > 0:
+            if curr in[TRAVEL_CURRENCY, 'USD'] and amt > 0:
                 calc_rate = auto_calc_fifo_rate(amt, met, curr)
                 st.caption(f"💡 {curr} 인벤토리 계산 환율: **{calc_rate:.5f}**")
                 cr_final = st.number_input("확정 환율", value=float(calc_rate), format="%.5f", key=f"exp_cr_auto_{met}_{amt}")
             else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else 0.0561), format="%.5f", key=f"exp_cr_man_{curr}")
             
         if st.button("🚀 지출 기록하기", use_container_width=True):
-            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': ''}])
+            # 영수증 URL 맵핑은 API 연동 후 여기에 추가됩니다.
+            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '', 'Receipt_URL': ''}])
             b_now, card_now, cash_now, _ = calculate_summary_metrics(ledger_df)
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True), metrics=[b_now, card_now, cash_now]): st.rerun()
 
@@ -353,11 +365,11 @@ with tab_in:
         if st.button("🔄 이동 실행", use_container_width=True):
             dest = f"트래블로그({curr_tr})" if "카드" in ty else f"현금({curr_tr})"
             source = "원화계좌" if "원화계좌" in ty else f"트래블로그({curr_tr})"
-            main_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': ty.split(" ")[0], 'Description': f"{ty.split(' ')[0]} (-> {dest})", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': source, 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': ''}])
+            main_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': ty.split(" ")[0], 'Description': f"{ty.split(' ')[0]} (-> {dest})", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': source, 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': '', 'Receipt_URL': ''}])
             final_entry = pd.concat([ledger_df, main_row], ignore_index=True)
             if fee_amt > 0:
                 fee_rate = auto_calc_fifo_rate(fee_amt, f"트래블로그({curr_tr})", curr_tr)
-                fee_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': "수수료", 'Description': f"{ty.split(' ')[0]} 수수료", 'Currency': curr_tr, 'Amount': fee_amt, 'PaymentMethod': f"트래블로그({curr_tr})", 'IsExpense': 1, 'AppliedRate': fee_rate, 'Note': ''}])
+                fee_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': "수수료", 'Description': f"{ty.split(' ')[0]} 수수료", 'Currency': curr_tr, 'Amount': fee_amt, 'PaymentMethod': f"트래블로그({curr_tr})", 'IsExpense': 1, 'AppliedRate': fee_rate, 'Note': '', 'Receipt_URL': ''}])
                 final_entry = pd.concat([final_entry, fee_row], ignore_index=True)
             b_now, card_now, cash_now, _ = calculate_summary_metrics(ledger_df); save_data(final_entry, metrics=[b_now, card_now, cash_now]); st.rerun()
 
@@ -372,7 +384,7 @@ with tab_in:
             r_rate = st.number_input("과거 결제 시 적용됐던 환율", value=(1.0 if r_curr=="KRW" else 0.0561), format="%.5f", key="rf_rate")
             r_desc = st.text_input("취소 내역 메모", placeholder="예: 호텔 보증금 반환", key="rf_desc")
         if st.button("🔙 환불 인벤토리 롤백 실행", use_container_width=True):
-            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback'}])
+            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
             b_now, card_now, cash_now, _ = calculate_summary_metrics(ledger_df)
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True), metrics=[b_now, card_now, cash_now]): st.rerun()
 
@@ -381,17 +393,14 @@ with tab_in:
         io_type = st.radio("구분",["출국", "입국"], horizontal=True, key="io_radio")
         desc = st.text_input("내용 (메모)", placeholder="편명, 시간 등", key="io_desc")
         if st.button("🚀 일정 기록 완료", use_container_width=True):
-            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': io_type, 'Description': desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': ''}])
+            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': io_type, 'Description': desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
 # --- SECTION 6:[Module D, E: History & Settlement] ---
-# [Modified] 조회 탭: 기본 '읽기 전용' 렌더링 및 '스마트 토글(수정 모드)' 도입
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     
     search_query = st.text_input("🔎 검색어 입력 (입력 후 Enter를 누르면 모바일 키보드가 내려갑니다)", placeholder="상호명, 메모, 카테고리 등", key="his_search")
-    
-    # [Added] 수정 모드 토글 (모바일 오터치 방지 및 렌더링 최적화)
     edit_mode = st.toggle("✏️ 장부 직접 수정 모드 켜기", value=False, key="his_edit_toggle")
 
     if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
@@ -410,19 +419,19 @@ with tab_his:
             )
             filtered_df = display_df[mask]
             st.info(f"🔎 '{search_query}' 검색 결과: 총 {len(filtered_df)}건 (데이터 보호를 위해 읽기 전용 모드로 표시됩니다.)")
-            st.dataframe(filtered_df, use_container_width=True)
+            
+            # [Modified] URL 클릭 가능하도록 컬럼 속성 설정 (API 연동 후 본격 활성화)
+            st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": st.column_config.LinkColumn("영수증 📸")})
             
         elif edit_mode:
-            # 토글을 켰을 때만 무거운 에디터 렌더링
             st.warning("⚠️ 현재 장부 수정 모드입니다. 셀을 직접 클릭하여 수정할 수 있습니다.")
-            edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final")
+            edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": st.column_config.LinkColumn("영수증 📸")})
             if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
                 b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
                 if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
                 
         else:
-            # [Added] 기본 상태는 가볍고 안전한 읽기 전용 데이터프레임
-            st.dataframe(display_df, use_container_width=True)
+            st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": st.column_config.LinkColumn("영수증 📸")})
 
 with tab_stats:
     if not ledger_df.empty:
@@ -505,4 +514,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.02.002 | Volume Guard: 50.0 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.02.003 | Volume Guard: 50.4 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
