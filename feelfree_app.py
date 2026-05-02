@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.01.007]
+#[Project: Feelfree Travel Ledger / Version: v26.05.02.001]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Mobile UI Optimization & Sidebar Inventory Split - 49.3 KB]
+#[Status: Mobile Smart Search & Read-Only Protection Applied - 49.7 KB]
 
 import streamlit as st
 import pandas as pd
@@ -26,9 +26,9 @@ SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_V
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
 #[Modified] 업데이트 로그
-VERSION = "v26.05.01.007"
-UPDATE_LOG_TEXT = """* `[Modified]` UI 개편: 사이드바의 통합 환율/외화 배치를 각 지갑(카드/현금) 잔액 바로 밑으로 분리 및 밀착 배치.
-* `[Modified]` UI 개편: 모바일 환경의 수평 공간 확보를 위해 메인 탭 이름 간소화(입력, 조회, 일일, 리포트)."""
+VERSION = "v26.05.02.001"
+UPDATE_LOG_TEXT = """* `[Added]` 모바일 UX 개선: 내역 조회 탭에 '스마트 독립 검색창' 탑재. 검색 후 Enter 시 키보드가 자동으로 내려가 쾌적한 화면 제공.
+* `[Added]` 데이터 무결성 보호: 검색 중에는 장부 연쇄 붕괴를 막기 위해 데이터 테이블이 읽기 전용(Read-Only) 모드로 자동 전환됨."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -61,7 +61,7 @@ st.markdown("""
     .kpi-value-vnd { font-size: 18px; color: #00FF00; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
     div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
     .stTabs[data-baseweb="tab-list"] { gap: 15px; padding-bottom: 10px; }
-    .stTabs [data-baseweb="tab"] { background-color: #1c1f2b; border-radius: 8px 8px 0 0; padding: 12px 25px; color: #ffffff; }
+    .stTabs[data-baseweb="tab"] { background-color: #1c1f2b; border-radius: 8px 8px 0 0; padding: 12px 25px; color: #ffffff; }
     .stTabs[aria-selected="true"] { background-color: #00FF00 !important; color: #000000 !important; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
@@ -134,9 +134,9 @@ def recalculate_entire_ledger(df):
                 inv_batches[target_to].append({'rate': batch['rate'], 'qty': take}); total_inherited_krw += take * batch['rate']; temp_qty -= take
             if qty > 0: rate = total_inherited_krw / qty if total_inherited_krw > 0 else 0.0561
         
-        elif is_exp == 1 and curr in [TRAVEL_CURRENCY, 'USD']:
+        elif is_exp == 1 and curr in[TRAVEL_CURRENCY, 'USD']:
             target = f"트래블로그({curr})" if ("트래블로그" in str(method) or "카드" in str(method)) else f"현금({curr})"
-            temp_qty = qty; total_cost_krw = 0.0; decomposed = []
+            temp_qty = qty; total_cost_krw = 0.0; decomposed =[]
             for batch in inv_batches[target]:
                 if temp_qty <= 0: break
                 if batch['qty'] <= 0: continue
@@ -259,7 +259,6 @@ with st.sidebar:
     st.caption(f"VND 가중평균: 100₫ = {WAR_VND*100:.2f}원")
     st.divider()
     
-    # [Modified] 지갑별 메트릭 바로 아래에 환율 배치 현황을 개별 부착
     st.metric("💳 카드 VND 잔액", f"{card_val:,.0f} ₫")
     if current_inventory_batches.get("트래블로그(VND)"):
         with st.expander("↳ 카드 환율 배치", expanded=False):
@@ -300,7 +299,6 @@ with st.sidebar:
 
 # --- SECTION 4:[Module C] Intelligent Input (📝 입력) ---
 st.title("🌏 Feelfree: 글로벌 여행 가계부")
-#[Modified] 탭 이름 간소화 (모바일 최적화)
 tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 리포트"])
 
 with tab_in:
@@ -368,7 +366,7 @@ with tab_in:
         col_r1, col_r2 = st.columns(2)
         with col_r1:
             r_curr = st.selectbox("취소된 통화",["VND", "KRW", "USD"], key="rf_curr")
-            r_met = st.selectbox("돌려받을 지갑",[f"현금({r_curr})", f"트래블로그({r_curr})", "원화계좌"] if r_curr != "KRW" else ["원화계좌"], key="rf_met")
+            r_met = st.selectbox("돌려받을 지갑",[f"현금({r_curr})", f"트래블로그({r_curr})", "원화계좌"] if r_curr != "KRW" else["원화계좌"], key="rf_met")
             r_amt = st.number_input("환불 금액", min_value=0.0, step=1.0, format="%.2f", key="rf_amt")
         with col_r2:
             r_rate = st.number_input("과거 결제 시 적용됐던 환율", value=(1.0 if r_curr=="KRW" else 0.0561), format="%.5f", key="rf_rate")
@@ -387,8 +385,13 @@ with tab_in:
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
 # --- SECTION 6:[Module D, E: History & Settlement] ---
+# [Modified] 조회 탭에 '스마트 독립 검색창' 탑재 및 읽기 전용 보호 적용
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
+    
+    # [Added] 스마트 검색창 (키보드 겹침 해소)
+    search_query = st.text_input("🔎 검색어 입력 (입력 후 Enter를 누르면 모바일 키보드가 내려갑니다)", placeholder="상호명, 메모, 카테고리 등", key="his_search")
+
     if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
         if save_data(ledger_df):
             st.success("데이터 정합성 복구 및 전체 장부 재건축이 완료되었습니다!"); time.sleep(1); st.rerun()
@@ -396,10 +399,23 @@ with tab_his:
     if not ledger_df.empty:
         display_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
         display_df = display_df.reindex(columns=FINAL_COLUMNS)
-        edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final")
-        if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
-            b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
-            if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
+        
+        # [Added] 검색어가 있을 경우 필터링 후 읽기 전용 모드로 렌더링
+        if search_query.strip():
+            mask = (
+                display_df['Category'].str.contains(search_query, case=False, na=False) |
+                display_df['Description'].str.contains(search_query, case=False, na=False) |
+                display_df['Note'].str.contains(search_query, case=False, na=False)
+            )
+            filtered_df = display_df[mask]
+            st.info(f"🔎 '{search_query}' 검색 결과: 총 {len(filtered_df)}건 (데이터 보호를 위해 읽기 전용 모드로 표시됩니다. 수정을 원하시면 검색어를 지워주세요.)")
+            st.dataframe(filtered_df, use_container_width=True)
+        else:
+            # 검색어가 없을 경우 기존의 데이터 에디터 렌더링
+            edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final")
+            if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
+                b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
+                if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
 
 with tab_stats:
     if not ledger_df.empty:
@@ -482,4 +498,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.01.007 | Volume Guard: 49.3 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.02.001 | Volume Guard: 49.7 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
