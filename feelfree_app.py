@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.02.006]
+#[Project: Feelfree Travel Ledger / Version: v26.05.02.007]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Post-Attachment Moved to Bottom & Inline Viewer Added - 54.1 KB]
+#[Status: Inline Viewer Removed (Rolled back to Native Data Grid) - 52.8 KB]
 
 import streamlit as st
 import pandas as pd
@@ -30,9 +30,8 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 
 #[Modified] 업데이트 로그
-VERSION = "v26.05.02.006"
-UPDATE_LOG_TEXT = """* `[Modified]` UX 최적화: 조회 탭의 본질적 기능(검색 및 열람)에 집중할 수 있도록 '영수증 사후 일괄 추가' 기능을 최하단으로 강등 배치.
-* `[Added]` 인라인 영수증 뷰어(Inline Viewer): 모바일 표에서 2번 터치해야 하는 프레임워크 한계를 우회하기 위해, 앱 화면 내에서 영수증 사진을 즉시 띄우는 뷰어 신설."""
+VERSION = "v26.05.02.007"
+UPDATE_LOG_TEXT = """* `[Removed]` 인라인 영수증 뷰어 폐기: 사용자의 직관적인 UX 요청에 따라, 표 데이터에서 직접 접근하는 방식(2-Click)으로 롤백 및 UI 최적화."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -186,7 +185,7 @@ def save_data(df, metrics=None):
             conn.update(worksheet="ledger", data=final_df.reindex(columns=FINAL_COLUMNS))
             if metrics:
                 current_time_str = datetime.now(st.session_state.current_tz).strftime("%H:%M")
-                summary = pd.DataFrame({"항목":["🏦 예산(KRW)", "💳 카드(VND)", "💵 현금(VND)", "🕒 업데이트"], "수치": [f"{metrics[0]:,.0f}", f"{metrics[1]:,.0f}", f"{metrics[2]:,.0f}", current_time_str]})
+                summary = pd.DataFrame({"항목":["🏦 예산(KRW)", "💳 카드(VND)", "💵 현금(VND)", "🕒 업데이트"], "수치":[f"{metrics[0]:,.0f}", f"{metrics[1]:,.0f}", f"{metrics[2]:,.0f}", current_time_str]})
                 try: conn.update(worksheet="summary", data=summary)
                 except: pass
             st.cache_data.clear(); return True
@@ -438,34 +437,18 @@ with tab_his:
             filtered_df = display_df[mask]
             st.info(f"🔎 '{search_query}' 검색 결과: 총 {len(filtered_df)}건 (데이터 보호를 위해 읽기 전용 모드로 표시됩니다.)")
             st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
+            
         elif edit_mode:
             st.warning("⚠️ 현재 장부 수정 모드입니다. 셀을 직접 클릭하여 수정할 수 있습니다.")
             edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
             if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
                 b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
                 if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
+                
         else:
             st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
-            
-        st.divider()
-        
-        # [Added] 모바일 2-Click 한계를 우회하는 앱 내장형 인라인 영수증 뷰어
-        receipt_df = display_df[display_df['Receipt_URL'].str.startswith('http', na=False)]
-        if not receipt_df.empty:
-            st.subheader("👀 앱 내 영수증 바로보기 (1-Click)")
-            st.info("💡 표에서 두 번 터치해야 하는 모바일 브라우저의 불편함을 없애기 위해, 앱 안에서 사진을 바로 띄워줍니다.")
-            
-            viewer_options = ["선택 안함"] + [f"{r['Date']} | {r['Category']} - {r['Description']} ({r['Amount']:,.0f}{r['Currency']})" for _, r in receipt_df.iterrows()]
-            url_mapping = {"선택 안함": ""}
-            for _, r in receipt_df.iterrows():
-                label = f"{r['Date']} | {r['Category']} - {r['Description']} ({r['Amount']:,.0f}{r['Currency']})"
-                url_mapping[label] = r['Receipt_URL']
 
-            sel_view = st.selectbox("확인할 영수증을 선택하세요:", viewer_options)
-            if sel_view != "선택 안함":
-                st.image(url_mapping[sel_view], use_container_width=True)
-
-        st.divider()
+    st.divider()
 
     # [Moved] 영수증 사후 추가 기능을 조회 탭 최하단으로 강등 배치
     with st.expander("📸 누락된 영수증 일괄 추가 (Post-Attachment)", expanded=False):
@@ -577,4 +560,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.02.006 | Volume Guard: 54.1 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.02.007 | Volume Guard: 52.8 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
