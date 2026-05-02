@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.02.001]
+#[Project: Feelfree Travel Ledger / Version: v26.05.02.002]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Mobile Smart Search & Read-Only Protection Applied - 49.7 KB]
+#[Status: Mobile Crash Fixed (Read-Only Default + Edit Toggle) - 50.0 KB]
 
 import streamlit as st
 import pandas as pd
@@ -25,10 +25,10 @@ CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'Payment
 SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
-#[Modified] 업데이트 로그
-VERSION = "v26.05.02.001"
-UPDATE_LOG_TEXT = """* `[Added]` 모바일 UX 개선: 내역 조회 탭에 '스마트 독립 검색창' 탑재. 검색 후 Enter 시 키보드가 자동으로 내려가 쾌적한 화면 제공.
-* `[Added]` 데이터 무결성 보호: 검색 중에는 장부 연쇄 붕괴를 막기 위해 데이터 테이블이 읽기 전용(Read-Only) 모드로 자동 전환됨."""
+#[Modified] 업데이트 로그 변경
+VERSION = "v26.05.02.002"
+UPDATE_LOG_TEXT = """* `[Fixed]` 모바일 렌더링 크래시 픽스: 내역 조회 탭 진입 시 무거운 데이터 에디터 대신 가벼운 읽기 전용(dataframe) 모드로 기본 렌더링되도록 수정하여 하위 탭 백지화 현상 해결.
+* `[Added]` 스마트 수정 토글: 모바일 화면 오터치(데이터 파괴) 방지를 위해, '장부 직접 수정 모드 켜기' 스위치를 추가하여 필요 시에만 편집기가 열리도록 UX 고도화."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -385,12 +385,14 @@ with tab_in:
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
 # --- SECTION 6:[Module D, E: History & Settlement] ---
-# [Modified] 조회 탭에 '스마트 독립 검색창' 탑재 및 읽기 전용 보호 적용
+# [Modified] 조회 탭: 기본 '읽기 전용' 렌더링 및 '스마트 토글(수정 모드)' 도입
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     
-    # [Added] 스마트 검색창 (키보드 겹침 해소)
     search_query = st.text_input("🔎 검색어 입력 (입력 후 Enter를 누르면 모바일 키보드가 내려갑니다)", placeholder="상호명, 메모, 카테고리 등", key="his_search")
+    
+    # [Added] 수정 모드 토글 (모바일 오터치 방지 및 렌더링 최적화)
+    edit_mode = st.toggle("✏️ 장부 직접 수정 모드 켜기", value=False, key="his_edit_toggle")
 
     if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
         if save_data(ledger_df):
@@ -400,7 +402,6 @@ with tab_his:
         display_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
         display_df = display_df.reindex(columns=FINAL_COLUMNS)
         
-        # [Added] 검색어가 있을 경우 필터링 후 읽기 전용 모드로 렌더링
         if search_query.strip():
             mask = (
                 display_df['Category'].str.contains(search_query, case=False, na=False) |
@@ -408,14 +409,20 @@ with tab_his:
                 display_df['Note'].str.contains(search_query, case=False, na=False)
             )
             filtered_df = display_df[mask]
-            st.info(f"🔎 '{search_query}' 검색 결과: 총 {len(filtered_df)}건 (데이터 보호를 위해 읽기 전용 모드로 표시됩니다. 수정을 원하시면 검색어를 지워주세요.)")
+            st.info(f"🔎 '{search_query}' 검색 결과: 총 {len(filtered_df)}건 (데이터 보호를 위해 읽기 전용 모드로 표시됩니다.)")
             st.dataframe(filtered_df, use_container_width=True)
-        else:
-            # 검색어가 없을 경우 기존의 데이터 에디터 렌더링
+            
+        elif edit_mode:
+            # 토글을 켰을 때만 무거운 에디터 렌더링
+            st.warning("⚠️ 현재 장부 수정 모드입니다. 셀을 직접 클릭하여 수정할 수 있습니다.")
             edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final")
             if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
                 b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
                 if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
+                
+        else:
+            # [Added] 기본 상태는 가볍고 안전한 읽기 전용 데이터프레임
+            st.dataframe(display_df, use_container_width=True)
 
 with tab_stats:
     if not ledger_df.empty:
@@ -498,4 +505,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.02.001 | Volume Guard: 49.7 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.02.002 | Volume Guard: 50.0 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
