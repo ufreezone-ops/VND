@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.02.005]
+#[Project: Feelfree Travel Ledger / Version: v26.05.02.006]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Post-Attachment UI & 1-Click Mobile Receipt Deployed - 52.8 KB]
+#[Status: Post-Attachment Moved to Bottom & Inline Viewer Added - 54.1 KB]
 
 import streamlit as st
 import pandas as pd
@@ -30,9 +30,9 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 
 #[Modified] 업데이트 로그
-VERSION = "v26.05.02.005"
-UPDATE_LOG_TEXT = """* `[Added]` 영수증 사후 첨부: 내역 조회 탭에 기존 내역을 선택하여 영수증 사진만 일괄 추가할 수 있는 아코디언 기능 신설 (삭제/재입력 불필요).
-* `[Modified]` 모바일 UX 픽스: 영수증 URL 열을 '🔗 보기' 형태의 하이퍼링크로 변경하고, 편집 기능을 잠가 모바일에서 터치 시 셀 활성화 없이 즉각 열리도록 1-Click 구현."""
+VERSION = "v26.05.02.006"
+UPDATE_LOG_TEXT = """* `[Modified]` UX 최적화: 조회 탭의 본질적 기능(검색 및 열람)에 집중할 수 있도록 '영수증 사후 일괄 추가' 기능을 최하단으로 강등 배치.
+* `[Added]` 인라인 영수증 뷰어(Inline Viewer): 모바일 표에서 2번 터치해야 하는 프레임워크 한계를 우회하기 위해, 앱 화면 내에서 영수증 사진을 즉시 띄우는 뷰어 신설."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -85,7 +85,6 @@ DOMESTIC_CATS =["항공권", "호텔", "보험", "지하철", "택시"]
 TRANSFER_CATS =["충전", "ATM출금", "보증금", "환전", "직접환전"]
 
 # --- SECTION 2:[Module A] Data Engine ---
-# [Modified] 이미지 업로드 함수 전진 배치 (조회 탭에서도 써야 함)
 def upload_image_to_imgbb(image_file):
     url = "https://api.imgbb.com/1/upload"
     try:
@@ -417,18 +416,68 @@ with tab_in:
 with tab_his:
     st.subheader("🔍 내역 조회 및 수정")
     
-    #[Added] 누락 영수증 사후 일괄 추가 아코디언 UI
+    search_query = st.text_input("🔎 검색어 입력 (입력 후 Enter를 누르면 모바일 키보드가 내려갑니다)", placeholder="상호명, 메모, 카테고리 등", key="his_search")
+    edit_mode = st.toggle("✏️ 장부 직접 수정 모드 켜기", value=False, key="his_edit_toggle")
+
+    if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
+        if save_data(ledger_df):
+            st.success("데이터 정합성 복구 및 전체 장부 재건축이 완료되었습니다!"); time.sleep(1); st.rerun()
+            
+    if not ledger_df.empty:
+        display_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
+        display_df = display_df.reindex(columns=FINAL_COLUMNS)
+        
+        link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
+        
+        if search_query.strip():
+            mask = (
+                display_df['Category'].str.contains(search_query, case=False, na=False) |
+                display_df['Description'].str.contains(search_query, case=False, na=False) |
+                display_df['Note'].str.contains(search_query, case=False, na=False)
+            )
+            filtered_df = display_df[mask]
+            st.info(f"🔎 '{search_query}' 검색 결과: 총 {len(filtered_df)}건 (데이터 보호를 위해 읽기 전용 모드로 표시됩니다.)")
+            st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
+        elif edit_mode:
+            st.warning("⚠️ 현재 장부 수정 모드입니다. 셀을 직접 클릭하여 수정할 수 있습니다.")
+            edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
+            if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
+                b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
+                if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
+        else:
+            st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
+            
+        st.divider()
+        
+        # [Added] 모바일 2-Click 한계를 우회하는 앱 내장형 인라인 영수증 뷰어
+        receipt_df = display_df[display_df['Receipt_URL'].str.startswith('http', na=False)]
+        if not receipt_df.empty:
+            st.subheader("👀 앱 내 영수증 바로보기 (1-Click)")
+            st.info("💡 표에서 두 번 터치해야 하는 모바일 브라우저의 불편함을 없애기 위해, 앱 안에서 사진을 바로 띄워줍니다.")
+            
+            viewer_options = ["선택 안함"] + [f"{r['Date']} | {r['Category']} - {r['Description']} ({r['Amount']:,.0f}{r['Currency']})" for _, r in receipt_df.iterrows()]
+            url_mapping = {"선택 안함": ""}
+            for _, r in receipt_df.iterrows():
+                label = f"{r['Date']} | {r['Category']} - {r['Description']} ({r['Amount']:,.0f}{r['Currency']})"
+                url_mapping[label] = r['Receipt_URL']
+
+            sel_view = st.selectbox("확인할 영수증을 선택하세요:", viewer_options)
+            if sel_view != "선택 안함":
+                st.image(url_mapping[sel_view], use_container_width=True)
+
+        st.divider()
+
+    # [Moved] 영수증 사후 추가 기능을 조회 탭 최하단으로 강등 배치
     with st.expander("📸 누락된 영수증 일괄 추가 (Post-Attachment)", expanded=False):
         if not ledger_df.empty:
             temp_sort = ledger_df.sort_values(by='Date', kind='mergesort', ascending=False)
             options =[]
             option_mapping = {}
             for i, row in temp_sort.iterrows():
-                # 영수증 존재 여부 시각적 표시
                 has_receipt = "✅" if str(row.get('Receipt_URL', '')).startswith('http') else "❌"
                 label = f"[{has_receipt}] {row['Date']} | {row['Category']} - {row['Description']} ({row['Amount']:,.0f}{row['Currency']})"
                 options.append(label)
-                option_mapping[label] = i # ledger_df 원본 인덱스 매핑
+                option_mapping[label] = i 
             
             sel_item = st.selectbox("영수증을 연결할 내역을 선택하세요", options)
             post_file = st.file_uploader("📸 영수증 사진 촬영/선택", type=['png', 'jpg', 'jpeg'], key="post_receipt")
@@ -446,41 +495,6 @@ with tab_his:
                                 time.sleep(1); st.rerun()
                 else:
                     st.warning("사진을 먼저 첨부해주세요.")
-
-    search_query = st.text_input("🔎 검색어 입력 (입력 후 Enter를 누르면 모바일 키보드가 내려갑니다)", placeholder="상호명, 메모, 카테고리 등", key="his_search")
-    edit_mode = st.toggle("✏️ 장부 직접 수정 모드 켜기", value=False, key="his_edit_toggle")
-
-    if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
-        if save_data(ledger_df):
-            st.success("데이터 정합성 복구 및 전체 장부 재건축이 완료되었습니다!"); time.sleep(1); st.rerun()
-            
-    if not ledger_df.empty:
-        display_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
-        display_df = display_df.reindex(columns=FINAL_COLUMNS)
-        
-        # [Modified] 1-Click 모바일 URL 렌더링 세팅 (수정 불가 처리)
-        link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
-        
-        if search_query.strip():
-            mask = (
-                display_df['Category'].str.contains(search_query, case=False, na=False) |
-                display_df['Description'].str.contains(search_query, case=False, na=False) |
-                display_df['Note'].str.contains(search_query, case=False, na=False)
-            )
-            filtered_df = display_df[mask]
-            st.info(f"🔎 '{search_query}' 검색 결과: 총 {len(filtered_df)}건 (데이터 보호를 위해 읽기 전용 모드로 표시됩니다.)")
-            st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
-            
-        elif edit_mode:
-            st.warning("⚠️ 현재 장부 수정 모드입니다. 셀을 직접 클릭하여 수정할 수 있습니다.")
-            # 편집 모드에서도 영수증 열은 1-Click 유지를 위해 수정 금지됨
-            edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
-            if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
-                b_n, card_n, cash_n, _ = calculate_summary_metrics(edited_df)
-                if save_data(edited_df, metrics=[b_n, card_n, cash_n]): st.rerun()
-                
-        else:
-            st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
 
 with tab_stats:
     if not ledger_df.empty:
@@ -563,4 +577,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.02.005 | Volume Guard: 52.8 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.02.006 | Volume Guard: 54.1 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
