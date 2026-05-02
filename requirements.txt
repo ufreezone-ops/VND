@@ -2,3 +2,9 @@ streamlit
 pandas
 plotly
 st-gsheets-connection  # [Added]
+streamlit
+pandas
+plotly
+gspread
+oauth2client
+yfinance
