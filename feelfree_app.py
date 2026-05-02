@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.02.003]
+#[Project: Feelfree Travel Ledger / Version: v26.05.02.004]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Sidebar UX Reordered & Receipt Uploader UI Prepared - 50.4 KB]
+#[Status: Phase 2 Deployed (ImgBB API Receipt Linking) & Sidebar UX - 51.2 KB]
 
 import streamlit as st
 import pandas as pd
@@ -9,6 +9,8 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta, timezone, date as dt_date
 from streamlit_gsheets import GSheetsConnection
 import time
+import requests
+import base64
 
 # --- SECTION 1: Configuration & Global Setup ---
 st.set_page_config(
@@ -21,15 +23,17 @@ st.set_page_config(
 TZ_KST = timezone(timedelta(hours=9))
 TZ_ICT = timezone(timedelta(hours=7))
 
-#[Modified] Phase 2 준비: Receipt_URL 컬럼 스키마 예비 확장 (데이터베이스 파괴 방지를 위해 꼬리에 배치)
 CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'Receipt_URL']
 SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_VND', 'Cum_Cash_VND', 'Note']
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
+#[Added] ImgBB API Key
+IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
+
 #[Modified] 업데이트 로그
-VERSION = "v26.05.02.003"
-UPDATE_LOG_TEXT = """* `[Modified]` 사이드바 UX 최적화: 현장 실용성 강화를 위해 지갑 잔액 및 배치 현황을 총 예산 위로 끌어올림.
-* `[Added]` Phase 2 영수증 링킹 준비: 입력 탭에 사진 촬영/업로드 UI 장착 및 `Receipt_URL` DB 스키마 예비 공사 완료."""
+VERSION = "v26.05.02.004"
+UPDATE_LOG_TEXT = """* `[Added]` Phase 2 영수증 링킹 완료: ImgBB API 통신 모듈을 탑재하여, 스마트폰으로 촬영한 영수증이 클라우드에 자동 업로드되고 장부에 URL로 맵핑됨.
+* `[Modified]` 사이드바 UX: 현장 사용성을 고려하여 현금(Cash) 잔액을 카드(Card) 잔액보다 상단으로 배치."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -87,7 +91,6 @@ def load_data():
         df = conn.read(worksheet="ledger", ttl="0s")
         if df is None or df.empty: return pd.DataFrame(columns=FINAL_COLUMNS)
         
-        # [Modified] 과거 장부에 Receipt_URL이 없으면 빈 값으로 자동 생성 (에러 방지)
         if 'Receipt_URL' not in df.columns:
             df['Receipt_URL'] = ""
             
@@ -253,7 +256,6 @@ def calculate_summary_metrics(df):
     return b_total, card_v, cash_v, spent_total
 
 # --- SECTION 5: [Sidebar] ---
-# [Modified] 지갑 잔액을 상단으로, 총 예산을 하단으로 위치 역전
 with st.sidebar:
     st.title("⚙️ GTL Settings")
     tz_sel = st.radio("📍 현재 위치 (Timezone)",["🇰🇷 한국 (KST)", "🇻🇳 베트남 (ICT)"], horizontal=True, index=0 if "Seoul" in str(st.session_state.current_tz) else 1)
@@ -263,35 +265,36 @@ with st.sidebar:
     st.title("💰 Wallet Status")
     b_val, card_val, cash_val, spent_val = calculate_summary_metrics(ledger_df)
     
-    st.metric("💳 카드 VND 잔액", f"{card_val:,.0f} ₫")
-    if current_inventory_batches.get("트래블로그(VND)"):
-        with st.expander("↳ 카드 환율 배치", expanded=False):
-            for b in current_inventory_batches["트래블로그(VND)"]:
-                status = f"{b['qty']:,.0f}" if b['qty'] > 0 else "소진"
-                st.caption(f"• {b['rate']:.4f}원 : {status}₫")
-
+    # [Modified] 현금 지갑을 최상단으로 끌어올림
     st.metric("💵 현금 VND 잔액", f"{cash_val:,.0f} ₫")
     if current_inventory_batches.get("현금(VND)"):
         with st.expander("↳ 현금 환율 배치", expanded=False):
             for b in current_inventory_batches["현금(VND)"]:
                 status = f"{b['qty']:,.0f}" if b['qty'] > 0 else "소진"
                 st.caption(f"• {b['rate']:.4f}원 : {status}₫")
+                
+    st.metric("💳 카드 VND 잔액", f"{card_val:,.0f} ₫")
+    if current_inventory_batches.get("트래블로그(VND)"):
+        with st.expander("↳ 카드 환율 배치", expanded=False):
+            for b in current_inventory_batches["트래블로그(VND)"]:
+                status = f"{b['qty']:,.0f}" if b['qty'] > 0 else "소진"
+                st.caption(f"• {b['rate']:.4f}원 : {status}₫")
     
     usd_card = sum([b['qty'] for b in current_inventory_batches["트래블로그(USD)"]])
     usd_cash = sum([b['qty'] for b in current_inventory_batches["현금(USD)"]])
-    if usd_card > 0 or usd_cash > 0:
+    if usd_cash > 0 or usd_card > 0:
         st.divider()
-        st.metric("💳 카드 USD 잔액", f"${usd_card:,.2f}")
-        if current_inventory_batches.get("트래블로그(USD)"):
-            with st.expander("↳ USD 카드 배치", expanded=False):
-                for b in current_inventory_batches["트래블로그(USD)"]:
-                    status = f"{b['qty']:,.2f}" if b['qty'] > 0 else "소진"
-                    st.caption(f"• {b['rate']:.2f}원 : ${status}")
-        
         st.metric("💵 현금 USD 잔액", f"${usd_cash:,.2f}")
         if current_inventory_batches.get("현금(USD)"):
             with st.expander("↳ USD 현금 배치", expanded=False):
                 for b in current_inventory_batches["현금(USD)"]:
+                    status = f"{b['qty']:,.2f}" if b['qty'] > 0 else "소진"
+                    st.caption(f"• {b['rate']:.2f}원 : ${status}")
+                    
+        st.metric("💳 카드 USD 잔액", f"${usd_card:,.2f}")
+        if current_inventory_batches.get("트래블로그(USD)"):
+            with st.expander("↳ USD 카드 배치", expanded=False):
+                for b in current_inventory_batches["트래블로그(USD)"]:
                     status = f"{b['qty']:,.2f}" if b['qty'] > 0 else "소진"
                     st.caption(f"• {b['rate']:.2f}원 : ${status}")
 
@@ -308,6 +311,21 @@ with st.sidebar:
     if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
 
 # --- SECTION 4:[Module C] Intelligent Input (📝 입력) ---
+# [Added] ImgBB 클라우드 전송 함수
+def upload_image_to_imgbb(image_file):
+    url = "https://api.imgbb.com/1/upload"
+    try:
+        payload = {
+            "key": IMGBB_API_KEY,
+            "image": base64.b64encode(image_file.read()).decode("utf-8")
+        }
+        res = requests.post(url, data=payload)
+        if res.status_code == 200:
+            return res.json()['data']['url']
+    except Exception as e:
+        st.error(f"이미지 서버 통신 오류: {e}")
+    return ""
+
 st.title("🌏 Feelfree: 글로벌 여행 가계부")
 tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 리포트"])
 
@@ -323,25 +341,31 @@ with tab_in:
         with col_desc:
             desc = st.text_input("내용 (상호명 및 상세메모)", placeholder="예: 안바카페 - 소고기버거, 반미정식", key="exp_desc")
         with col_receipt:
-            #[Modified] 카메라 및 파일 업로더 UI 활성화 (API 연동 전까지 저장은 보류됨)
+            # [Modified] 영수증 사진 업로더 UI (카메라 연동)
             uploaded_file = st.file_uploader("📸 영수증 사진", type=['png', 'jpg', 'jpeg'], key="exp_receipt")
             
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             curr = st.selectbox("통화",["VND", "KRW", "USD"], key="exp_curr")
-            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌"] if curr != "KRW" else["원화계좌"]
+            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌"] if curr != "KRW" else ["원화계좌"]
             met = st.selectbox("결제수단", met_options, index=0, key="exp_met")
         with col_m2:
             amt = st.number_input("금액", min_value=0, step=1000 if curr=="VND" else 1, format="%d", key="exp_amt_int") if curr in["VND", "KRW"] else st.number_input("금액", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
-            if curr in[TRAVEL_CURRENCY, 'USD'] and amt > 0:
+            if curr in [TRAVEL_CURRENCY, 'USD'] and amt > 0:
                 calc_rate = auto_calc_fifo_rate(amt, met, curr)
                 st.caption(f"💡 {curr} 인벤토리 계산 환율: **{calc_rate:.5f}**")
                 cr_final = st.number_input("확정 환율", value=float(calc_rate), format="%.5f", key=f"exp_cr_auto_{met}_{amt}")
             else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else 0.0561), format="%.5f", key=f"exp_cr_man_{curr}")
             
         if st.button("🚀 지출 기록하기", use_container_width=True):
-            # 영수증 URL 맵핑은 API 연동 후 여기에 추가됩니다.
-            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '', 'Receipt_URL': ''}])
+            # [Added] 사진이 있으면 클라우드로 쏘고 URL을 받아옴
+            receipt_url = ""
+            if uploaded_file is not None:
+                with st.spinner("📸 영수증을 클라우드로 안전하게 전송 중입니다..."):
+                    receipt_url = upload_image_to_imgbb(uploaded_file)
+                    if receipt_url: st.toast("✅ 영수증 링킹 완료!")
+            
+            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '', 'Receipt_URL': receipt_url}])
             b_now, card_now, cash_now, _ = calculate_summary_metrics(ledger_df)
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True), metrics=[b_now, card_now, cash_now]): st.rerun()
 
@@ -419,8 +443,6 @@ with tab_his:
             )
             filtered_df = display_df[mask]
             st.info(f"🔎 '{search_query}' 검색 결과: 총 {len(filtered_df)}건 (데이터 보호를 위해 읽기 전용 모드로 표시됩니다.)")
-            
-            # [Modified] URL 클릭 가능하도록 컬럼 속성 설정 (API 연동 후 본격 활성화)
             st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": st.column_config.LinkColumn("영수증 📸")})
             
         elif edit_mode:
@@ -514,4 +536,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.02.003 | Volume Guard: 50.4 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.02.004 | Volume Guard: 51.2 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
