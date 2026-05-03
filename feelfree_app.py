@@ -1,6 +1,6 @@
 #[Project: Feelfree Travel Ledger / Version: v26.05.03.008]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Budget Fix, Report Match & Detail Receipt Viewer - 64.2 KB]
+#[Status: Macro-Category Decoupled & Viewer ValueError Fixed - 64.2 KB]
 
 import streamlit as st
 import pandas as pd
@@ -31,12 +31,13 @@ TRIP_CONFIGS = {
     }
 }
 
+# [Modified] 데이터 마이닝 사전 분리: 항공권/숙박을 뭉치지 않고 개별 대분류로 독립
 MACRO_MAP = {
     "Grab": "🚗 교통", "VinBus": "🚗 교통", "DiDi": "🚗 교통", "지하철": "🚗 교통", "택시": "🚗 교통",
     "식사": "🍔 식음료", "간식": "🍔 식음료", "마트": "🍔 식음료",
     "마사지": "🏄 액티비티", "투어": "🏄 액티비티", "입장료": "🏄 액티비티",
     "선물": "🎁 쇼핑", "통신": "📱 통신/기타", "수수료": "📱 통신/기타", "팁": "📱 통신/기타",
-    "항공권": "🛫 사전결제", "호텔": "🛫 사전결제", "보험": "🛫 사전결제", "보증금": "🏦 자산이동"
+    "항공권": "✈️ 항공권", "호텔": "🏨 숙박", "보험": "🛡️ 보험", "보증금": "🏦 자산이동"
 }
 
 CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'Receipt_URL']
@@ -47,9 +48,8 @@ IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 VERSION = "v26.05.03.008"
-UPDATE_LOG_TEXT = """* `[Fixed]` 예산 붕괴 픽스: DOMESTIC 자산 및 보증금 결제 시 AppliedRate가 0으로 리셋되어 예산 누적이 파괴되던 치명적 버그 해결.
-* `[Fixed]` 금액 불일치 픽스: 리포트 탭 지출 환산 로직에 실제 FIFO 환율을 곱하도록 수정하여 사이드바 지출 총액과 1원 단위까지 완벽 동기화.
-* `[Added]` 텍스트 영수증 뷰어: 조회 탭에서 내역 선택 시, 메모장의 항목을 글머리 기호로 분해하여 실제 영수증처럼 깔끔하게 보여주는 기능 탑재."""
+UPDATE_LOG_TEXT = """* `[Fixed]` ValueError 핫픽스: 조회 탭 인라인 뷰어의 금액 포맷팅(f-string) 문법 오류 수정.
+* `[Modified]` 데이터 마이닝 최적화: '사전결제'로 뭉쳐있던 항공권, 호텔, 보험을 개별 대분류(Macro Category)로 독립시켜 리포트 차트의 직관성 대폭 향상."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -148,8 +148,6 @@ def recalculate_entire_ledger(df):
     for i, row in temp_df.iterrows():
         cat = row['Category']
         asset_cls = get_asset_class(row['PaymentMethod'])
-        
-        # [Fixed] 예산 붕괴 해결: 보증금이거나 DOMESTIC 결제는 환율을 0으로 닦지 않음!
         if cat in EXPENSE_CATS and cat != '보증금' and asset_cls != "DOMESTIC":
             temp_df.at[i, 'AppliedRate'] = 0.0
             
@@ -405,7 +403,6 @@ with tab_in:
 
         col_a1, col_a2 = st.columns(2)
         with col_a1:
-            # [Fixed] Float/Int Warning 해결 로직 적용
             if curr == "KRW" or (curr == TRAVEL_CURRENCY and MULTIPLIER == 100):
                 amt = st.number_input(f"금액 ({curr})", min_value=0, step=1000 if curr != "KRW" else 1, format="%d", key="exp_amt_int")
             else:
@@ -520,20 +517,20 @@ with tab_his:
             
         st.divider()
         
-        # [Added] 상세 텍스트 분해(Receipt) + 사진 동시 뷰어
+        # [Fixed] f-string ValueError 해결 (포맷 문자열 사전 조립)
         st.subheader("🧾 상세 내역 및 영수증 뷰어")
-        st.info("💡 항목을 선택하시면 세부 품목(콜라, 꼬치 등)과 영수증 사진을 실제 영수증처럼 깔끔하게 보여줍니다.")
+        st.info("💡 항목을 선택하시면 세부 품목과 영수증 사진을 보여줍니다.")
         
         viewer_options =["선택 안함"]
         options_map = {}
         for i, r in display_df.sort_values(by='Date', kind='mergesort', ascending=False).iterrows():
-            lbl_amt = f"{r['Amount']:,.2f if MULTIPLIER==1 and r['Currency']!='KRW' else .0f}"
+            amt_fmt = "{:,.2f}" if MULTIPLIER == 1 and r['Currency'] != 'KRW' else "{:,.0f}"
+            lbl_amt = amt_fmt.format(r['Amount'])
             lbl = f"[{r['Date']}] {r['Category']} | {lbl_amt} {r['Currency']}"
             desc_short = str(r['Description'])[:20] + "..." if len(str(r['Description'])) > 20 else str(r['Description'])
             lbl += f" ({desc_short})"
             unique_lbl = f"{i}:: {lbl}"
-            viewer_options.append(unique_lbl)
-            options_map[unique_lbl] = r
+            viewer_options.append(unique_lbl); options_map[unique_lbl] = r
 
         sel_view = st.selectbox("조회할 내역을 선택하세요:", viewer_options)
         if sel_view != "선택 안함":
@@ -543,17 +540,16 @@ with tab_his:
             c_info, c_img = st.columns([1, 1])
             with c_info:
                 st.markdown(f"### 🛒 {row_data['Category']}")
-                st.markdown(f"**💳 결제금액:** {row_data['Amount']:,.2f if MULTIPLIER==1 and row_data['Currency']!='KRW' else .0f} {row_data['Currency']}")
+                amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
+                st.markdown(f"**💳 결제금액:** {amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}")
                 st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
                 
-                # 메모장(-) 파싱을 통한 영수증(Bullet) 효과
                 if "-" in desc_full:
                     parts = desc_full.split("-", 1)
                     st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
                     items = parts[1].split(",")
                     st.markdown("**📝 세부 구매 내역:**")
-                    for item in items:
-                        st.markdown(f"- {item.strip()}")
+                    for item in items: st.markdown(f"- {item.strip()}")
                 else:
                     st.markdown(f"**📝 내역:** {desc_full}")
                     
@@ -572,7 +568,9 @@ with tab_his:
             option_mapping = {}
             for i, row in temp_sort.iterrows():
                 has_receipt = "✅" if str(row.get('Receipt_URL', '')).startswith('http') else "❌"
-                label = f"[{has_receipt}] {row['Date']} | {row['Category']} - {row['Description']} ({row['Amount']:,.0f}{LOCAL_SYM})"
+                amt_fmt3 = "{:,.2f}" if MULTIPLIER == 1 and row['Currency'] != 'KRW' else "{:,.0f}"
+                lbl_amt3 = amt_fmt3.format(row['Amount'])
+                label = f"[{has_receipt}] {row['Date']} | {row['Category']} - {row['Description']} ({lbl_amt3}{LOCAL_SYM})"
                 options.append(label); option_mapping[label] = i 
             
             sel_item = st.selectbox("영수증을 연결할 내역을 선택하세요", options)
@@ -596,7 +594,6 @@ with tab_stats:
         if not exp_df.empty:
             exp_df['Macro_Category'] = exp_df['Category'].map(MACRO_MAP).fillna("기타")
             
-            # [Fixed] 리포트 탭에도 FIFO 'AppliedRate'를 그대로 적용하여 사이드바 지출액과 1원 단위까지 100% 동기화
             def get_krw_val(r):
                 if r['Currency'] == 'KRW': return r['Amount']
                 elif r['Currency'] in [TRAVEL_CURRENCY, 'USD']: return r['Amount'] * r['AppliedRate']
@@ -635,14 +632,15 @@ with tab_stats:
                 "선물": "#9C27B0", "통신": "#FF9800", "수수료": "#795548", "팁": "#03A9F4",
                 "항공권": "#D32F2F", "호텔": "#1976D2", "보험": "#FBC02D"
             }
+            # [Modified] 독립된 대분류 항목 색상 동기화
             macro_color_map = {
                 "🍔 식음료": "#4CAF50", "🚗 교통": "#00ACC1", "🏄 액티비티": "#0288D1", 
-                "🎁 쇼핑": "#9C27B0", "📱 통신/기타": "#FF9800", "🛫 사전결제": "#D32F2F", "기타": "#9E9E9E"
+                "🎁 쇼핑": "#9C27B0", "📱 통신/기타": "#FF9800", "✈️ 항공권": "#D32F2F", "🏨 숙박": "#1976D2", "🛡️ 보험": "#FBC02D", "기타": "#9E9E9E"
             }
             
             if not dom_df.empty:
                 dom_df['Date_Clean'] = dom_df['Date'].str.split('(').str[0]
-                fig1 = px.bar(dom_df, x='Date_Clean', y=y_col, color='Macro_Category', title=f"🛫 사전 결제 (대분류 그룹화)", color_discrete_map=macro_color_map)
+                fig1 = px.bar(dom_df, x='Date_Clean', y=y_col, color='Macro_Category', title=f"🛫 사전 결제 및 고정 지출", color_discrete_map=macro_color_map)
                 fig1.update_layout(barmode='stack', margin=dict(l=5, r=5, t=40, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
                 st.plotly_chart(fig1, use_container_width=True)
             
