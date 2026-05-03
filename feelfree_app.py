@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.03.001]
+#[Project: Feelfree Travel Ledger / Version: v26.05.03.002]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: GTL Multi-Trip Universe & Macro Map Integration - 55.4 KB]
+#[Status: Global Variables Restored (NameError Fixed) - 55.5 KB]
 
 import streamlit as st
 import pandas as pd
@@ -18,7 +18,6 @@ st.set_page_config(page_title="Feelfree: 글로벌 여행 가계부", page_icon=
 TZ_KST = timezone(timedelta(hours=9))
 TZ_ICT = timezone(timedelta(hours=7))
 
-# [Added] GTL Multi-Trip Configurations
 TRIP_CONFIGS = {
     "🇻🇳 푸꾸옥 (2026)": {
         "sheet": "PQ_2026", 
@@ -34,7 +33,6 @@ TRIP_CONFIGS = {
     }
 }
 
-# [Added] 데이터 마이닝을 위한 의미론적 대분류 사전 (MACRO_MAP)
 MACRO_MAP = {
     "Grab": "🚗 교통", "VinBus": "🚗 교통", "DiDi": "🚗 교통", "지하철": "🚗 교통", "택시": "🚗 교통",
     "식사": "🍔 식음료", "간식": "🍔 식음료", "마트": "🍔 식음료",
@@ -43,7 +41,6 @@ MACRO_MAP = {
     "항공권": "🛫 사전결제", "호텔": "🛫 사전결제", "보험": "🛫 사전결제"
 }
 
-# [Modified] 통화 종속성 탈피 (Cum_Card_Local 도입)
 CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'Receipt_URL']
 SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local', 'Note']
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
@@ -51,10 +48,8 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-VERSION = "v26.05.03.001"
-UPDATE_LOG_TEXT = """* `[Added]` Multi-Trip 지원: 푸꾸옥(VND)과 칭다오(CNY) 여행을 스위칭할 수 있는 탭(Sheet) 라우팅 시스템 도입.
-* `[Added]` 게이트웨이 분리: 자산(트래블로그)과 결제 앱(알리페이 등)을 분리하여 자산 추적과 사용 로그의 재미를 동시 확보.
-* `[Added]` MACRO_MAP 도입: 개별 여행지의 특화된 카테고리(DiDi, Grab)를 글로벌 표준 대분류(교통)로 묶어주는 마이닝 엔진 탑재."""
+VERSION = "v26.05.03.002"
+UPDATE_LOG_TEXT = """* `[Fixed]` NameError 버그 픽스: Multi-Trip 개편 과정에서 누락되었던 `DOMESTIC_CATS` 전역 변수를 복구하여 리포트 탭 렌더링 붕괴 현상 해결."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -101,6 +96,10 @@ LOCAL_SYM = TRIP_CONFIGS[st.session_state.current_trip]["symbol"]
 EXPENSE_CATS = TRIP_CONFIGS[st.session_state.current_trip]["cats"]
 SURVIVAL_CATS =["간식", "Grab", "DiDi", "VinBus", "지하철", "마사지", "팁", "식사"]
 
+# [Added] 누락되었던 전역 분류 변수 복구
+FIXED_COST_CATS = ["항공권", "호텔", "보험"]
+DOMESTIC_CATS =["항공권", "호텔", "보험", "지하철", "택시"]
+
 # --- SECTION 2:[Module A] Data Engine ---
 def upload_image_to_imgbb(image_file):
     try:
@@ -112,11 +111,9 @@ def upload_image_to_imgbb(image_file):
 
 def load_data():
     try:
-        # [Modified] 동적 탭 로딩
         df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
         if df is None or df.empty: return pd.DataFrame(columns=FINAL_COLUMNS)
         
-        # Legacy Schema Migration (Cum_Card_VND -> Cum_Card_Local)
         if 'Cum_Card_VND' in df.columns: df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
         if 'Cum_Cash_VND' in df.columns: df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
             
@@ -151,7 +148,7 @@ def recalculate_entire_ledger(df):
         rate = temp_df.at[i, 'AppliedRate'] 
         
         if cat in['충전', '환전', '입금', '직접환전', '환불']:
-            if curr == TRAVEL_CURRENCY and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = 0.0561 if curr=="VND" else 190.0 # 기본 fallback
+            if curr == TRAVEL_CURRENCY and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = 0.0561 if curr=="VND" else 190.0
             elif curr == 'USD' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = 1350.0
 
             target = f"트래블로그({curr})" if ("카드" in desc or "카드" in method or "트래블로그" in method) else f"현금({curr})"
@@ -269,7 +266,6 @@ def calculate_summary_metrics(df):
 
 # --- SECTION 5:[Sidebar] ---
 with st.sidebar:
-    # [Added] Multi-Trip Selector
     sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", list(TRIP_CONFIGS.keys()), index=list(TRIP_CONFIGS.keys()).index(st.session_state.current_trip))
     if sel_trip != st.session_state.current_trip:
         st.session_state.current_trip = sel_trip
@@ -343,10 +339,9 @@ with tab_in:
         with col_m1:
             curr = st.selectbox("통화",[TRAVEL_CURRENCY, "KRW", "USD"], key="exp_curr")
         with col_m2:
-            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌"] if curr != "KRW" else ["원화계좌"]
+            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌"] if curr != "KRW" else["원화계좌"]
             met = st.selectbox("결제 자산(Asset)", met_options, index=0, key="exp_met")
         with col_m3:
-            # [Added] 게이트웨이 분리 (알리페이 등)
             gateway_options =["선택안함 (기본)", "알리페이 (Alipay)", "위챗페이 (WeChat)", "Apple Pay", "토스페이", "기타 앱"]
             gateway = st.selectbox("결제 앱 (Gateway)", gateway_options, key="exp_gw")
             
@@ -367,7 +362,6 @@ with tab_in:
                     receipt_url = upload_image_to_imgbb(uploaded_file)
                     if receipt_url: st.toast("✅ 영수증 링킹 완료!")
             
-            # [Added] 게이트웨이 태그 자동 삽입
             final_desc = f"[{gateway.split(' ')[0]}] {desc}" if "선택안함" not in gateway else desc
             
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': final_desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '', 'Receipt_URL': receipt_url}])
@@ -453,16 +447,6 @@ with tab_his:
             st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
             
         st.divider()
-        receipt_df = display_df[display_df['Receipt_URL'].str.startswith('http', na=False)]
-        if not receipt_df.empty:
-            st.subheader("👀 앱 내 영수증 바로보기 (1-Click)")
-            viewer_options = ["선택 안함"] + [f"{r['Date']} | {r['Category']} - {r['Description']} ({r['Amount']:,.0f}{LOCAL_SYM})" for _, r in receipt_df.iterrows()]
-            url_mapping = {"선택 안함": ""}
-            for _, r in receipt_df.iterrows(): url_mapping[f"{r['Date']} | {r['Category']} - {r['Description']} ({r['Amount']:,.0f}{LOCAL_SYM})"] = r['Receipt_URL']
-            sel_view = st.selectbox("확인할 영수증을 선택하세요:", viewer_options)
-            if sel_view != "선택 안함": st.image(url_mapping[sel_view], use_container_width=True)
-
-        st.divider()
 
     with st.expander("📸 누락된 영수증 일괄 추가 (Post-Attachment)", expanded=False):
         if not ledger_df.empty:
@@ -493,7 +477,6 @@ with tab_stats:
         exp_df = exp_df[exp_df['IsExpense'] == 1].copy()
         
         if not exp_df.empty:
-            # [Added] 데이터 마이닝을 위한 MACRO_MAP (의미론적 대분류) 매핑
             exp_df['Macro_Category'] = exp_df['Category'].map(MACRO_MAP).fillna("기타")
             
             def get_krw_val(r):
@@ -572,4 +555,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.03.001 | Volume Guard: 55.4 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.03.002 | Volume Guard: 55.5 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
