@@ -1,6 +1,6 @@
 #[Project: Feelfree Travel Ledger / Version: v26.05.03.009]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Interactive Row Selection UX & Budget Strip Fix - 64.5 KB]
+#[Status: Budget Logic Defense & Top-Placed Interactive Viewer - 64.5 KB]
 
 import streamlit as st
 import pandas as pd
@@ -47,8 +47,9 @@ IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 VERSION = "v26.05.03.009"
-UPDATE_LOG_TEXT = """* `[Modified]` 인터랙티브 UX: 조회 탭에서 데이터 표의 행(Row)을 직접 클릭하면 바로 아래에 세부 내역과 영수증 사진이 펼쳐지도록 최신 기능(on_select) 탑재.
-* `[Fixed]` 데이터 클렌징: 엑셀에서 복사 시 발생할 수 있는 보이지 않는 공백(Whitespace)으로 인해 카테고리 로직(보증금 등)이 무시되어 예산이 어긋나던 현상 완벽 차단."""
+UPDATE_LOG_TEXT = """* `[Fixed]` 예산 모순(Budget Mismatch) 원천 차단: 엑셀에서 보증금/사전결제 입력 시 환율이 빈칸(0)일 경우 시스템 기본 환율을 강제 주입하여 총예산 누락 방지.
+* `[Modified]` 인터랙티브 뷰어 UX 극대화: 내역 터치 시 영수증과 상세 내역이 표의 '바로 위쪽'에 즉시 렌더링되도록 시각적 동선 최적화 (스크롤 불필요).
+* `[Added]` 다중 사후 정리 도구: 누락된 내역 일괄 추가 기능에 '세부 내역(메모)' 텍스트 입력창을 병합하여 사후 다이어리 기능 강화."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -103,6 +104,13 @@ def get_asset_class(text):
     if any(k in txt for k in["트래블", "월렛", "카드VND", "카드CNY", "카드USD"]): return "PREPAID" 
     return "DOMESTIC" 
 
+# [Added] 엑셀 빈칸 오류 방어를 위한 국가별 기본 환율 제공기
+def get_default_rate(curr):
+    if curr == "VND": return 0.0561
+    if curr == "CNY": return 195.00
+    if curr == "USD": return 1350.0
+    return 1.0
+
 def upload_image_to_imgbb(image_file):
     try:
         payload = {"key": IMGBB_API_KEY, "image": base64.b64encode(image_file.read()).decode("utf-8")}
@@ -129,8 +137,6 @@ def load_data():
         if 'Receipt_URL' not in df.columns: df['Receipt_URL'] = ""
             
         df = df.dropna(subset=['Date', 'Category'], how='any')
-        
-        # [Fixed] 엑셀 복사/붙여넣기 시 발생하는 띄어쓰기(Whitespace) 치명적 오류 방지 클렌징
         df['Category'] = df['Category'].astype(str).str.strip()
         df['PaymentMethod'] = df['PaymentMethod'].astype(str).str.strip()
         df['Currency'] = df['Currency'].astype(str).str.strip()
@@ -161,12 +167,8 @@ def recalculate_entire_ledger(df):
     c_budget = 0.0
     
     for i, row in temp_df.iterrows():
-        qty = row['Amount']
-        curr = str(row['Currency']).strip()
-        cat = str(row['Category']).strip()
-        method = str(row['PaymentMethod']).strip()
-        desc = str(row['Description']).strip()
-        
+        qty, curr = row['Amount'], row['Currency']
+        cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
         is_exp = 1 if cat in EXPENSE_CATS and cat not in['환불', '보증금'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
         
@@ -176,8 +178,7 @@ def recalculate_entire_ledger(df):
         asset_cls = get_asset_class(method)
         
         if cat in['충전', '환전', '입금', '직접환전']:
-            if curr == TRAVEL_CURRENCY and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = 0.0561 if curr=="VND" else 190.0 
-            elif curr == 'USD' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = 1350.0
+            if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
 
             dest_cls = get_asset_class(desc + method)
             target = f"트래블로그({curr})" if dest_cls == "PREPAID" else f"현금({curr})"
@@ -186,7 +187,7 @@ def recalculate_entire_ledger(df):
             if asset_cls == "DOMESTIC": c_budget += qty if curr == 'KRW' else qty * rate
         
         elif cat == '환불':
-            if pd.isna(rate) or rate <= 0.0 or rate == 1.0: rate = 0.0561 if curr=="VND" else 190.0 
+            if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
             if asset_cls == "DOMESTIC":
                 c_budget -= qty if curr == 'KRW' else qty * rate 
             else:
@@ -202,10 +203,12 @@ def recalculate_entire_ledger(df):
                     if batch['qty'] <= 0: continue
                     take = min(temp_qty, batch['qty']); batch['qty'] -= take
                     inv_batches[target_to].append({'rate': batch['rate'], 'qty': take}); total_inherited_krw += take * batch['rate']; temp_qty -= take
-            if qty > 0: rate = total_inherited_krw / qty if total_inherited_krw > 0 else (0.0561 if curr=="VND" else 190.0)
+            if qty > 0: rate = total_inherited_krw / qty if total_inherited_krw > 0 else get_default_rate(curr)
         
         elif is_deductible == 1:
             if asset_cls == "DOMESTIC":
+                # [Fixed] 엑셀에서 보증금 등 결제 시 환율을 빈칸으로 두었을 때 발생하는 예산 증발 버그 원천 차단
+                if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0): rate = get_default_rate(curr)
                 c_budget += qty if curr == 'KRW' else qty * rate
                 rate = 1.0 if curr == 'KRW' else rate
             elif curr in[TRAVEL_CURRENCY, 'USD']:
@@ -256,8 +259,7 @@ def get_inventory_status(df):
     inv_batches = { f"트래블로그({TRAVEL_CURRENCY})":[], f"현금({TRAVEL_CURRENCY})":[], "트래블로그(USD)":[], "현금(USD)":[] }
     if temp_df.empty: return inv_batches
     for _, row in temp_df.iterrows():
-        qty, rate = row['Amount'], row['AppliedRate']
-        desc, cat, method, curr = str(row['Description']).strip(), str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Currency']).strip()
+        qty, rate, desc, cat, method, curr = row['Amount'], row['AppliedRate'], str(row['Description']), str(row['Category']).strip(), str(row['PaymentMethod']), row['Currency']
         asset_cls = get_asset_class(method)
         
         if cat in['충전', '환전', '입금', '직접환전']:
@@ -290,7 +292,7 @@ def get_inventory_status(df):
 current_inventory_batches = get_inventory_status(ledger_df)
 
 sw_df_loc = ledger_df[(ledger_df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (ledger_df['Currency'].str.strip() == TRAVEL_CURRENCY)]
-WAR_LOCAL = (sw_df_loc['Amount'] * sw_df_loc['AppliedRate']).sum() / sw_df_loc['Amount'].sum() if not sw_df_loc.empty and sw_df_loc['Amount'].sum() > 0 else (0.0561 if TRAVEL_CURRENCY=="VND" else 190.0)
+WAR_LOCAL = (sw_df_loc['Amount'] * sw_df_loc['AppliedRate']).sum() / sw_df_loc['Amount'].sum() if not sw_df_loc.empty and sw_df_loc['Amount'].sum() > 0 else get_default_rate(TRAVEL_CURRENCY)
 
 sw_df_usd = ledger_df[(ledger_df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (ledger_df['Currency'].str.strip() == 'USD')]
 WAR_USD = (sw_df_usd['Amount'] * sw_df_usd['AppliedRate']).sum() / sw_df_usd['Amount'].sum() if not sw_df_usd.empty and sw_df_usd['Amount'].sum() > 0 else 1350.0
@@ -421,7 +423,7 @@ with tab_in:
                 calc_rate = auto_calc_fifo_rate(amt, met, curr)
                 st.caption(f"💡 {curr} 인벤토리 계산 환율: **{calc_rate:.5f}**")
                 cr_final = st.number_input("확정 환율", value=float(calc_rate), format="%.5f", key=f"exp_cr_auto_{met}_{amt}")
-            else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else (0.0561 if curr=="VND" else 190.0)), format="%.5f", key=f"exp_cr_man_{curr}")
+            else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else get_default_rate(curr)), format="%.5f", key=f"exp_cr_man_{curr}")
             
         if st.button("🚀 지출 기록하기", use_container_width=True):
             receipt_url = ""
@@ -481,7 +483,7 @@ with tab_in:
             else:
                 r_amt = st.number_input("환불 금액", min_value=0.0, step=1.0, format="%.2f", key="rf_amt_flt")
         with col_r2:
-            r_rate = st.number_input("과거 결제 시 적용됐던 환율", value=(1.0 if r_curr=="KRW" else (0.0561 if r_curr=="VND" else 190.0)), format="%.5f", key="rf_rate")
+            r_rate = st.number_input("과거 결제 시 적용됐던 환율", value=(1.0 if r_curr=="KRW" else get_default_rate(r_curr)), format="%.5f", key="rf_rate")
             r_desc = st.text_input("취소 내역 메모", placeholder="예: 호텔 보증금 반환", key="rf_desc")
         if st.button("🔙 환불 인벤토리 롤백 실행", use_container_width=True):
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
@@ -511,6 +513,9 @@ with tab_his:
         display_df = display_df.reindex(columns=FINAL_COLUMNS)
         link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
         
+        # [Added] 렌더링 위치를 최상단으로 끌어올리기 위한 빈 컨테이너(Placeholder) 생성
+        viewer_placeholder = st.empty()
+        
         if search_query.strip():
             mask = (display_df['Category'].str.contains(search_query, case=False, na=False) | display_df['Description'].str.contains(search_query, case=False, na=False) | display_df['Note'].str.contains(search_query, case=False, na=False))
             filtered_df = display_df[mask]
@@ -522,49 +527,43 @@ with tab_his:
             if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
                 if save_data(edited_df): st.rerun()
         else:
-            st.info("💡 표에서 원하는 내역의 행을 클릭(터치)하시면 아래에 상세 내역과 영수증이 펼쳐집니다.")
-            # [Added] 인터랙티브 원클릭(1-Click) Row Selection 렌더링
-            df_event = st.dataframe(
-                display_df, 
-                use_container_width=True, 
-                column_config={"Receipt_URL": link_cfg},
-                selection_mode="single-row",
-                on_select="rerun"
-            )
+            st.write("💡 **표의 행(Row)을 클릭(터치)하시면 바로 위쪽에 상세 내역과 영수증이 펼쳐집니다!**")
+            #[Modified] on_select 이벤트를 사용한 터치형 뷰어 연결
+            df_event = st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
             
+            # 터치된 행이 있을 경우, 미리 만들어둔 최상단 컨테이너에 내용 주입
             if df_event.selection.rows:
                 selected_idx = df_event.selection.rows[0]
                 row_data = display_df.iloc[selected_idx]
                 
-                st.divider()
-                st.subheader("🧾 상세 내역 및 영수증 뷰어")
-                
-                desc_full = str(row_data['Description'])
-                c_info, c_img = st.columns([1, 1])
-                with c_info:
-                    st.markdown(f"### 🛒 {row_data['Category']}")
-                    amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
-                    st.markdown(f"**💳 결제금액:** {amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}")
-                    st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
-                    
-                    if "-" in desc_full:
-                        parts = desc_full.split("-", 1)
-                        st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
-                        items = parts[1].split(",")
-                        st.markdown("**📝 세부 구매 내역:**")
-                        for item in items: st.markdown(f"- {item.strip()}")
-                    else:
-                        st.markdown(f"**📝 내역:** {desc_full}")
+                with viewer_placeholder.container():
+                    st.markdown("---")
+                    st.subheader("🧾 상세 내역 및 영수증 뷰어")
+                    desc_full = str(row_data['Description'])
+                    c_info, c_img = st.columns([1, 1])
+                    with c_info:
+                        st.markdown(f"### 🛒 {row_data['Category']}")
+                        amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
+                        st.markdown(f"**💳 결제금액:** {amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}")
+                        st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
                         
-                with c_img:
-                    if str(row_data['Receipt_URL']).startswith("http"):
-                        st.image(row_data['Receipt_URL'], use_container_width=True)
-                    else:
-                        st.info("첨부된 영수증 사진이 없습니다.")
+                        if "-" in desc_full:
+                            parts = desc_full.split("-", 1)
+                            st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
+                            items = parts[1].split(",")
+                            st.markdown("**📝 세부 구매 내역:**")
+                            for item in items: st.markdown(f"- {item.strip()}")
+                        else:
+                            st.markdown(f"**📝 내역:** {desc_full}")
+                            
+                    with c_img:
+                        if str(row_data['Receipt_URL']).startswith("http"): st.image(row_data['Receipt_URL'], use_container_width=True)
+                        else: st.info("첨부된 영수증 사진이 없습니다.")
+                    st.markdown("---")
 
-        st.divider()
-
-    with st.expander("📸 누락된 영수증 일괄 추가 (Post-Attachment)", expanded=False):
+    st.divider()
+    # [Modified] 메모장 텍스트 추가 기능을 품은 일괄 사후 정리 도구
+    with st.expander("📝 누락된 영수증 및 상세 메모 일괄 추가", expanded=False):
         if not ledger_df.empty:
             temp_sort = ledger_df.sort_values(by='Date', kind='mergesort', ascending=False)
             options =[]
@@ -576,18 +575,24 @@ with tab_his:
                 label = f"[{has_receipt}] {row['Date']} | {row['Category']} - {row['Description']} ({lbl_amt3}{LOCAL_SYM})"
                 options.append(label); option_mapping[label] = i 
             
-            sel_item = st.selectbox("영수증을 연결할 내역을 선택하세요", options)
+            sel_item = st.selectbox("업데이트할 내역을 선택하세요", options)
+            new_memo = st.text_area("📝 추가할 세부 내역 (메모)", placeholder="예: 농어찜, 양배추, 칭다오맥주...")
             post_file = st.file_uploader("📸 영수증 사진 촬영/선택", type=['png', 'jpg', 'jpeg'], key="post_receipt")
             
-            if st.button("🔗 선택한 내역에 영수증 업로드 및 연결", use_container_width=True):
-                if post_file and sel_item:
-                    with st.spinner("클라우드 전송 중..."):
-                        url = upload_image_to_imgbb(post_file)
-                        if url:
-                            target_idx = option_mapping[sel_item]
-                            ledger_df.at[target_idx, 'Receipt_URL'] = url
-                            if save_data(ledger_df): st.success("영수증이 성공적으로 연결되었습니다!"); time.sleep(1); st.rerun()
-                else: st.warning("사진을 먼저 첨부해주세요.")
+            if st.button("🔗 선택한 내역에 업데이트 적용", use_container_width=True):
+                if new_memo or post_file:
+                    target_idx = option_mapping[sel_item]
+                    if new_memo:
+                        old_desc = str(ledger_df.at[target_idx, 'Description'])
+                        ledger_df.at[target_idx, 'Description'] = f"{old_desc} - {new_memo}" if "-" not in old_desc else f"{old_desc}, {new_memo}"
+                        
+                    if post_file:
+                        with st.spinner("클라우드 전송 중..."):
+                            url = upload_image_to_imgbb(post_file)
+                            if url: ledger_df.at[target_idx, 'Receipt_URL'] = url
+                            
+                    if save_data(ledger_df): st.success("성공적으로 업데이트되었습니다!"); time.sleep(1); st.rerun()
+                else: st.warning("메모를 입력하거나 사진을 첨부해주세요.")
 
 with tab_stats:
     if not ledger_df.empty:
