@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.03.006]
+#[Project: Feelfree Travel Ledger / Version: v26.05.03.007]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: 3-Tier Asset Routing (HyundaiCard Isolation & Wallet Fix) - 60.1 KB]
+#[Status: Format String ValueError Hotfix - 60.1 KB]
 
 import streamlit as st
 import pandas as pd
@@ -46,9 +46,8 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-VERSION = "v26.05.03.006"
-UPDATE_LOG_TEXT = """* `[Fixed]` 3-Tier 자산 라우팅 픽스: '현대카드' 등 국내 신용카드 결제/환불이 현지 외환 인벤토리를 교란하는 현상을 막기 위해, 자산을 CASH, PREPAID, DOMESTIC 3단계로 완벽히 분리 격리함.
-* `[Fixed]` 트래블월렛 인식: 라우팅 사전에 '월렛'을 추가하여 현금으로 오분류되던 버그(250¥ 현금 튕김 현상) 해결."""
+VERSION = "v26.05.03.007"
+UPDATE_LOG_TEXT = """* `[Fixed]` ValueError 핫픽스: 사이드바 환율 렌더링 중 f-string 포맷 지정자 중복 오류를 수정하여 렌더링 크래시 완전 해결."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -97,13 +96,11 @@ if 'shared_date' not in st.session_state: st.session_state.shared_date = datetim
 if 'last_cat_idx' not in st.session_state: st.session_state.last_cat_idx = 0
 
 # --- SECTION 2:[Module A] Data Engine ---
-# [Added] 3-Tier Asset Routing Engine
-# 목적: 현대카드(DOMESTIC) 결제/환불 시 현지 트래블월렛(PREPAID) 잔고가 변동되는 치명적 회계 오류를 막기 위함.
 def get_asset_class(text):
     txt = str(text).replace(" ", "")
-    if "현금" in txt: return "CASH" # 현지 지폐
-    if any(k in txt for k in["트래블", "월렛", "카드VND", "카드CNY", "카드USD"]): return "PREPAID" # 현지 선불외화
-    return "DOMESTIC" # 현대카드, 신용카드, 네이버페이, 원화계좌 등 (현지 인벤토리 격리 대상)
+    if "현금" in txt: return "CASH" 
+    if any(k in txt for k in["트래블", "월렛", "카드VND", "카드CNY", "카드USD"]): return "PREPAID" 
+    return "DOMESTIC" 
 
 def upload_image_to_imgbb(image_file):
     try:
@@ -162,34 +159,26 @@ def recalculate_entire_ledger(df):
         is_deductible = 1 if (is_exp == 1 or cat == '보증금') else 0
         rate = temp_df.at[i, 'AppliedRate'] 
         
-        # [Modified] 자산 분류 (DOMESTIC은 현지 인벤토리에 들어가지 않음)
         asset_cls = get_asset_class(method)
         
-        # 1. 자산의 유입 (충전, 환전)
         if cat in['충전', '환전', '입금', '직접환전']:
             if curr == TRAVEL_CURRENCY and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = 0.0561 if curr=="VND" else 190.0 
             elif curr == 'USD' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = 1350.0
 
-            # 들어가는 목적지(Destination) 파악
             dest_cls = get_asset_class(desc + method)
             target = f"트래블로그({curr})" if dest_cls == "PREPAID" else f"현금({curr})"
             
             if curr != 'KRW' and target in inv_batches: inv_batches[target].append({'rate': rate, 'qty': qty})
-            
-            # 원천이 DOMESTIC(원화계좌 등)이면 예산 증가
             if asset_cls == "DOMESTIC": c_budget += qty if curr == 'KRW' else qty * rate
         
-        # 2. 환불의 유입 (격리 보장)
         elif cat == '환불':
             if pd.isna(rate) or rate <= 0.0 or rate == 1.0: rate = 0.0561 if curr=="VND" else 190.0 
-            
             if asset_cls == "DOMESTIC":
-                c_budget -= qty if curr == 'KRW' else qty * rate # 현대카드 환불은 예산만 복구
+                c_budget -= qty if curr == 'KRW' else qty * rate 
             else:
                 target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 if curr != 'KRW' and target in inv_batches: inv_batches[target].append({'rate': rate, 'qty': qty})
         
-        # 3. ATM 출금
         elif cat == 'ATM출금':
             temp_qty = qty; total_inherited_krw = 0.0
             target_from = f"트래블로그({curr})"; target_to = f"현금({curr})"
@@ -201,7 +190,6 @@ def recalculate_entire_ledger(df):
                     inv_batches[target_to].append({'rate': batch['rate'], 'qty': take}); total_inherited_krw += take * batch['rate']; temp_qty -= take
             if qty > 0: rate = total_inherited_krw / qty if total_inherited_krw > 0 else (0.0561 if curr=="VND" else 190.0)
         
-        # 4. 자산의 유출 (지출 및 보증금 결제)
         elif is_deductible == 1:
             if asset_cls == "DOMESTIC":
                 c_budget += qty if curr == 'KRW' else qty * rate
@@ -239,7 +227,7 @@ def save_data(df, metrics=None):
             conn.update(worksheet=ACTIVE_SHEET, data=final_df.reindex(columns=FINAL_COLUMNS))
             if metrics:
                 current_time_str = datetime.now(st.session_state.current_tz).strftime("%H:%M")
-                summary = pd.DataFrame({"항목":["🏦 예산(KRW)", f"💳 카드({TRAVEL_CURRENCY})", f"💵 현금({TRAVEL_CURRENCY})", "🕒 업데이트"], "수치": [f"{metrics[0]:,.0f}", f"{metrics[1]:,.0f}", f"{metrics[2]:,.0f}", current_time_str]})
+                summary = pd.DataFrame({"항목":["🏦 예산(KRW)", f"💳 카드({TRAVEL_CURRENCY})", f"💵 현금({TRAVEL_CURRENCY})", "🕒 업데이트"], "수치":[f"{metrics[0]:,.0f}", f"{metrics[1]:,.0f}", f"{metrics[2]:,.0f}", current_time_str]})
                 try: conn.update(worksheet="summary", data=summary)
                 except: pass
             st.cache_data.clear(); return True
@@ -294,7 +282,7 @@ WAR_USD = (sw_df_usd['Amount'] * sw_df_usd['AppliedRate']).sum() / sw_df_usd['Am
 
 def auto_calc_fifo_rate(amount, method, curr=TRAVEL_CURRENCY):
     asset_cls = get_asset_class(method)
-    if asset_cls == "DOMESTIC": return WAR_LOCAL # Domestic은 재고 안 빼므로 표시용으로만 리턴
+    if asset_cls == "DOMESTIC": return WAR_LOCAL 
     
     target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
     temp_inv = get_inventory_status(ledger_df)
@@ -328,7 +316,8 @@ with st.sidebar:
     b_val, card_val, cash_val, spent_val = calculate_summary_metrics(ledger_df)
     
     fmt_str = "{:,.2f}" if TRAVEL_CURRENCY != 'VND' else "{:,.0f}"
-    rate_fmt = "{:.2f}" if TRAVEL_CURRENCY != 'VND' else "{:.4f}"
+    # [Fixed] f-string 포맷 지정자 문법 교정 ({:.2f} -> .2f)
+    rate_fmt = ".2f" if TRAVEL_CURRENCY != 'VND' else ".4f"
     
     st.metric(f"💵 현금 {TRAVEL_CURRENCY} 잔액", f"{LOCAL_SYM} {fmt_str.format(cash_val)}")
     if current_inventory_batches.get(f"현금({TRAVEL_CURRENCY})"):
@@ -572,7 +561,6 @@ with tab_stats:
             c_mode = st.radio("표시 통화 선택",["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr")
             y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
             
-            # [Modified] 다국가 통합 Color Map (푸꾸옥/칭다오 시각적 통일)
             color_map = {
                 "식사": "#2E7D32", "간식": "#4CAF50", "마트": "#E91E63", 
                 "Grab": "#00897B", "VinBus": "#00ACC1", "DiDi": "#00897B", "지하철": "#00ACC1", "택시": "#009688",
@@ -630,4 +618,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.03.006 | Volume Guard: 60.1 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.03.007 | Volume Guard: 60.1 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
