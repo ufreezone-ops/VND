@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.03.007]
+#[Project: Feelfree Travel Ledger / Version: v26.05.03.008]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Format String ValueError Hotfix - 60.1 KB]
+#[Status: Budget Fix, Report Match & Detail Receipt Viewer - 64.2 KB]
 
 import streamlit as st
 import pandas as pd
@@ -46,8 +46,10 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-VERSION = "v26.05.03.007"
-UPDATE_LOG_TEXT = """* `[Fixed]` ValueError 핫픽스: 사이드바 환율 렌더링 중 f-string 포맷 지정자 중복 오류를 수정하여 렌더링 크래시 완전 해결."""
+VERSION = "v26.05.03.008"
+UPDATE_LOG_TEXT = """* `[Fixed]` 예산 붕괴 픽스: DOMESTIC 자산 및 보증금 결제 시 AppliedRate가 0으로 리셋되어 예산 누적이 파괴되던 치명적 버그 해결.
+* `[Fixed]` 금액 불일치 픽스: 리포트 탭 지출 환산 로직에 실제 FIFO 환율을 곱하도록 수정하여 사이드바 지출 총액과 1원 단위까지 완벽 동기화.
+* `[Added]` 텍스트 영수증 뷰어: 조회 탭에서 내역 선택 시, 메모장의 항목을 글머리 기호로 분해하여 실제 영수증처럼 깔끔하게 보여주는 기능 탑재."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -144,7 +146,13 @@ def recalculate_entire_ledger(df):
     temp_df = temp_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
     
     for i, row in temp_df.iterrows():
-        if row['Category'] in EXPENSE_CATS: temp_df.at[i, 'AppliedRate'] = 0.0
+        cat = row['Category']
+        asset_cls = get_asset_class(row['PaymentMethod'])
+        
+        # [Fixed] 예산 붕괴 해결: 보증금이거나 DOMESTIC 결제는 환율을 0으로 닦지 않음!
+        if cat in EXPENSE_CATS and cat != '보증금' and asset_cls != "DOMESTIC":
+            temp_df.at[i, 'AppliedRate'] = 0.0
+            
         temp_df.at[i, 'Note'] = ""; temp_df.at[i, 'Cum_Budget_KRW'] = 0.0; temp_df.at[i, 'Cum_Card_Local'] = 0.0; temp_df.at[i, 'Cum_Cash_Local'] = 0.0
     
     inv_batches = { f"트래블로그({TRAVEL_CURRENCY})":[], f"현금({TRAVEL_CURRENCY})":[], "트래블로그(USD)":[], "현금(USD)":[] }
@@ -316,7 +324,6 @@ with st.sidebar:
     b_val, card_val, cash_val, spent_val = calculate_summary_metrics(ledger_df)
     
     fmt_str = "{:,.2f}" if TRAVEL_CURRENCY != 'VND' else "{:,.0f}"
-    # [Fixed] f-string 포맷 지정자 문법 교정 ({:.2f} -> .2f)
     rate_fmt = ".2f" if TRAVEL_CURRENCY != 'VND' else ".4f"
     
     st.metric(f"💵 현금 {TRAVEL_CURRENCY} 잔액", f"{LOCAL_SYM} {fmt_str.format(cash_val)}")
@@ -324,14 +331,14 @@ with st.sidebar:
         with st.expander("↳ 현금 환율 배치", expanded=False):
             for b in current_inventory_batches[f"현금({TRAVEL_CURRENCY})"]:
                 status = fmt_str.format(b['qty']) if b['qty'] > 0 else "소진"
-                st.caption(f"• {status}{LOCAL_SYM} @ {b['rate']:{rate_fmt}}")
+                st.caption(f"• {status}{LOCAL_SYM} @ {b['rate']:{rate_fmt}}원")
                 
     st.metric(f"💳 카드 {TRAVEL_CURRENCY} 잔액", f"{LOCAL_SYM} {fmt_str.format(card_val)}")
     if current_inventory_batches.get(f"트래블로그({TRAVEL_CURRENCY})"):
         with st.expander("↳ 카드 환율 배치", expanded=False):
             for b in current_inventory_batches[f"트래블로그({TRAVEL_CURRENCY})"]:
                 status = fmt_str.format(b['qty']) if b['qty'] > 0 else "소진"
-                st.caption(f"• {status}{LOCAL_SYM} @ {b['rate']:{rate_fmt}}")
+                st.caption(f"• {status}{LOCAL_SYM} @ {b['rate']:{rate_fmt}}원")
     
     usd_card = sum([b['qty'] for b in current_inventory_batches.get("트래블로그(USD)",[])])
     usd_cash = sum([b['qty'] for b in current_inventory_batches.get("현금(USD)",[])])
@@ -342,14 +349,14 @@ with st.sidebar:
             with st.expander("↳ USD 현금 배치", expanded=False):
                 for b in current_inventory_batches["현금(USD)"]:
                     status = f"{b['qty']:,.2f}" if b['qty'] > 0 else "소진"
-                    st.caption(f"• ${status} @ {b['rate']:.2f}")
+                    st.caption(f"• ${status} @ {b['rate']:.2f}원")
                     
         st.metric("💳 카드 USD 잔액", f"${usd_card:,.2f}")
         if current_inventory_batches.get("트래블로그(USD)"):
             with st.expander("↳ USD 카드 배치", expanded=False):
                 for b in current_inventory_batches["트래블로그(USD)"]:
                     status = f"{b['qty']:,.2f}" if b['qty'] > 0 else "소진"
-                    st.caption(f"• ${status} @ {b['rate']:.2f}")
+                    st.caption(f"• ${status} @ {b['rate']:.2f}원")
 
     st.divider()
     st.metric("🏦 총 예산 (KRW)", f"{b_val:,.0f} 원")
@@ -398,7 +405,11 @@ with tab_in:
 
         col_a1, col_a2 = st.columns(2)
         with col_a1:
-            amt = st.number_input(f"금액 ({LOCAL_SYM} / 원)", min_value=0.0, step=1000.0 if curr==TRAVEL_CURRENCY and MULTIPLIER==100 else 1.0, format="%.2f" if MULTIPLIER==1 else "%d", key="exp_amt_int") if curr in[TRAVEL_CURRENCY, "KRW"] else st.number_input("금액", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
+            # [Fixed] Float/Int Warning 해결 로직 적용
+            if curr == "KRW" or (curr == TRAVEL_CURRENCY and MULTIPLIER == 100):
+                amt = st.number_input(f"금액 ({curr})", min_value=0, step=1000 if curr != "KRW" else 1, format="%d", key="exp_amt_int")
+            else:
+                amt = st.number_input(f"금액 ({curr})", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
         with col_a2:
             if curr in[TRAVEL_CURRENCY, 'USD'] and amt > 0:
                 calc_rate = auto_calc_fifo_rate(amt, met, curr)
@@ -423,7 +434,11 @@ with tab_in:
         c1, c2 = st.columns(2)
         with c1:
             curr_tr = st.selectbox("대상 통화",[TRAVEL_CURRENCY, "USD"], key="tr_curr")
-            t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0.0, step=1000.0 if curr_tr==TRAVEL_CURRENCY and MULTIPLIER==100 else 10.0, format="%.2f" if MULTIPLIER==1 else "%d", key="tr_target")
+            if curr_tr == TRAVEL_CURRENCY and MULTIPLIER == 100:
+                t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
+            else:
+                t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_target_flt")
+                
             if "ATM" in ty:
                 inherited_r = auto_calc_fifo_rate(t_amt, f"트래블로그({curr_tr})", curr_tr)
                 st.info(f"💳 카드 재고 계승 환율: **{inherited_r:.5f}**")
@@ -433,7 +448,11 @@ with tab_in:
                 s_cost = st.number_input("소요 원금 (KRW)", min_value=0, step=1, format="%d", key="tr_source_swap")
                 applied_tr_rate = s_cost / t_amt if t_amt > 0 else 0
         with c2:
-            fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0.0, step=1000.0 if curr_tr==TRAVEL_CURRENCY and MULTIPLIER==100 else 1.0, format="%.2f" if MULTIPLIER==1 else "%d", key="tr_fee") if "ATM" in ty else 0
+            if curr_tr == TRAVEL_CURRENCY and MULTIPLIER == 100:
+                fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_fee_int")
+            else:
+                fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0.0, step=1.0, format="%.2f", key="tr_fee_flt")
+                
         if st.button("🔄 이동 실행", use_container_width=True):
             dest = f"트래블로그({curr_tr})" if "카드" in ty else f"현금({curr_tr})"
             source = "원화계좌(한국)" if "원화계좌" in ty else f"트래블로그({curr_tr})"
@@ -451,7 +470,10 @@ with tab_in:
         with col_r1:
             r_curr = st.selectbox("취소된 통화",[TRAVEL_CURRENCY, "KRW", "USD"], key="rf_curr")
             r_met = st.selectbox("돌려받을 지갑",[f"현금({r_curr})", f"트래블로그({r_curr})", "원화계좌(한국)", "원화계좌(현지)"] if r_curr != "KRW" else["원화계좌(한국)", "원화계좌(현지)"], key="rf_met")
-            r_amt = st.number_input("환불 금액", min_value=0.0, step=1.0, format="%.2f", key="rf_amt")
+            if r_curr == "KRW" or (r_curr == TRAVEL_CURRENCY and MULTIPLIER == 100):
+                r_amt = st.number_input("환불 금액", min_value=0, step=1000 if r_curr != "KRW" else 1, format="%d", key="rf_amt_int")
+            else:
+                r_amt = st.number_input("환불 금액", min_value=0.0, step=1.0, format="%.2f", key="rf_amt_flt")
         with col_r2:
             r_rate = st.number_input("과거 결제 시 적용됐던 환율", value=(1.0 if r_curr=="KRW" else (0.0561 if r_curr=="VND" else 190.0)), format="%.5f", key="rf_rate")
             r_desc = st.text_input("취소 내역 메모", placeholder="예: 호텔 보증금 반환", key="rf_desc")
@@ -497,6 +519,51 @@ with tab_his:
             st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
             
         st.divider()
+        
+        # [Added] 상세 텍스트 분해(Receipt) + 사진 동시 뷰어
+        st.subheader("🧾 상세 내역 및 영수증 뷰어")
+        st.info("💡 항목을 선택하시면 세부 품목(콜라, 꼬치 등)과 영수증 사진을 실제 영수증처럼 깔끔하게 보여줍니다.")
+        
+        viewer_options =["선택 안함"]
+        options_map = {}
+        for i, r in display_df.sort_values(by='Date', kind='mergesort', ascending=False).iterrows():
+            lbl_amt = f"{r['Amount']:,.2f if MULTIPLIER==1 and r['Currency']!='KRW' else .0f}"
+            lbl = f"[{r['Date']}] {r['Category']} | {lbl_amt} {r['Currency']}"
+            desc_short = str(r['Description'])[:20] + "..." if len(str(r['Description'])) > 20 else str(r['Description'])
+            lbl += f" ({desc_short})"
+            unique_lbl = f"{i}:: {lbl}"
+            viewer_options.append(unique_lbl)
+            options_map[unique_lbl] = r
+
+        sel_view = st.selectbox("조회할 내역을 선택하세요:", viewer_options)
+        if sel_view != "선택 안함":
+            row_data = options_map[sel_view]
+            desc_full = str(row_data['Description'])
+            
+            c_info, c_img = st.columns([1, 1])
+            with c_info:
+                st.markdown(f"### 🛒 {row_data['Category']}")
+                st.markdown(f"**💳 결제금액:** {row_data['Amount']:,.2f if MULTIPLIER==1 and row_data['Currency']!='KRW' else .0f} {row_data['Currency']}")
+                st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
+                
+                # 메모장(-) 파싱을 통한 영수증(Bullet) 효과
+                if "-" in desc_full:
+                    parts = desc_full.split("-", 1)
+                    st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
+                    items = parts[1].split(",")
+                    st.markdown("**📝 세부 구매 내역:**")
+                    for item in items:
+                        st.markdown(f"- {item.strip()}")
+                else:
+                    st.markdown(f"**📝 내역:** {desc_full}")
+                    
+            with c_img:
+                if str(row_data['Receipt_URL']).startswith("http"):
+                    st.image(row_data['Receipt_URL'], use_container_width=True)
+                else:
+                    st.info("첨부된 영수증 사진이 없습니다.")
+
+        st.divider()
 
     with st.expander("📸 누락된 영수증 일괄 추가 (Post-Attachment)", expanded=False):
         if not ledger_df.empty:
@@ -529,14 +596,14 @@ with tab_stats:
         if not exp_df.empty:
             exp_df['Macro_Category'] = exp_df['Category'].map(MACRO_MAP).fillna("기타")
             
+            # [Fixed] 리포트 탭에도 FIFO 'AppliedRate'를 그대로 적용하여 사이드바 지출액과 1원 단위까지 100% 동기화
             def get_krw_val(r):
                 if r['Currency'] == 'KRW': return r['Amount']
-                elif r['Currency'] == TRAVEL_CURRENCY: return r['Amount'] * WAR_LOCAL
-                elif r['Currency'] == 'USD': return r['Amount'] * WAR_USD
+                elif r['Currency'] in [TRAVEL_CURRENCY, 'USD']: return r['Amount'] * r['AppliedRate']
                 return 0
                 
             exp_df['KRW_val'] = exp_df.apply(get_krw_val, axis=1)
-            exp_df['Local_val'] = exp_df.apply(lambda r: r['Amount'] if r['Currency'] == TRAVEL_CURRENCY else r['Amount'] / WAR_LOCAL if WAR_LOCAL>0 else 0, axis=1)
+            exp_df['Local_val'] = exp_df.apply(lambda r: r['Amount'] if r['Currency'] == TRAVEL_CURRENCY else (r['Amount'] * r['AppliedRate'] / WAR_LOCAL if WAR_LOCAL>0 else 0), axis=1)
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
             
             st.subheader("🏁 여행 경제 요약")
@@ -618,4 +685,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.03.007 | Volume Guard: 60.1 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.03.008 | Volume Guard: 64.2 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
