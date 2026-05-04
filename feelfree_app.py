@@ -189,6 +189,32 @@ def load_data():
         return df
     except Exception: return pd.DataFrame(columns=FINAL_COLUMNS)
 
+# [Added] 모든 여행지의 데이터를 통합 로드하는 함수 (Line 146에 삽입)
+def load_all_trips_data():
+    all_dfs = []
+    with st.spinner("🌍 모든 여행 기록을 불러오는 중..."):
+        for trip_name, config in TRIP_CONFIGS.items():
+            try:
+                # 각 시트 읽기 (ttl=0으로 실시간성 확보)
+                df_t = conn.read(worksheet=config['sheet'], ttl="0s")
+                if df_t is None or df_t.empty: continue
+                
+                # Country 컬럼 보정 로직 (기존 load_data와 동일)
+                if 'Country' not in df_t.columns:
+                    default_country = "베트남" if "PQ" in config['sheet'] else "중국"
+                    df_t.insert(1, 'Country', default_country)
+                else:
+                    df_t['Country'] = df_t['Country'].astype(str).str.strip().replace(['nan', 'None', ''], None)
+                    df_t['Country'] = df_t['Country'].fillna("베트남" if "PQ" in config['sheet'] else "중국")
+
+                # 스키마 정렬
+                df_t = df_t.reindex(columns=FINAL_COLUMNS)
+                all_dfs.append(df_t)
+            except: continue
+            
+    if not all_dfs: return pd.DataFrame(columns=FINAL_COLUMNS)
+    return pd.concat(all_dfs, ignore_index=True)
+
 def recalculate_entire_ledger(df):
     temp_df = df.copy()
     temp_df = temp_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
@@ -557,22 +583,44 @@ with tab_his:
     
     viewer_placeholder = st.empty()
     
-    c_search, c_tog = st.columns([3, 1])
-    with c_search: search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
-    with c_tog: edit_mode = st.toggle("✏️ 장부 직접 수정 모드", value=False, key="his_edit_toggle")
+    # [Modified] 검색바 레이아웃 변경 (토글 추가 / Line 438)
+    c_search, c_global, c_tog = st.columns([2, 1, 1])
+    with c_search: 
+        search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
+    with c_global:
+        global_search = st.toggle("🌍 전체 검색", value=False, key="global_search_toggle")
+    with c_tog: 
+        edit_mode = st.toggle("✏️ 직접 수정 모드", value=False, key="his_edit_toggle")
 
+    # [Modified] 데이터 소스 결정 (Line 446)
+    if global_search and search_query.strip():
+        # 전체 여행 검색 시에는 수정을 막기 위해 안내 메시지 출력
+        st.warning("⚠️ '전체 검색' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
+        edit_mode = False # 강제로 수정 모드 해제
+        display_df = load_all_trips_data()
+    else:
+        display_df = ledger_df.copy()
+        
     if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
         if save_data(ledger_df):
             st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
             
-    if not ledger_df.empty:
-        display_df = ledger_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
+# --- [Modified/Added] 교체 구간 시작 ---
+    if not display_df.empty: # [Modified] ledger_df 대신 상단에서 정의한 display_df 사용
+        display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
         display_df = display_df.reindex(columns=FINAL_COLUMNS)
         link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
         
         if search_query.strip():
-            mask = (display_df['Category'].str.contains(search_query, case=False, na=False) | display_df['Description'].str.contains(search_query, case=False, na=False) | display_df['Note'].str.contains(search_query, case=False, na=False))
+            # [Modified] Country 필드까지 검색 범위 확장
+            mask = (
+                display_df['Category'].str.contains(search_query, case=False, na=False) | 
+                display_df['Description'].str.contains(search_query, case=False, na=False) | 
+                display_df['Note'].str.contains(search_query, case=False, na=False) |
+                display_df['Country'].str.contains(search_query, case=False, na=False) # [Added]
+            )
             filtered_df = display_df[mask]
+            st.write(f"🔎 검색 결과: {len(filtered_df)}건") # [Added] 건수 표시
             st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
             
         elif edit_mode:
