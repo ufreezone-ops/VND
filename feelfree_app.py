@@ -734,55 +734,33 @@ with tab_stats:
                 "🎁 쇼핑": "#9C27B0", "📱 통신/기타": "#FF9800", "✈️ 항공권": "#D32F2F", "🏨 숙박": "#1976D2", "🛡️ 보험": "#FBC02D", "기타": "#9E9E9E"
             }
             
-            if not dom_df.empty:
+if not dom_df.empty:
                 dom_df['Date_Clean'] = dom_df['Date'].str.split('(').str[0]
-                fig1 = px.bar(dom_df, x='Date_Clean', y=y_col, color='Macro_Category', title=f"🛫 사전 결제 (대분류 그룹화)", color_discrete_map=macro_color_map)
-# [Modified] 상단 여백 대폭 확보 및 제목 위치 조정
+                # [Modified] title을 None으로 설정하여 내부 제목 제거
+                fig1 = px.bar(dom_df, x='Date_Clean', y=y_col, color='Macro_Category', title=None, color_discrete_map=macro_color_map)
+                
                 fig1.update_layout(
                     barmode='stack', 
-                    margin=dict(l=10, r=10, t=100, b=120), # t(상단)를 100으로, b(하단)를 120으로 확대
-                    title={
-                        'text': f"🛫 사전 결제 (대분류 그룹화)",
-                        'y': 0.95,        # 제목을 차트 최상단으로 밀어 올림
-                        'x': 0.5,
-                        'xanchor': 'center',
-                        'yanchor': 'top'
-                    },
-                    legend=dict(
-                        orientation="h",
-                        yanchor="top",
-                        y=-0.3,           # 범례를 조금 더 아래로 (여백 확보)
-                        xanchor="center", 
-                        x=0.5
-                    )
+                    margin=dict(l=10, r=10, t=30, b=120), # 상단(t) 여백을 30으로 축소
+                    legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5)
                 )
-                st.plotly_chart(fig1, use_container_width=True)
+                # [Added] 차트 외부 상단에 제목 배치 (절대 안 겹침)
+                st.markdown("<h4 style='text-align: center;'>🛫 사전 결제 (대분류 그룹화)</h4>", unsafe_allow_html=True)
+                st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
             
-            if not ovr_df.empty:
+if not ovr_df.empty:
                 ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
-                fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=f"🚶‍♂️ 현지 체류 일일 흐름 ({len(ovr_df['Date'].unique())}일차)", color_discrete_map=color_map)
-
-# [Modified] 상단 여백 대폭 확보 및 제목 위치 조정
+                # [Modified] title을 None으로 설정하여 내부 제목 제거
+                fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=None, color_discrete_map=color_map)
+                
                 fig2.update_layout(
                     barmode='stack', 
-                    margin=dict(l=10, r=10, t=100, b=120), # t(상단)를 100으로, b(하단)를 120으로 확대
-                    title={
-                        'text': f"🚶‍♂️ 현지 체류 일일 흐름 ({len(ovr_df['Date'].unique())}일차)",
-                        'y': 0.95,        # 제목을 차트 최상단으로 밀어 올림
-                        'x': 0.5,
-                        'xanchor': 'center',
-                        'yanchor': 'top'
-                    },
-                    legend=dict(
-                        orientation="h",
-                        yanchor="top",
-                        y=-0.3,           # 범례를 조금 더 아래로 (여백 확보)
-                        xanchor="center", 
-                        x=0.5
-                    )
+                    margin=dict(l=10, r=10, t=30, b=120), # 상단(t) 여백을 30으로 축소
+                    legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5)
                 )
-                st.plotly_chart(fig2, use_container_width=True)
-
+                # [Added] 차트 외부 상단에 제목 배치 (절대 안 겹침)
+                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 현지 체류 일일 흐름 ({len(ovr_df['Date'].unique())}일차)</h4>", unsafe_allow_html=True)
+                st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 with tab_final:
     if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
         total_trip_krw = exp_df['KRW_val'].sum(); total_trip_loc = exp_df['Local_val'].sum()
