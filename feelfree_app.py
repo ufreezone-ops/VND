@@ -496,10 +496,7 @@ with tab_in:
                     if receipt_url: st.toast("✅ 영수증 링킹 완료!")
             
             final_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
-            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': final_desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '', 'Receipt_URL': receipt_url}])
-            
             curr_country = "베트남" if "푸꾸옥" in st.session_state.current_trip else "중국"
-    
             new_row = pd.DataFrame([{
                 'Date': sel_date.strftime("%m/%d(%a)"),
                 'Country': curr_country, # [Added] 14컬럼 데이터
@@ -734,7 +731,7 @@ with tab_stats:
                 "🎁 쇼핑": "#9C27B0", "📱 통신/기타": "#FF9800", "✈️ 항공권": "#D32F2F", "🏨 숙박": "#1976D2", "🛡️ 보험": "#FBC02D", "기타": "#9E9E9E"
             }
             
-if not dom_df.empty:
+            if not dom_df.empty:
                 dom_df['Date_Clean'] = dom_df['Date'].str.split('(').str[0]
                 # [Modified] title을 None으로 설정하여 내부 제목 제거
                 fig1 = px.bar(dom_df, x='Date_Clean', y=y_col, color='Macro_Category', title=None, color_discrete_map=macro_color_map)
@@ -748,7 +745,7 @@ if not dom_df.empty:
                 st.markdown("<h4 style='text-align: center;'>🛫 사전 결제 (대분류 그룹화)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
             
-if not ovr_df.empty:
+            if not ovr_df.empty:
                 ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
                 # [Modified] title을 None으로 설정하여 내부 제목 제거
                 fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=None, color_discrete_map=color_map)
