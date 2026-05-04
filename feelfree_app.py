@@ -769,7 +769,7 @@ with tab_final:
         def kpi_box(title, krw, loc=None):
             loc_str = f"<div class='kpi-value-vnd'>({fmt_local.format(loc)} {LOCAL_SYM})</div>" if loc is not None else ""
             return f"<div class='kpi-box'><div class='kpi-title'>{title}</div><div class='kpi-value-krw'>{krw:,.0f} 원</div>{loc_str}</div>"
-        st.header("🏁 글로벌 여행 최종 전략 리포트")
+        st.header("🏁 여행요약")
         k1, k2, k3, k4 = st.columns(4)
         with k1: st.markdown(kpi_box("여행 최종 총 지출", total_trip_krw, total_trip_loc), unsafe_allow_html=True)
         with k2: st.markdown(kpi_box("국내 지출 총액", dom_total_krw), unsafe_allow_html=True)
