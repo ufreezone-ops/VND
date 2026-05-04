@@ -442,7 +442,7 @@ with st.sidebar:
 
 # --- SECTION 4:[Module C] Intelligent Input (📝 입력) ---
 st.title(f"{st.session_state.current_trip}")
-tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 리포트"])
+tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 요약"])
 
 with tab_in:
     mode = st.radio("기록 모드 선택",["일반 지출", "자산 이동", "환불(취소)", "출입국"], horizontal=True, key="mode_radio")
