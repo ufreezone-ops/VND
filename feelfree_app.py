@@ -1,6 +1,6 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.04.001]
+#[Project: Feelfree Travel Ledger / Version: v26.05.04.002]
 #[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Interactive Inline Editor & Viewer Integrated - 64.9 KB]
+#[Status: Smart Line Parser (Newline priority) Applied - 65.1 KB]
 
 import streamlit as st
 import pandas as pd
@@ -46,8 +46,8 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-VERSION = "v26.05.04.001"
-UPDATE_LOG_TEXT = """* `[Modified]` 인터랙티브 인라인 에디터 도입: 조회 탭에서 하단 콤보박스를 폐기하고, 내역을 터치하면 그 자리에서 즉시 메모 수정과 영수증 첨부를 동시에 할 수 있는 직관적 통합 대시보드 UX 구현."""
+VERSION = "v26.05.04.002"
+UPDATE_LOG_TEXT = """* `[Fixed]` 스마트 줄바꿈 파서 탑재: 영수증 세부 내역을 분해할 때 기존의 단순 쉼표(,) 분할 방식이 문장을 훼손하는 문제를 해결하기 위해, 줄바꿈(엔터)을 최우선 기준으로 분할하여 엑셀 복사/붙여넣기 데이터의 무결성을 100% 보존함."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -497,7 +497,6 @@ with tab_in:
 with tab_his:
     st.info("💡 **표의 행(Row)을 클릭(터치)하시면 바로 아래에 상세 내역 수정과 영수증 첨부 화면이 펼쳐집니다!**")
     
-    # [Modified] 뷰어를 상단에 배치하기 위한 Placeholder
     viewer_placeholder = st.empty()
     
     c_search, c_tog = st.columns([3, 1])
@@ -509,7 +508,6 @@ with tab_his:
             st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
             
     if not ledger_df.empty:
-        # [Fixed] 원본 데이터(ledger_df)를 직접 수정하기 위해 정렬된 뷰의 인덱스 매핑 활용
         display_df = ledger_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
         display_df = display_df.reindex(columns=FINAL_COLUMNS)
         link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
@@ -525,14 +523,12 @@ with tab_his:
                 if save_data(edited_df): st.rerun()
                 
         else:
-            #[Added] on_select 이벤트 터치형 인터랙티브 뷰어/에디터 결합 렌더링
             df_event = st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
             
             if df_event.selection.rows:
                 selected_idx = df_event.selection.rows[0]
                 row_data = display_df.iloc[selected_idx]
                 
-                # viewer_placeholder 위치에 뷰어+에디터 렌더링
                 with viewer_placeholder.container():
                     st.markdown("---")
                     c_info, c_edit = st.columns([1, 1])
@@ -547,11 +543,19 @@ with tab_his:
                         if "-" in desc_full:
                             parts = desc_full.split("-", 1)
                             st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
-                            items = parts[1].split(",")
+                            detail_str = parts[1].strip()
                             st.markdown("**📝 세부 구매 내역:**")
-                            for item in items: st.markdown(f"- {item.strip()}")
+                            # [Modified] 줄바꿈(\n)이 있으면 최우선으로 분할, 없으면 쉼표(,)로 분할 (스마트 파서)
+                            items = detail_str.split("\n") if "\n" in detail_str else detail_str.split(",")
+                            for item in items: 
+                                if item.strip(): st.markdown(f"- {item.strip()}")
                         else:
-                            st.markdown(f"**📝 내역:** {desc_full}")
+                            if "\n" in desc_full:
+                                st.markdown("**📝 세부 내역:**")
+                                for item in desc_full.split("\n"):
+                                    if item.strip(): st.markdown(f"- {item.strip()}")
+                            else:
+                                st.markdown(f"**📝 내역:** {desc_full}")
                             
                         if str(row_data['Receipt_URL']).startswith("http"):
                             st.image(row_data['Receipt_URL'], use_container_width=True)
@@ -560,6 +564,7 @@ with tab_his:
                             
                     with c_edit:
                         st.subheader("✏️ 내역 보강 및 영수증 첨부")
+                        st.caption("세부 내역을 엑셀에서 복사해 붙여넣거나 엔터(줄바꿈)로 여러 개 입력하시면, 왼쪽 뷰어에서 깔끔하게 분리되어 표시됩니다.")
                         new_desc = st.text_area("📝 세부 내역 (수정/추가)", value=row_data['Description'], height=150)
                         new_receipt = st.file_uploader("📸 새 영수증 사진 업로드", type=['png', 'jpg', 'jpeg'], key="inline_receipt")
                         
@@ -569,11 +574,7 @@ with tab_his:
                                 with st.spinner("클라우드 전송 중..."):
                                     url = upload_image_to_imgbb(new_receipt)
                                     if url: display_df.at[selected_idx, 'Receipt_URL'] = url
-                            # 변경된 데이터(display_df)로 전체 재계산 및 덮어쓰기
-                            if save_data(display_df):
-                                st.success("업데이트 완료!")
-                                time.sleep(1)
-                                st.rerun()
+                            if save_data(display_df): st.success("업데이트 완료!"); time.sleep(1); st.rerun()
                     st.markdown("---")
 
 with tab_stats:
@@ -672,4 +673,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.04.001 | Volume Guard: 64.9 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.04.002 | Volume Guard: 65.1 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
