@@ -730,6 +730,20 @@ with tab_stats:
                 "🍔 식음료": "#4CAF50", "🚗 교통": "#00ACC1", "🏄 액티비티": "#0288D1", 
                 "🎁 쇼핑": "#9C27B0", "📱 통신/기타": "#FF9800", "✈️ 항공권": "#D32F2F", "🏨 숙박": "#1976D2", "🛡️ 보험": "#FBC02D", "기타": "#9E9E9E"
             }
+
+            if not ovr_df.empty:
+                ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
+                # [Modified] title을 None으로 설정하여 내부 제목 제거
+                fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=None, color_discrete_map=color_map)
+                
+                fig2.update_layout(
+                    barmode='stack', 
+                    margin=dict(l=10, r=10, t=30, b=120), # 상단(t) 여백을 30으로 축소
+                    legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5)
+                )
+                # [Added] 차트 외부 상단에 제목 배치 (절대 안 겹침)
+                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 현지 체류 일일 흐름 ({len(ovr_df['Date'].unique())}일차)</h4>", unsafe_allow_html=True)
+                st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
             
             if not dom_df.empty:
                 dom_df['Date_Clean'] = dom_df['Date'].str.split('(').str[0]
@@ -745,19 +759,6 @@ with tab_stats:
                 st.markdown("<h4 style='text-align: center;'>🛫 사전 결제 (대분류 그룹화)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
             
-            if not ovr_df.empty:
-                ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
-                # [Modified] title을 None으로 설정하여 내부 제목 제거
-                fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=None, color_discrete_map=color_map)
-                
-                fig2.update_layout(
-                    barmode='stack', 
-                    margin=dict(l=10, r=10, t=30, b=120), # 상단(t) 여백을 30으로 축소
-                    legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5)
-                )
-                # [Added] 차트 외부 상단에 제목 배치 (절대 안 겹침)
-                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 현지 체류 일일 흐름 ({len(ovr_df['Date'].unique())}일차)</h4>", unsafe_allow_html=True)
-                st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 with tab_final:
     if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
         total_trip_krw = exp_df['KRW_val'].sum(); total_trip_loc = exp_df['Local_val'].sum()
