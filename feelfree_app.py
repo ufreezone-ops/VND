@@ -160,10 +160,15 @@ def load_data():
         df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
         if df is None or df.empty: return pd.DataFrame(columns=FINAL_COLUMNS)
 
-        # [Added] Country 컬럼 부재 시 자동 생성 및 채우기 (Migration Helper)
+        # [Modified] Country 컬럼 처리: 헤더가 없으면 삽입, 헤더만 있고 비어있으면 채우기
+        default_country = "베트남" if "PQ" in ACTIVE_SHEET else "중국"
+        
         if 'Country' not in df.columns:
-            default_country = "베트남" if "PQ" in ACTIVE_SHEET else "중국"
             df.insert(1, 'Country', default_country)
+        else:
+            # 데이터가 문자열 'nan', 'None' 또는 실제 빈값인 경우 기본값으로 채움
+            df['Country'] = df['Country'].astype(str).str.strip().replace(['nan', 'None', ''], None)
+            df['Country'] = df['Country'].fillna(default_country)
         
         if 'Cum_Card_VND' in df.columns: df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
         if 'Cum_Cash_VND' in df.columns: df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
