@@ -686,7 +686,7 @@ with tab_stats:
         exp_df = exp_df[exp_df['IsExpense'] == 1].copy()
         
         if not exp_df.empty:
-            # [Logic] 차트 색상 및 데이터 전처리 (이동 없음)
+            # [Logic] 데이터 전처리 및 색상 맵핑
             exp_df['Macro_Category'] = exp_df['Category'].map(MACRO_MAP).fillna("기타")
             def get_krw_val(r):
                 if str(r['Currency']).strip() == 'KRW': return r['Amount']
@@ -708,13 +708,10 @@ with tab_stats:
                 "🎁 쇼핑": "#9C27B0", "📱 통신/기타": "#FF9800", "✈️ 항공권": "#D32F2F", "🏨 숙박": "#1976D2", "🛡️ 보험": "#FBC02D", "기타": "#9E9E9E"
             }
 
-            # --- [Modified] 레이아웃 재배치 시작 ---
-
-            # 1단계: 통화 선택 (최상단)
+            # --- [1단계] 최상단: 분석 통화 선택 및 현지 지출 차트 ---
             c_mode = st.radio("📊 분석 통화 선택", ["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
             y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
-            # 2단계: 여행지 지출 차트 (메인 리포트)
             ovr_df = exp_df[(exp_df['PaymentMethod'].str.strip() != '원화계좌(한국)') & (~exp_df['Category'].isin(['입국','출국']))]
             if not ovr_df.empty:
                 ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
@@ -723,27 +720,10 @@ with tab_stats:
                     barmode='stack', margin=dict(l=10, r=10, t=30, b=120),
                     legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5)
                 )
-                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 일별 지출 ({len(ovr_df['Date'].unique())}일차)</h4>", unsafe_allow_html=True)
+                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 현지 체류 일일 흐름 ({len(ovr_df['Date'].unique())}일차)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 
-            st.divider()
-
-            # 3단계: 여행 지출 요약 지표 (KPI)
-            st.subheader("🏁 여행 지출 요약")
-            c1, c2 = st.columns(2)
-            with c1:
-                dom_df = exp_df[(exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') & (~exp_df['Category'].isin(['입국','출국']))]
-                st.info("🇰🇷 사전 결제")
-                st.metric("총액", f"{dom_df['KRW_val'].sum():,.0f} 원")
-                dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
-                for cat_name, row_data in dg.iterrows(): st.write(f"- {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
-            with c2:
-                st.success(f"🌏 여행지 지출 (USD 포함)")
-                st.metric("총액 (원화환산)", f"{ovr_df['KRW_val'].sum():,.0f} 원")
-                og = ovr_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
-                for cat_name, row_data in og.iterrows(): st.write(f"- {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
-            
-            # 4단계: 일자별 요약 테이블
+            # --- [2단계] 중간: 일자별 요약 테이블 ---
             st.divider()
             daily_set = exp_df.groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index()
             surv_only = exp_df[exp_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'})
@@ -751,29 +731,39 @@ with tab_stats:
             fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
             st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총(원)','Local_val':f'총({LOCAL_SYM})','S_KRW':'일상(원)','S_Loc':f'일상({LOCAL_SYM})'}).style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}))
 
-# --- [Modified] 5단계: 사전 결제 차트 (Treemap으로 혁신) ---
+            # --- [3단계] 중간: 사전 결제 트리맵 ---
+            dom_df = exp_df[(exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') & (~exp_df['Category'].isin(['입국','출국']))]
             if not dom_df.empty:
-                # Treemap 생성: 계층 구조(대분류 -> 중분류 -> 상세내용) 적용
+                st.divider()
                 fig1 = px.treemap(
-                    dom_df, 
-                    path=['Macro_Category', 'Category', 'Description'], 
-                    values=y_col, 
-                    color='Macro_Category',
-                    color_discrete_map=macro_color_map,
-                    custom_data=[y_col] # 툴팁용 데이터
+                    dom_df, path=['Macro_Category', 'Category', 'Description'], values=y_col, 
+                    color='Macro_Category', color_discrete_map=macro_color_map
                 )
-                
-                # 트리맵 텍스트 및 레이아웃 최적화
-                fig1.update_traces(
-                    texttemplate="<b>%{label}</b><br>%{value:,.0f}",
-                    hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}"
-                )
-                fig1.update_layout(
-                    margin=dict(l=10, r=10, t=30, b=30), # 트리맵은 범례가 없으므로 하단 여백 축소
-                )
-
+                fig1.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
+                fig1.update_layout(margin=dict(l=10, r=10, t=30, b=30))
                 st.markdown("<h4 style='text-align: center;'>🛫 사전 결제 비중 분석 (Treemap)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
+
+            # --- [4단계] 최하단: 여행 지출 요약 (KPI + Expander) ---
+            st.divider()
+            st.subheader("🏁 여행 경제 지출 요약")
+            c1, c2 = st.columns(2)
+            
+            with c1:
+                st.info("🇰🇷 사전 결제 및 고정 지출")
+                st.metric("총액", f"{dom_df['KRW_val'].sum():,.0f} 원")
+                with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
+                    dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
+                    for cat_name, row_data in dg.iterrows():
+                        st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
+            
+            with c2:
+                st.success(f"🌏 현지 체류 지출 (USD 포함)")
+                st.metric("총액 (원화환산)", f"{ovr_df['KRW_val'].sum():,.0f} 원")
+                with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
+                    og = ovr_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
+                    for cat_name, row_data in og.iterrows():
+                        st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
                 
 with tab_final:
     if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
