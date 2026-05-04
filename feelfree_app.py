@@ -76,6 +76,18 @@ st.markdown("""
     .stTabs[data-baseweb="tab-list"] { gap: 15px; padding-bottom: 10px; }
     .stTabs[data-baseweb="tab"] { background-color: #1c1f2b; border-radius: 8px 8px 0 0; padding: 12px 25px; color: #ffffff; }
     .stTabs[aria-selected="true"] { background-color: #00FF00 !important; color: #000000 !important; font-weight: bold; }
+
+    /* [Added] 사이드바 여행지 선택기(Selectbox) 고대비 스타일링 */
+    div[data-testid="stSidebar"] div[data-baseweb="select"] > div {
+        border: 2px solid #00FF00 !important; /* Neon Green 테두리 */
+        background-color: #1e2130 !important; /* 배경을 약간 밝게 */
+        border-radius: 10px !important;
+    }
+    div[data-testid="stSidebar"] .stSelectbox label {
+        color: #00FF00 !important; /* 라벨 텍스트 강조 */
+        font-weight: bold !important;
+        font-size: 1.1rem !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
