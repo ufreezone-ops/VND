@@ -751,15 +751,28 @@ with tab_stats:
             fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
             st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총(원)','Local_val':f'총({LOCAL_SYM})','S_KRW':'일상(원)','S_Loc':f'일상({LOCAL_SYM})'}).style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}))
 
-            # 5단계: 사전 결제 차트 (최하단)
+# --- [Modified] 5단계: 사전 결제 차트 (Treemap으로 혁신) ---
             if not dom_df.empty:
-                dom_df['Date_Clean'] = dom_df['Date'].str.split('(').str[0]
-                fig1 = px.bar(dom_df, x='Date_Clean', y=y_col, color='Macro_Category', title=None, color_discrete_map=macro_color_map)
-                fig1.update_layout(
-                    barmode='stack', margin=dict(l=10, r=10, t=30, b=120),
-                    legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5)
+                # Treemap 생성: 계층 구조(대분류 -> 중분류 -> 상세내용) 적용
+                fig1 = px.treemap(
+                    dom_df, 
+                    path=['Macro_Category', 'Category', 'Description'], 
+                    values=y_col, 
+                    color='Macro_Category',
+                    color_discrete_map=macro_color_map,
+                    custom_data=[y_col] # 툴팁용 데이터
                 )
-                st.markdown("<h4 style='text-align: center;'>🛫 사전 결제 </h4>", unsafe_allow_html=True)
+                
+                # 트리맵 텍스트 및 레이아웃 최적화
+                fig1.update_traces(
+                    texttemplate="<b>%{label}</b><br>%{value:,.0f}",
+                    hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}"
+                )
+                fig1.update_layout(
+                    margin=dict(l=10, r=10, t=30, b=30), # 트리맵은 범례가 없으므로 하단 여백 축소
+                )
+
+                st.markdown("<h4 style='text-align: center;'>🛫 사전 결제 비중 분석 (Treemap)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
                 
 with tab_final:
