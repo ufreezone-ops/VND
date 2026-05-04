@@ -776,13 +776,13 @@ with tab_final:
         with k3: st.markdown(kpi_box("현지 지출 총액", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
         with k4: st.markdown(kpi_box(f"현지 일상/생존 1일 평균", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
         
-        st.subheader("🌳 지출 구조 상세 분석 (Treemap)")
+        st.subheader("🌳 지출분석 (Treemap)")
         fig_tree = px.treemap(exp_df, path=['Macro_Category', 'Category', 'Description'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
         fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>%{percentRoot:.1%}")
         fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=0), font=dict(size=14))
         st.plotly_chart(fig_tree, use_container_width=True)
         
-        st.subheader("🍕 대분류별 지출 비중")
+        st.subheader("🍕 지출비중")
         cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
         fig_donut = px.pie(cat_pie, values='KRW_val', names='Macro_Category', hole=0.5, color_discrete_sequence=px.colors.qualitative.Set3)
         fig_donut.update_traces(textposition='inside', textinfo='label+value+percent', texttemplate='%{label}<br>%{value:,.0f}원<br>%{percent:.1%}')
