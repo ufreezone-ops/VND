@@ -88,6 +88,24 @@ st.markdown("""
         font-weight: bold !important;
         font-size: 1.1rem !important;
     }
+    /* [Added] 드롭다운(풀다운) 리스트에서 선택된 항목 하이라이트 */
+    div[data-baseweb="popover"] li[aria-selected="true"] {
+        background-color: #FFA500 !important; /* 주황색 배경 */
+        color: #000000 !important; /* 검정색 글자 */
+        font-weight: bold !important;
+    }
+
+    /* [Added] 드롭다운 리스트 마우스 호버(Hover) 시 스타일 */
+    div[data-baseweb="popover"] li:hover {
+        background-color: #FFD700 !important; /* 호버 시 노란색 계열 */
+        color: #000000 !important;
+    }
+
+    /* 사이드바 전용 선택기 라벨 색상 보정 */
+    div[data-testid="stSidebar"] .stSelectbox label p {
+        color: #FFD700 !important; /* 라벨을 노란색으로 더 강조 */
+    }
+    
     </style>
     """, unsafe_allow_html=True)
 
