@@ -737,16 +737,23 @@ with tab_stats:
             if not dom_df.empty:
                 dom_df['Date_Clean'] = dom_df['Date'].str.split('(').str[0]
                 fig1 = px.bar(dom_df, x='Date_Clean', y=y_col, color='Macro_Category', title=f"🛫 사전 결제 (대분류 그룹화)", color_discrete_map=macro_color_map)
-                # [Modified] 범례를 아래로 내리고 여백을 조정함
+# [Modified] 상단 여백 대폭 확보 및 제목 위치 조정
                 fig1.update_layout(
                     barmode='stack', 
-                    margin=dict(l=10, r=10, t=60, b=100), # 상단(t)과 하단(b) 여백 확대
+                    margin=dict(l=10, r=10, t=100, b=120), # t(상단)를 100으로, b(하단)를 120으로 확대
+                    title={
+                        'text': f"🛫 사전 결제 (대분류 그룹화)",
+                        'y': 0.95,        # 제목을 차트 최상단으로 밀어 올림
+                        'x': 0.5,
+                        'xanchor': 'center',
+                        'yanchor': 'top'
+                    },
                     legend=dict(
-                        orientation="h",   # 가로 배열 유지
-                        yanchor="top",     # 기준점을 범례 상단으로
-                        y=-0.25,           # 차트 아래쪽으로 배치
+                        orientation="h",
+                        yanchor="top",
+                        y=-0.3,           # 범례를 조금 더 아래로 (여백 확보)
                         xanchor="center", 
-                        x=0.5              # 중앙 정렬
+                        x=0.5
                     )
                 )
                 st.plotly_chart(fig1, use_container_width=True)
@@ -755,16 +762,23 @@ with tab_stats:
                 ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
                 fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=f"🚶‍♂️ 현지 체류 일일 흐름 ({len(ovr_df['Date'].unique())}일차)", color_discrete_map=color_map)
 
-                # [Modified] 범례를 아래로 내리고 여백을 조정함
+# [Modified] 상단 여백 대폭 확보 및 제목 위치 조정
                 fig2.update_layout(
                     barmode='stack', 
-                    margin=dict(l=10, r=10, t=60, b=100), # 상단(t)과 하단(b) 여백 확대
+                    margin=dict(l=10, r=10, t=100, b=120), # t(상단)를 100으로, b(하단)를 120으로 확대
+                    title={
+                        'text': f"🚶‍♂️ 현지 체류 일일 흐름 ({len(ovr_df['Date'].unique())}일차)",
+                        'y': 0.95,        # 제목을 차트 최상단으로 밀어 올림
+                        'x': 0.5,
+                        'xanchor': 'center',
+                        'yanchor': 'top'
+                    },
                     legend=dict(
-                        orientation="h",   # 가로 배열 유지
-                        yanchor="top",     # 기준점을 범례 상단으로
-                        y=-0.25,           # 차트 아래쪽으로 배치
+                        orientation="h",
+                        yanchor="top",
+                        y=-0.3,           # 범례를 조금 더 아래로 (여백 확보)
                         xanchor="center", 
-                        x=0.5              # 중앙 정렬
+                        x=0.5
                     )
                 )
                 st.plotly_chart(fig2, use_container_width=True)
