@@ -415,7 +415,7 @@ with st.sidebar:
     if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
 
 # --- SECTION 4:[Module C] Intelligent Input (📝 입력) ---
-st.title(f"🌏 GTL: {st.session_state.current_trip}")
+st.title(f"{st.session_state.current_trip}")
 tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 리포트"])
 
 with tab_in:
