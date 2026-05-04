@@ -39,7 +39,7 @@ MACRO_MAP = {
     "항공권": "✈️ 항공권", "호텔": "🏨 숙박", "보험": "🛡️ 보험", "보증금": "🏦 자산이동"
 }
 
-CORE_COLUMNS =['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'Receipt_URL']
+CORE_COLUMNS =['Date', 'Country', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'Receipt_URL']
 SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local', 'Note']
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
@@ -159,6 +159,12 @@ def load_data():
     try:
         df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
         if df is None or df.empty: return pd.DataFrame(columns=FINAL_COLUMNS)
+
+        # [Added] Country 컬럼 부재 시 자동 생성 및 채우기 (Migration Helper)
+        if 'Country' not in df.columns:
+            default_country = "베트남" if "PQ" in ACTIVE_SHEET else "중국"
+            df.insert(1, 'Country', default_country)
+        
         if 'Cum_Card_VND' in df.columns: df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
         if 'Cum_Cash_VND' in df.columns: df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
         if 'Receipt_URL' not in df.columns: df['Receipt_URL'] = ""
@@ -460,6 +466,23 @@ with tab_in:
             
             final_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Category': cat, 'Description': final_desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '', 'Receipt_URL': receipt_url}])
+            
+            curr_country = "베트남" if "푸꾸옥" in st.session_state.current_trip else "중국"
+    
+            new_row = pd.DataFrame([{
+                'Date': sel_date.strftime("%m/%d(%a)"),
+                'Country': curr_country, # [Added] 14컬럼 데이터
+                'Category': cat,
+                'Description': final_desc,
+                'Currency': curr,
+                'Amount': amt,
+                'PaymentMethod': met,
+                'IsExpense': 1,
+                'AppliedRate': cr_final,
+                'Note': '',
+                'Receipt_URL': receipt_url
+            }])
+            
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
     elif mode == "자산 이동":
