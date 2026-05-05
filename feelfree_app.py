@@ -709,12 +709,21 @@ with tab_stats:
         if not exp_df.empty:
             # [Logic] 데이터 전처리 및 색상 맵핑
             exp_df['Macro_Category'] = exp_df['Category'].map(MACRO_MAP).fillna("기타")
+# [Modified] 다중 통화 KRW 완벽 환산 로직 (모든 통화 지원)
             def get_krw_val(r):
                 if str(r['Currency']).strip() == 'KRW': return r['Amount']
-                elif str(r['Currency']).strip() in [TRAVEL_CURRENCY, 'USD']: return r['Amount'] * r['AppliedRate']
-                return 0
+                return r['Amount'] * r['AppliedRate']
+                
             exp_df['KRW_val'] = exp_df.apply(get_krw_val, axis=1)
-            exp_df['Local_val'] = exp_df.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == TRAVEL_CURRENCY else (r['Amount'] * r['AppliedRate'] / WAR_LOCAL if WAR_LOCAL>0 else 0), axis=1)
+            
+            def get_local_val(r):
+                c_curr = str(r['Currency']).strip()
+                if c_curr == TRAVEL_CURRENCY: return r['Amount']
+                krw_v = r['Amount'] if c_curr == 'KRW' else r['Amount'] * r['AppliedRate']
+                war_t = get_WAR(TRAVEL_CURRENCY)
+                return krw_v / war_t if war_t > 0 else 0
+                
+            exp_df['Local_val'] = exp_df.apply(get_local_val, axis=1)
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
 
             color_map = {
@@ -733,15 +742,19 @@ with tab_stats:
             c_mode = st.radio("📊 분석 통화 선택", ["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
             y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
-            ovr_df = exp_df[(exp_df['PaymentMethod'].str.strip() != '원화계좌(한국)') & (~exp_df['Category'].isin(['입국','출국']))]
+ovr_df = exp_df[(exp_df['PaymentMethod'].str.strip() != '원화계좌(한국)') & (~exp_df['Category'].isin(['입국','출국']))]
             if not ovr_df.empty:
+                ovr_df = ovr_df.copy()
                 ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
+                ovr_df = ovr_df.sort_values(by='Date_Clean') # 날짜순 강제 정렬
+                
                 fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=None, color_discrete_map=color_map)
                 fig2.update_layout(
                     barmode='stack', margin=dict(l=10, r=10, t=30, b=120),
                     legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5)
                 )
-                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 여행지 일일 지출 ({len(ovr_df['Date'].unique())}일차)</h4>", unsafe_allow_html=True)
+                fig2.update_xaxes(categoryorder='category ascending') # X축 날짜순 강제 정렬
+                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 여행지 일일 지출 ({len(ovr_df['Date_Clean'].unique())}일차)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 
             # --- [2단계] 중간: 일자별 요약 테이블 ---
