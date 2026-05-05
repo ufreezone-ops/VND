@@ -599,111 +599,102 @@ with tab_in:
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
 # --- SECTION 6:[Module D, E: History & Settlement] ---
-with tab_his:
-    st.info("💡 **표의 행(Row)을 클릭(터치)하시면 바로 아래에 상세 내역 수정과 영수증 첨부 화면이 펼쳐집니다!**")
-    
-    viewer_placeholder = st.empty()
-    
-    c_filter, c_search, c_global, c_tog = st.columns([1, 2, 1, 1])
-    with c_filter:
-        country_filter = st.selectbox("🌍 국가 필터",["전체"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys()), key="his_country")
-    with c_search: 
-        search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
-    with c_global:
-        global_search = st.toggle("🌍 전체 검색", value=False, key="global_search_toggle")
-    with c_tog: 
-        edit_mode = st.toggle("✏️ 직접 수정 모드", value=False, key="his_edit_toggle")
+with tab_stats:
+    if not ledger_df.empty:
+        exp_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
+        exp_df = exp_df[exp_df['IsExpense'] == 1].copy()
+        
+        if not exp_df.empty:
+            exp_df['Macro_Category'] = exp_df['Category'].map(MACRO_MAP).fillna("기타")
+            
+            # [Modified] 다중 통화 KRW 완벽 환산 로직 (모든 통화 지원)
+            def get_krw_val(r):
+                if str(r['Currency']).strip() == 'KRW': return r['Amount']
+                return r['Amount'] * r['AppliedRate']
+            exp_df['KRW_val'] = exp_df.apply(get_krw_val, axis=1)
+            
+            def get_local_val(r):
+                c_curr = str(r['Currency']).strip()
+                if c_curr == TRAVEL_CURRENCY: return r['Amount']
+                krw_v = r['Amount'] if c_curr == 'KRW' else r['Amount'] * r['AppliedRate']
+                war_t = get_WAR(TRAVEL_CURRENCY)
+                return krw_v / war_t if war_t > 0 else 0
+            exp_df['Local_val'] = exp_df.apply(get_local_val, axis=1)
+            exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
 
-    if global_search and search_query.strip():
-        st.warning("⚠️ '전체 검색' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
-        edit_mode = False 
-        display_df = load_all_trips_data()
-    else:
-        display_df = ledger_df.copy()
-        if country_filter != "전체":
-            display_df = display_df[display_df['Country'] == country_filter]
-        
-    if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
-        if save_data(ledger_df):
-            st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
-            
-# --- [Modified/Added] 교체 구간 시작 ---
-    if not display_df.empty: # [Modified] ledger_df 대신 상단에서 정의한 display_df 사용
-        display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
-        display_df = display_df.reindex(columns=FINAL_COLUMNS)
-        link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
-        
-        if search_query.strip():
-            # [Modified] Country 필드까지 검색 범위 확장
-            mask = (
-                display_df['Category'].str.contains(search_query, case=False, na=False) | 
-                display_df['Description'].str.contains(search_query, case=False, na=False) | 
-                display_df['Note'].str.contains(search_query, case=False, na=False) |
-                display_df['Country'].str.contains(search_query, case=False, na=False) # [Added]
-            )
-            filtered_df = display_df[mask]
-            st.write(f"🔎 검색 결과: {len(filtered_df)}건") # [Added] 건수 표시
-            st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
-            
-        elif edit_mode:
-            edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
-            if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
-                if save_data(edited_df): st.rerun()
+            color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "마트": "#E91E63", "Grab": "#00897B", "VinBus": "#00ACC1", "DiDi": "#00897B", "지하철": "#00ACC1", "택시": "#009688", "교통": "#009688", "마사지": "#0288D1", "투어": "#673AB7", "입장료": "#3F51B5", "선물": "#9C27B0", "통신": "#FF9800", "수수료": "#795548", "팁": "#03A9F4", "항공권": "#D32F2F", "호텔": "#1976D2", "보험": "#FBC02D"}
+            macro_color_map = {"🍔 식음료": "#4CAF50", "🚗 교통": "#00ACC1", "🏄 액티비티": "#0288D1", "🎁 쇼핑": "#9C27B0", "📱 통신/기타": "#FF9800", "✈️ 항공권": "#D32F2F", "🏨 숙박": "#1976D2", "🛡️ 보험": "#FBC02D", "기타": "#9E9E9E"}
+
+            # ---[1단계] 최상단: 분석 통화 선택 및 현지 지출 차트 ---
+            c_mode = st.radio("📊 분석 통화 선택",["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
+            y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
+
+            ovr_df = exp_df[(exp_df['PaymentMethod'].str.strip() != '원화계좌(한국)') & (~exp_df['Category'].isin(['입국','출국']))]
+            if not ovr_df.empty:
+                ovr_df = ovr_df.copy()
+                ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
+                ovr_df = ovr_df.sort_values(by='Date_Clean') # 날짜순 강제 정렬
                 
-        else:
-            df_event = st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
-            
-            if df_event.selection.rows:
-                selected_idx = df_event.selection.rows[0]
-                row_data = display_df.iloc[selected_idx]
-                
-                with viewer_placeholder.container():
-                    st.markdown("---")
-                    c_info, c_edit = st.columns([1, 1])
-                    
-                    with c_info:
-                        st.subheader("🧾 상세 내역 및 영수증 뷰어")
-                        amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
-                        st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']})")
-                        st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
-                        
-                        desc_full = str(row_data['Description'])
-                        if "-" in desc_full:
-                            parts = desc_full.split("-", 1)
-                            st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
-                            detail_str = parts[1].strip()
-                            st.markdown("**📝 세부 구매 내역:**")
-                            # [Modified] 줄바꿈(\n)이 있으면 최우선으로 분할, 없으면 쉼표(,)로 분할 (스마트 파서)
-                            items = detail_str.split("\n") if "\n" in detail_str else detail_str.split(",")
-                            for item in items: 
-                                if item.strip(): st.markdown(f"- {item.strip()}")
-                        else:
-                            if "\n" in desc_full:
-                                st.markdown("**📝 세부 내역:**")
-                                for item in desc_full.split("\n"):
-                                    if item.strip(): st.markdown(f"- {item.strip()}")
-                            else:
-                                st.markdown(f"**📝 내역:** {desc_full}")
-                            
-                        if str(row_data['Receipt_URL']).startswith("http"):
-                            st.image(row_data['Receipt_URL'], use_container_width=True)
-                        else:
-                            st.info("첨부된 영수증 사진이 없습니다.")
-                            
-                    with c_edit:
-                        st.subheader("✏️ 내역 보강 및 영수증 첨부")
-                        st.caption("세부 내역을 엑셀에서 복사해 붙여넣거나 엔터(줄바꿈)로 여러 개 입력하시면, 왼쪽 뷰어에서 깔끔하게 분리되어 표시됩니다.")
-                        new_desc = st.text_area("📝 세부 내역 (수정/추가)", value=row_data['Description'], height=150)
-                        new_receipt = st.file_uploader("📸 새 영수증 사진 업로드", type=['png', 'jpg', 'jpeg'], key="inline_receipt")
-                        
-                        if st.button("💾 이 내역 업데이트", use_container_width=True):
-                            display_df.at[selected_idx, 'Description'] = new_desc
-                            if new_receipt:
-                                with st.spinner("클라우드 전송 중..."):
-                                    url = upload_image_to_imgbb(new_receipt)
-                                    if url: display_df.at[selected_idx, 'Receipt_URL'] = url
-                            if save_data(display_df): st.success("업데이트 완료!"); time.sleep(1); st.rerun()
-                    st.markdown("---")
+                fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=None, color_discrete_map=color_map)
+                fig2.update_layout(barmode='stack', margin=dict(l=10, r=10, t=30, b=120), legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5))
+                fig2.update_xaxes(categoryorder='category ascending') # X축 날짜순 강제 렌더링
+                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 여행지 일일 지출 ({len(ovr_df['Date_Clean'].unique())}일차)</h4>", unsafe_allow_html=True)
+                st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
+
+            # --- [2단계] 중간: 일자별 요약 테이블 ---
+            st.divider()
+            daily_set = exp_df.groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index()
+            surv_only = exp_df[exp_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'})
+            daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0)
+            fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
+            st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총(원)','Local_val':f'총({LOCAL_SYM})','S_KRW':'일상(원)','S_Loc':f'일상({LOCAL_SYM})'}).style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}))
+
+            # --- [3단계] 중간: 사전 결제 트리맵 ---
+            dom_df = exp_df[(exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') & (~exp_df['Category'].isin(['입국','출국']))]
+            if not dom_df.empty:
+                st.divider()
+                fig1 = px.treemap(dom_df, path=['Macro_Category', 'Category', 'Description'], values=y_col, color='Macro_Category', color_discrete_map=macro_color_map)
+                fig1.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
+                fig1.update_layout(margin=dict(l=10, r=10, t=30, b=30))
+                st.markdown("<h4 style='text-align: center;'>🛫 사전 결제 비중 분석 (Treemap)</h4>", unsafe_allow_html=True)
+                st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
+
+            if len(TRIP_CONFIGS[st.session_state.current_trip]["nodes"]) > 1 and not ovr_df.empty:
+                st.divider()
+                fig_country = px.treemap(ovr_df, path=['Country', 'Macro_Category', 'Category'], values=y_col, color='Country', color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_country.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
+                fig_country.update_layout(margin=dict(l=10, r=10, t=30, b=30))
+                st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지 지출 비중 분석 (Treemap)</h4>", unsafe_allow_html=True)
+                st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
+
+            # --- [4단계] 최하단: 여행 지출 요약 (KPI) ---
+            st.divider()
+            st.subheader("🏁 여행 비용 요약 (Gross 기준)")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.info("🇰🇷 사전 결제")
+                st.metric("발생총액", f"{dom_df['KRW_val'].sum():,.0f} 원")
+                with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
+                    dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
+                    for cat_name, row_data in dg.iterrows():
+                        st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
+            with c2:
+                st.success(f"🌏 여행지 지출")
+                st.metric("발생총액", f"{ovr_df['KRW_val'].sum():,.0f} 원")
+                with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
+                    og = ovr_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
+                    for cat_name, row_data in og.iterrows():
+                        st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
+
+            # [Resilience] 손실/보상 상쇄 분석
+            refund_df = ledger_df[ledger_df['Category'] == '환불']
+            if not refund_df.empty:
+                st.divider()
+                st.subheader("🛡️ 손실 및 보상 상쇄 분석 (Resilience)")
+                r_krw = refund_df.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
+                st.warning(f"**총 환불 및 보상 회수액:** {r_krw:,.0f} 원")
+                with st.expander("↳ 보상 내역 상세 보기", expanded=False):
+                    st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
 with tab_stats:
     if not ledger_df.empty:
