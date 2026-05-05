@@ -230,7 +230,7 @@ def recalculate_entire_ledger(df):
             if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
             if asset_cls == "DOMESTIC": c_budget += qty if curr == 'KRW' else qty * rate
         
-elif cat == '환불':
+        elif cat == '환불':
             if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
             if asset_cls == "DOMESTIC":
                 c_budget -= qty if curr == 'KRW' else qty * rate 
