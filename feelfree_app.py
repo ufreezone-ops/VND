@@ -417,13 +417,13 @@ with st.sidebar:
             
             c1.metric(f"💳 카드", f"{fmt.format(c_card)}")
             if current_inventory_batches.get(f"트래블로그({c})"):
-                with c1.expander("↳ 카드 환율 배치", expanded=False):
+                with c1.expander("카드배치", expanded=False):
                     for b in current_inventory_batches[f"트래블로그({c})"]:
                         if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @ {b['rate']:.2f}원")
             
             c2.metric(f"💵 현금", f"{fmt.format(c_cash)}")
             if current_inventory_batches.get(f"현금({c})"):
-                with c2.expander("↳ 현금 환율 배치", expanded=False):
+                with c2.expander("↳ 현금배치", expanded=False):
                     for b in current_inventory_batches[f"현금({c})"]:
                         if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @ {b['rate']:.2f}원")
             st.divider()
