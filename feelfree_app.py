@@ -18,7 +18,7 @@ st.set_page_config(page_title="Feelfree: 글로벌 여행 가계부", page_icon=
 
 TZ_KST = timezone(timedelta(hours=9))
 
-# [Modified] 다중 국가(Multi-Node) 지원을 위한 GTL 설정
+# [Modified] 다중 국가(Multi-Node) 지원을 위한 GTL 설정 (보스니아, 카타르 제외 / 상하이, 글로벌 추가)
 TRIP_CONFIGS = {
     "🇻🇳 푸꾸옥 (2026)": {
         "sheet": "PQ_2026",
@@ -30,16 +30,16 @@ TRIP_CONFIGS = {
         "nodes": {"중국": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1}},
         "cats":["식사", "간식", "DiDi", "지하철", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금"]
     },
-    "🗺️ 발칸 6국 (2024)": {
+    "🗺️ 발칸/동유럽 (2024)": {
         "sheet": "BK_2024",
         "nodes": {
             "튀르키예": {"currency": "TRY", "symbol": "₺", "timezone": 3, "multiplier": 1},
             "세르비아": {"currency": "RSD", "symbol": "din", "timezone": 1, "multiplier": 1},
-            "보스니아": {"currency": "BAM", "symbol": "KM", "timezone": 1, "multiplier": 1},
             "몬테네그로": {"currency": "EUR", "symbol": "€", "timezone": 1, "multiplier": 1},
             "크로아티아": {"currency": "EUR", "symbol": "€", "timezone": 1, "multiplier": 1},
             "헝가리": {"currency": "HUF", "symbol": "Ft", "timezone": 1, "multiplier": 100},
-            "카타르": {"currency": "QAR", "symbol": "ر.ق", "timezone": 3, "multiplier": 1}
+            "중국(상하이)": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1},
+            "글로벌(달러)": {"currency": "USD", "symbol": "$", "timezone": 1, "multiplier": 1}
         },
         "cats":["식사", "간식", "교통", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금", "기타"]
     }
