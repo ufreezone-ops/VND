@@ -36,12 +36,13 @@ TRIP_CONFIGS = {
             "중국(상하이)": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1},
             "글로벌(달러)": {"currency": "USD", "symbol": "$", "timezone": 1, "multiplier": 1}
         },
-        "cats":["식사", "간식", "교통", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금", "기타"]
+        # [Modified] 발칸 지출 카테고리에 '렌트카' 추가
+        "cats":["식사", "간식", "교통", "렌트카", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금", "기타"]
     }
 }
 
 MACRO_MAP = {
-    "Grab": "🚗 교통", "VinBus": "🚗 교통", "DiDi": "🚗 교통", "지하철": "🚗 교통", "택시": "🚗 교통",
+    "Grab": "🚗 교통", "VinBus": "🚗 교통", "DiDi": "🚗 교통", "지하철": "🚗 교통", "택시": "🚗 교통","렌트카": "🚗 교통",
     "식사": "🍔 식음료", "간식": "🍔 식음료", "마트": "🍔 식음료",
     "마사지": "🏄 액티비티", "투어": "🏄 액티비티", "입장료": "🏄 액티비티",
     "선물": "🎁 쇼핑", "통신": "📱 통신/기타", "수수료": "📱 통신/기타", "팁": "📱 통신/기타",
@@ -744,7 +745,30 @@ with tab_stats:
             exp_df['Local_val'] = exp_df.apply(get_local_val, axis=1)
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
 
-            color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "마트": "#E91E63", "Grab": "#00897B", "VinBus": "#00ACC1", "DiDi": "#00897B", "지하철": "#00ACC1", "택시": "#009688", "교통": "#009688", "마사지": "#0288D1", "투어": "#673AB7", "입장료": "#3F51B5", "선물": "#9C27B0", "통신": "#FF9800", "수수료": "#795548", "팁": "#03A9F4", "항공권": "#D32F2F", "호텔": "#1976D2", "보험": "#FBC02D"}
+            # [Added] Net-ifier 엔진: 환불 내역을 역산하여 지출(exp_df) 차트에서 직접 깎아냅니다.
+            r_df = ledger_df[ledger_df['Category'] == '환불'].copy()
+            if not r_df.empty:
+                for _, r_row in r_df.iterrows():
+                    desc = str(r_row['Description']).replace(" ", "")
+                    # 스마트 카테고리 추론 (항공권, 호텔 매칭)
+                    t_cat = "기타"
+                    if any(k in desc for k in["호텔", "숙박", "인페라", "라이온", "스플랜디도"]): t_cat = "호텔"
+                    elif any(k in desc for k in ["항공", "귁첸", "소피아", "베오그라드", "부다페스트"]): t_cat = "항공권"
+                    
+                    r_val = r_row['Amount'] if str(r_row['Currency']).strip() == 'KRW' else r_row['Amount'] * r_row['AppliedRate']
+                    
+                    # 가장 금액이 큰 해당 카테고리 지출부터 차감
+                    while r_val > 0.5:
+                        cands = exp_df[(exp_df['Category'] == t_cat) & (exp_df['KRW_val'] > 0)]
+                        if cands.empty:
+                            cands = exp_df[exp_df['KRW_val'] > 0]
+                            if cands.empty: break
+                        m_idx = cands['KRW_val'].idxmax()
+                        take = min(r_val, exp_df.at[m_idx, 'KRW_val'])
+                        exp_df.at[m_idx, 'KRW_val'] -= take
+                        r_val -= take
+
+            color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "마트": "#E91E63", "Grab": "#00897B", "VinBus": "#00ACC1", "DiDi": "#00897B", "지하철": "#00ACC1", "택시": "#009688", "교통": "#009688", "렌트카": "#009688", "마사지": "#0288D1", "투어": "#673AB7", "입장료": "#3F51B5", "선물": "#9C27B0", "통신": "#FF9800", "수수료": "#795548", "팁": "#03A9F4", "항공권": "#D32F2F", "호텔": "#1976D2", "보험": "#FBC02D"}
             macro_color_map = {"🍔 식음료": "#4CAF50", "🚗 교통": "#00ACC1", "🏄 액티비티": "#0288D1", "🎁 쇼핑": "#9C27B0", "📱 통신/기타": "#FF9800", "✈️ 항공권": "#D32F2F", "🏨 숙박": "#1976D2", "🛡️ 보험": "#FBC02D", "기타": "#9E9E9E"}
 
             c_mode = st.radio("📊 분석 통화 선택",["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
@@ -799,12 +823,14 @@ with tab_stats:
             
             with c1:
                 st.info("🇰🇷 사전 결제")
-                st.metric("순지출액", f"{(dom_df['KRW_val'].sum() - dom_refund_total):,.0f} 원")
+                # [Modified] Net-ifier가 이미 차감했으므로 중복 차감 제거
+                st.metric("순지출액", f"{dom_df['KRW_val'].sum():,.0f} 원")
                 with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
                     dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
                     for cat_name, row_data in dg.iterrows():
                         st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
             with c2:
+                # ... (중간 동일하므로 유지: 덮어쓰실 때 with c2: 아래는 그대로 두세요) ...
                 st.success(f"🌏 여행지 지출")
                 st.metric("총액", f"{ovr_df['KRW_val'].sum():,.0f} 원")
                 with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
@@ -822,14 +848,12 @@ with tab_stats:
 
 with tab_final:
     if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
-        final_dom_refund_total = dom_refund_total if 'dom_refund_total' in locals() else 0
-
-        total_trip_krw = exp_df['KRW_val'].sum() - final_dom_refund_total
+        # [Modified] Net-ifier가 exp_df 내부의 값을 이미 깎았으므로, 여기서 추가로 빼지 않음 (이중 차감 방지)
+        total_trip_krw = exp_df['KRW_val'].sum()
         total_trip_loc = exp_df['Local_val'].sum()
         
-        #[Modified] 요약 탭 KPI에서도 고정비를 엄격히 분리하여 Net 기준 계산
         is_fixed_cost_final = (exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') | (exp_df['Category'].isin(FIXED_COST_CATS))
-        dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum() - final_dom_refund_total
+        dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum()
         ovr_total_krw = total_trip_krw - dom_total_krw
         ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
         
