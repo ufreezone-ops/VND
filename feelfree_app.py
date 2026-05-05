@@ -1,7 +1,3 @@
-#[Project: Feelfree Travel Ledger / Version: v26.05.04.002]
-#[Strategic Partner: Gem / Core: Force Rate Re-Induction Engine]
-#[Status: Smart Line Parser (Newline priority) Applied - 65.1 KB]
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -18,7 +14,6 @@ st.set_page_config(page_title="Feelfree: 글로벌 여행 가계부", page_icon=
 
 TZ_KST = timezone(timedelta(hours=9))
 
-# [Modified] 다중 국가(Multi-Node) 지원을 위한 GTL 설정 (보스니아, 카타르 제외 / 상하이, 글로벌 추가)
 TRIP_CONFIGS = {
     "🇻🇳 푸꾸옥 (2026)": {
         "sheet": "PQ_2026",
@@ -60,9 +55,10 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-VERSION = "v26.05.05.002"
-UPDATE_LOG_TEXT = """* `[Added]` GTL 글로벌 헌법 제정: 발칸 6국 다중 통화/국가 동적 스위칭 지원. 
-* `[Fixed]` 전체 블록 교체 방식으로 코드 제공 프로토콜 최적화(Indentation Error 방지)."""
+VERSION = "v26.05.05.003"
+UPDATE_LOG_TEXT = """* `[Fixed]` 전체 코드 통합 및 무결성 복구. (탭 중복 및 누락 현상 수정)
+* `[Fixed]` 현금 인벤토리 자산 클래스 분류 시 '종이돈', '지폐' 키워드 인식 추가.
+* `[Fixed]` 순지출(Net) 산출 로직 완벽 연동."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -91,36 +87,11 @@ st.markdown("""
     .stTabs[data-baseweb="tab-list"] { gap: 15px; padding-bottom: 10px; }
     .stTabs[data-baseweb="tab"] { background-color: #1c1f2b; border-radius: 8px 8px 0 0; padding: 12px 25px; color: #ffffff; }
     .stTabs[aria-selected="true"] { background-color: #00FF00 !important; color: #000000 !important; font-weight: bold; }
-
-    /* [Added] 사이드바 여행지 선택기(Selectbox) 고대비 스타일링 */
-    div[data-testid="stSidebar"] div[data-baseweb="select"] > div {
-        border: 2px solid #00FF00 !important; /* Neon Green 테두리 */
-        background-color: #1e2130 !important; /* 배경을 약간 밝게 */
-        border-radius: 10px !important;
-    }
-    div[data-testid="stSidebar"] .stSelectbox label {
-        color: #00FF00 !important; /* 라벨 텍스트 강조 */
-        font-weight: bold !important;
-        font-size: 1.1rem !important;
-    }
-    /* [Added] 드롭다운(풀다운) 리스트에서 선택된 항목 하이라이트 */
-    div[data-baseweb="popover"] li[aria-selected="true"] {
-        background-color: #FFA500 !important; /* 주황색 배경 */
-        color: #000000 !important; /* 검정색 글자 */
-        font-weight: bold !important;
-    }
-
-    /* [Added] 드롭다운 리스트 마우스 호버(Hover) 시 스타일 */
-    div[data-baseweb="popover"] li:hover {
-        background-color: #FFD700 !important; /* 호버 시 노란색 계열 */
-        color: #000000 !important;
-    }
-
-    /* 사이드바 전용 선택기 라벨 색상 보정 */
-    div[data-testid="stSidebar"] .stSelectbox label p {
-        color: #FFD700 !important; /* 라벨을 노란색으로 더 강조 */
-    }
-    
+    div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #00FF00 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
+    div[data-testid="stSidebar"] .stSelectbox label { color: #00FF00 !important; font-weight: bold !important; font-size: 1.1rem !important; }
+    div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
+    div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
+    div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -395,7 +366,6 @@ def calculate_summary_metrics(df):
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True)
     b_total = temp_df['Cum_Budget_KRW'].iloc[-1] if 'Cum_Budget_KRW' in temp_df.columns else 0
     
-    # 총지출 계산 후, 원화계좌로 취소/환불된 금액(항공권/숙박 취소 등)만 차감하여 순지출(Net) 도출
     gross_spent = temp_df[temp_df['IsExpense'] == 1].apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
     expense_refunds = temp_df[(temp_df['Category'] == '환불') & (temp_df['PaymentMethod'].apply(get_asset_class) == 'DOMESTIC')]
     refund_total = expense_refunds.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
@@ -464,7 +434,6 @@ with tab_in:
     dynamic_tz = timezone(timedelta(hours=IN_CFG["timezone"])) if "한국" not in str(st.session_state.current_tz) else TZ_KST
     sel_date = st.date_input("날짜 선택", value=datetime.now(dynamic_tz).date(), key="shared_date_input")
 
-    # [Added] 구성(TRIP_CONFIGS) 기반 동적 통화 리스트 생성
     available_currs = sorted(list(set(node["currency"] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())))
 
     if mode == "일반 지출":
@@ -477,8 +446,7 @@ with tab_in:
             
         col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
         with col_m1: 
-            # [Modified] 하드코딩 제거: IN_CURR를 최우선으로, 이후 KRW, USD 및 나머지 동적 통화 배치
-            curr_opts =[IN_CURR, "KRW", "USD"] + [c for c in available_currs if c not in [IN_CURR, "KRW", "USD"]]
+            curr_opts =[IN_CURR, "KRW", "USD"] + [c for c in available_currs if c not in[IN_CURR, "KRW", "USD"]]
             curr = st.selectbox("통화", curr_opts, key="exp_curr")
         with col_m2:
             met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌(한국)", "원화계좌(현지)"] if curr != "KRW" else["원화계좌(한국)", "원화계좌(현지)"]
@@ -537,8 +505,7 @@ with tab_in:
         ty = st.selectbox("유형",["직접환전 (원화계좌 -> 지폐)", "충전 (원화계좌 -> 카드)", "ATM출금 (카드 -> 지폐)"], key="tr_type")
         c1, c2 = st.columns(2)
         with c1:
-            # [Modified] 하드코딩 제거
-            curr_opts_tr =[IN_CURR, "USD"] + [c for c in available_currs if c not in[IN_CURR, "USD", "KRW"]]
+            curr_opts_tr =[IN_CURR, "USD"] +[c for c in available_currs if c not in[IN_CURR, "USD", "KRW"]]
             curr_tr = st.selectbox("대상 통화", curr_opts_tr, key="tr_curr")
             
             if curr_tr == IN_CURR and IN_MULTI == 100:
@@ -575,8 +542,7 @@ with tab_in:
         st.subheader("🔙 결제 취소 및 환불 (Rollback)")
         col_r1, col_r2 = st.columns(2)
         with col_r1:
-            # [Modified] 하드코딩 제거
-            curr_opts_rf = [IN_CURR, "KRW", "USD"] +[c for c in available_currs if c not in [IN_CURR, "KRW", "USD"]]
+            curr_opts_rf =[IN_CURR, "KRW", "USD"] +[c for c in available_currs if c not in[IN_CURR, "KRW", "USD"]]
             r_curr = st.selectbox("취소된 통화", curr_opts_rf, key="rf_curr")
             
             r_met = st.selectbox("돌려받을 지갑",[f"현금({r_curr})", f"트래블로그({r_curr})", "원화계좌(한국)", "원화계좌(현지)"] if r_curr != "KRW" else["원화계좌(한국)", "원화계좌(현지)"], key="rf_met")
@@ -600,6 +566,109 @@ with tab_in:
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
 # --- SECTION 6:[Module D, E: History & Settlement] ---
+with tab_his:
+    st.info("💡 **표의 행(Row)을 클릭(터치)하시면 바로 아래에 상세 내역 수정과 영수증 첨부 화면이 펼쳐집니다!**")
+    
+    viewer_placeholder = st.empty()
+    
+    c_filter, c_search, c_global, c_tog = st.columns([1, 2, 1, 1])
+    with c_filter:
+        country_filter = st.selectbox("🌍 국가 필터", ["전체"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys()), key="his_country")
+    with c_search: 
+        search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
+    with c_global:
+        global_search = st.toggle("🌍 전체 검색", value=False, key="global_search_toggle")
+    with c_tog: 
+        edit_mode = st.toggle("✏️ 직접 수정 모드", value=False, key="his_edit_toggle")
+
+    if global_search and search_query.strip():
+        st.warning("⚠️ '전체 검색' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
+        edit_mode = False 
+        display_df = load_all_trips_data()
+    else:
+        display_df = ledger_df.copy()
+        if country_filter != "전체":
+            display_df = display_df[display_df['Country'] == country_filter]
+
+    if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
+        if save_data(ledger_df):
+            st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
+            
+    if not display_df.empty: 
+        display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
+        display_df = display_df.reindex(columns=FINAL_COLUMNS)
+        link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
+        
+        if search_query.strip():
+            mask = (
+                display_df['Category'].str.contains(search_query, case=False, na=False) | 
+                display_df['Description'].str.contains(search_query, case=False, na=False) | 
+                display_df['Note'].str.contains(search_query, case=False, na=False) |
+                display_df['Country'].str.contains(search_query, case=False, na=False) 
+            )
+            filtered_df = display_df[mask]
+            st.write(f"🔎 검색 결과: {len(filtered_df)}건")
+            st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
+            
+        elif edit_mode:
+            edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
+            if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
+                if save_data(edited_df): st.rerun()
+                
+        else:
+            df_event = st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
+            
+            if df_event.selection.rows:
+                selected_idx = df_event.selection.rows[0]
+                row_data = display_df.iloc[selected_idx]
+                
+                with viewer_placeholder.container():
+                    st.markdown("---")
+                    c_info, c_edit = st.columns([1, 1])
+                    
+                    with c_info:
+                        st.subheader("🧾 상세 내역 및 영수증 뷰어")
+                        amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
+                        st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']})")
+                        st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
+                        
+                        desc_full = str(row_data['Description'])
+                        if "-" in desc_full:
+                            parts = desc_full.split("-", 1)
+                            st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
+                            detail_str = parts[1].strip()
+                            st.markdown("**📝 세부 구매 내역:**")
+                            items = detail_str.split("\n") if "\n" in detail_str else detail_str.split(",")
+                            for item in items: 
+                                if item.strip(): st.markdown(f"- {item.strip()}")
+                        else:
+                            if "\n" in desc_full:
+                                st.markdown("**📝 세부 내역:**")
+                                for item in desc_full.split("\n"):
+                                    if item.strip(): st.markdown(f"- {item.strip()}")
+                            else:
+                                st.markdown(f"**📝 내역:** {desc_full}")
+                            
+                        if str(row_data['Receipt_URL']).startswith("http"):
+                            st.image(row_data['Receipt_URL'], use_container_width=True)
+                        else:
+                            st.info("첨부된 영수증 사진이 없습니다.")
+                            
+                    with c_edit:
+                        st.subheader("✏️ 내역 보강 및 영수증 첨부")
+                        st.caption("세부 내역을 엑셀에서 복사해 붙여넣거나 엔터(줄바꿈)로 여러 개 입력하시면, 왼쪽 뷰어에서 깔끔하게 분리되어 표시됩니다.")
+                        new_desc = st.text_area("📝 세부 내역 (수정/추가)", value=row_data['Description'], height=150)
+                        new_receipt = st.file_uploader("📸 새 영수증 사진 업로드", type=['png', 'jpg', 'jpeg'], key="inline_receipt")
+                        
+                        if st.button("💾 이 내역 업데이트", use_container_width=True):
+                            display_df.at[selected_idx, 'Description'] = new_desc
+                            if new_receipt:
+                                with st.spinner("클라우드 전송 중..."):
+                                    url = upload_image_to_imgbb(new_receipt)
+                                    if url: display_df.at[selected_idx, 'Receipt_URL'] = url
+                            if save_data(display_df): st.success("업데이트 완료!"); time.sleep(1); st.rerun()
+                    st.markdown("---")
+
 with tab_stats:
     if not ledger_df.empty:
         exp_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
@@ -697,15 +766,21 @@ with tab_stats:
 
 with tab_final:
     if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
-        total_trip_krw = exp_df['KRW_val'].sum() - dom_refund_total
-        dom_total_krw = exp_df[exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)']['KRW_val'].sum() - dom_refund_total
-        ovr_total_krw = total_trip_krw - dom_total_krw; ovr_total_loc = exp_df[exp_df['PaymentMethod'].str.strip() != '원화계좌(한국)']['Local_val'].sum()
+        final_dom_refund_total = dom_refund_total if 'dom_refund_total' in locals() else 0
+        total_trip_krw = exp_df['KRW_val'].sum() - final_dom_refund_total
+        total_trip_loc = exp_df['Local_val'].sum()
+        dom_total_krw = exp_df[exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)']['KRW_val'].sum() - final_dom_refund_total
+        ovr_total_krw = total_trip_krw - dom_total_krw
+        ovr_total_loc = exp_df[exp_df['PaymentMethod'].str.strip() != '원화계좌(한국)']['Local_val'].sum()
         local_v = exp_df[(exp_df['IsSurvival'] == 1) & (exp_df['Currency'].str.strip() == TRAVEL_CURRENCY)].copy()
         avg_local_krw = local_v['KRW_val'].sum() / 7 if not local_v.empty else 0
         avg_local_loc = local_v['Local_val'].sum() / 7 if not local_v.empty else 0
+        
+        fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
         def kpi_box(title, krw, loc=None):
             loc_str = f"<div class='kpi-value-vnd'>({fmt_local.format(loc)} {LOCAL_SYM})</div>" if loc is not None else ""
             return f"<div class='kpi-box'><div class='kpi-title'>{title}</div><div class='kpi-value-krw'>{krw:,.0f} 원</div>{loc_str}</div>"
+            
         st.header("🏁 여행요약")
         k1, k2, k3, k4 = st.columns(4)
         with k1: st.markdown(kpi_box("여행 최종 순지출", total_trip_krw, total_trip_loc), unsafe_allow_html=True)
@@ -728,39 +803,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.05.002 | Volume Guard: 68.5 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
-
-with tab_final:
-    if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
-        total_trip_krw = exp_df['KRW_val'].sum(); total_trip_loc = exp_df['Local_val'].sum()
-        dom_total_krw = exp_df[exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)']['KRW_val'].sum()
-        ovr_total_krw = total_trip_krw - dom_total_krw; ovr_total_loc = exp_df[exp_df['PaymentMethod'].str.strip() != '원화계좌(한국)']['Local_val'].sum()
-        local_v = exp_df[(exp_df['IsSurvival'] == 1) & (exp_df['Currency'].str.strip() == TRAVEL_CURRENCY)].copy()
-        avg_local_krw = local_v['KRW_val'].sum() / 7 if not local_v.empty else 0
-        avg_local_loc = local_v['Local_val'].sum() / 7 if not local_v.empty else 0
-        def kpi_box(title, krw, loc=None):
-            loc_str = f"<div class='kpi-value-vnd'>({fmt_local.format(loc)} {LOCAL_SYM})</div>" if loc is not None else ""
-            return f"<div class='kpi-box'><div class='kpi-title'>{title}</div><div class='kpi-value-krw'>{krw:,.0f} 원</div>{loc_str}</div>"
-        st.header("🏁 여행요약")
-        k1, k2, k3, k4 = st.columns(4)
-        with k1: st.markdown(kpi_box("여행 최종 총 지출", total_trip_krw, total_trip_loc), unsafe_allow_html=True)
-        with k2: st.markdown(kpi_box("국내 지출 총액", dom_total_krw), unsafe_allow_html=True)
-        with k3: st.markdown(kpi_box("현지 지출 총액", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
-        with k4: st.markdown(kpi_box(f"현지 일상/생존 1일 평균", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
-        
-        st.subheader("🌳 지출분석 (Treemap)")
-        fig_tree = px.treemap(exp_df, path=['Macro_Category', 'Category', 'Description'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
-        fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>%{percentRoot:.1%}")
-        fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=0), font=dict(size=14))
-        st.plotly_chart(fig_tree, use_container_width=True)
-        
-        st.subheader("🍕 지출비중")
-        cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
-        fig_donut = px.pie(cat_pie, values='KRW_val', names='Macro_Category', hole=0.5, color_discrete_sequence=px.colors.qualitative.Set3)
-        fig_donut.update_traces(textposition='inside', textinfo='label+value+percent', texttemplate='%{label}<br>%{value:,.0f}원<br>%{percent:.1%}')
-        until_day = exp_df['Date'].max().split('(')[0]
-        fig_donut.add_annotation(text=f"<b>총 지출</b><br>{total_trip_krw:,.0f} 원<br><span style='font-size:10px'>Until {until_day}</span>", showarrow=False, font=dict(size=16))
-        fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
-        st.plotly_chart(fig_donut, use_container_width=True)
-
-st.caption(f"GTL Platform v26.05.04.002 | Volume Guard: 65.1 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.05.003 | Volume Guard: 68.5 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
