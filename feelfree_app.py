@@ -57,10 +57,10 @@ IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 # [Modified] 버전 및 업데이트 로그
-VERSION = "v26.05.05.004"
-UPDATE_LOG_TEXT = """* `[Added]` 자산 이동 내 '재환전(외화매도)' 기능 추가 및 환차손익(FX Diff) 투명 분할 기록 로직 적용.
-* `[Fixed]` 환전 및 재환전 내역의 오분류(환불/기타 등)로 인한 지출 총액 및 인벤토리 누수 문제 완벽 해결.
-* `[Fixed]` 전체 코드 통합 및 무결성 복구."""
+VERSION = "v26.05.05.005"
+UPDATE_LOG_TEXT = """* `[Added]` 일일 지출 차트 및 테이블에 '국가별 분리(Time-Space)' 뷰 적용. 동일 국가 재방문 시에도 시간순 정렬 완벽 유지.
+* `[Added]` 자산 이동 내 '재환전(외화매도)' 기능 추가 및 환차손익 투명 분할 기록.
+* `[Fixed]` 환불 내역 Net-ifier 엔진 탑재로 차트 및 요약 지표 다이어트 완료."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -783,20 +783,32 @@ with tab_stats:
                 ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
                 ovr_df = ovr_df.sort_values(by='Date_Clean')
                 
-                fig2 = px.bar(ovr_df, x='Date_Clean', y=y_col, color='Category', title=None, color_discrete_map=color_map)
+                # [Added] 국가별 정보를 x축 라벨에 HTML로 병기하여 시각적 분리감 확보
+                ovr_df['Date_Country'] = ovr_df['Date_Clean'] + "<br><span style='font-size:11px;color:#AAAAAA'>" + ovr_df['Country'] + "</span>"
+                
+                fig2 = px.bar(ovr_df, x='Date_Country', y=y_col, color='Category', title=None, color_discrete_map=color_map)
                 fig2.update_layout(barmode='stack', margin=dict(l=10, r=10, t=30, b=120), legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5))
-                fig2.update_xaxes(categoryorder='category ascending')
-                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 여행지 일일 지출 ({len(ovr_df['Date_Clean'].unique())}일차)</h4>", unsafe_allow_html=True)
+                # [Modified] 알파벳순 강제 정렬을 방지하고 실제 시간순(Array)을 강제 유지
+                fig2.update_xaxes(categoryorder='array', categoryarray=ovr_df['Date_Country'].unique())
+                st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 국가별/일일 지출 흐름 ({len(ovr_df['Date_Clean'].unique())}일차)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 
             st.divider()
-            # [Modified] 일별 지출 테이블을 전체(exp_df)가 아닌 고정비가 제외된 현지 지출(ovr_df) 기준으로 변경
-            daily_set = ovr_df.groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'KRW_val', 'Local_val'])
+            # [Modified] 일별 지출 테이블 GroupBy 쿼리에 '국가(Country)' 정보 묶음 연산 추가
+            daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
             surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
             daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
             fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
-            st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총(원)','Local_val':f'총({LOCAL_SYM})','S_KRW':'일상(원)','S_Loc':f'일상({LOCAL_SYM})'}).style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}))
-
+            
+            # [Added] 렌더링 시 컬럼 순서를 '국가 -> 날짜 -> 금액' 순으로 엑셀과 동일하게 배치
+            if not daily_table.empty:
+                display_table = daily_table[['Country', 'Date', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(
+                    columns={'Country':'국가', 'Date':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'}
+                )
+                st.table(display_table.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}))
+            else:
+                st.info("현지 지출 데이터가 없습니다.")
+                
             dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
             if not dom_df.empty:
                 st.divider()
