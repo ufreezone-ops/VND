@@ -588,11 +588,11 @@ with tab_in:
 with tab_his:
     st.info("💡 **표의 행(Row)을 클릭(터치)하시면 바로 아래에 상세 내역 수정과 영수증 첨부 화면이 펼쳐집니다!**")
     
-viewer_placeholder = st.empty()
+    viewer_placeholder = st.empty()
     
     c_filter, c_search, c_global, c_tog = st.columns([1, 2, 1, 1])
     with c_filter:
-        country_filter = st.selectbox("🌍 국가 필터", ["전체"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys()), key="his_country")
+        country_filter = st.selectbox("🌍 국가 필터",["전체"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys()), key="his_country")
     with c_search: 
         search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
     with c_global:
