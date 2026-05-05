@@ -25,7 +25,7 @@ TRIP_CONFIGS = {
         "nodes": {"중국": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1}},
         "cats":["식사", "간식", "DiDi", "지하철", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금"]
     },
-    "🗺️ 발칸6국(2024)": {
+    "🗺️ 발칸/동유럽 (2024)": {
         "sheet": "BK_2024",
         "nodes": {
             "튀르키예": {"currency": "TRY", "symbol": "₺", "timezone": 3, "multiplier": 1},
@@ -41,8 +41,9 @@ TRIP_CONFIGS = {
     }
 }
 
+# [Modified] MACRO_MAP에 재환전, 렌트카 추가
 MACRO_MAP = {
-    "Grab": "🚗 교통", "VinBus": "🚗 교통", "DiDi": "🚗 교통", "지하철": "🚗 교통", "택시": "🚗 교통","렌트카": "🚗 교통",
+    "Grab": "🚗 교통", "VinBus": "🚗 교통", "DiDi": "🚗 교통", "지하철": "🚗 교통", "택시": "🚗 교통", "렌트카": "🚗 교통",
     "식사": "🍔 식음료", "간식": "🍔 식음료", "마트": "🍔 식음료",
     "마사지": "🏄 액티비티", "투어": "🏄 액티비티", "입장료": "🏄 액티비티",
     "선물": "🎁 쇼핑", "통신": "📱 통신/기타", "수수료": "📱 통신/기타", "팁": "📱 통신/기타",
@@ -57,10 +58,11 @@ IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 # [Modified] 버전 및 업데이트 로그
-VERSION = "v26.05.05.005"
-UPDATE_LOG_TEXT = """* `[Added]` 일일 지출 차트 및 테이블에 '국가별 분리(Time-Space)' 뷰 적용. 동일 국가 재방문 시에도 시간순 정렬 완벽 유지.
-* `[Added]` 자산 이동 내 '재환전(외화매도)' 기능 추가 및 환차손익 투명 분할 기록.
-* `[Fixed]` 환불 내역 Net-ifier 엔진 탑재로 차트 및 요약 지표 다이어트 완료."""
+VERSION = "v26.05.06.001"
+UPDATE_LOG_TEXT = """* `[Modified]` 모바일 최적화: 차트 X축 겹침 방지(-90도 회전) 및 일별 지출 표 가로 스크롤 지원(st.dataframe) 적용.
+* `[Added]` 일일 지출 차트 및 테이블에 '국가별 분리(Time-Space)' 뷰 적용. 
+* `[Added]` 자산 이동 내 '재환전' 기능 추가 및 환차손익 투명 분할 기록.
+* `[Fixed]` 환불 내역 Net-ifier 엔진 탑재로 차트 지표 다이어트 완료."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -118,7 +120,7 @@ if 'last_cat_idx' not in st.session_state: st.session_state.last_cat_idx = 0
 # --- SECTION 2:[Module A] Data Engine ---
 def get_asset_class(text):
     txt = str(text).replace(" ", "")
-    if any(k in txt for k in ["현금", "종이돈", "지폐"]): return "CASH" 
+    if any(k in txt for k in["현금", "종이돈", "지폐"]): return "CASH" 
     if any(k in txt for k in["트래블", "월렛", "카드"]): return "PREPAID" 
     return "DOMESTIC" 
 
@@ -214,6 +216,7 @@ def recalculate_entire_ledger(df):
     for i, row in temp_df.iterrows():
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
+        
         # [Modified] 재환전을 명시적 비지출(0) 항목으로 보호
         is_exp = 1 if cat in EXPENSE_CATS and cat not in['환불', '보증금', '재환전'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
@@ -238,8 +241,8 @@ def recalculate_entire_ledger(df):
             else:
                 target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
-        
-        # [Added] 재환전: 인벤토리 차감 및 원금(Budget) 회수 로직
+                
+        # [Added] 재환전 인벤토리 차감 및 원금(Budget) 회수 로직
         elif cat == '재환전':
             if curr != 'KRW':
                 target_from = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
@@ -417,13 +420,13 @@ with st.sidebar:
             
             c1.metric(f"💳 카드", f"{fmt.format(c_card)}")
             if current_inventory_batches.get(f"트래블로그({c})"):
-                with c1.expander("카드배치", expanded=False):
+                with c1.expander("↳ 카드 환율 배치", expanded=False):
                     for b in current_inventory_batches[f"트래블로그({c})"]:
                         if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @ {b['rate']:.2f}원")
             
             c2.metric(f"💵 현금", f"{fmt.format(c_cash)}")
             if current_inventory_batches.get(f"현금({c})"):
-                with c2.expander("현금배치", expanded=False):
+                with c2.expander("↳ 현금 환율 배치", expanded=False):
                     for b in current_inventory_batches[f"현금({c})"]:
                         if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @ {b['rate']:.2f}원")
             st.divider()
@@ -477,7 +480,7 @@ with tab_in:
                 if not extracted.empty: harvested_tags = set(extracted[0].dropna().unique())
             
             default_gateways =["알리페이", "위챗페이", "네이버페이", "카카오페이", "Apple Pay", "토스페이", "Trip.com", "Agoda", "Booking.com", "Uber", "Bolt", "Revolut"]
-            combined_gateways = ["선택안함 (기본)"] + sorted(list(set(default_gateways) | harvested_tags)) + ["➕ 직접 입력하기"]
+            combined_gateways =["선택안함 (기본)"] + sorted(list(set(default_gateways) | harvested_tags)) +["➕ 직접 입력하기"]
             gateway_sel = st.selectbox("결제 플랫폼 (Gateway)", combined_gateways, key="exp_gw")
             
             final_gateway = ""
@@ -528,7 +531,7 @@ with tab_in:
         # [Added] 재환전 전용 UI 및 환차손익 로직 추가
         if "재환전" in ty:
             with c1:
-                curr_opts_tr = [c for c in available_currs if c not in ["KRW"]]
+                curr_opts_tr =[c for c in available_currs if c not in ["KRW"]]
                 curr_tr = st.selectbox("팔(Sell) 통화", curr_opts_tr, key="tr_curr")
                 s_amt = st.number_input(f"팔 외화 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_sell_flt")
                 source_met = st.selectbox("외화 출처",[f"트래블로그({curr_tr})", f"현금({curr_tr})"], key="tr_sell_met")
@@ -750,14 +753,12 @@ with tab_stats:
             if not r_df.empty:
                 for _, r_row in r_df.iterrows():
                     desc = str(r_row['Description']).replace(" ", "")
-                    # 스마트 카테고리 추론 (항공권, 호텔 매칭)
                     t_cat = "기타"
                     if any(k in desc for k in["호텔", "숙박", "인페라", "라이온", "스플랜디도"]): t_cat = "호텔"
-                    elif any(k in desc for k in ["항공", "귁첸", "소피아", "베오그라드", "부다페스트"]): t_cat = "항공권"
+                    elif any(k in desc for k in["항공", "귁첸", "소피아", "베오그라드", "부다페스트"]): t_cat = "항공권"
                     
                     r_val = r_row['Amount'] if str(r_row['Currency']).strip() == 'KRW' else r_row['Amount'] * r_row['AppliedRate']
                     
-                    # 가장 금액이 큰 해당 카테고리 지출부터 차감
                     while r_val > 0.5:
                         cands = exp_df[(exp_df['Category'] == t_cat) & (exp_df['KRW_val'] > 0)]
                         if cands.empty:
@@ -774,7 +775,6 @@ with tab_stats:
             c_mode = st.radio("📊 분석 통화 선택",["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
             y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
-# [Modified] 결제수단과 무관하게 고정비(항공/호텔/보험)는 무조건 '사전 결제' 그룹으로 강제 분리
             is_fixed_cost = (exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') | (exp_df['Category'].isin(FIXED_COST_CATS))
 
             ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국']))]
@@ -787,9 +787,9 @@ with tab_stats:
                 ovr_df['Date_Country'] = ovr_df['Date_Clean'] + "<br><span style='font-size:11px;color:#AAAAAA'>" + ovr_df['Country'] + "</span>"
                 
                 fig2 = px.bar(ovr_df, x='Date_Country', y=y_col, color='Category', title=None, color_discrete_map=color_map)
-                fig2.update_layout(barmode='stack', margin=dict(l=10, r=10, t=30, b=120), legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5))
-                # [Modified] 알파벳순 강제 정렬을 방지하고 실제 시간순(Array)을 강제 유지
-                fig2.update_xaxes(categoryorder='array', categoryarray=ovr_df['Date_Country'].unique())
+                # [Modified] X축 텍스트 겹침 방지를 위해 강제 -90도 회전 및 폰트 크기 조정, 하단 마진 증가
+                fig2.update_layout(barmode='stack', margin=dict(l=10, r=10, t=30, b=150), legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5))
+                fig2.update_xaxes(categoryorder='array', categoryarray=ovr_df['Date_Country'].unique(), tickangle=-90, tickfont=dict(size=10))
                 st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 국가별/일일 지출 흐름 ({len(ovr_df['Date_Clean'].unique())}일차)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 
@@ -805,10 +805,11 @@ with tab_stats:
                 display_table = daily_table[['Country', 'Date', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(
                     columns={'Country':'국가', 'Date':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'}
                 )
-                st.table(display_table.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}))
+                # [Modified] 모바일에서 국가 이름 세로 늘어짐(행 높이 팽창) 방지를 위해 st.table 대신 반응형 st.dataframe 사용 및 인덱스 숨김 처리
+                st.dataframe(display_table.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}), use_container_width=True, hide_index=True)
             else:
                 st.info("현지 지출 데이터가 없습니다.")
-                
+
             dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
             if not dom_df.empty:
                 st.divider()
@@ -843,7 +844,6 @@ with tab_stats:
                     for cat_name, row_data in dg.iterrows():
                         st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
             with c2:
-                # ... (중간 동일하므로 유지: 덮어쓰실 때 with c2: 아래는 그대로 두세요) ...
                 st.success(f"🌏 여행지 지출")
                 st.metric("총액", f"{ovr_df['KRW_val'].sum():,.0f} 원")
                 with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
@@ -901,4 +901,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform v26.05.05.003 | Volume Guard: 68.5 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform v26.05.06.001 | Volume Guard: 69.8 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
