@@ -57,12 +57,10 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-# [Modified] 버전 및 업데이트 로그
-VERSION = "v26.05.06.001"
-UPDATE_LOG_TEXT = """* `[Modified]` 모바일 최적화: 차트 X축 겹침 방지(-90도 회전) 및 일별 지출 표 가로 스크롤 지원(st.dataframe) 적용.
-* `[Added]` 일일 지출 차트 및 테이블에 '국가별 분리(Time-Space)' 뷰 적용. 
-* `[Added]` 자산 이동 내 '재환전' 기능 추가 및 환차손익 투명 분할 기록.
-* `[Fixed]` 환불 내역 Net-ifier 엔진 탑재로 차트 지표 다이어트 완료."""
+# [Modified] 버전 및 업데이트 로그 v26.05.06.002
+VERSION = "v26.05.06.002"
+UPDATE_LOG_TEXT = """* `[Improved]` 탭 디자인 혁신: 밋밋했던 상단 탭을 도드라지는 버튼형 디자인으로 변경하여 선택 상태의 시인성을 극대화함.
+* `[Fixed]` 모바일 최적화: 차트 X축 겹침 방지 및 일별 지출 표 가로 스크롤 지원 적용 완료."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -88,9 +86,42 @@ st.markdown("""
     .kpi-value-krw { font-size: 26px; font-weight: bold; color: #ffffff; line-height: 1.1; }
     .kpi-value-vnd { font-size: 18px; color: #00FF00; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
     div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
-    .stTabs[data-baseweb="tab-list"] { gap: 15px; padding-bottom: 10px; }
-    .stTabs[data-baseweb="tab"] { background-color: #1c1f2b; border-radius: 8px 8px 0 0; padding: 12px 25px; color: #ffffff; }
-    .stTabs[aria-selected="true"] { background-color: #00FF00 !important; color: #000000 !important; font-weight: bold; }
+
+    /* [Modified] 도드라지는 탭 디자인 (버튼형 Segmented Control) */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 12px;
+        padding: 8px 12px;
+        background-color: #161a25; 
+        border-radius: 15px;
+        border: 1px solid #333;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        height: 45px;
+        background-color: #1c1f2b; 
+        border-radius: 10px !important;
+        padding: 0px 25px !important;
+        color: #888 !important; 
+        border: 1px solid transparent;
+        transition: all 0.3s ease;
+    }
+
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: #2c3143;
+        color: #ffffff !important;
+    }
+
+    /* 선택된 활성 탭 하이라이트 */
+    .stTabs [aria-selected="true"] {
+        background-color: #00FF00 !important; 
+        color: #000000 !important; 
+        font-weight: 800 !important;
+        box-shadow: 0px 4px 15px rgba(0, 255, 0, 0.4) !important; 
+        border: 1px solid #00FF00 !important;
+        transform: translateY(-2px); 
+    }
+
+    /* 사이드바 및 기타 UI 일관성 유지 */
     div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #00FF00 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
     div[data-testid="stSidebar"] .stSelectbox label { color: #00FF00 !important; font-weight: bold !important; font-size: 1.1rem !important; }
     div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
