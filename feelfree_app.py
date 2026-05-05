@@ -25,7 +25,7 @@ TRIP_CONFIGS = {
         "nodes": {"중국": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1}},
         "cats":["식사", "간식", "DiDi", "지하철", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금"]
     },
-    "🗺️ 발칸/동유럽 (2024)": {
+    "🗺️발칸6국(2024)": {
         "sheet": "BK_2024",
         "nodes": {
             "튀르키예": {"currency": "TRY", "symbol": "₺", "timezone": 3, "multiplier": 1},
@@ -420,13 +420,13 @@ with st.sidebar:
             
             c1.metric(f"💳 카드", f"{fmt.format(c_card)}")
             if current_inventory_batches.get(f"트래블로그({c})"):
-                with c1.expander("↳ 카드 환율 배치", expanded=False):
+                with c1.expander("카드배치", expanded=False):
                     for b in current_inventory_batches[f"트래블로그({c})"]:
                         if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @ {b['rate']:.2f}원")
             
             c2.metric(f"💵 현금", f"{fmt.format(c_cash)}")
             if current_inventory_batches.get(f"현금({c})"):
-                with c2.expander("↳ 현금 환율 배치", expanded=False):
+                with c2.expander("현금배치", expanded=False):
                     for b in current_inventory_batches[f"현금({c})"]:
                         if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @ {b['rate']:.2f}원")
             st.divider()
@@ -790,7 +790,7 @@ with tab_stats:
                 # [Modified] X축 텍스트 겹침 방지를 위해 강제 -90도 회전 및 폰트 크기 조정, 하단 마진 증가
                 fig2.update_layout(barmode='stack', margin=dict(l=10, r=10, t=30, b=150), legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5))
                 fig2.update_xaxes(categoryorder='array', categoryarray=ovr_df['Date_Country'].unique(), tickangle=-90, tickfont=dict(size=10))
-                st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 국가별/일일 지출 흐름 ({len(ovr_df['Date_Clean'].unique())}일차)</h4>", unsafe_allow_html=True)
+                st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({len(ovr_df['Date_Clean'].unique())}일차)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 
             st.divider()
@@ -816,7 +816,7 @@ with tab_stats:
                 fig1 = px.treemap(dom_df, path=['Macro_Category', 'Category', 'Description'], values=y_col, color='Macro_Category', color_discrete_map=macro_color_map)
                 fig1.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
                 fig1.update_layout(margin=dict(l=10, r=10, t=30, b=30))
-                st.markdown("<h4 style='text-align: center;'>🛫 사전 결제 비중 분석 (Treemap)</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 style='text-align: center;'>🛫 사전결제(Treemap)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
 
             if len(TRIP_CONFIGS[st.session_state.current_trip]["nodes"]) > 1 and not ovr_df.empty:
@@ -824,11 +824,11 @@ with tab_stats:
                 fig_country = px.treemap(ovr_df, path=['Country', 'Macro_Category', 'Category'], values=y_col, color='Country', color_discrete_sequence=px.colors.qualitative.Pastel)
                 fig_country.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
                 fig_country.update_layout(margin=dict(l=10, r=10, t=30, b=30))
-                st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지 지출 비중 분석 (Treemap)</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지지출(Treemap)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
 
             st.divider()
-            st.subheader("🏁 여행 비용 요약 (Net 기준)")
+            st.subheader("🏁 여행 비용 요약 (Net)")
             c1, c2 = st.columns(2)
             
             refund_df = ledger_df[ledger_df['Category'] == '환불']
@@ -839,24 +839,24 @@ with tab_stats:
                 st.info("🇰🇷 사전 결제")
                 # [Modified] Net-ifier가 이미 차감했으므로 중복 차감 제거
                 st.metric("순지출액", f"{dom_df['KRW_val'].sum():,.0f} 원")
-                with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
+                with st.expander("상세내역", expanded=False):
                     dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
                     for cat_name, row_data in dg.iterrows():
                         st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
             with c2:
                 st.success(f"🌏 여행지 지출")
                 st.metric("총액", f"{ovr_df['KRW_val'].sum():,.0f} 원")
-                with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
+                with st.expander("상세내역", expanded=False):
                     og = ovr_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
                     for cat_name, row_data in og.iterrows():
                         st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
 
             if not refund_df.empty:
                 st.divider()
-                st.subheader("🛡️ 손실 및 보상 상쇄 분석 (Resilience)")
+                st.subheader("🛡️ 손실과 보상")
                 r_krw = refund_df.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
-                st.warning(f"**총 환불 및 자산회수액:** {r_krw:,.0f} 원")
-                with st.expander("↳ 보상 내역 상세 보기", expanded=False):
+                st.warning(f"**환불총액:** {r_krw:,.0f} 원")
+                with st.expander("상세내역", expanded=False):
                     st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
 with tab_final:
