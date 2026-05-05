@@ -459,6 +459,9 @@ with tab_in:
     dynamic_tz = timezone(timedelta(hours=IN_CFG["timezone"])) if "한국" not in str(st.session_state.current_tz) else TZ_KST
     sel_date = st.date_input("날짜 선택", value=datetime.now(dynamic_tz).date(), key="shared_date_input")
 
+    # [Added] 구성(TRIP_CONFIGS) 기반 동적 통화 리스트 생성
+    available_currs = sorted(list(set(node["currency"] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())))
+
     if mode == "일반 지출":
         cat = st.radio("항목 선택", EXPENSE_CATS, index=min(st.session_state.last_cat_idx, len(EXPENSE_CATS)-1), horizontal=True, key="exp_cat")
         st.session_state.last_cat_idx = EXPENSE_CATS.index(cat)
@@ -469,10 +472,11 @@ with tab_in:
             
         col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
         with col_m1: 
-            curr_opts =[IN_CURR, "KRW", "USD"] + [c for c in["EUR", "TRY", "RSD", "BAM", "HUF", "QAR"] if c not in [IN_CURR, "USD"]]
+            # [Modified] 하드코딩 제거: IN_CURR를 최우선으로, 이후 KRW, USD 및 나머지 동적 통화 배치
+            curr_opts =[IN_CURR, "KRW", "USD"] + [c for c in available_currs if c not in [IN_CURR, "KRW", "USD"]]
             curr = st.selectbox("통화", curr_opts, key="exp_curr")
         with col_m2:
-            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌(한국)", "원화계좌(현지)"] if curr != "KRW" else ["원화계좌(한국)", "원화계좌(현지)"]
+            met_options =[f"현금({curr})", f"트래블로그({curr})", "원화계좌(한국)", "원화계좌(현지)"] if curr != "KRW" else["원화계좌(한국)", "원화계좌(현지)"]
             met = st.selectbox("결제 자산(Asset)", met_options, index=0, key="exp_met")
         with col_m3:
             harvested_tags = set()
@@ -528,7 +532,10 @@ with tab_in:
         ty = st.selectbox("유형",["직접환전 (원화계좌 -> 지폐)", "충전 (원화계좌 -> 카드)", "ATM출금 (카드 -> 지폐)"], key="tr_type")
         c1, c2 = st.columns(2)
         with c1:
-            curr_tr = st.selectbox("대상 통화", [IN_CURR, "USD"] + [c for c in["EUR", "TRY", "RSD", "BAM", "HUF"] if c not in [IN_CURR, "USD"]], key="tr_curr")
+            # [Modified] 하드코딩 제거
+            curr_opts_tr =[IN_CURR, "USD"] + [c for c in available_currs if c not in[IN_CURR, "USD", "KRW"]]
+            curr_tr = st.selectbox("대상 통화", curr_opts_tr, key="tr_curr")
+            
             if curr_tr == IN_CURR and IN_MULTI == 100:
                 t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
             else:
@@ -563,7 +570,10 @@ with tab_in:
         st.subheader("🔙 결제 취소 및 환불 (Rollback)")
         col_r1, col_r2 = st.columns(2)
         with col_r1:
-            r_curr = st.selectbox("취소된 통화", [IN_CURR, "KRW", "USD"] + [c for c in["EUR", "TRY", "RSD", "BAM", "HUF"] if c not in[IN_CURR, "USD"]], key="rf_curr")
+            # [Modified] 하드코딩 제거
+            curr_opts_rf = [IN_CURR, "KRW", "USD"] +[c for c in available_currs if c not in [IN_CURR, "KRW", "USD"]]
+            r_curr = st.selectbox("취소된 통화", curr_opts_rf, key="rf_curr")
+            
             r_met = st.selectbox("돌려받을 지갑",[f"현금({r_curr})", f"트래블로그({r_curr})", "원화계좌(한국)", "원화계좌(현지)"] if r_curr != "KRW" else["원화계좌(한국)", "원화계좌(현지)"], key="rf_met")
             if r_curr == "KRW" or (r_curr == IN_CURR and IN_MULTI == 100):
                 r_amt = st.number_input("환불 금액", min_value=0, step=1000 if r_curr != "KRW" else 1, format="%d", key="rf_amt_int")
