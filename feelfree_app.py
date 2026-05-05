@@ -25,7 +25,7 @@ TRIP_CONFIGS = {
         "nodes": {"중국": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1}},
         "cats":["식사", "간식", "DiDi", "지하철", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금"]
     },
-    "🗺️ 발칸6국 (2024)": {
+    "🗺️ 발칸6국(2024)": {
         "sheet": "BK_2024",
         "nodes": {
             "튀르키예": {"currency": "TRY", "symbol": "₺", "timezone": 3, "multiplier": 1},
