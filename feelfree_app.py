@@ -45,7 +45,7 @@ MACRO_MAP = {
     "식사": "🍔 식음료", "간식": "🍔 식음료", "마트": "🍔 식음료",
     "마사지": "🏄 액티비티", "투어": "🏄 액티비티", "입장료": "🏄 액티비티",
     "선물": "🎁 쇼핑", "통신": "📱 통신/기타", "수수료": "📱 통신/기타", "팁": "📱 통신/기타",
-    "항공권": "✈️ 항공권", "호텔": "🏨 숙박", "보험": "🛡️ 보험", "보증금": "🏦 자산이동"
+    "항공권": "✈️ 항공권", "호텔": "🏨 숙박", "보험": "🛡️ 보험", "보증금": "🏦 자산이동", "재환전": "🏦 자산이동"
 }
 
 CORE_COLUMNS =['Date', 'Country', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'Receipt_URL']
@@ -55,10 +55,11 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-VERSION = "v26.05.05.003"
-UPDATE_LOG_TEXT = """* `[Fixed]` 전체 코드 통합 및 무결성 복구. (탭 중복 및 누락 현상 수정)
-* `[Fixed]` 현금 인벤토리 자산 클래스 분류 시 '종이돈', '지폐' 키워드 인식 추가.
-* `[Fixed]` 순지출(Net) 산출 로직 완벽 연동."""
+# [Modified] 버전 및 업데이트 로그
+VERSION = "v26.05.05.004"
+UPDATE_LOG_TEXT = """* `[Added]` 자산 이동 내 '재환전(외화매도)' 기능 추가 및 환차손익(FX Diff) 투명 분할 기록 로직 적용.
+* `[Fixed]` 환전 및 재환전 내역의 오분류(환불/기타 등)로 인한 지출 총액 및 인벤토리 누수 문제 완벽 해결.
+* `[Fixed]` 전체 코드 통합 및 무결성 복구."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -212,7 +213,8 @@ def recalculate_entire_ledger(df):
     for i, row in temp_df.iterrows():
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
-        is_exp = 1 if cat in EXPENSE_CATS and cat not in['환불', '보증금'] else 0
+        # [Modified] 재환전을 명시적 비지출(0) 항목으로 보호
+        is_exp = 1 if cat in EXPENSE_CATS and cat not in['환불', '보증금', '재환전'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
         
         is_deductible = 1 if (is_exp == 1 or cat == '보증금') else 0
@@ -228,13 +230,28 @@ def recalculate_entire_ledger(df):
             if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
             if asset_cls == "DOMESTIC": c_budget += qty if curr == 'KRW' else qty * rate
         
-        elif cat == '환불':
+elif cat == '환불':
             if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
             if asset_cls == "DOMESTIC":
                 c_budget -= qty if curr == 'KRW' else qty * rate 
             else:
                 target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
+        
+        # [Added] 재환전: 인벤토리 차감 및 원금(Budget) 회수 로직
+        elif cat == '재환전':
+            if curr != 'KRW':
+                target_from = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                temp_qty = qty
+                if target_from in inv_batches:
+                    for batch in inv_batches[target_from]:
+                        if temp_qty <= 0: break
+                        if batch['qty'] <= 0: continue
+                        take = min(temp_qty, batch['qty'])
+                        batch['qty'] -= take
+                        temp_qty -= take
+                if pd.notna(rate) and rate > 0:
+                    c_budget -= qty * rate
         
         elif cat == 'ATM출금':
             temp_qty = qty; total_inherited_krw = 0.0
@@ -324,7 +341,8 @@ def get_inventory_status(df):
                     if batch['qty'] <= 0: continue
                     take = min(temp_qty, batch['qty']); batch['qty'] -= take
                     inv_batches[target_to].append({'rate': batch['rate'], 'qty': take, 'initial': take}); temp_qty -= take
-        elif (row['IsExpense'] == 1 or cat == '보증금') and curr != 'KRW':
+        # [Modified] 재환전 시에도 인벤토리(지갑)가 지출처럼 까이도록 '재환전' 추가
+        elif (row['IsExpense'] == 1 or cat in ['보증금', '재환전']) and curr != 'KRW':
             if asset_cls != "DOMESTIC":
                 target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
@@ -502,41 +520,76 @@ with tab_in:
 
     elif mode == "자산 이동":
         st.subheader("🔁 자산 이동 및 환전")
-        ty = st.selectbox("유형",["직접환전 (원화계좌 -> 지폐)", "충전 (원화계좌 -> 카드)", "ATM출금 (카드 -> 지폐)"], key="tr_type")
+        # [Modified] 재환전 유형 추가
+        ty = st.selectbox("유형",["직접환전 (원화계좌 -> 지폐)", "충전 (원화계좌 -> 카드)", "ATM출금 (카드 -> 지폐)", "재환전 (외화 -> 원화계좌)"], key="tr_type")
         c1, c2 = st.columns(2)
-        with c1:
-            curr_opts_tr =[IN_CURR, "USD"] +[c for c in available_currs if c not in[IN_CURR, "USD", "KRW"]]
-            curr_tr = st.selectbox("대상 통화", curr_opts_tr, key="tr_curr")
-            
-            if curr_tr == IN_CURR and IN_MULTI == 100:
-                t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
-            else:
-                t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_target_flt")
+        
+        # [Added] 재환전 전용 UI 및 환차손익 로직 추가
+        if "재환전" in ty:
+            with c1:
+                curr_opts_tr = [c for c in available_currs if c not in ["KRW"]]
+                curr_tr = st.selectbox("팔(Sell) 통화", curr_opts_tr, key="tr_curr")
+                s_amt = st.number_input(f"팔 외화 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_sell_flt")
+                source_met = st.selectbox("외화 출처",[f"트래블로그({curr_tr})", f"현금({curr_tr})"], key="tr_sell_met")
+            with c2:
+                rcv_krw = st.number_input("입금받은 원화 총액 (KRW)", min_value=0, step=1000, format="%d", key="tr_rcv_krw")
+                if s_amt > 0:
+                    fifo_rate = auto_calc_fifo_rate(s_amt, source_met, curr_tr)
+                    fifo_cost = s_amt * fifo_rate
+                    st.info(f"💡 시스템 내 매입 원가(FIFO): **{fifo_cost:,.0f} 원**")
+                    fx_diff = rcv_krw - fifo_cost
+                    if rcv_krw > 0:
+                        st.caption(f"적용 매도 환율: {(rcv_krw/s_amt):.4f}")
+                        if fx_diff < -1: st.error(f"📉 환차손(손해) 발생: {abs(fx_diff):,.0f} 원")
+                        elif fx_diff > 1: st.success(f"📈 환차익(이익) 발생: {fx_diff:,.0f} 원")
+                        else: st.success("⚖️ 환차손익 없음")
+                        
+            if st.button("🔄 재환전 실행 (환차손익 분할기록)", use_container_width=True):
+                applied_sell_rate = rcv_krw / s_amt if s_amt > 0 else 0
+                main_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': '재환전', 'Description': f"남은 {curr_tr} 재환전 (외화매도)", 'Currency': curr_tr, 'Amount': s_amt, 'PaymentMethod': source_met, 'IsExpense': 0, 'AppliedRate': applied_sell_rate, 'Note': f"원화 {rcv_krw}원 입금", 'Receipt_URL': ''}])
+                final_entry = pd.concat([ledger_df, main_row], ignore_index=True)
                 
-            if "ATM" in ty:
-                inherited_r = auto_calc_fifo_rate(t_amt, f"트래블로그({curr_tr})", curr_tr)
-                st.info(f"💳 카드 재고 계승 환율: **{inherited_r:.5f}**")
-                s_cost = st.number_input("인출 원금 확인", value=float(t_amt), key="tr_source_atm")
-                applied_tr_rate = inherited_r
-            else:
-                s_cost = st.number_input("소요 원금 (KRW)", min_value=0, step=1, format="%d", key="tr_source_swap")
-                applied_tr_rate = s_cost / t_amt if t_amt > 0 else 0
-        with c2:
-            if curr_tr == IN_CURR and IN_MULTI == 100:
-                fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_fee_int")
-            else:
-                fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0.0, step=1.0, format="%.2f", key="tr_fee_flt")
+                fx_diff = rcv_krw - (s_amt * auto_calc_fifo_rate(s_amt, source_met, curr_tr)) if s_amt > 0 else 0
+                if abs(fx_diff) >= 1:
+                    fx_amt = -abs(fx_diff) if fx_diff > 0 else abs(fx_diff)
+                    desc_fx = f"[{curr_tr} 재환전] 환차익" if fx_diff > 0 else f"[{curr_tr} 재환전] 환차손"
+                    fx_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': '수수료', 'Description': desc_fx, 'Currency': 'KRW', 'Amount': fx_amt, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': 'Auto-FX Diff', 'Receipt_URL': ''}])
+                    final_entry = pd.concat([final_entry, fx_row], ignore_index=True)
+                if save_data(final_entry): st.rerun()
                 
-        if st.button("🔄 이동 실행", use_container_width=True):
-            dest = f"트래블로그({curr_tr})" if "카드" in ty else f"현금({curr_tr})"
-            source = "원화계좌(한국)" if "원화계좌" in ty else f"트래블로그({curr_tr})"
-            main_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': ty.split(" ")[0], 'Description': f"{ty.split(' ')[0]} (-> {dest})", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': source, 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': '', 'Receipt_URL': ''}])
-            final_entry = pd.concat([ledger_df, main_row], ignore_index=True)
-            if fee_amt > 0:
-                fee_rate = auto_calc_fifo_rate(fee_amt, f"트래블로그({curr_tr})", curr_tr)
-                fee_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': "수수료", 'Description': f"{ty.split(' ')[0]} 수수료", 'Currency': curr_tr, 'Amount': fee_amt, 'PaymentMethod': f"트래블로그({curr_tr})", 'IsExpense': 1, 'AppliedRate': fee_rate, 'Note': '', 'Receipt_URL': ''}])
-                final_entry = pd.concat([final_entry, fee_row], ignore_index=True)
-            if save_data(final_entry): st.rerun()
+        else:
+            with c1:
+                curr_opts_tr =[IN_CURR, "USD"] +[c for c in available_currs if c not in[IN_CURR, "USD", "KRW"]]
+                curr_tr = st.selectbox("대상 통화", curr_opts_tr, key="tr_curr")
+                if curr_tr == IN_CURR and IN_MULTI == 100:
+                    t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
+                else:
+                    t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_target_flt")
+                    
+                if "ATM" in ty:
+                    inherited_r = auto_calc_fifo_rate(t_amt, f"트래블로그({curr_tr})", curr_tr)
+                    st.info(f"💳 카드 재고 계승 환율: **{inherited_r:.5f}**")
+                    s_cost = st.number_input("인출 원금 확인", value=float(t_amt), key="tr_source_atm")
+                    applied_tr_rate = inherited_r
+                else:
+                    s_cost = st.number_input("소요 원금 (KRW)", min_value=0, step=1, format="%d", key="tr_source_swap")
+                    applied_tr_rate = s_cost / t_amt if t_amt > 0 else 0
+            with c2:
+                if curr_tr == IN_CURR and IN_MULTI == 100:
+                    fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_fee_int")
+                else:
+                    fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0.0, step=1.0, format="%.2f", key="tr_fee_flt")
+                    
+            if st.button("🔄 이동 실행", use_container_width=True):
+                dest = f"트래블로그({curr_tr})" if "카드" in ty else f"현금({curr_tr})"
+                source = "원화계좌(한국)" if "원화계좌" in ty else f"트래블로그({curr_tr})"
+                main_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': ty.split(" ")[0], 'Description': f"{ty.split(' ')[0]} (-> {dest})", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': source, 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': '', 'Receipt_URL': ''}])
+                final_entry = pd.concat([ledger_df, main_row], ignore_index=True)
+                if fee_amt > 0:
+                    fee_rate = auto_calc_fifo_rate(fee_amt, f"트래블로그({curr_tr})", curr_tr)
+                    fee_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': "수수료", 'Description': f"{ty.split(' ')[0]} 수수료", 'Currency': curr_tr, 'Amount': fee_amt, 'PaymentMethod': f"트래블로그({curr_tr})", 'IsExpense': 1, 'AppliedRate': fee_rate, 'Note': '', 'Receipt_URL': ''}])
+                    final_entry = pd.concat([final_entry, fee_row], ignore_index=True)
+                if save_data(final_entry): st.rerun()
 
     elif mode == "환불(취소)":
         st.subheader("🔙 결제 취소 및 환불 (Rollback)")
