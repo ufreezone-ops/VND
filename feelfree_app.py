@@ -81,49 +81,43 @@ st.markdown("""
     <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
     <style>
     .main { background-color: #0e1117; }
-    .kpi-box { background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 8px solid #00FF00; margin-bottom: 20px; min-height: 130px; box-shadow: 4px 6px 15px rgba(0,0,0,0.5); }
+    .kpi-box { background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 8px solid #FF8C00; margin-bottom: 20px; min-height: 130px; box-shadow: 4px 6px 15px rgba(0,0,0,0.5); }
     .kpi-title { font-size: 15px; color: #cccccc; margin-bottom: 10px; font-weight: 600; }
     .kpi-value-krw { font-size: 26px; font-weight: bold; color: #ffffff; line-height: 1.1; }
-    .kpi-value-vnd { font-size: 18px; color: #00FF00; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
+    .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
     div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-    /* [Modified] 도드라지는 탭 디자인 (버튼형 Segmented Control) */
+    /* [Modified] 모바일 최적화형 슬림 탭 바 */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 12px;
-        padding: 8px 12px;
+        gap: 5px; /* 간격을 12px에서 5px로 대폭 축소 */
+        padding: 5px 5px;
         background-color: #161a25; 
-        border-radius: 15px;
+        border-radius: 12px;
         border: 1px solid #333;
     }
 
     .stTabs [data-baseweb="tab"] {
-        height: 45px;
+        height: 40px; /* 높이 소폭 축소 */
         background-color: #1c1f2b; 
-        border-radius: 10px !important;
-        padding: 0px 25px !important;
+        border-radius: 8px !important;
+        padding: 0px 10px !important; /* 좌우 여백을 25px에서 10px로 축소하여 폭 절약 */
         color: #888 !important; 
         border: 1px solid transparent;
-        transition: all 0.3s ease;
+        font-size: 14px !important; /* 폰트 크기 살짝 조절 */
     }
 
-    .stTabs [data-baseweb="tab"]:hover {
-        background-color: #2c3143;
-        color: #ffffff !important;
-    }
-
-    /* 선택된 활성 탭 하이라이트 */
+    /* [Modified] 오렌지 테마 활성 탭 */
     .stTabs [aria-selected="true"] {
-        background-color: #00FF00 !important; 
+        background-color: #FFA500 !important; /* 네온그린에서 오렌지로 변경 */
         color: #000000 !important; 
         font-weight: 800 !important;
-        box-shadow: 0px 4px 15px rgba(0, 255, 0, 0.4) !important; 
-        border: 1px solid #00FF00 !important;
-        transform: translateY(-2px); 
+        box-shadow: 0px 4px 12px rgba(255, 165, 0, 0.4) !important; 
+        border: 1px solid #FFA500 !important;
     }
 
-    /* 사이드바 및 기타 UI 일관성 유지 */
-    div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #00FF00 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
-    div[data-testid="stSidebar"] .stSelectbox label { color: #00FF00 !important; font-weight: bold !important; font-size: 1.1rem !important; }
+    /* 사이드바 및 드롭다운 스타일 (오렌지 톤 유지) */
+    div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
+    div[data-testid="stSidebar"] .stSelectbox label { color: #FFA500 !important; font-weight: bold !important; }
     div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
     div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
     div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
