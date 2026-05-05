@@ -720,7 +720,7 @@ with tab_stats:
                     barmode='stack', margin=dict(l=10, r=10, t=30, b=120),
                     legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5)
                 )
-                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 현지 체류 일일 흐름 ({len(ovr_df['Date'].unique())}일차)</h4>", unsafe_allow_html=True)
+                st.markdown(f"<h4 style='text-align: center;'>🚶‍♂️ 여행지 일일 지출 ({len(ovr_df['Date'].unique())}일차)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 
             # --- [2단계] 중간: 일자별 요약 테이블 ---
@@ -746,11 +746,11 @@ with tab_stats:
 
             # --- [4단계] 최하단: 여행 지출 요약 (KPI + Expander) ---
             st.divider()
-            st.subheader("🏁 여행 경제 지출 요약")
+            st.subheader("🏁 여행 비용 요약")
             c1, c2 = st.columns(2)
             
             with c1:
-                st.info("🇰🇷 사전 결제 및 고정 지출")
+                st.info("🇰🇷 사전 결제")
                 st.metric("총액", f"{dom_df['KRW_val'].sum():,.0f} 원")
                 with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
                     dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
@@ -758,7 +758,7 @@ with tab_stats:
                         st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
             
             with c2:
-                st.success(f"🌏 현지 체류 지출 (USD 포함)")
+                st.success(f"🌏 여행지 지출")
                 st.metric("총액 (원화환산)", f"{ovr_df['KRW_val'].sum():,.0f} 원")
                 with st.expander("↳ 항목별 상세 내역 보기", expanded=False):
                     og = ovr_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
