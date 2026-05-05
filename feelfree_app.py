@@ -697,7 +697,10 @@ with tab_stats:
             c_mode = st.radio("📊 분석 통화 선택",["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
             y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
-            ovr_df = exp_df[(exp_df['PaymentMethod'].str.strip() != '원화계좌(한국)') & (~exp_df['Category'].isin(['입국','출국']))]
+# [Modified] 결제수단과 무관하게 고정비(항공/호텔/보험)는 무조건 '사전 결제' 그룹으로 강제 분리
+            is_fixed_cost = (exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') | (exp_df['Category'].isin(FIXED_COST_CATS))
+
+            ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국']))]
             if not ovr_df.empty:
                 ovr_df = ovr_df.copy()
                 ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
@@ -716,7 +719,7 @@ with tab_stats:
             fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
             st.table(daily_table.rename(columns={'Date':'날짜','KRW_val':'총(원)','Local_val':f'총({LOCAL_SYM})','S_KRW':'일상(원)','S_Loc':f'일상({LOCAL_SYM})'}).style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}))
 
-            dom_df = exp_df[(exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') & (~exp_df['Category'].isin(['입국','출국']))]
+            dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
             if not dom_df.empty:
                 st.divider()
                 fig1 = px.treemap(dom_df, path=['Macro_Category', 'Category', 'Description'], values=y_col, color='Macro_Category', color_discrete_map=macro_color_map)
@@ -767,11 +770,16 @@ with tab_stats:
 with tab_final:
     if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
         final_dom_refund_total = dom_refund_total if 'dom_refund_total' in locals() else 0
+
         total_trip_krw = exp_df['KRW_val'].sum() - final_dom_refund_total
         total_trip_loc = exp_df['Local_val'].sum()
-        dom_total_krw = exp_df[exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)']['KRW_val'].sum() - final_dom_refund_total
+        
+        #[Modified] 요약 탭 KPI에서도 고정비를 엄격히 분리하여 Net 기준 계산
+        is_fixed_cost_final = (exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') | (exp_df['Category'].isin(FIXED_COST_CATS))
+        dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum() - final_dom_refund_total
         ovr_total_krw = total_trip_krw - dom_total_krw
-        ovr_total_loc = exp_df[exp_df['PaymentMethod'].str.strip() != '원화계좌(한국)']['Local_val'].sum()
+        ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
+        
         local_v = exp_df[(exp_df['IsSurvival'] == 1) & (exp_df['Currency'].str.strip() == TRAVEL_CURRENCY)].copy()
         avg_local_krw = local_v['KRW_val'].sum() / 7 if not local_v.empty else 0
         avg_local_loc = local_v['Local_val'].sum() / 7 if not local_v.empty else 0
