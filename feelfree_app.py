@@ -517,7 +517,7 @@ with st.sidebar:
             st.divider()
 
     # [Modified] 총액 섹션 시작 전 큰 여백 확보
-    st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
     st.metric("🏦 총 예산", f"{b_val:,.0f} 원")
     st.metric("💸 지출총액", f"{spent_val:,.0f} 원")
 
