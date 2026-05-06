@@ -668,15 +668,15 @@ with tab_his:
     
     c_filter, c_search, c_tog = st.columns([2, 3, 1])
     with c_filter:
-        filter_options =["🌍 모든 여행 장부 (전역 검색)", "이번 여행 전체"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())
+        filter_options =["모든 여행가계부", "이번 여행 전체"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())
         country_filter = st.selectbox("🌍 국가 필터", filter_options, index=1, key="his_country")
     with c_search: 
         search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
     with c_tog: 
         edit_mode = st.toggle("✏️ 직접 수정 모드", value=False, key="his_edit_toggle")
 
-    if country_filter == "🌍 모든 여행 장부 (전역 검색)":
-        st.warning("⚠️ '모든 여행 장부' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
+    if country_filter == "모든 여행가계부":
+        st.warning("⚠️ '모든 여행가계부' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
         edit_mode = False 
         display_df = load_all_trips_data()
     else:
