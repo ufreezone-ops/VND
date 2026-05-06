@@ -698,7 +698,7 @@ with tab_his:
     
     c_filter, c_search, c_tog = st.columns([2, 3, 1])
     with c_filter:
-        filter_options =["모든 여행가계부", "이번 여행 전체"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())
+        filter_options =["모든 여행가계부", "이번 여행가계부"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())
         country_filter = st.selectbox("🌍 국가 필터", filter_options, index=1, key="his_country")
     with c_search: 
         search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
@@ -711,7 +711,7 @@ with tab_his:
         display_df = load_all_trips_data()
     else:
         display_df = ledger_df.copy()
-        if country_filter != "이번 여행 전체":
+        if country_filter != "이번 여행가계부":
             display_df = display_df[display_df['Country'] == country_filter]
 
     if st.button(f"🔄 '{st.session_state.current_trip}' 가계부 전체 데이터 정합성 재계산", use_container_width=True, type="primary"):
