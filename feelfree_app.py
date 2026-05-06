@@ -493,7 +493,7 @@ with st.sidebar:
         
         if c_card > 0 or c_cash > 0 or c in trip_currs:
             # 통화 헤더
-            st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:12px; margin-bottom:10px;'>● {c}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
             
             # 잔액 정보 (수직 배치로 겹침 원천 차단)
             fmt = "{:,.2f}" if c not in ["VND", "HUF"] else "{:,.0f}"
