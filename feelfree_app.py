@@ -492,15 +492,15 @@ with st.sidebar:
         c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
         
         if c_card > 0 or c_cash > 0 or c in trip_currs:
-            # 통화 헤더
-            st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
+            # 1. 통화명 헤더
+            st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:12px; margin-bottom:5px;'>● {c}</div>", unsafe_allow_html=True)
             
-            # 잔액 정보 (수직 배치로 겹침 원천 차단)
+            # 2. 잔액 정보 (현금 하단에 마진 추가)
             fmt = "{:,.2f}" if c not in ["VND", "HUF"] else "{:,.0f}"
             st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
-            st.markdown(f"💵 현금: **{fmt.format(c_cash)}**")
+            st.markdown(f"<div style='margin-bottom:8px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) # [Modified] 상세배치와의 간격 확보
             
-            # 통합 배치 정보 (익스팬더 하나로 통합)
+            # 3. 통합 배치 정보
             card_batches = current_inventory_batches.get(f"트래블로그({c})", [])
             cash_batches = current_inventory_batches.get(f"현금({c})", [])
             
@@ -516,6 +516,8 @@ with st.sidebar:
                             if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:.1f}")
             st.divider()
 
+    # [Modified] 총액 섹션 시작 전 큰 여백 확보
+    st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
     st.metric("🏦 총 예산", f"{b_val:,.0f} 원")
     st.metric("💸 지출총액", f"{spent_val:,.0f} 원")
 
