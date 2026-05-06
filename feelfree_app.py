@@ -498,7 +498,7 @@ with st.sidebar:
             # 2. 잔액 정보 (현금 하단에 마진 추가)
             fmt = "{:,.2f}" if c not in ["VND", "HUF"] else "{:,.0f}"
             st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
-            st.markdown(f"<div style='margin-bottom:8px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) # [Modified] 상세배치와의 간격 확보
+            st.markdown(f"<div style='margin-bottom:14px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) # [Modified] 상세배치와의 간격 확보
             
             # 3. 통합 배치 정보
             card_batches = current_inventory_batches.get(f"트래블로그({c})", [])
