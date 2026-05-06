@@ -659,12 +659,12 @@ with tab_his:
     with c_search: 
         search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
     with c_global:
-        global_search = st.toggle("🌍 전체 검색", value=False, key="global_search_toggle")
+        global_search = st.toggle("🌍 모든 여행 검색", value=False, key="global_search_toggle")
     with c_tog: 
         edit_mode = st.toggle("✏️ 직접 수정 모드", value=False, key="his_edit_toggle")
 
     if global_search and search_query.strip():
-        st.warning("⚠️ '전체 검색' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
+        st.warning("⚠️ '모든 여행 검색' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
         edit_mode = False 
         display_df = load_all_trips_data()
     else:
