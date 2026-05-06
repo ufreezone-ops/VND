@@ -181,11 +181,16 @@ def upload_image_to_imgbb(image_file):
 
 def normalize_date(d_str):
     d_str = str(d_str).strip()
+    # 1. 이미 YYYY-MM-DD(Day) 형식이면 그대로 반환
+    if re.match(r'^\d{4}-\d{2}-\d{2}', d_str):
+        return d_str
+    
+    # 2. YY.MM.DD 또는 YYYY.MM.DD 형식을 YYYY-MM-DD(Day)로 변환
     match = re.match(r'^(?:20)?(\d{2})[\.\-\/]\s*(\d{1,2})[\.\-\/]\s*(\d{1,2})\.?$', d_str)
     if match:
         y, m, d = match.groups()
         dt_obj = datetime.strptime(f"20{y}-{int(m):02d}-{int(d):02d}", "%Y-%m-%d")
-        return dt_obj.strftime("%m/%d(%a)")
+        return dt_obj.strftime("%Y-%m-%d(%a)")
     return d_str
 
 def load_data():
@@ -193,22 +198,40 @@ def load_data():
         df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
         if df is None or df.empty: return pd.DataFrame(columns=FINAL_COLUMNS)
 
+        # [Added] 마이그레이션을 위한 현재 여행 연도 추출
+        year_match = re.search(r'\((\d{4})\)', st.session_state.current_trip)
+        trip_year = year_match.group(1) if year_match else "2024"
+
+        # 1. Country 보정 로직 (유지)
         if 'Country' not in df.columns:
             df.insert(1, 'Country', FIRST_NODE_NAME)
         else:
             df['Country'] = df['Country'].astype(str).str.strip().replace(['nan', 'None', ''], None)
             df['Country'] = df['Country'].fillna(FIRST_NODE_NAME)
         
+        # 2. 레거시 컬럼명 변경 (유지)
         if 'Cum_Card_VND' in df.columns: df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
         if 'Cum_Cash_VND' in df.columns: df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
         if 'Receipt_URL' not in df.columns: df['Receipt_URL'] = ""
             
+        # 3. 데이터 클리닝 및 연도 결합 (Modified)
         df = df.dropna(subset=['Date', 'Category'], how='any')
         df['Category'] = df['Category'].astype(str).str.strip()
         df['PaymentMethod'] = df['PaymentMethod'].astype(str).str.strip()
         df['Currency'] = df['Currency'].astype(str).str.strip()
+        
+        # [Added] 구형 날짜(MM/DD)에 연도 강제 주입 로직
+        def fix_legacy_date(d):
+            d = str(d).strip()
+            if d and not re.match(r'^\d{4}', d): # 연도로 시작하지 않는 데이터
+                # "04/21(Tue)" 또는 "04/21" -> "2026-04-21"
+                return f"{trip_year}-{d.replace('/', '-')}"
+            return d
+
+        df['Date'] = df['Date'].apply(fix_legacy_date)
         df['Date'] = df['Date'].apply(normalize_date)
         
+        # 4. 수치형 변환 및 정규화 (유지)
         df = df.reindex(columns=FINAL_COLUMNS)
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
         df['AppliedRate'] = pd.to_numeric(df['AppliedRate'], errors='coerce').fillna(0.0)
@@ -553,7 +576,7 @@ with tab_in:
             
             final_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
             new_row = pd.DataFrame([{
-                'Date': sel_date.strftime("%m/%d(%a)"),
+                'Date': sel_date.strftime("%Y-%m-%d(%a)"),
                 'Country': sel_node,
                 'Category': cat,
                 'Description': final_desc,
@@ -595,14 +618,14 @@ with tab_in:
                         
             if st.button("🔄 재환전 실행 (환차손익 분할기록)", use_container_width=True):
                 applied_sell_rate = rcv_krw / s_amt if s_amt > 0 else 0
-                main_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': '재환전', 'Description': f"남은 {curr_tr} 재환전 (외화매도)", 'Currency': curr_tr, 'Amount': s_amt, 'PaymentMethod': source_met, 'IsExpense': 0, 'AppliedRate': applied_sell_rate, 'Note': f"원화 {rcv_krw}원 입금", 'Receipt_URL': ''}])
+                main_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '재환전', 'Description': f"남은 {curr_tr} 재환전 (외화매도)", 'Currency': curr_tr, 'Amount': s_amt, 'PaymentMethod': source_met, 'IsExpense': 0, 'AppliedRate': applied_sell_rate, 'Note': f"원화 {rcv_krw}원 입금", 'Receipt_URL': ''}])
                 final_entry = pd.concat([ledger_df, main_row], ignore_index=True)
                 
                 fx_diff = rcv_krw - (s_amt * auto_calc_fifo_rate(s_amt, source_met, curr_tr)) if s_amt > 0 else 0
                 if abs(fx_diff) >= 1:
                     fx_amt = -abs(fx_diff) if fx_diff > 0 else abs(fx_diff)
                     desc_fx = f"[{curr_tr} 재환전] 환차익" if fx_diff > 0 else f"[{curr_tr} 재환전] 환차손"
-                    fx_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': '수수료', 'Description': desc_fx, 'Currency': 'KRW', 'Amount': fx_amt, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': 'Auto-FX Diff', 'Receipt_URL': ''}])
+                    fx_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '수수료', 'Description': desc_fx, 'Currency': 'KRW', 'Amount': fx_amt, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': 'Auto-FX Diff', 'Receipt_URL': ''}])
                     final_entry = pd.concat([final_entry, fx_row], ignore_index=True)
                 if save_data(final_entry): st.rerun()
                 
@@ -632,11 +655,11 @@ with tab_in:
             if st.button("🔄 이동 실행", use_container_width=True):
                 dest = f"트래블로그({curr_tr})" if "카드" in ty else f"현금({curr_tr})"
                 source = "원화계좌(한국)" if "원화계좌" in ty else f"트래블로그({curr_tr})"
-                main_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': ty.split(" ")[0], 'Description': f"{ty.split(' ')[0]} (-> {dest})", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': source, 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': '', 'Receipt_URL': ''}])
+                main_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': ty.split(" ")[0], 'Description': f"{ty.split(' ')[0]} (-> {dest})", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': source, 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': '', 'Receipt_URL': ''}])
                 final_entry = pd.concat([ledger_df, main_row], ignore_index=True)
                 if fee_amt > 0:
                     fee_rate = auto_calc_fifo_rate(fee_amt, f"트래블로그({curr_tr})", curr_tr)
-                    fee_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': "수수료", 'Description': f"{ty.split(' ')[0]} 수수료", 'Currency': curr_tr, 'Amount': fee_amt, 'PaymentMethod': f"트래블로그({curr_tr})", 'IsExpense': 1, 'AppliedRate': fee_rate, 'Note': '', 'Receipt_URL': ''}])
+                    fee_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': "수수료", 'Description': f"{ty.split(' ')[0]} 수수료", 'Currency': curr_tr, 'Amount': fee_amt, 'PaymentMethod': f"트래블로그({curr_tr})", 'IsExpense': 1, 'AppliedRate': fee_rate, 'Note': '', 'Receipt_URL': ''}])
                     final_entry = pd.concat([final_entry, fee_row], ignore_index=True)
                 if save_data(final_entry): st.rerun()
 
@@ -656,7 +679,7 @@ with tab_in:
             r_rate = st.number_input("과거 결제 시 적용됐던 환율", value=(1.0 if r_curr=="KRW" else get_default_rate(r_curr)), format="%.5f", key="rf_rate")
             r_desc = st.text_input("취소 내역 메모", placeholder="예: 호텔 보증금 반환", key="rf_desc")
         if st.button("🔙 환불 인벤토리 롤백 실행", use_container_width=True):
-            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
+            new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
     else:
@@ -664,7 +687,7 @@ with tab_in:
         io_type = st.radio("구분",["출국", "입국"], horizontal=True, key="io_radio")
         desc = st.text_input("내용 (메모)", placeholder="편명, 시간 등", key="io_desc")
         if st.button("🚀 일정 기록 완료", use_container_width=True):
-            new_row = pd.DataFrame([{'Date': sel_date.strftime("%m/%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
+            new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
 # --- SECTION 6:[Module D, E: History & Settlement] ---
