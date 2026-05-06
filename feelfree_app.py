@@ -129,15 +129,19 @@ st.markdown("""
     div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
     div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
 
-    /* [Added] 사이드바 최상단 공백 제거 및 디자인 컴팩트화 */
+    /* [Modified] 사이드바 디자인 최종 최적화 */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        padding-top: 1rem !important;
-        gap: 0.1rem !important;
+        padding-top: 0.5rem !important;
+        gap: 0px !important;
     }
-    /* 사이드바 폰트 및 여백 미세 조정 */
-    [data-testid="stSidebar"] .stMarkdown p {
-        margin-bottom: 0px !important;
-        font-size: 0.85rem !important;
+    /* 익스팬더 내부 여백 최소화 */
+    [data-testid="stSidebar"] .stExpander div[data-testid="stVerticalBlock"] {
+        gap: 2px !important;
+        padding: 5px !important;
+    }
+    /* 사이드바 구분선 두께 조절 */
+    [data-testid="stSidebar"] hr {
+        margin: 0.5rem 0 !important;
     }
     
     </style>
@@ -488,24 +492,28 @@ with st.sidebar:
         c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
         
         if c_card > 0 or c_cash > 0 or c in trip_currs:
-            st.markdown(f"**● {c}**")
-            c1, c2 = st.columns(2)
-            fmt = "{:,.2f}" if c not in ["VND", "HUF"] else "{:,.0f}"
+            # 통화 헤더
+            st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:10px;'>● {c}</div>", unsafe_allow_html=True)
             
-            with c1:
-                st.caption("💳 카드")
-                st.markdown(f"**{fmt.format(c_card)}**")
-                if current_inventory_batches.get(f"트래블로그({c})"):
-                    with st.expander("배치", expanded=False):
-                        for b in current_inventory_batches[f"트래블로그({c})"]:
-                            if b['qty'] > 0: st.caption(f"{fmt.format(b['qty'])} @{b['rate']:.1f}")
-            with c2:
-                st.caption("💵 현금")
-                st.markdown(f"**{fmt.format(c_cash)}**")
-                if current_inventory_batches.get(f"현금({c})"):
-                    with st.expander("배치", expanded=False):
-                        for b in current_inventory_batches[f"현금({c})"]:
-                            if b['qty'] > 0: st.caption(f"{fmt.format(b['qty'])} @{b['rate']:.1f}")
+            # 잔액 정보 (수직 배치로 겹침 원천 차단)
+            fmt = "{:,.2f}" if c not in ["VND", "HUF"] else "{:,.0f}"
+            st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
+            st.markdown(f"💵 현금: **{fmt.format(c_cash)}**")
+            
+            # 통합 배치 정보 (익스팬더 하나로 통합)
+            card_batches = current_inventory_batches.get(f"트래블로그({c})", [])
+            cash_batches = current_inventory_batches.get(f"현금({c})", [])
+            
+            if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
+                with st.expander("🔍 상세 배치", expanded=False):
+                    if any(b['qty'] > 0 for b in card_batches):
+                        st.caption("[카드]")
+                        for b in card_batches:
+                            if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:.1f}")
+                    if any(b['qty'] > 0 for b in cash_batches):
+                        st.caption("[현금]")
+                        for b in cash_batches:
+                            if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:.1f}")
             st.divider()
 
     st.metric("🏦 총 예산", f"{b_val:,.0f} 원")
