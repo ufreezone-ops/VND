@@ -140,7 +140,8 @@ DOMESTIC_CATS =["항공권", "호텔", "보험", "지하철", "택시"]
 
 if 'current_tz' not in st.session_state: st.session_state.current_tz = TZ_KST
 if 'shared_date' not in st.session_state: st.session_state.shared_date = datetime.now(st.session_state.current_tz).date()
-if 'last_cat_idx' not in st.session_state: st.session_state.last_cat_idx = 0
+# [Modified] 인덱스 대신 문자열로 상태 기억
+if 'last_cat_name' not in st.session_state: st.session_state.last_cat_name = "식사"
 
 # --- SECTION 2:[Module A] Data Engine ---
 def get_asset_class(text):
@@ -149,9 +150,19 @@ def get_asset_class(text):
     if any(k in txt for k in["트래블", "월렛", "카드"]): return "PREPAID" 
     return "DOMESTIC" 
 
+# [Modified] 하드코딩 폐기 및 장부 내 평균 환율 동적 추론 로직으로 변경
 def get_default_rate(curr):
-    rates = {"VND": 0.0561, "CNY": 195.0, "USD": 1350.0, "EUR": 1480.0, "TRY": 45.0, "RSD": 12.6, "BAM": 757.0, "HUF": 3.8, "QAR": 380.0}
-    return rates.get(curr, 1.0)
+    if curr == "KRW": return 1.0
+    # 1순위: 현재 로드된 ledger_df(이번 여행)에서 해당 통화의 평균 적용 환율 찾기
+    try:
+        if 'ledger_df' in globals() and not ledger_df.empty:
+            df_curr = ledger_df[(ledger_df['Currency'].str.strip() == curr) & (ledger_df['AppliedRate'] > 0)]
+            if not df_curr.empty: return df_curr['AppliedRate'].mean()
+    except: pass
+    
+    # 2순위: 시스템에 남겨진 안전망 (최소한의 계산 실패 방지용)
+    fallback_rates = {"VND": 0.056, "CNY": 190.0, "USD": 1350.0, "EUR": 1480.0, "TRY": 45.0, "RSD": 12.6, "HUF": 3.8}
+    return fallback_rates.get(curr, 1.0)
 
 def upload_image_to_imgbb(image_file):
     try:
@@ -483,9 +494,11 @@ with tab_in:
 
     available_currs = sorted(list(set(node["currency"] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())))
 
-    if mode == "일반 지출":
-        cat = st.radio("항목 선택", EXPENSE_CATS, index=min(st.session_state.last_cat_idx, len(EXPENSE_CATS)-1), horizontal=True, key="exp_cat")
-        st.session_state.last_cat_idx = EXPENSE_CATS.index(cat)
+    if mode == "일반 지출":        
+        # [Modified] 인덱스가 아닌 카테고리 텍스트 자체를 추적하여 버그 원천 차단
+        def_index = EXPENSE_CATS.index(st.session_state.last_cat_name) if st.session_state.last_cat_name in EXPENSE_CATS else 0
+        cat = st.radio("항목 선택", EXPENSE_CATS, index=def_index, horizontal=True, key="exp_cat")
+        st.session_state.last_cat_name = cat
         
         col_desc, col_receipt = st.columns([3, 1])
         with col_desc: desc = st.text_input("내용 (상호명 및 상세메모)", placeholder="예: 안바카페 - 소고기버거, 반미정식", key="exp_desc")
@@ -653,26 +666,25 @@ with tab_his:
     
     viewer_placeholder = st.empty()
     
-    c_filter, c_search, c_global, c_tog = st.columns([1, 2, 1, 1])
+    c_filter, c_search, c_tog = st.columns([2, 3, 1])
     with c_filter:
-        country_filter = st.selectbox("🌍 국가 필터", ["전체"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys()), key="his_country")
+        filter_options =["🌍 모든 여행 장부 (전역 검색)", "이번 여행 전체"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())
+        country_filter = st.selectbox("🌍 국가 필터", filter_options, index=1, key="his_country")
     with c_search: 
         search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
-    with c_global:
-        global_search = st.toggle("🌍 모든 여행 검색", value=False, key="global_search_toggle")
     with c_tog: 
         edit_mode = st.toggle("✏️ 직접 수정 모드", value=False, key="his_edit_toggle")
 
-    if global_search and search_query.strip():
-        st.warning("⚠️ '모든 여행 검색' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
+    if country_filter == "🌍 모든 여행 장부 (전역 검색)":
+        st.warning("⚠️ '모든 여행 장부' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
         edit_mode = False 
         display_df = load_all_trips_data()
     else:
         display_df = ledger_df.copy()
-        if country_filter != "전체":
+        if country_filter != "이번 여행 전체":
             display_df = display_df[display_df['Country'] == country_filter]
 
-    if st.button("🔄 장부 전체 다시 계산 (Recalculate All)", use_container_width=True, type="primary"):
+    if st.button(f"🔄 '{st.session_state.current_trip}' 장부 전체 데이터 정합성 재계산", use_container_width=True, type="primary"):
         if save_data(ledger_df):
             st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
             
@@ -711,7 +723,13 @@ with tab_his:
                     with c_info:
                         st.subheader("🧾 상세 내역 및 영수증 뷰어")
                         amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
-                        st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']})")
+
+                        # [Added] 소나무 꿀 (Pine Honey) 에피소드 대응: KRW 즉시 환산 로직
+                        krw_equivalent = row_data['Amount'] if row_data['Currency'] == 'KRW' else row_data['Amount'] * row_data['AppliedRate']
+                        krw_display = f" ➔ <span style='color:#FFD700'>약 {krw_equivalent:,.0f} 원</span>" if row_data['Currency'] != 'KRW' else ""
+                        
+                        # [Modified] 마크다운에 원화 가치 병기 (HTML span 적용)
+                        st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}{krw_display})", unsafe_allow_html=True)
                         st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
                         
                         desc_full = str(row_data['Description'])
