@@ -479,7 +479,7 @@ def calculate_summary_metrics(df):
 # --- SECTION 5:[Sidebar] ---
 with st.sidebar:
 
-    st.subheader("💰 Wallet Status")
+    st.subheader("💰 지갑 잔고")
     b_val, spent_val = calculate_summary_metrics(ledger_df)
     
     active_currs = set([k.split('(')[1].replace(')','') for k in current_inventory_batches.keys() if len(current_inventory_batches[k]) > 0 and sum(b['qty'] for b in current_inventory_batches[k]) > 0])
