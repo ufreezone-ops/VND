@@ -157,7 +157,7 @@ def get_asset_class(text):
     if any(k in txt for k in["트래블", "월렛", "카드"]): return "PREPAID" 
     return "DOMESTIC" 
 
-# [Modified] 하드코딩 폐기 및 장부 내 평균 환율 동적 추론 로직으로 변경
+# [Modified] 하드코딩 폐기 및 가계부 내 평균 환율 동적 추론 로직으로 변경
 def get_default_rate(curr):
     if curr == "KRW": return 1.0
     # 1순위: 현재 로드된 ledger_df(이번 여행)에서 해당 통화의 평균 적용 환율 찾기
@@ -714,7 +714,7 @@ with tab_his:
         if country_filter != "이번 여행 전체":
             display_df = display_df[display_df['Country'] == country_filter]
 
-    if st.button(f"🔄 '{st.session_state.current_trip}' 장부 전체 데이터 정합성 재계산", use_container_width=True, type="primary"):
+    if st.button(f"🔄 '{st.session_state.current_trip}' 가계부 전체 데이터 정합성 재계산", use_container_width=True, type="primary"):
         if save_data(ledger_df):
             st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
             
