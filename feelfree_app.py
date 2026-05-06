@@ -59,11 +59,9 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-# [Modified] 버전 및 업데이트 로그 v26.05.06.003
-VERSION = "v26.05.06.003"
-UPDATE_LOG_TEXT = """* `[Added]` GUI 컴포넌트 튜닝을 돕는 코드 태깅(🎨Layout, 🎛️Component, 📊Chart, ⚙️Logic) 도입.
-* `[Improved]` 탭 디자인 혁신: 밋밋했던 상단 탭을 도드라지는 버튼형 디자인으로 변경하여 선택 상태의 시인성을 극대화함.
-* `[Fixed]` 모바일 최적화: 차트 X축 겹침 방지 및 일별 지출 표 가로 스크롤 지원 적용 완료."""
+# [Modified] 버전 및 업데이트 로그 v26.05.06.004
+VERSION = "v26.05.06.004"
+UPDATE_LOG_TEXT = """* `[Fixed]` CSS 선택자 문법 오류(띄어쓰기 누락)로 인해 탭 디자인(오렌지색 테두리 및 활성 배경)이 풀려버리는 현상 해결."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -91,8 +89,8 @@ st.markdown("""
     .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
     div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-    /* 오렌지 강조형 탭 컨테이너 */
-    .stTabs[data-baseweb="tab-list"] {
+    /* [Modified] 오렌지 강조형 탭 컨테이너 (띄어쓰기 복구) */
+    .stTabs [data-baseweb="tab-list"] {
         gap: 5px; 
         padding: 5px 5px;
         background-color: #161a25; 
@@ -100,7 +98,7 @@ st.markdown("""
         border: 2px solid #FFA500; 
         box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); 
     }
-    .stTabs[data-baseweb="tab"] {
+    .stTabs [data-baseweb="tab"] {
         height: 40px; 
         background-color: #262b3b; 
         border-radius: 8px !important;
@@ -114,8 +112,8 @@ st.markdown("""
         background-color: #3d4455; 
         color: #ffffff !important;
     }
-    /* 오렌지 테마 활성 탭 */
-    .stTabs[aria-selected="true"] {
+    /*[Modified] 오렌지 테마 활성 탭 (띄어쓰기 복구) */
+    .stTabs [aria-selected="true"] {
         background-color: #FFA500 !important; 
         color: #000000 !important; 
         font-weight: 800 !important;
@@ -131,8 +129,7 @@ st.markdown("""
     div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
 
     /* 사이드바 디자인 최종 최적화 */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0.5rem !important; gap: 0px !important; }
-    [data-testid="stSidebar"] .stExpander div[data-testid="stVerticalBlock"] { gap: 2px !important; padding: 5px !important; }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0.5rem !important; gap: 0px !important; }[data-testid="stSidebar"] .stExpander div[data-testid="stVerticalBlock"] { gap: 2px !important; padding: 5px !important; }
     [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
     
     </style>
