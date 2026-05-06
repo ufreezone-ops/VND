@@ -832,7 +832,7 @@ with tab_his:
                                 except: pass
                                 return match.group(0)
                             # 가격으로 추정되는 숫자 정규식 추출
-                            pattern = re.compile(r'\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b|\b\d+(?:\.\d+)?\b')
+                            pattern = re.compile(r'(?<![\d\.])\d{1,3}(?:,\d{3})*(?:\.\d+)?(?![\d\.])')
                             return pattern.sub(replacer, text)
 
                         desc_full = str(row_data['Description'])
