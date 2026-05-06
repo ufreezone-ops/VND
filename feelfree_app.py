@@ -714,7 +714,7 @@ with tab_his:
         if country_filter != "이번 여행가계부":
             display_df = display_df[display_df['Country'] == country_filter]
 
-    if st.button(f"🔄 '{st.session_state.current_trip}' 가계부 전체 데이터 정합성 재계산", use_container_width=True, type="primary"):
+    if st.button(f"🔄 '{st.session_state.current_trip}' 가계부 정합성 재계산", use_container_width=True, type="primary"):
         if save_data(ledger_df):
             st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
             
