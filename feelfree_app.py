@@ -87,13 +87,14 @@ st.markdown("""
     .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
     div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-    /* [Modified] 모바일 최적화형 슬림 탭 바 */
+    /* [Modified] 오렌지 강조형 탭 컨테이너 */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 5px; /* 간격을 12px에서 5px로 대폭 축소 */
+        gap: 5px; 
         padding: 5px 5px;
         background-color: #161a25; 
         border-radius: 12px;
-        border: 1px solid #333;
+        border: 2px solid #FFA500; /* 테두리를 오렌지색으로 변경 및 두께 강화 */
+        box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); /* 은은한 오렌지 광채 추가 */
     }
 
     .stTabs [data-baseweb="tab"] {
