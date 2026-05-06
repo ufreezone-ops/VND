@@ -59,9 +59,10 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-# [Modified] 버전 및 업데이트 로그 v26.05.06.004
-VERSION = "v26.05.06.004"
-UPDATE_LOG_TEXT = """* `[Fixed]` CSS 선택자 문법 오류(띄어쓰기 누락)로 인해 탭 디자인(오렌지색 테두리 및 활성 배경)이 풀려버리는 현상 해결."""
+#[Modified] 버전 및 업데이트 로그 v26.05.06.005
+VERSION = "v26.05.06.005"
+UPDATE_LOG_TEXT = """* `[Added]` 뷰어 내 '딥-리더(Deep-Reader)' 자동 환산기 탑재 (메모 속 숫자를 인식해 당시 환율로 원화 자동 번역).
+* `[Added]` 뷰어 우측에 '타임머신 계산기' 추가 (해당 결제건의 과거 환율이 자동 적용된 미니 환산기)."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -817,7 +818,27 @@ with tab_his:
                         st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}{krw_display})", unsafe_allow_html=True)
                         st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
                         
+                        # [Added] ⚙️ 딥-리더 (Deep-Reader) 자동 환산 엔진
+                        def smart_krw_translator(text, rate, curr):
+                            if rate <= 0 or curr == 'KRW': return text
+                            def replacer(match):
+                                num_str = match.group(0).replace(',', '')
+                                try:
+                                    v = float(num_str)
+                                    # 1~9 사이의 정수는 수량으로 간주하여 무시, 그 외의 금액 숫자는 자동 환산
+                                    if v > 0 and not (v < 10 and num_str.isdigit()):
+                                        krw_val = v * rate
+                                        return f"{match.group(0)}<span style='font-size:13px;color:#FFD700;font-style:italic;'> (약 {krw_val:,.0f}원)</span>"
+                                except: pass
+                                return match.group(0)
+                            # 가격으로 추정되는 숫자 정규식 추출
+                            pattern = re.compile(r'\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b|\b\d+(?:\.\d+)?\b')
+                            return pattern.sub(replacer, text)
+
                         desc_full = str(row_data['Description'])
+                        rate_for_calc = row_data['AppliedRate']
+                        curr_for_calc = row_data['Currency']
+
                         if "-" in desc_full:
                             parts = desc_full.split("-", 1)
                             st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
@@ -825,14 +846,19 @@ with tab_his:
                             st.markdown("**📝 세부 구매 내역:**")
                             items = detail_str.split("\n") if "\n" in detail_str else detail_str.split(",")
                             for item in items: 
-                                if item.strip(): st.markdown(f"- {item.strip()}")
+                                if item.strip(): 
+                                    trans_item = smart_krw_translator(item.strip(), rate_for_calc, curr_for_calc)
+                                    st.markdown(f"- {trans_item}", unsafe_allow_html=True)
                         else:
                             if "\n" in desc_full:
                                 st.markdown("**📝 세부 내역:**")
                                 for item in desc_full.split("\n"):
-                                    if item.strip(): st.markdown(f"- {item.strip()}")
+                                    if item.strip(): 
+                                        trans_item = smart_krw_translator(item.strip(), rate_for_calc, curr_for_calc)
+                                        st.markdown(f"- {trans_item}", unsafe_allow_html=True)
                             else:
-                                st.markdown(f"**📝 내역:** {desc_full}")
+                                trans_item = smart_krw_translator(desc_full, rate_for_calc, curr_for_calc)
+                                st.markdown(f"**📝 내역:** {trans_item}", unsafe_allow_html=True)
                             
                         if str(row_data['Receipt_URL']).startswith("http"):
                             st.image(row_data['Receipt_URL'], use_container_width=True)
@@ -843,6 +869,14 @@ with tab_his:
                         ### 🎨[GUI: Layout] 우측: 간편 인라인 수정 폼
                         st.subheader("✏️ 내역 보강 및 영수증 첨부")
                         st.caption("세부 내역을 엑셀에서 복사해 붙여넣거나 엔터(줄바꿈)로 여러 개 입력하시면, 왼쪽 뷰어에서 깔끔하게 분리되어 표시됩니다.")
+                        
+                        # [Added] 🎛️ 타임머신 미니 계산기
+                        if row_data['Currency'] != 'KRW' and row_data['AppliedRate'] > 0:
+                            with st.expander(f"🧮 타임머신 계산기 (적용 환율: {row_data['AppliedRate']:.4f})", expanded=True):
+                                mini_amt = st.number_input(f"영수증 속 현지 금액을 입력해 보세요 ({row_data['Currency']})", min_value=0.0, step=10.0, key="mini_calc")
+                                if mini_amt > 0:
+                                    st.success(f"➔ 당시 원화 가치: **{mini_amt * row_data['AppliedRate']:,.0f} 원**")
+                        
                         new_desc = st.text_area("📝 세부 내역 (수정/추가)", value=row_data['Description'], height=150)
                         new_receipt = st.file_uploader("📸 새 영수증 사진 업로드", type=['png', 'jpg', 'jpeg'], key="inline_receipt")
                         
