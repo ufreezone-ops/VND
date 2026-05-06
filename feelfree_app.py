@@ -522,6 +522,7 @@ with st.sidebar:
     st.metric("💸 지출총액", f"{spent_val:,.0f} 원")
 
     st.divider()
+    st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
     tz_sel = st.radio("📍 기준 시간 (Timezone)",["🇰🇷 한국 시간", "🌍 여행지 현지 시간"], horizontal=True, index=0 if "한국" in str(st.session_state.current_tz) else 1)
     st.session_state.current_tz = TZ_KST if "한국" in tz_sel else TRIP_TZ
     if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
