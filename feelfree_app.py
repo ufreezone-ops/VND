@@ -462,10 +462,6 @@ def calculate_summary_metrics(df):
 
 # --- SECTION 5:[Sidebar] ---
 with st.sidebar:
-    sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", list(TRIP_CONFIGS.keys()), index=list(TRIP_CONFIGS.keys()).index(st.session_state.current_trip))
-    if sel_trip != st.session_state.current_trip:
-        st.session_state.current_trip = sel_trip; st.rerun()
-
     st.divider()
     st.title("💰 Wallet Status")
     b_val, spent_val = calculate_summary_metrics(ledger_df)
@@ -507,6 +503,18 @@ with st.sidebar:
         
 # --- SECTION 4:[Module C] Intelligent Input (📝 입력) ---
 st.title(f"{st.session_state.current_trip}")
+
+# [Modified] 메인 화면 상단으로 전진 배치된 여행 선택기
+c_trip_top, c_empty = st.columns([2, 2])
+with c_trip_top:
+    sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", list(TRIP_CONFIGS.keys()), 
+                             index=list(TRIP_CONFIGS.keys()).index(st.session_state.current_trip),
+                             label_visibility="collapsed") # 제목이 이미 있으므로 라벨은 숨김
+    if sel_trip != st.session_state.current_trip:
+        st.session_state.current_trip = sel_trip; st.rerun()
+
+st.divider() # 선택기 아래 구분선 추가
+
 tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 요약"])
 
 with tab_in:
