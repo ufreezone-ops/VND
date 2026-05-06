@@ -128,6 +128,18 @@ st.markdown("""
     div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
     div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
     div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
+
+    /* [Added] 사이드바 최상단 공백 제거 및 디자인 컴팩트화 */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        padding-top: 1rem !important;
+        gap: 0.1rem !important;
+    }
+    /* 사이드바 폰트 및 여백 미세 조정 */
+    [data-testid="stSidebar"] .stMarkdown p {
+        margin-bottom: 0px !important;
+        font-size: 0.85rem !important;
+    }
+    
     </style>
     """, unsafe_allow_html=True)
 
@@ -462,8 +474,8 @@ def calculate_summary_metrics(df):
 
 # --- SECTION 5:[Sidebar] ---
 with st.sidebar:
-    st.divider()
-    st.title("💰 Wallet Status")
+
+    st.subheader("💰 Wallet Status")
     b_val, spent_val = calculate_summary_metrics(ledger_df)
     
     active_currs = set([k.split('(')[1].replace(')','') for k in current_inventory_batches.keys() if len(current_inventory_batches[k]) > 0 and sum(b['qty'] for b in current_inventory_batches[k]) > 0])
@@ -476,25 +488,28 @@ with st.sidebar:
         c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
         
         if c_card > 0 or c_cash > 0 or c in trip_currs:
-            st.markdown(f"**[{c} 잔액]**")
+            st.markdown(f"**● {c}**")
             c1, c2 = st.columns(2)
-            fmt = "{:,.2f}" if c not in["VND", "HUF"] else "{:,.0f}"
+            fmt = "{:,.2f}" if c not in ["VND", "HUF"] else "{:,.0f}"
             
-            c1.metric(f"💳 카드", f"{fmt.format(c_card)}")
-            if current_inventory_batches.get(f"트래블로그({c})"):
-                with c1.expander("카드배치", expanded=False):
-                    for b in current_inventory_batches[f"트래블로그({c})"]:
-                        if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @ {b['rate']:.2f}원")
-            
-            c2.metric(f"💵 현금", f"{fmt.format(c_cash)}")
-            if current_inventory_batches.get(f"현금({c})"):
-                with c2.expander("현금배치", expanded=False):
-                    for b in current_inventory_batches[f"현금({c})"]:
-                        if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @ {b['rate']:.2f}원")
+            with c1:
+                st.caption("💳 카드")
+                st.markdown(f"**{fmt.format(c_card)}**")
+                if current_inventory_batches.get(f"트래블로그({c})"):
+                    with st.expander("배치", expanded=False):
+                        for b in current_inventory_batches[f"트래블로그({c})"]:
+                            if b['qty'] > 0: st.caption(f"{fmt.format(b['qty'])} @{b['rate']:.1f}")
+            with c2:
+                st.caption("💵 현금")
+                st.markdown(f"**{fmt.format(c_cash)}**")
+                if current_inventory_batches.get(f"현금({c})"):
+                    with st.expander("배치", expanded=False):
+                        for b in current_inventory_batches[f"현금({c})"]:
+                            if b['qty'] > 0: st.caption(f"{fmt.format(b['qty'])} @{b['rate']:.1f}")
             st.divider()
 
-    st.metric("🏦 총 예산 (KRW)", f"{b_val:,.0f} 원")
-    st.metric("💸 지출총액 (KRW)", f"{spent_val:,.0f} 원")
+    st.metric("🏦 총 예산", f"{b_val:,.0f} 원")
+    st.metric("💸 지출총액", f"{spent_val:,.0f} 원")
 
     st.divider()
     tz_sel = st.radio("📍 기준 시간 (Timezone)",["🇰🇷 한국 시간", "🌍 여행지 현지 시간"], horizontal=True, index=0 if "한국" in str(st.session_state.current_tz) else 1)
