@@ -97,13 +97,19 @@ st.markdown("""
     }
 
     .stTabs [data-baseweb="tab"] {
-        height: 40px; /* 높이 소폭 축소 */
-        background-color: #1c1f2b; 
+        height: 40px; 
+        background-color: #262b3b; /* 비활성 배경을 조금 더 밝게 조정 */
         border-radius: 8px !important;
-        padding: 0px 10px !important; /* 좌우 여백을 25px에서 10px로 축소하여 폭 절약 */
-        color: #888 !important; 
-        border: 1px solid transparent;
-        font-size: 14px !important; /* 폰트 크기 살짝 조절 */
+        padding: 0px 10px !important; 
+        color: #CCCCCC !important; /* 글자색을 어두운 회색에서 밝은 회색으로 변경 */
+        border: 1px solid #333;
+        font-size: 14px !important; 
+        transition: all 0.3s ease;
+    }
+
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: #3d4455; /* 마우스 올렸을 때 더 밝게 반응 */
+        color: #ffffff !important;
     }
 
     /* [Modified] 오렌지 테마 활성 탭 */
