@@ -775,40 +775,42 @@ with tab_his:
         link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
         
         #[Mode 1: 검색 모드]
-        if search_query.strip():
-            mask = (
-                display_df['Category'].str.contains(search_query, case=False, na=False) | 
-                display_df['Description'].str.contains(search_query, case=False, na=False) | 
-                display_df['Note'].str.contains(search_query, case=False, na=False) |
-                display_df['Country'].str.contains(search_query, case=False, na=False) 
-            )
-            filtered_df = display_df[mask]
-            st.write(f"🔎 검색 결과: {len(filtered_df)}건")
-            st.dataframe(filtered_df, use_container_width=True, column_config={"Receipt_URL": link_cfg})
-            
-        #[Mode 2: 직접 수정 모드 (Data Editor)]
-        elif edit_mode:
+        #[Mode 1: 직접 수정 모드 (Data Editor)]
+        if edit_mode:
             edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
             if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
                 if save_data(edited_df): st.rerun()
                 
-        #[Mode 3: 기본 조회 모드 및 상세 뷰어]
+        #[Mode 2 & 3 통합: 검색 결과 및 기본 조회 모드 (상세 뷰어 완벽 지원)]
         else:
-            ### 📊[GUI: Chart/Table] 메인 데이터 그리드 표
-            df_event = st.dataframe(display_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
+            if search_query.strip():
+                mask = (
+                    display_df['Category'].str.contains(search_query, case=False, na=False) | 
+                    display_df['Description'].str.contains(search_query, case=False, na=False) | 
+                    display_df['Note'].str.contains(search_query, case=False, na=False) |
+                    display_df['Country'].str.contains(search_query, case=False, na=False) 
+                )
+                render_df = display_df[mask]
+                st.write(f"🔎 검색 결과: {len(render_df)}건")
+            else:
+                render_df = display_df
+                
+            ### 📊[GUI: Chart/Table] 메인 데이터 그리드 표 (검색 시에도 클릭 가능)
+            df_event = st.dataframe(render_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
             
             # [행 클릭 시 상세 뷰어 표시 로직]
             if df_event.selection.rows:
                 selected_idx = df_event.selection.rows[0]
-                row_data = display_df.iloc[selected_idx]
+                real_idx = render_df.index[selected_idx] # 검색결과 표와 원본 DB의 인덱스 싱크로율 맞춤
+                row_data = display_df.loc[real_idx]
                 
                 with viewer_placeholder.container():
                     st.markdown("---")
-                    ### 🎨 [GUI: Layout] 뷰어 좌우 2단 분할
+                    ### 🎨[GUI: Layout] 뷰어 좌우 2단 분할
                     c_info, c_edit = st.columns([1, 1])
                     
                     with c_info:
-                        ### 🎨 [GUI: Layout] 좌측: 뷰어 화면
+                        ### 🎨[GUI: Layout] 좌측: 뷰어 화면
                         st.subheader("🧾 상세 내역 및 영수증 뷰어")
                         amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
 
@@ -818,20 +820,19 @@ with tab_his:
                         st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}{krw_display})", unsafe_allow_html=True)
                         st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
                         
-                        # [Added] ⚙️ 딥-리더 (Deep-Reader) 자동 환산 엔진
+                        # [Added] ⚙️ 딥-리더 (Deep-Reader) 자동 환산 엔진 (한국어 완벽 인식)
                         def smart_krw_translator(text, rate, curr):
                             if rate <= 0 or curr == 'KRW': return text
                             def replacer(match):
                                 num_str = match.group(0).replace(',', '')
                                 try:
                                     v = float(num_str)
-                                    # 1~9 사이의 정수는 수량으로 간주하여 무시, 그 외의 금액 숫자는 자동 환산
                                     if v > 0 and not (v < 10 and num_str.isdigit()):
                                         krw_val = v * rate
                                         return f"{match.group(0)}<span style='font-size:13px;color:#FFD700;font-style:italic;'> (약 {krw_val:,.0f}원)</span>"
                                 except: pass
                                 return match.group(0)
-                            # 가격으로 추정되는 숫자 정규식 추출
+                            # 한국어 밀착 숫자 완벽 인식 정규식으로 교체
                             pattern = re.compile(r'(?<![\d\.])\d{1,3}(?:,\d{3})*(?:\.\d+)?(?![\d\.])')
                             return pattern.sub(replacer, text)
 
@@ -881,11 +882,11 @@ with tab_his:
                         new_receipt = st.file_uploader("📸 새 영수증 사진 업로드", type=['png', 'jpg', 'jpeg'], key="inline_receipt")
                         
                         if st.button("💾 이 내역 업데이트", use_container_width=True):
-                            display_df.at[selected_idx, 'Description'] = new_desc
+                            display_df.at[real_idx, 'Description'] = new_desc
                             if new_receipt:
                                 with st.spinner("클라우드 전송 중..."):
                                     url = upload_image_to_imgbb(new_receipt)
-                                    if url: display_df.at[selected_idx, 'Receipt_URL'] = url
+                                    if url: display_df.at[real_idx, 'Receipt_URL'] = url
                             if save_data(display_df): st.success("업데이트 완료!"); time.sleep(1); st.rerun()
                     st.markdown("---")
 
