@@ -59,32 +59,27 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 
-# --- [Added] AI Brain (Gemini) Configuration ---
-
-# 1. 먼저 열쇠를 찾는 '방법'을 정의합니다 (함수 정의)
+# --- [Added] AI Brain (Gemini) Configuration [Modified] ---
 def get_gemini_key():
-    """루트 레벨과 하위 섹션을 모두 뒤져 Gemini API Key를 찾습니다."""
+    """Secrets 구조를 분석하여 Gemini API Key를 확보합니다."""
+    if "GEMINI_API_KEY" in st.secrets:
+        return st.secrets["GEMINI_API_KEY"]
     try:
-        # 루트 레벨 확인 (추천 방식)
-        if "GEMINI_API_KEY" in st.secrets:
-            return st.secrets["GEMINI_API_KEY"]
-        # connections.gsheets 섹션 내부 확인
         if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
             return st.secrets["connections"]["gsheets"].get("GEMINI_API_KEY")
     except: pass
     return None
 
-# --- [Modified] AI Brain (Gemini) Configuration ---
 GEMINI_KEY = get_gemini_key()
 
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    # [Added] 모델 객체만 생성 (실제 가동은 분석 함수 내에서 수행)
-    # 라이브러리 버전에 따라 모델 이름이 다를 수 있으므로 스위칭 로직 준비
+    # [Modified] 모델 이름을 명시적 경로명으로 시도하여 404 방지
     try:
-        ai_model = genai.GenerativeModel('gemini-1.5-flash')
+        # 최신 SDK는 'models/...' 접두어를 붙였을 때 더 정확히 찾기도 합니다.
+        ai_model = genai.GenerativeModel(model_name='gemini-1.5-flash')
     except:
-        ai_model = genai.GenerativeModel('gemini-pro-vision')
+        ai_model = genai.GenerativeModel(model_name='gemini-pro-vision')
 else:
     ai_model = None
     
@@ -340,35 +335,49 @@ def load_all_trips_data():
     return pd.concat(all_dfs, ignore_index=True)
 
 def analyze_receipt_with_ai(image_file):
-    """Gemini AI를 사용하여 영수증 이미지를 분석합니다 (404 에러 대응 로직 포함)."""
+    """[Modified] Gemini AI를 사용하여 영수증 분석을 수행하며, 에러 시 모델 진단을 실시합니다."""
     if ai_model is None:
         st.error("🔑 Gemini API Key가 설정되지 않았습니다.")
         return None
 
     try:
         image_data = image_file.getvalue()
-        prompt = "영수증 사진을 분석해서 상호명(store), 금액(total_amount, 숫자만), 통화(currency, ISO코드), 품목(items), 날짜(date, YYYY-MM-DD)를 JSON으로만 응답해."
-        contents = [prompt, {"mime_type": "image/jpeg", "data": image_data}]
+        # [Strategy] 프롬프트를 더 직관적으로 정제
+        prompt = """
+        영수증 사진을 분석해서 아래 JSON 형식으로만 응답해.
+        금액은 숫자만, 통화는 ISO코드(VND, CNY, EUR, KRW 등)로 추출해.
+        {
+            "store": "상호명",
+            "total_amount": 1000,
+            "currency": "VND",
+            "items": "품목 리스트",
+            "date": "YYYY-MM-DD"
+        }
+        """
+        # 최신 SDK 호출 규격 준수
+        response = ai_model.generate_content([
+            prompt,
+            {"mime_type": "image/jpeg", "data": image_data}
+        ])
         
-        # [Strategy] 1차 시도: gemini-1.5-flash
-        try:
-            response = ai_model.generate_content(contents)
-        except Exception as e:
-            if "404" in str(e):
-                # [Recovery] 1.5-flash가 없으면 gemini-pro-vision으로 즉시 전환하여 재시도
-                backup_model = genai.GenerativeModel('gemini-pro-vision')
-                response = backup_model.generate_content(contents)
-            else:
-                raise e
-
-        # JSON 추출 로직 (유지)
         json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
         if json_match:
             import json
             return json.loads(json_match.group())
             
     except Exception as e:
-        st.error(f"🤖 AI 분석 엔진 오류: {e}")
+        # [Added] 404 에러 발생 시 현재 가용한 모델 리스트를 출력하여 진단
+        if "404" in str(e):
+            st.error(f"🤖 모델 경로 오류(404): {e}")
+            with st.expander("🛠️ 시스템 AI 환경 진단 (사용 가능한 모델 목록)"):
+                try:
+                    models = [m.name for m in genai.list_models()]
+                    st.write(models)
+                    st.info("💡 위 목록에 'models/gemini-1.5-flash'가 없다면 라이브러리 업데이트가 필요합니다.")
+                except:
+                    st.write("모델 목록을 불러올 수 없습니다. API Key를 확인하세요.")
+        else:
+            st.error(f"🤖 AI 분석 중 오류 발생: {e}")
     return None
 
 ### ⚙️ [Logic: Core Calculation] 전체 원장 재계산 (DB 저장 전)
