@@ -203,7 +203,6 @@ def summarize_receipt_with_gemini(raw_text):
             return raw_text + "\n\n(⚠️ Gemini API 키가 설정되지 않아 원본을 출력합니다.)"
         
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = """너는 다국어 영수증 전문 분석가야. 아래 주어진 영수증 텍스트에서 상호명, 주소, 전화번호, 세금(Tax), 날짜, 카드번호, 총액(Total) 등 불필요한 정보는 모두 버리고 오직 '소비한 품목'과 '가격'만 추출해.
 지침:
@@ -216,9 +215,22 @@ def summarize_receipt_with_gemini(raw_text):
 [영수증 텍스트]
 """ + raw_text
 
-        response = model.generate_content(prompt)
-        if response.text: return response.text.strip()
-        return raw_text
+        # [Fixed] 모델명 버전 호환성 문제를 해결하는 다중 Fallback 로직 탑재
+        models_to_try =['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-pro']
+        last_error = ""
+        
+        for m_name in models_to_try:
+            try:
+                model = genai.GenerativeModel(m_name)
+                response = model.generate_content(prompt)
+                if response.text: return response.text.strip()
+            except Exception as e:
+                last_error = str(e)
+                # 404(Not Found) 에러면 다음 모델 이름으로 재시도
+                if "404" in str(e) or "not found" in str(e).lower(): continue
+                break # 404가 아닌 다른 에러(키 오류 등)면 중단
+                
+        return raw_text + f"\n\n(⚠️ Gemini 요약 에러: {last_error})"
     except ImportError: return raw_text + "\n\n(⚠️ google-generativeai 라이브러리가 없어 원본 출력)"
     except Exception as e: return raw_text + f"\n\n(⚠️ Gemini 요약 에러: {e})"
 
