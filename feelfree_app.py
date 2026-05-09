@@ -8,7 +8,6 @@ import time
 import requests
 import base64
 import re
-import google.generativeai as genai # [Added] AI 브레인
 
 # ==============================================================================
 # --- SECTION 1: Configuration & Global Setup ---
@@ -58,39 +57,12 @@ SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_L
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
-
-# --- [Added] AI Brain (Gemini) Configuration [Modified] ---
-def get_gemini_key():
-    """Secrets 구조를 분석하여 Gemini API Key를 확보합니다."""
-    if "GEMINI_API_KEY" in st.secrets:
-        return st.secrets["GEMINI_API_KEY"]
-    try:
-        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-            return st.secrets["connections"]["gsheets"].get("GEMINI_API_KEY")
-    except: pass
-    return None
-
-# --- [Modified] AI Brain (Gemini) Configuration ---
-GEMINI_KEY = get_gemini_key()
-
-if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
-    try:
-        # [Strategy] 진단 결과 확인된 최적의 모델(Index 2)로 교체
-        ai_model = genai.GenerativeModel('gemini-2.0-flash')
-    except:
-        # 백업용으로 최신 별칭(Index 10) 시도
-        ai_model = genai.GenerativeModel('gemini-flash-latest')
-else:
-    ai_model = None
-    
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-# [Modified] 버전 및 업데이트 로그 v26.05.09.001
-VERSION = "v26.05.09.001"
-UPDATE_LOG_TEXT = """* `[Added]` 초정밀 AI 비전 엔진(Google Cloud Vision API) 연동 완료. 사진 속 영수증 내역을 자동으로 추출하여 메모에 삽입합니다.
-* `[Added]` 뷰어 내 '딥-리더(Deep-Reader)' 자동 환산기 탑재 (메모 속 숫자를 인식해 당시 환율로 원화 자동 번역).
-* `[Added]` 뷰어 우측에 '타임머신 계산기' 추가 (해당 결제건의 과거 환율이 자동 적용된 미니 환산기)."""
+# [Modified] 버전 및 업데이트 로그 v26.05.09.002
+VERSION = "v26.05.09.002"
+UPDATE_LOG_TEXT = """* `[Added]` Google Gemini API(LLM) 연동 완료. 영수증 이미지에서 추출된 원시 데이터를 한국어로 스마트하게 번역 및 요약(품목, 수량, 가격)합니다.
+* `[Fixed]` 지출 입력 후 메모칸(Description) 데이터 초기화 시 발생하는 Streamlit 생명주기(Lifecycle) 충돌 에러 우회 및 안정화."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -118,49 +90,18 @@ st.markdown("""
     .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
     div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-    /* 오렌지 강조형 탭 컨테이너 */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 5px; 
-        padding: 5px 5px;
-        background-color: #161a25; 
-        border-radius: 12px;
-        border: 2px solid #FFA500; 
-        box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); 
-    }
-    .stTabs[data-baseweb="tab"] {
-        height: 40px; 
-        background-color: #262b3b; 
-        border-radius: 8px !important;
-        padding: 0px 10px !important; 
-        color: #CCCCCC !important; 
-        border: 1px solid #333;
-        font-size: 14px !important; 
-        transition: all 0.3s ease;
-    }
-    .stTabs[data-baseweb="tab"]:hover {
-        background-color: #3d4455; 
-        color: #ffffff !important;
-    }
-    /* 오렌지 테마 활성 탭 */
-    .stTabs [aria-selected="true"] {
-        background-color: #FFA500 !important; 
-        color: #000000 !important; 
-        font-weight: 800 !important;
-        box-shadow: 0px 4px 12px rgba(255, 165, 0, 0.4) !important; 
-        border: 1px solid #FFA500 !important;
-    }
+    .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #161a25; border-radius: 12px; border: 2px solid #FFA500; box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); }
+    .stTabs[data-baseweb="tab"] { height: 40px; background-color: #262b3b; border-radius: 8px !important; padding: 0px 10px !important; color: #CCCCCC !important; border: 1px solid #333; font-size: 14px !important; transition: all 0.3s ease; }
+    .stTabs[data-baseweb="tab"]:hover { background-color: #3d4455; color: #ffffff !important; }
+    .stTabs [aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: 800 !important; box-shadow: 0px 4px 12px rgba(255, 165, 0, 0.4) !important; border: 1px solid #FFA500 !important; }
 
-    /* 사이드바 및 드롭다운 스타일 */
     div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
     div[data-testid="stSidebar"] .stSelectbox label { color: #FFA500 !important; font-weight: bold !important; }
     div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
     div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
-    div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
-
-    /* 사이드바 디자인 최종 최적화 */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0.5rem !important; gap: 0px !important; }[data-testid="stSidebar"] .stExpander div[data-testid="stVerticalBlock"] { gap: 2px !important; padding: 5px !important; }
+    div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0.5rem !important; gap: 0px !important; }
+    [data-testid="stSidebar"] .stExpander div[data-testid="stVerticalBlock"] { gap: 2px !important; padding: 5px !important; }
     [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
-    
     </style>
     """, unsafe_allow_html=True)
 
@@ -193,7 +134,7 @@ def get_asset_class(text):
     if any(k in txt for k in["트래블", "월렛", "카드"]): return "PREPAID" 
     return "DOMESTIC" 
 
-### ⚙️ [Logic: Rate Fallback] 평균 환율 동적 추론
+### ⚙️[Logic: Rate Fallback] 평균 환율 동적 추론
 def get_default_rate(curr):
     if curr == "KRW": return 1.0
     try:
@@ -213,17 +154,15 @@ def upload_image_to_imgbb(image_file):
     except: pass
     return ""
 
-### ⚙️[Logic: AI OCR] [Added] 구글 클라우드 비전 API 텍스트 추출 엔진
+### ⚙️[Logic: AI OCR - Vision] 구글 클라우드 비전 API 텍스트 추출 엔진 (눈)
 def extract_text_from_vision_api(image_bytes):
     try:
         from google.oauth2 import service_account
         from google.cloud import vision
         
-        # [스마트 탐색] Streamlit Secrets의 모든 계층(폴더)을 뒤져서 인증키를 자동으로 찾아냅니다.
         def find_gcp_key(d):
             try:
-                if "private_key" in d and "client_email" in d:
-                    return dict(d)
+                if "private_key" in d and "client_email" in d: return dict(d)
                 for k, v in d.items():
                     if isinstance(v, dict) or hasattr(v, 'items'):
                         res = find_gcp_key(v)
@@ -232,27 +171,19 @@ def extract_text_from_vision_api(image_bytes):
             return None
             
         secret_dict = find_gcp_key(st.secrets)
-        
-        if not secret_dict:
-            return f"⚠️ [설정 오류] Secrets에서 인증키를 찾지 못했습니다. 현재 구조: {list(st.secrets.keys())}"
+        if not secret_dict: return "⚠️ [설정 오류] Secrets에서 GCP 인증키를 찾지 못했습니다."
             
-        # [자동 복구 1] 누락된 필수 항목(type, project_id) 자동 주입
-        if "type" not in secret_dict: 
-            secret_dict["type"] = "service_account"
+        if "type" not in secret_dict: secret_dict["type"] = "service_account"
         if "project_id" not in secret_dict:
             email = secret_dict.get("client_email", "")
-            if "@" in email and ".iam" in email:
-                secret_dict["project_id"] = email.split("@")[1].split(".iam")[0]
-            else:
-                secret_dict["project_id"] = "gtl-project-auto"
+            if "@" in email and ".iam" in email: secret_dict["project_id"] = email.split("@")[1].split(".iam")[0]
+            else: secret_dict["project_id"] = "gtl-project-auto"
                 
-        # [자동 복구 2] 복사 과정에서 텍스트로 굳어버린 줄바꿈 기호(\n)를 실제 줄바꿈으로 해제
         if "\\n" in secret_dict["private_key"]:
             secret_dict["private_key"] = secret_dict["private_key"].replace('\\n', '\n')
             
         credentials = service_account.Credentials.from_service_account_info(secret_dict)
         client = vision.ImageAnnotatorClient(credentials=credentials)
-        
         image = vision.Image(content=image_bytes)
         response = client.text_detection(image=image)
         
@@ -260,10 +191,36 @@ def extract_text_from_vision_api(image_bytes):
         texts = response.text_annotations
         if texts: return texts[0].description
         return ""
-    except ImportError:
-        return "⚠️ [설정 오류] 'google-cloud-vision' 라이브러리가 requirements.txt에 없습니다."
-    except Exception as e:
-        return f"⚠️ [에러 발생]: {e}"
+    except ImportError: return "⚠️ [설정 오류] 'google-cloud-vision' 라이브러리가 없습니다."
+    except Exception as e: return f"⚠️ [에러 발생]: {e}"
+
+### ⚙️[Logic: AI LLM - Gemini] [Added] 영수증 스마트 번역/요약 엔진 (뇌)
+def summarize_receipt_with_gemini(raw_text):
+    if not raw_text or "⚠️" in raw_text: return raw_text
+    try:
+        import google.generativeai as genai
+        if "GEMINI_API_KEY" not in st.secrets:
+            return raw_text + "\n\n(⚠️ Gemini API 키가 설정되지 않아 원본을 출력합니다.)"
+        
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = """너는 다국어 영수증 전문 분석가야. 아래 주어진 영수증 텍스트에서 상호명, 주소, 전화번호, 세금(Tax), 날짜, 카드번호, 총액(Total) 등 불필요한 정보는 모두 버리고 오직 '소비한 품목'과 '가격'만 추출해.
+지침:
+1. 품목 이름은 무조건 '한국어'로 가장 자연스럽게 번역해 (예: CA PHE SUA DA -> 아이스 연유 커피).
+2. 수량이 2개 이상일 때만 품목 이름 뒤에 '(X개)'라고 표시해 (예: 소고기 쌀국수 (2개) 120,000). 수량이 1개면 적지 마.
+3. 화폐 단위 기호는 빼고 가격 숫자만 적어.
+4. 각 항목은 '품목명 가격' 형태로 한 줄씩 출력해. (예: 계란 볶음밥 50,000)
+5. 인사말이나 부연 설명은 절대 하지 말고 위 규칙에 맞춘 결과만 딱 출력해.
+
+[영수증 텍스트]
+""" + raw_text
+
+        response = model.generate_content(prompt)
+        if response.text: return response.text.strip()
+        return raw_text
+    except ImportError: return raw_text + "\n\n(⚠️ google-generativeai 라이브러리가 없어 원본 출력)"
+    except Exception as e: return raw_text + f"\n\n(⚠️ Gemini 요약 에러: {e})"
 
 ### ⚙️ [Logic: Data Formatting] 날짜 정규화 엔진
 def normalize_date(d_str):
@@ -335,45 +292,7 @@ def load_all_trips_data():
     if not all_dfs: return pd.DataFrame(columns=FINAL_COLUMNS)
     return pd.concat(all_dfs, ignore_index=True)
 
-def analyze_receipt_with_ai(image_file):
-    """[Modified] Gemini 2.0 Flash 엔진을 사용하여 영수증을 초고속 분석합니다."""
-    if ai_model is None:
-        st.error("🔑 Gemini API Key가 설정되지 않았습니다.")
-        return None
-
-    try:
-        image_data = image_file.getvalue()
-        # [Strategy] 2.0 모델의 강력한 멀티모달 능력을 활용하는 정밀 프롬프트
-        prompt = """
-        이 영수증 사진을 분석해서 반드시 아래 JSON 형식으로만 응답해.
-        1. store: 상호명
-        2. total_amount: 최종 결제 금액 (숫자만)
-        3. currency: ISO 통화코드 (VND, CNY, EUR, KRW 등)
-        4. items: 상세 품목 리스트 (엔터로 구분된 문자열)
-        5. date: 결제 날짜 (YYYY-MM-DD)
-        
-        JSON:
-        """
-        
-        response = ai_model.generate_content([
-            prompt,
-            {"mime_type": "image/jpeg", "data": image_data}
-        ])
-        
-        # 결과에서 JSON 블록 추출
-        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
-        if json_match:
-            import json
-            extracted = json.loads(json_match.group())
-            # [Added] 세션에 분석 성공 플래그 저장
-            st.session_state.last_ai_status = "success"
-            return extracted
-            
-    except Exception as e:
-        st.error(f"🤖 AI 엔진(2.0-flash) 오류: {e}")
-    return None
-
-### ⚙️ [Logic: Core Calculation] 전체 원장 재계산 (DB 저장 전)
+### ⚙️[Logic: Core Calculation] 전체 원장 재계산 (DB 저장 전)
 def recalculate_entire_ledger(df):
     temp_df = df.copy()
     temp_df = temp_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
@@ -410,8 +329,7 @@ def recalculate_entire_ledger(df):
         
         elif cat == '환불':
             if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
-            if asset_cls == "DOMESTIC":
-                c_budget -= qty if curr == 'KRW' else qty * rate 
+            if asset_cls == "DOMESTIC": c_budget -= qty if curr == 'KRW' else qty * rate 
             else:
                 target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
@@ -474,7 +392,7 @@ def recalculate_entire_ledger(df):
         
     return temp_df
 
-### ⚙️ [Logic: DB Save] 구글 시트 동기화
+### ⚙️[Logic: DB Save] 구글 시트 동기화
 def save_data(df, metrics=None):
     if df is None or len(df) == 0: return False
     with st.status("클라우드 동기화 중...", expanded=False):
@@ -537,7 +455,7 @@ current_inventory_batches = get_inventory_status(ledger_df)
 sw_df_loc = ledger_df[(ledger_df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (ledger_df['Currency'].str.strip() == TRAVEL_CURRENCY)]
 WAR_LOCAL = (sw_df_loc['Amount'] * sw_df_loc['AppliedRate']).sum() / sw_df_loc['Amount'].sum() if not sw_df_loc.empty and sw_df_loc['Amount'].sum() > 0 else get_default_rate(TRAVEL_CURRENCY)
 
-### ⚙️ [Logic: URDI Engine] 가중 평균 환율(WAR) 및 FIFO 환율 계산
+### ⚙️[Logic: URDI Engine] 가중 평균 환율(WAR) 및 FIFO 환율 계산
 def get_WAR(curr):
     sw_df = ledger_df[(ledger_df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (ledger_df['Currency'].str.strip() == curr)]
     if not sw_df.empty and sw_df['Amount'].sum() > 0: return (sw_df['Amount'] * sw_df['AppliedRate']).sum() / sw_df['Amount'].sum()
@@ -549,7 +467,7 @@ def auto_calc_fifo_rate(amount, method, curr=TRAVEL_CURRENCY):
     target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
     temp_inv = get_inventory_status(ledger_df)
     if target not in temp_inv: return get_WAR(curr)
-    available_batches = [b for b in temp_inv[target] if b['qty'] > 0]
+    available_batches =[b for b in temp_inv[target] if b['qty'] > 0]
     if not available_batches: return get_WAR(curr)
     total_cost_krw, remaining = 0.0, amount
     for batch in available_batches:
@@ -558,7 +476,7 @@ def auto_calc_fifo_rate(amount, method, curr=TRAVEL_CURRENCY):
     if remaining > 0: total_cost_krw += remaining * available_batches[-1]['rate']
     return total_cost_krw / amount if amount > 0 else 0
 
-### ⚙️ [Logic: Metrics] 대시보드 지표 추출
+### ⚙️[Logic: Metrics] 대시보드 지표 추출
 def calculate_summary_metrics(df):
     if df.empty: return 0.0, 0.0
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True)
@@ -583,7 +501,7 @@ with st.sidebar:
     ### 📊 [GUI: Chart/Table] 통화별 잔고 표시
     for c in display_currs:
         if c == "KRW": continue
-        c_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블로그({c})", [])])
+        c_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블로그({c})",[])])
         c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
         
         if c_card > 0 or c_cash > 0 or c in trip_currs:
@@ -593,7 +511,7 @@ with st.sidebar:
             st.markdown(f"<div style='margin-bottom:18px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
             
             card_batches = current_inventory_batches.get(f"트래블로그({c})",[])
-            cash_batches = current_inventory_batches.get(f"현금({c})", [])
+            cash_batches = current_inventory_batches.get(f"현금({c})",[])
             
             if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
                 with st.expander("🔍 상세 배치", expanded=False):
@@ -661,54 +579,38 @@ with tab_in:
 
     # ------------------------------------------------------------------
     #[Mode 1: 일반 지출]
-    # ------------------------------------------------------------------   
+    # ------------------------------------------------------------------
     if mode == "일반 지출":        
-        ### 🎛️ [GUI: Component] 지출 카테고리
+        ### 🎛️[GUI: Component] 지출 카테고리
         def_index = EXPENSE_CATS.index(st.session_state.last_cat_name) if st.session_state.last_cat_name in EXPENSE_CATS else 0
         cat = st.radio("항목 선택", EXPENSE_CATS, index=def_index, horizontal=True, key="exp_cat")
         st.session_state.last_cat_name = cat
         
-        # [Fixed] 안전한 메모칸 초기화 로직 (Streamlit 생명주기 충돌 에러 방지)
+        # [Fixed] 안전한 메모칸 초기화 로직
         if st.session_state.get('clear_exp_desc', False):
             st.session_state.exp_desc = ""
             st.session_state.clear_exp_desc = False
-        
-        ### 🎨 [GUI: Layout] 세부내역 및 영수증 업로드 (OCR 지원)
-        col_desc, col_receipt = st.columns([3, 1])
-        
-        ### 🎨 [GUI: Layout] 세부내역 및 영수증 업로드 (OCR 지원)
+            
+        ### 🎨[GUI: Layout] 세부내역 및 영수증 업로드 (OCR 지원)
         col_desc, col_receipt = st.columns([3, 1])
         
         with col_receipt: 
             uploaded_file = st.file_uploader("📸 영수증 첨부", type=['png', 'jpg', 'jpeg'], key="exp_receipt")
-            
-        # [Corrected Indent: 8 spaces] AI 분석 버튼 및 로직
-        if uploaded_file is not None:
-            if st.button("🤖 AI 영수증 분석 (Auto-fill)", use_container_width=True):
-                with st.spinner("AI 브레인이 영수증을 읽고 있습니다..."):
-                    ai_data = analyze_receipt_with_ai(uploaded_file)
-                    if ai_data:
-                        # 분석된 데이터를 세션 상태에 저장
-                        st.session_state.ai_extracted = ai_data
-                        st.success(f"✅ '{ai_data['store']}' 내역 분석 완료!")
-                        st.rerun()
-
-        # [Corrected Indent: 8 spaces] AI가 추출한 데이터 호출
-        ai_ext = st.session_state.get('ai_extracted', {})
-        
-        # [Logic] AI 데이터를 메모칸 기본값으로 조합 (상호명 - 품목)
-        ai_default_desc = ""
-        if ai_ext:
-            store = ai_ext.get('store', '')
-            items = ai_ext.get('items', '')
-            ai_default_desc = f"{store} - {items}" if items else store
-
+            # [Added] 🎛️ 영수증 스캔 및 AI 번역 파이프라인 (Vision -> Gemini)
+            if uploaded_file is not None:
+                if st.button("🤖 영수증 AI 스캔 (스마트 번역)", use_container_width=True):
+                    with st.spinner("AI가 영수증을 분석하고 번역하는 중입니다..."):
+                        # 1단계: Vision API (눈)
+                        ext_text = extract_text_from_vision_api(uploaded_file.getvalue())
+                        # 2단계: Gemini API (뇌)
+                        smart_text = summarize_receipt_with_gemini(ext_text)
+                        
+                        if smart_text:
+                            st.session_state.exp_desc = st.session_state.get('exp_desc', '') + "\n" + smart_text
+                            st.rerun()
+                            
         with col_desc: 
-            # [Modified] value 파라미터에 AI 분석 결과(ai_default_desc)를 연결함
-            desc = st.text_area("📝 내용 (상호명 및 다중 내역)", 
-                               value=ai_default_desc if ai_default_desc else "",
-                               placeholder="예: 안바카페 - 소고기버거\n반미정식", 
-                               height=120, key="exp_desc")
+            desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식\n(사진을 스캔하면 AI가 한국어로 번역하여 적어줍니다)", height=120, key="exp_desc")
             
         ### 🎨 [GUI: Layout] 통화/수단/게이트웨이
         col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
@@ -734,7 +636,7 @@ with tab_in:
             if gateway_sel == "➕ 직접 입력하기": final_gateway = st.text_input("새로운 플랫폼 이름 입력", placeholder="예: 마이리얼트립")
             elif gateway_sel != "선택안함 (기본)": final_gateway = gateway_sel
 
-        ### 🎨 [GUI: Layout] 금액 및 환율 설정 영역
+        ### 🎨[GUI: Layout] 금액 및 환율 설정 영역
         col_a1, col_a2 = st.columns(2)
         with col_a1:
             ### 🎛️ [GUI: Component] 금액 입력
@@ -772,7 +674,6 @@ with tab_in:
                 'Receipt_URL': receipt_url
             }])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): 
-                # [Fixed] 즉시 강제 변경하지 않고, 다음 렌더링 시 비우도록 플래그 설정
                 st.session_state.clear_exp_desc = True
                 st.rerun()
 
@@ -875,13 +776,13 @@ with tab_in:
             r_rate = st.number_input("과거 결제 시 적용됐던 환율", value=(1.0 if r_curr=="KRW" else get_default_rate(r_curr)), format="%.5f", key="rf_rate")
             r_desc = st.text_input("취소 내역 메모", placeholder="예: 호텔 보증금 반환", key="rf_desc")
             
-        ### 🎛️ [GUI: Component] 환불 롤백 실행 버튼
+        ### 🎛️[GUI: Component] 환불 롤백 실행 버튼
         if st.button("🔙 환불 인벤토리 롤백 실행", use_container_width=True):
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
     # ------------------------------------------------------------------
-    # [Mode 4: 출입국 일정 기록]
+    #[Mode 4: 출입국 일정 기록]
     # ------------------------------------------------------------------
     else:
         st.subheader("✈️ 출입국 일정 기록")
@@ -977,7 +878,7 @@ with tab_his:
                         st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}{krw_display})", unsafe_allow_html=True)
                         st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
                         
-                        # [Added] ⚙️ 딥-리더 (Deep-Reader) 자동 환산 엔진 (한국어 완벽 인식)
+                        # [Added] ⚙️ 딥-리더 (Deep-Reader) 자동 환산 엔진
                         def smart_krw_translator(text, rate, curr):
                             if rate <= 0 or curr == 'KRW': return text
                             def replacer(match):
@@ -1034,20 +935,20 @@ with tab_his:
                                 if mini_amt > 0:
                                     st.success(f"➔ 당시 원화 가치: **{mini_amt * row_data['AppliedRate']:,.0f} 원**")
                         
-                        # [Added] ⚙️ OCR 연동을 위한 상태 동기화 로직
                         desc_key = f"edit_desc_{real_idx}"
                         if st.session_state.get('current_edit_idx') != real_idx:
                             st.session_state[desc_key] = str(row_data['Description'])
                             st.session_state['current_edit_idx'] = real_idx
                             
                         new_receipt = st.file_uploader("📸 새 영수증 사진 업로드", type=['png', 'jpg', 'jpeg'], key="inline_receipt")
-                        # [Added] 🎛️ 수정 뷰어용 OCR 스캔 버튼
+                        # [Added] 🎛️ 수정 뷰어용 OCR 및 LLM 번역 파이프라인
                         if new_receipt:
-                            if st.button("🤖 첨부된 사진 AI 스캔 (OCR)", use_container_width=True):
-                                with st.spinner("구글 AI가 영수증을 분석 중입니다..."):
+                            if st.button("🤖 첨부된 사진 AI 스캔 (스마트 번역)", use_container_width=True):
+                                with st.spinner("AI가 영수증을 분석하고 번역하는 중입니다..."):
                                     ext_text = extract_text_from_vision_api(new_receipt.getvalue())
-                                    if ext_text:
-                                        st.session_state[desc_key] = st.session_state.get(desc_key, '') + "\n" + ext_text
+                                    smart_text = summarize_receipt_with_gemini(ext_text)
+                                    if smart_text:
+                                        st.session_state[desc_key] = st.session_state.get(desc_key, '') + "\n" + smart_text
                                         st.rerun()
 
                         new_desc = st.text_area("📝 세부 내역 (수정/추가)", height=150, key=desc_key)
@@ -1242,4 +1143,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 68 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
