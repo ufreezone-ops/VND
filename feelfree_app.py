@@ -59,9 +59,10 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-#[Modified] 버전 및 업데이트 로그 v26.05.06.005
-VERSION = "v26.05.06.005"
-UPDATE_LOG_TEXT = """* `[Added]` 뷰어 내 '딥-리더(Deep-Reader)' 자동 환산기 탑재 (메모 속 숫자를 인식해 당시 환율로 원화 자동 번역).
+# [Modified] 버전 및 업데이트 로그 v26.05.09.001
+VERSION = "v26.05.09.001"
+UPDATE_LOG_TEXT = """* `[Added]` 초정밀 AI 비전 엔진(Google Cloud Vision API) 연동 완료. 사진 속 영수증 내역을 자동으로 추출하여 메모에 삽입합니다.
+* `[Added]` 뷰어 내 '딥-리더(Deep-Reader)' 자동 환산기 탑재 (메모 속 숫자를 인식해 당시 환율로 원화 자동 번역).
 * `[Added]` 뷰어 우측에 '타임머신 계산기' 추가 (해당 결제건의 과거 환율이 자동 적용된 미니 환산기)."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -90,7 +91,7 @@ st.markdown("""
     .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
     div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-    /* [Modified] 오렌지 강조형 탭 컨테이너 (띄어쓰기 복구) */
+    /* 오렌지 강조형 탭 컨테이너 */
     .stTabs [data-baseweb="tab-list"] {
         gap: 5px; 
         padding: 5px 5px;
@@ -99,7 +100,7 @@ st.markdown("""
         border: 2px solid #FFA500; 
         box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); 
     }
-    .stTabs [data-baseweb="tab"] {
+    .stTabs[data-baseweb="tab"] {
         height: 40px; 
         background-color: #262b3b; 
         border-radius: 8px !important;
@@ -109,11 +110,11 @@ st.markdown("""
         font-size: 14px !important; 
         transition: all 0.3s ease;
     }
-    .stTabs [data-baseweb="tab"]:hover {
+    .stTabs[data-baseweb="tab"]:hover {
         background-color: #3d4455; 
         color: #ffffff !important;
     }
-    /*[Modified] 오렌지 테마 활성 탭 (띄어쓰기 복구) */
+    /* 오렌지 테마 활성 탭 */
     .stTabs [aria-selected="true"] {
         background-color: #FFA500 !important; 
         color: #000000 !important; 
@@ -184,6 +185,36 @@ def upload_image_to_imgbb(image_file):
         if res.status_code == 200: return res.json()['data']['url']
     except: pass
     return ""
+
+### ⚙️[Logic: AI OCR] [Added] 구글 클라우드 비전 API 텍스트 추출 엔진
+def extract_text_from_vision_api(image_bytes):
+    try:
+        from google.oauth2 import service_account
+        from google.cloud import vision
+        
+        # Secrets 구조 동적 탐색 (gcp_service_account 하위 또는 루트 구조 완벽 대응)
+        secret_dict = None
+        if "gcp_service_account" in st.secrets:
+            secret_dict = dict(st.secrets["gcp_service_account"])
+        elif "type" in st.secrets and st.secrets["type"] == "service_account":
+            secret_dict = dict(st.secrets)
+        else:
+            return "⚠️ [설정 오류] Streamlit Secrets에 GCP 인증키(JSON)가 올바르게 설정되지 않았습니다."
+            
+        credentials = service_account.Credentials.from_service_account_info(secret_dict)
+        client = vision.ImageAnnotatorClient(credentials=credentials)
+        
+        image = vision.Image(content=image_bytes)
+        response = client.text_detection(image=image)
+        
+        if response.error.message: return f"⚠️ [API 에러]: {response.error.message}"
+        texts = response.text_annotations
+        if texts: return texts[0].description
+        return ""
+    except ImportError:
+        return "⚠️ [설정 오류] 'google-cloud-vision' 라이브러리가 requirements.txt에 없습니다."
+    except Exception as e:
+        return f"⚠️ [에러 발생]: {e}"
 
 ### ⚙️ [Logic: Data Formatting] 날짜 정규화 엔진
 def normalize_date(d_str):
@@ -375,9 +406,9 @@ def save_data(df, metrics=None):
 ledger_df = load_data()
 
 # ==============================================================================
-# --- SECTION 3: [Module B] URDI Engine ---
+# --- SECTION 3:[Module B] URDI Engine ---
 # ==============================================================================
-### ⚙️ [Logic: URDI Engine] 인벤토리 잔고 추적
+### ⚙️[Logic: URDI Engine] 인벤토리 잔고 추적
 def get_inventory_status(df):
     from collections import defaultdict
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True) if not df.empty else df
@@ -403,7 +434,7 @@ def get_inventory_status(df):
                     if batch['qty'] <= 0: continue
                     take = min(temp_qty, batch['qty']); batch['qty'] -= take
                     inv_batches[target_to].append({'rate': batch['rate'], 'qty': take, 'initial': take}); temp_qty -= take
-        elif (row['IsExpense'] == 1 or cat in ['보증금', '재환전']) and curr != 'KRW':
+        elif (row['IsExpense'] == 1 or cat in['보증금', '재환전']) and curr != 'KRW':
             if asset_cls != "DOMESTIC":
                 target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
@@ -470,7 +501,7 @@ with st.sidebar:
         
         if c_card > 0 or c_cash > 0 or c in trip_currs:
             st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
-            fmt = "{:,.2f}" if c not in ["VND", "HUF"] else "{:,.0f}"
+            fmt = "{:,.2f}" if c not in["VND", "HUF"] else "{:,.0f}"
             st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
             st.markdown(f"<div style='margin-bottom:18px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
             
@@ -495,7 +526,7 @@ with st.sidebar:
     st.metric("💸 지출총액", f"{spent_val:,.0f} 원")
 
     st.divider()
-    ### 🎛️ [GUI: Component] 타임존 및 새로고침
+    ### 🎛️[GUI: Component] 타임존 및 새로고침
     st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
     tz_sel = st.radio("📍 기준 시간 (Timezone)",["🇰🇷 한국 시간", "🌍 여행지 현지 시간"], horizontal=True, index=0 if "한국" in str(st.session_state.current_tz) else 1)
     st.session_state.current_tz = TZ_KST if "한국" in tz_sel else TRIP_TZ
@@ -508,7 +539,7 @@ with st.sidebar:
 # ==============================================================================
 st.title(f"{st.session_state.current_trip}")
 
-### 🎨 [GUI: Layout] 메인 화면 상단 여행 선택 영역 분할
+### 🎨[GUI: Layout] 메인 화면 상단 여행 선택 영역 분할
 c_trip_top, c_empty = st.columns([2, 2])
 with c_trip_top:
     ### 🎛️ [GUI: Component] 여행 선택 드롭다운
@@ -550,10 +581,24 @@ with tab_in:
         cat = st.radio("항목 선택", EXPENSE_CATS, index=def_index, horizontal=True, key="exp_cat")
         st.session_state.last_cat_name = cat
         
-        ### 🎨 [GUI: Layout] 세부내역 및 영수증 업로드
+        ### 🎨 [GUI: Layout] 세부내역 및 영수증 업로드 (OCR 지원)
         col_desc, col_receipt = st.columns([3, 1])
-        with col_desc: desc = st.text_input("내용 (상호명 및 상세메모)", placeholder="예: 안바카페 - 소고기버거, 반미정식", key="exp_desc")
-        with col_receipt: uploaded_file = st.file_uploader("📸 영수증 첨부", type=['png', 'jpg', 'jpeg'], key="exp_receipt")
+        
+        with col_receipt: 
+            uploaded_file = st.file_uploader("📸 영수증 첨부", type=['png', 'jpg', 'jpeg'], key="exp_receipt")
+            # [Added] 🎛️ 영수증 업로드 시 OCR 스캔 버튼 노출
+            if uploaded_file is not None:
+                if st.button("🤖 영수증 AI 스캔 (OCR)", use_container_width=True):
+                    with st.spinner("구글 AI가 영수증을 분석 중입니다..."):
+                        ext_text = extract_text_from_vision_api(uploaded_file.getvalue())
+                        if ext_text:
+                            # 기존 내용이 있으면 줄바꿈 후 덧붙이기
+                            st.session_state.exp_desc = st.session_state.get('exp_desc', '') + "\n" + ext_text
+                            st.rerun()
+                            
+        with col_desc: 
+            # [Modified] 다중 줄바꿈(OCR) 지원을 위해 text_input에서 text_area로 변경
+            desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식\n(사진을 스캔하면 내역이 여기에 자동으로 들어옵니다)", height=120, key="exp_desc")
             
         ### 🎨 [GUI: Layout] 통화/수단/게이트웨이
         col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
@@ -616,7 +661,10 @@ with tab_in:
                 'Note': '',
                 'Receipt_URL': receipt_url
             }])
-            if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
+            if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): 
+                # [Added] 등록 완료 시 메모칸 초기화
+                st.session_state.exp_desc = ""
+                st.rerun()
 
     # ------------------------------------------------------------------
     #[Mode 2: 자산 이동 및 환전]
@@ -739,10 +787,10 @@ with tab_in:
 with tab_his:
     st.info("💡 **표의 행(Row)을 클릭(터치)하시면 바로 아래에 상세 내역 수정과 영수증 첨부 화면이 펼쳐집니다!**")
     
-    ### 🎨 [GUI: Layout] 뷰어 플레이스홀더 (테이블 아래에 표시할 뷰어의 위치 사전 할당)
+    ### 🎨 [GUI: Layout] 뷰어 플레이스홀더
     viewer_placeholder = st.empty()
     
-    ### 🎨 [GUI: Layout] 상단 검색 및 필터부
+    ### 🎨[GUI: Layout] 상단 검색 및 필터부
     c_filter, c_search, c_tog = st.columns([2, 3, 1])
     with c_filter:
         ### 🎛️ [GUI: Component] 여행/국가 필터
@@ -774,14 +822,13 @@ with tab_his:
         display_df = display_df.reindex(columns=FINAL_COLUMNS)
         link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
         
-        #[Mode 1: 검색 모드]
         #[Mode 1: 직접 수정 모드 (Data Editor)]
         if edit_mode:
             edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
             if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
                 if save_data(edited_df): st.rerun()
                 
-        #[Mode 2 & 3 통합: 검색 결과 및 기본 조회 모드 (상세 뷰어 완벽 지원)]
+        #[Mode 2 & 3 통합: 검색 결과 및 기본 조회 모드]
         else:
             if search_query.strip():
                 mask = (
@@ -795,13 +842,13 @@ with tab_his:
             else:
                 render_df = display_df
                 
-            ### 📊[GUI: Chart/Table] 메인 데이터 그리드 표 (검색 시에도 클릭 가능)
+            ### 📊[GUI: Chart/Table] 메인 데이터 그리드 표
             df_event = st.dataframe(render_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
             
-            # [행 클릭 시 상세 뷰어 표시 로직]
+            #[행 클릭 시 상세 뷰어 표시 로직]
             if df_event.selection.rows:
                 selected_idx = df_event.selection.rows[0]
-                real_idx = render_df.index[selected_idx] # 검색결과 표와 원본 DB의 인덱스 싱크로율 맞춤
+                real_idx = render_df.index[selected_idx] 
                 row_data = display_df.loc[real_idx]
                 
                 with viewer_placeholder.container():
@@ -832,7 +879,6 @@ with tab_his:
                                         return f"{match.group(0)}<span style='font-size:13px;color:#FFD700;font-style:italic;'> (약 {krw_val:,.0f}원)</span>"
                                 except: pass
                                 return match.group(0)
-                            # 한국어 밀착 숫자 완벽 인식 정규식으로 교체
                             pattern = re.compile(r'(?<![\d\.])\d{1,3}(?:,\d{3})*(?:\.\d+)?(?![\d\.])')
                             return pattern.sub(replacer, text)
 
@@ -873,13 +919,28 @@ with tab_his:
                         
                         # [Added] 🎛️ 타임머신 미니 계산기
                         if row_data['Currency'] != 'KRW' and row_data['AppliedRate'] > 0:
-                            with st.expander(f"🧮 타임머신 계산기 (적용 환율: {row_data['AppliedRate']:.4f})", expanded=True):
+                            with st.expander(f"🧮 타임머신 계산기 (적용 환율: {row_data['AppliedRate']:.4f})", expanded=False):
                                 mini_amt = st.number_input(f"영수증 속 현지 금액을 입력해 보세요 ({row_data['Currency']})", min_value=0.0, step=10.0, key="mini_calc")
                                 if mini_amt > 0:
                                     st.success(f"➔ 당시 원화 가치: **{mini_amt * row_data['AppliedRate']:,.0f} 원**")
                         
-                        new_desc = st.text_area("📝 세부 내역 (수정/추가)", value=row_data['Description'], height=150)
+                        # [Added] ⚙️ OCR 연동을 위한 상태 동기화 로직
+                        desc_key = f"edit_desc_{real_idx}"
+                        if st.session_state.get('current_edit_idx') != real_idx:
+                            st.session_state[desc_key] = str(row_data['Description'])
+                            st.session_state['current_edit_idx'] = real_idx
+                            
                         new_receipt = st.file_uploader("📸 새 영수증 사진 업로드", type=['png', 'jpg', 'jpeg'], key="inline_receipt")
+                        # [Added] 🎛️ 수정 뷰어용 OCR 스캔 버튼
+                        if new_receipt:
+                            if st.button("🤖 첨부된 사진 AI 스캔 (OCR)", use_container_width=True):
+                                with st.spinner("구글 AI가 영수증을 분석 중입니다..."):
+                                    ext_text = extract_text_from_vision_api(new_receipt.getvalue())
+                                    if ext_text:
+                                        st.session_state[desc_key] = st.session_state.get(desc_key, '') + "\n" + ext_text
+                                        st.rerun()
+
+                        new_desc = st.text_area("📝 세부 내역 (수정/추가)", height=150, key=desc_key)
                         
                         if st.button("💾 이 내역 업데이트", use_container_width=True):
                             display_df.at[real_idx, 'Description'] = new_desc
@@ -1054,14 +1115,14 @@ with tab_final:
         with k3: st.markdown(kpi_box("현지 지출 총액", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
         with k4: st.markdown(kpi_box(f"현지 일상/생존 1일 평균", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
         
-        ### 📊 [GUI: Chart/Table] 결산 요약 트리맵 (전체비중)
+        ### 📊[GUI: Chart/Table] 결산 요약 트리맵 (전체비중)
         st.subheader("🌳 지출분석 (Treemap)")
         fig_tree = px.treemap(exp_df, path=['Macro_Category', 'Category', 'Description'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
         fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>%{percentRoot:.1%}")
         fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=0), font=dict(size=14))
         st.plotly_chart(fig_tree, use_container_width=True)
         
-        ### 📊 [GUI: Chart/Table] 카테고리별 도넛 차트
+        ### 📊[GUI: Chart/Table] 카테고리별 도넛 차트
         st.subheader("🍕 지출비중")
         cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
         fig_donut = px.pie(cat_pie, values='KRW_val', names='Macro_Category', hole=0.5, color_discrete_sequence=px.colors.qualitative.Set3)
@@ -1071,4 +1132,4 @@ with tab_final:
         fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
         st.plotly_chart(fig_donut, use_container_width=True)
 
-st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 65 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 68 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
