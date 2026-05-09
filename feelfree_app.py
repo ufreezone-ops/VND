@@ -59,10 +59,9 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-# [Modified] 버전 및 업데이트 로그 v26.05.09.002
-VERSION = "v26.05.09.002"
-UPDATE_LOG_TEXT = """* `[Added]` Google Gemini API(LLM) 연동 완료. 영수증 이미지에서 추출된 원시 데이터를 한국어로 스마트하게 번역 및 요약(품목, 수량, 가격)합니다.
-* `[Fixed]` 지출 입력 후 메모칸(Description) 데이터 초기화 시 발생하는 Streamlit 생명주기(Lifecycle) 충돌 에러 우회 및 안정화."""
+# [Modified] 버전 및 업데이트 로그 v26.05.10.001
+VERSION = "v26.05.10.001"
+UPDATE_LOG_TEXT = """* `[Fixed]` Gemini API 모델 세대교체에 대응하여 LLM 호출 모델 리스트 최신화 (gemini-2.5-flash, gemini-2.0-flash, gemini-flash-latest 등). 영수증 요약 시 발생하는 404 에러 해결."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -194,7 +193,22 @@ def extract_text_from_vision_api(image_bytes):
     except ImportError: return "⚠️ [설정 오류] 'google-cloud-vision' 라이브러리가 없습니다."
     except Exception as e: return f"⚠️ [에러 발생]: {e}"
 
-### ⚙️[Logic: AI LLM - Gemini] [Added] 영수증 스마트 번역/요약 엔진 (뇌)
+# [Modified] 버전 및 업데이트 로그 v26.05.10.001
+VERSION = "v26.05.10.001"
+UPDATE_LOG_TEXT = """* `[Fixed]` Gemini API 모델 세대교체에 대응하여 LLM 호출 모델 리스트 최신화 (gemini-2.5-flash, gemini-2.0-flash, gemini-flash-latest 등). 영수증 요약 시 발생하는 404 에러 해결."""
+
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# ... (이하 Section 1 유지) ...
+2. Module A: summarize_receipt_with_gemini 함수 수정
+code
+Python
+# ==============================================================================
+# --- SECTION 2: [Module A] Data Engine ---
+# ==============================================================================
+# ... (extract_text_from_vision_api 등 함수 유지) ...
+
+### ⚙️[Logic: AI LLM - Gemini] [Modified] 영수증 스마트 번역/요약 엔진 (뇌)
 def summarize_receipt_with_gemini(raw_text):
     if not raw_text or "⚠️" in raw_text: return raw_text
     try:
@@ -215,8 +229,8 @@ def summarize_receipt_with_gemini(raw_text):
 [영수증 텍스트]
 """ + raw_text
 
-        # [Fixed] 모델명 버전 호환성 문제를 해결하는 다중 Fallback 로직 탑재
-        models_to_try =['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-pro']
+        # [Modified] 모델명 버전 호환성 404 에러를 해결하는 다중 Fallback 로직 탑재 (최신 모델 반영)
+        models_to_try =['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-pro-latest']
         last_error = ""
         
         for m_name in models_to_try:
