@@ -59,19 +59,35 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 
-# --- [Modified] AI Brain (Gemini) Configuration ---
+# --- [Added] AI Brain (Gemini) Configuration ---
+
+# 1. 먼저 열쇠를 찾는 '방법'을 정의합니다 (함수 정의)
+def get_gemini_key():
+    """루트 레벨과 하위 섹션을 모두 뒤져 Gemini API Key를 찾습니다."""
+    try:
+        # 루트 레벨 확인 (추천 방식)
+        if "GEMINI_API_KEY" in st.secrets:
+            return st.secrets["GEMINI_API_KEY"]
+        # connections.gsheets 섹션 내부 확인
+        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+            return st.secrets["connections"]["gsheets"].get("GEMINI_API_KEY")
+    except: pass
+    return None
+
+# 2. 정의된 방법을 사용하여 실제 열쇠를 가져옵니다 (함수 호출)
 GEMINI_KEY = get_gemini_key()
 
+# 3. 열쇠가 있다면 AI 브레인을 가동합니다
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
     try:
-        # [Modified] 최신 모델 명칭 사용
+        # 최신 1.5-flash 모델 우선 시도
         ai_model = genai.GenerativeModel('gemini-1.5-flash')
     except:
-        # 혹시 모델을 찾지 못할 경우의 안전망 (구형 모델로 우회)
+        # 실패 시 구형 모델로 우회
         ai_model = genai.GenerativeModel('gemini-pro-vision')
 else:
-    ai_model = None
+    ai_model = None # 열쇠가 없으면 기능을 잠정 비활성화
     
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
