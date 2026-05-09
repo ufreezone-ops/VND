@@ -192,24 +192,36 @@ def extract_text_from_vision_api(image_bytes):
         from google.oauth2 import service_account
         from google.cloud import vision
         
-        # Secrets 구조 동적 탐색 및 누락 데이터 자동 복구 로직
-        secret_dict = None
-        if "gcp_service_account" in st.secrets:
-            secret_dict = dict(st.secrets["gcp_service_account"])
-        elif "private_key" in st.secrets and "client_email" in st.secrets:
-            secret_dict = dict(st.secrets)
+        # [스마트 탐색] Streamlit Secrets의 모든 계층(폴더)을 뒤져서 인증키를 자동으로 찾아냅니다.
+        def find_gcp_key(d):
+            try:
+                if "private_key" in d and "client_email" in d:
+                    return dict(d)
+                for k, v in d.items():
+                    if isinstance(v, dict) or hasattr(v, 'items'):
+                        res = find_gcp_key(v)
+                        if res: return res
+            except: pass
+            return None
             
-            # [Added] Dan의 Secrets에 누락된 필수 항목(type, project_id) 자동 주입
-            if "type" not in secret_dict: 
-                secret_dict["type"] = "service_account"
-            if "project_id" not in secret_dict:
-                email = secret_dict.get("client_email", "")
-                if "@" in email and ".iam" in email:
-                    secret_dict["project_id"] = email.split("@")[1].split(".iam")[0]
-                else:
-                    secret_dict["project_id"] = "gtl-project-auto"
-        else:
-            return "⚠️ [설정 오류] Streamlit Secrets에 GCP 인증키(JSON)가 올바르게 설정되지 않았습니다."
+        secret_dict = find_gcp_key(st.secrets)
+        
+        if not secret_dict:
+            return f"⚠️ [설정 오류] Secrets에서 인증키를 찾지 못했습니다. 현재 구조: {list(st.secrets.keys())}"
+            
+        # [자동 복구 1] 누락된 필수 항목(type, project_id) 자동 주입
+        if "type" not in secret_dict: 
+            secret_dict["type"] = "service_account"
+        if "project_id" not in secret_dict:
+            email = secret_dict.get("client_email", "")
+            if "@" in email and ".iam" in email:
+                secret_dict["project_id"] = email.split("@")[1].split(".iam")[0]
+            else:
+                secret_dict["project_id"] = "gtl-project-auto"
+                
+        # [자동 복구 2] 복사 과정에서 텍스트로 굳어버린 줄바꿈 기호(\n)를 실제 줄바꿈으로 해제
+        if "\\n" in secret_dict["private_key"]:
+            secret_dict["private_key"] = secret_dict["private_key"].replace('\\n', '\n')
             
         credentials = service_account.Credentials.from_service_account_info(secret_dict)
         client = vision.ImageAnnotatorClient(credentials=credentials)
