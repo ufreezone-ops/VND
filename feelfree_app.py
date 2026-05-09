@@ -74,20 +74,19 @@ def get_gemini_key():
     except: pass
     return None
 
-# 2. 정의된 방법을 사용하여 실제 열쇠를 가져옵니다 (함수 호출)
+# --- [Modified] AI Brain (Gemini) Configuration ---
 GEMINI_KEY = get_gemini_key()
 
-# 3. 열쇠가 있다면 AI 브레인을 가동합니다
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
+    # [Added] 모델 객체만 생성 (실제 가동은 분석 함수 내에서 수행)
+    # 라이브러리 버전에 따라 모델 이름이 다를 수 있으므로 스위칭 로직 준비
     try:
-        # 최신 1.5-flash 모델 우선 시도
         ai_model = genai.GenerativeModel('gemini-1.5-flash')
     except:
-        # 실패 시 구형 모델로 우회
         ai_model = genai.GenerativeModel('gemini-pro-vision')
 else:
-    ai_model = None # 열쇠가 없으면 기능을 잠정 비활성화
+    ai_model = None
     
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
@@ -341,47 +340,35 @@ def load_all_trips_data():
     return pd.concat(all_dfs, ignore_index=True)
 
 def analyze_receipt_with_ai(image_file):
-    """Gemini AI를 사용하여 영수증 이미지를 분석합니다."""
+    """Gemini AI를 사용하여 영수증 이미지를 분석합니다 (404 에러 대응 로직 포함)."""
     if ai_model is None:
         st.error("🔑 Gemini API Key가 설정되지 않았습니다.")
         return None
 
     try:
-        # [Modified] 이미지 바이트 추출 및 데이터 구조 최적화
         image_data = image_file.getvalue()
+        prompt = "영수증 사진을 분석해서 상호명(store), 금액(total_amount, 숫자만), 통화(currency, ISO코드), 품목(items), 날짜(date, YYYY-MM-DD)를 JSON으로만 응답해."
+        contents = [prompt, {"mime_type": "image/jpeg", "data": image_data}]
         
-        # [Strategy] 프롬프트를 더 명확하게 하여 응답 속도와 정확도 향상
-        prompt = """
-        이 영수증 사진을 아주 상세하게 읽어줘. 
-        반드시 아래 JSON 형식으로만 답하고, 다른 텍스트는 포함하지 마.
-        금액은 숫자로만, 통화는 기호가 아닌 ISO코드(VND, CNY, EUR, KRW 등)로 추출해.
-        {
-            "store": "상점 이름",
-            "total_amount": 1234.56,
-            "currency": "통화코드",
-            "items": "구매한 모든 품목 나열",
-            "date": "YYYY-MM-DD"
-        }
-        """
-        
-        # [Modified] 컨텐츠 생성 방식 최적화
-        contents = [
-            prompt,
-            {"mime_type": "image/jpeg", "data": image_data}
-        ]
-        
-        response = ai_model.generate_content(contents)
-        
-        # [Logic] JSON 추출
+        # [Strategy] 1차 시도: gemini-1.5-flash
+        try:
+            response = ai_model.generate_content(contents)
+        except Exception as e:
+            if "404" in str(e):
+                # [Recovery] 1.5-flash가 없으면 gemini-pro-vision으로 즉시 전환하여 재시도
+                backup_model = genai.GenerativeModel('gemini-pro-vision')
+                response = backup_model.generate_content(contents)
+            else:
+                raise e
+
+        # JSON 추출 로직 (유지)
         json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
         if json_match:
             import json
             return json.loads(json_match.group())
             
     except Exception as e:
-        # [Modified] 구체적인 에러 안내
         st.error(f"🤖 AI 분석 엔진 오류: {e}")
-        st.info("💡 팁: 'requirements.txt'에 'google-generativeai>=0.7.0'이 있는지 확인해 주세요.")
     return None
 
 ### ⚙️ [Logic: Core Calculation] 전체 원장 재계산 (DB 저장 전)
