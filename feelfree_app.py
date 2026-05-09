@@ -596,12 +596,17 @@ with tab_in:
 
     # ------------------------------------------------------------------
     #[Mode 1: 일반 지출]
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------   
     if mode == "일반 지출":        
         ### 🎛️ [GUI: Component] 지출 카테고리
         def_index = EXPENSE_CATS.index(st.session_state.last_cat_name) if st.session_state.last_cat_name in EXPENSE_CATS else 0
         cat = st.radio("항목 선택", EXPENSE_CATS, index=def_index, horizontal=True, key="exp_cat")
         st.session_state.last_cat_name = cat
+        
+        # [Fixed] 안전한 메모칸 초기화 로직 (Streamlit 생명주기 충돌 에러 방지)
+        if st.session_state.get('clear_exp_desc', False):
+            st.session_state.exp_desc = ""
+            st.session_state.clear_exp_desc = False
         
         ### 🎨 [GUI: Layout] 세부내역 및 영수증 업로드 (OCR 지원)
         col_desc, col_receipt = st.columns([3, 1])
@@ -684,8 +689,8 @@ with tab_in:
                 'Receipt_URL': receipt_url
             }])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): 
-                # [Added] 등록 완료 시 메모칸 초기화
-                st.session_state.exp_desc = ""
+                # [Fixed] 즉시 강제 변경하지 않고, 다음 렌더링 시 비우도록 플래그 설정
+                st.session_state.clear_exp_desc = True
                 st.rerun()
 
     # ------------------------------------------------------------------
