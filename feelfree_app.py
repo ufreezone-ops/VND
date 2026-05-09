@@ -8,6 +8,7 @@ import time
 import requests
 import base64
 import re
+import google.generativeai as genai # [Added] AI 브레인
 
 # ==============================================================================
 # --- SECTION 1: Configuration & Global Setup ---
@@ -57,6 +58,14 @@ SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_L
 FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
+
+# --- [Added] AI Brain (Gemini) Configuration ---
+# Streamlit Secrets에 저장된 API Key를 호출합니다.
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    # 비용 효율과 속도를 위해 1.5-flash 모델을 기본으로 사용합니다.
+    ai_model = genai.GenerativeModel('gemini-1.5-flash')
+
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 # [Modified] 버전 및 업데이트 로그 v26.05.09.001
@@ -307,6 +316,39 @@ def load_all_trips_data():
             except: continue
     if not all_dfs: return pd.DataFrame(columns=FINAL_COLUMNS)
     return pd.concat(all_dfs, ignore_index=True)
+
+def analyze_receipt_with_ai(image_file):
+    """[Added] Gemini AI를 사용하여 영수증 이미지를 분석하고 JSON 데이터를 반환합니다."""
+    if "GEMINI_API_KEY" not in st.secrets:
+        st.error("Gemini API Key가 설정되지 않았습니다.")
+        return None
+
+    try:
+        # 이미지를 AI가 읽을 수 있는 바이트로 변환
+        img_bytes = image_file.getvalue()
+        img_parts = [{"mime_type": "image/jpeg", "data": img_bytes}]
+        
+        prompt = """
+        이 영수증 사진을 분석해서 아래 JSON 형식으로만 응답해줘. 
+        모르는 항목은 빈 문자열로 둬. 금액은 숫자만 추출해.
+        {
+            "store": "상호명",
+            "total_amount": 1234.56,
+            "currency": "VND 또는 CNY 또는 EUR 등",
+            "items": "품목1, 품목2, 품목3 (상세하게)",
+            "date": "YYYY-MM-DD"
+        }
+        """
+        response = ai_model.generate_content([prompt, img_parts[0]])
+        # 결과값에서 JSON만 추출 (정규식 사용)
+        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+        if json_match:
+            import json
+            return json.loads(json_match.group())
+    except Exception as e:
+        st.error(f"AI 분석 중 오류 발생: {e}")
+    return None
+
 
 ### ⚙️ [Logic: Core Calculation] 전체 원장 재계산 (DB 저장 전)
 def recalculate_entire_ledger(df):
@@ -613,15 +655,19 @@ with tab_in:
         
         with col_receipt: 
             uploaded_file = st.file_uploader("📸 영수증 첨부", type=['png', 'jpg', 'jpeg'], key="exp_receipt")
-            # [Added] 🎛️ 영수증 업로드 시 OCR 스캔 버튼 노출
-            if uploaded_file is not None:
-                if st.button("🤖 영수증 AI 스캔 (OCR)", use_container_width=True):
-                    with st.spinner("구글 AI가 영수증을 분석 중입니다..."):
-                        ext_text = extract_text_from_vision_api(uploaded_file.getvalue())
-                        if ext_text:
-                            # 기존 내용이 있으면 줄바꿈 후 덧붙이기
-                            st.session_state.exp_desc = st.session_state.get('exp_desc', '') + "\n" + ext_text
-                            st.rerun()
+            # [Added] AI 분석 버튼 및 로직
+        if uploaded_file is not None:
+            if st.button("🤖 AI 영수증 분석 (Auto-fill)", use_container_width=True):
+                with st.spinner("AI 브레인이 영수증을 읽고 있습니다..."):
+                    ai_data = analyze_receipt_with_ai(uploaded_file)
+                    if ai_data:
+                        # 분석된 데이터를 세션 상태에 임시 저장하여 폼에 주입
+                        st.session_state.ai_extracted = ai_data
+                        st.success(f"✅ '{ai_data['store']}' 내역 분석 완료!")
+                        st.rerun()
+
+    # [Added] AI가 추출한 데이터가 있다면 입력 필드의 기본값으로 자동 설정
+    ai_ext = st.session_state.get('ai_extracted', {})
                             
         with col_desc: 
             # [Modified] 다중 줄바꿈(OCR) 지원을 위해 text_input에서 text_area로 변경
