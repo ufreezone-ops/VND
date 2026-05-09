@@ -653,25 +653,39 @@ with tab_in:
         ### 🎨 [GUI: Layout] 세부내역 및 영수증 업로드 (OCR 지원)
         col_desc, col_receipt = st.columns([3, 1])
         
+        ### 🎨 [GUI: Layout] 세부내역 및 영수증 업로드 (OCR 지원)
+        col_desc, col_receipt = st.columns([3, 1])
+        
         with col_receipt: 
             uploaded_file = st.file_uploader("📸 영수증 첨부", type=['png', 'jpg', 'jpeg'], key="exp_receipt")
-            # [Added] AI 분석 버튼 및 로직
+            
+        # [Corrected Indent: 8 spaces] AI 분석 버튼 및 로직
         if uploaded_file is not None:
             if st.button("🤖 AI 영수증 분석 (Auto-fill)", use_container_width=True):
                 with st.spinner("AI 브레인이 영수증을 읽고 있습니다..."):
                     ai_data = analyze_receipt_with_ai(uploaded_file)
                     if ai_data:
-                        # 분석된 데이터를 세션 상태에 임시 저장하여 폼에 주입
+                        # 분석된 데이터를 세션 상태에 저장
                         st.session_state.ai_extracted = ai_data
                         st.success(f"✅ '{ai_data['store']}' 내역 분석 완료!")
                         st.rerun()
 
-    # [Added] AI가 추출한 데이터가 있다면 입력 필드의 기본값으로 자동 설정
-    ai_ext = st.session_state.get('ai_extracted', {})
-                            
+        # [Corrected Indent: 8 spaces] AI가 추출한 데이터 호출
+        ai_ext = st.session_state.get('ai_extracted', {})
+        
+        # [Logic] AI 데이터를 메모칸 기본값으로 조합 (상호명 - 품목)
+        ai_default_desc = ""
+        if ai_ext:
+            store = ai_ext.get('store', '')
+            items = ai_ext.get('items', '')
+            ai_default_desc = f"{store} - {items}" if items else store
+
         with col_desc: 
-            # [Modified] 다중 줄바꿈(OCR) 지원을 위해 text_input에서 text_area로 변경
-            desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식\n(사진을 스캔하면 내역이 여기에 자동으로 들어옵니다)", height=120, key="exp_desc")
+            # [Modified] value 파라미터에 AI 분석 결과(ai_default_desc)를 연결함
+            desc = st.text_area("📝 내용 (상호명 및 다중 내역)", 
+                               value=ai_default_desc if ai_default_desc else "",
+                               placeholder="예: 안바카페 - 소고기버거\n반미정식", 
+                               height=120, key="exp_desc")
             
         ### 🎨 [GUI: Layout] 통화/수단/게이트웨이
         col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
