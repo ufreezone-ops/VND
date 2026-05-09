@@ -199,15 +199,6 @@ UPDATE_LOG_TEXT = """* `[Fixed]` Gemini API 모델 세대교체에 대응하여 
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# ... (이하 Section 1 유지) ...
-2. Module A: summarize_receipt_with_gemini 함수 수정
-code
-Python
-# ==============================================================================
-# --- SECTION 2: [Module A] Data Engine ---
-# ==============================================================================
-# ... (extract_text_from_vision_api 등 함수 유지) ...
-
 ### ⚙️[Logic: AI LLM - Gemini] [Modified] 영수증 스마트 번역/요약 엔진 (뇌)
 def summarize_receipt_with_gemini(raw_text):
     if not raw_text or "⚠️" in raw_text: return raw_text
