@@ -387,7 +387,7 @@ def recalculate_entire_ledger(df):
                         take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                         total_cost_krw += take * batch['rate']
                         take_str = f"{take:,.2f}" if curr not in["VND", "HUF"] else f"{take:,.0f}"
-                        rate_str = f"{batch['rate']:.2f}" if curr not in ["VND", "HUF"] else f"{batch['rate']:.4f}"
+                        rate_str = f"{batch['rate']:.2f}" if curr not in ["HUF"] else f"{batch['rate']:.4f}"
                         decomposed.append(f"{take_str}@{rate_str}")
                 if qty > 0:
                     rate = total_cost_krw / qty if total_cost_krw > 0 else get_default_rate(curr)
