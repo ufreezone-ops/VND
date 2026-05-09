@@ -193,12 +193,6 @@ def extract_text_from_vision_api(image_bytes):
     except ImportError: return "⚠️ [설정 오류] 'google-cloud-vision' 라이브러리가 없습니다."
     except Exception as e: return f"⚠️ [에러 발생]: {e}"
 
-# [Modified] 버전 및 업데이트 로그 v26.05.10.001
-VERSION = "v26.05.10.001"
-UPDATE_LOG_TEXT = """* `[Fixed]` Gemini API 모델 세대교체에 대응하여 LLM 호출 모델 리스트 최신화 (gemini-2.5-flash, gemini-2.0-flash, gemini-flash-latest 등). 영수증 요약 시 발생하는 404 에러 해결."""
-
-conn = st.connection("gsheets", type=GSheetsConnection)
-
 ### ⚙️[Logic: AI LLM - Gemini] [Modified] 영수증 스마트 번역/요약 엔진 (뇌)
 def summarize_receipt_with_gemini(raw_text):
     if not raw_text or "⚠️" in raw_text: return raw_text
