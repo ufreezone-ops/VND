@@ -6,4 +6,4 @@ oauth2client
 yfinance
 st-gsheets-connection
 google-cloud-vision
-google-generativeai
+google-generativeai>=0.7.0
