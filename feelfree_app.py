@@ -70,16 +70,16 @@ def get_gemini_key():
     except: pass
     return None
 
+# --- [Modified] AI Brain (Gemini) Configuration ---
 GEMINI_KEY = get_gemini_key()
 
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    # [Modified] 모델 이름을 명시적 경로명으로 시도하여 404 방지
     try:
-        # 최신 SDK는 'models/...' 접두어를 붙였을 때 더 정확히 찾기도 합니다.
-        ai_model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+        # [Modified] -latest 접두어를 붙여 최신 안정화 모델을 강제 호출합니다.
+        ai_model = genai.GenerativeModel('gemini-1.5-flash-latest')
     except:
-        ai_model = genai.GenerativeModel(model_name='gemini-pro-vision')
+        ai_model = genai.GenerativeModel('gemini-pro-vision')
 else:
     ai_model = None
     
@@ -335,26 +335,16 @@ def load_all_trips_data():
     return pd.concat(all_dfs, ignore_index=True)
 
 def analyze_receipt_with_ai(image_file):
-    """[Modified] Gemini AI를 사용하여 영수증 분석을 수행하며, 에러 시 모델 진단을 실시합니다."""
+    """[Modified] Gemini AI를 사용하여 영수증 분석을 수행하며, 404 에러 시 가용 모델 리스트를 진단합니다."""
     if ai_model is None:
         st.error("🔑 Gemini API Key가 설정되지 않았습니다.")
         return None
 
     try:
         image_data = image_file.getvalue()
-        # [Strategy] 프롬프트를 더 직관적으로 정제
-        prompt = """
-        영수증 사진을 분석해서 아래 JSON 형식으로만 응답해.
-        금액은 숫자만, 통화는 ISO코드(VND, CNY, EUR, KRW 등)로 추출해.
-        {
-            "store": "상호명",
-            "total_amount": 1000,
-            "currency": "VND",
-            "items": "품목 리스트",
-            "date": "YYYY-MM-DD"
-        }
-        """
-        # 최신 SDK 호출 규격 준수
+        prompt = "영수증 사진을 분석해서 상호명(store), 금액(total_amount), 통화(currency), 품목(items), 날짜(date)를 JSON으로만 응답해."
+        
+        # 최신 모델 가동 시도
         response = ai_model.generate_content([
             prompt,
             {"mime_type": "image/jpeg", "data": image_data}
@@ -366,18 +356,16 @@ def analyze_receipt_with_ai(image_file):
             return json.loads(json_match.group())
             
     except Exception as e:
-        # [Added] 404 에러 발생 시 현재 가용한 모델 리스트를 출력하여 진단
-        if "404" in str(e):
-            st.error(f"🤖 모델 경로 오류(404): {e}")
-            with st.expander("🛠️ 시스템 AI 환경 진단 (사용 가능한 모델 목록)"):
-                try:
-                    models = [m.name for m in genai.list_models()]
-                    st.write(models)
-                    st.info("💡 위 목록에 'models/gemini-1.5-flash'가 없다면 라이브러리 업데이트가 필요합니다.")
-                except:
-                    st.write("모델 목록을 불러올 수 없습니다. API Key를 확인하세요.")
-        else:
-            st.error(f"🤖 AI 분석 중 오류 발생: {e}")
+        # [Added] 404 에러가 나면 숨겨진 모델 리스트를 강제로 띄웁니다.
+        st.error(f"🤖 AI 엔진 경로 오류: {e}")
+        with st.expander("🛠️ 시스템 가용 AI 모델 리스트 (진단용)", expanded=True):
+            try:
+                # 현재 API Key로 접근 가능한 모델 목록을 가져옵니다.
+                models = [m.name for m in genai.list_models()]
+                st.write("사용 가능한 모델:", models)
+                st.info("💡 위 목록에 'models/gemini-1.5-flash' 등이 있는지 확인해 주세요.")
+            except:
+                st.warning("모델 리스트를 불러올 수 없습니다. API Key의 유효성을 확인하세요.")
     return None
 
 ### ⚙️ [Logic: Core Calculation] 전체 원장 재계산 (DB 저장 전)
