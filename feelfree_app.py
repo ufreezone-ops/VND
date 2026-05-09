@@ -59,9 +59,9 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-# [Modified] 버전 및 업데이트 로그 v26.05.10.001
-VERSION = "v26.05.10.001"
-UPDATE_LOG_TEXT = """* `[Fixed]` Gemini API 모델 세대교체에 대응하여 LLM 호출 모델 리스트 최신화 (gemini-2.5-flash, gemini-2.0-flash, gemini-flash-latest 등). 영수증 요약 시 발생하는 404 에러 해결."""
+# [Modified] 버전 및 업데이트 로그 v26.05.10.002
+VERSION = "v26.05.10.002"
+UPDATE_LOG_TEXT = """* `[Fixed]` 영수증 상세 뷰어의 Deep-Reader(자동 환산 엔진) 고도화. 용량/수량(ml, g, cm, 개 등)을 뜻하는 숫자는 무시하고, 실제 결제 금액(VND, USD 등)만 정확하게 선별하여 원화로 환산하도록 정규식(Regex) 논리 개선."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -892,19 +892,33 @@ with tab_his:
                         st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}{krw_display})", unsafe_allow_html=True)
                         st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
                         
-                        # [Added] ⚙️ 딥-리더 (Deep-Reader) 자동 환산 엔진
+                        # [Modified] ⚙️ 딥-리더 (Deep-Reader) 자동 환산 엔진 고도화
                         def smart_krw_translator(text, rate, curr):
                             if rate <= 0 or curr == 'KRW': return text
                             def replacer(match):
-                                num_str = match.group(0).replace(',', '')
+                                num_str = match.group(1).replace(',', '')
+                                suffix = match.group(2).lower() if match.group(2) else ""
                                 try:
                                     v = float(num_str)
-                                    if v > 0 and not (v < 10 and num_str.isdigit()):
+                                    is_currency = any(c in suffix for c in['vnd', 'usd', 'eur', 'cny', 'try', 'rsd', 'huf', 'krw', '원', '동', '달러'])
+                                    is_unit = any(u in suffix for u in['ml', 'g', 'kg', 'cm', 'mm', '개', 'x', '입', '장', '명', '박스'])
+                                    
+                                    # 수량, 길이, 무게 등 단위가 직접 붙어있으면 환산 생략
+                                    if is_unit and not is_currency: 
+                                        return match.group(0)
+                                        
+                                    # 1. 화폐 단위가 명시됨
+                                    # 2. 대단위 화폐(VND 등)에서 1000 이상의 큰 숫자
+                                    # 3. 소수점이 있는 정확한 금액 표기 (예: 15.00)
+                                    # 4. 금액이 100을 초과하는 일반 정수
+                                    if is_currency or (curr in ['VND', 'HUF'] and v >= 1000) or ('.' in num_str) or (v > 100):
                                         krw_val = v * rate
-                                        return f"{match.group(0)}<span style='font-size:13px;color:#FFD700;font-style:italic;'> (약 {krw_val:,.0f}원)</span>"
+                                        return f"{match.group(1)}<span style='font-size:13px;color:#FFD700;font-style:italic;'> (약 {krw_val:,.0f}원)</span>{match.group(2)}"
                                 except: pass
                                 return match.group(0)
-                            pattern = re.compile(r'(?<![\d\.])\d{1,3}(?:,\d{3})*(?:\.\d+)?(?![\d\.])')
+                                
+                            # 그룹1: 숫자 부분, 그룹2: 숫자 뒤에 따라오는 공백 및 문자 (단위 확인용)
+                            pattern = re.compile(r'(?<![\d\.])(\d{1,3}(?:,\d{3})*(?:\.\d+)?)(?!\d)(\s*[a-zA-Z가-힣]*)')
                             return pattern.sub(replacer, text)
 
                         desc_full = str(row_data['Description'])
