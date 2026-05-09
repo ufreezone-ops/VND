@@ -59,13 +59,20 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 
-# --- [Added] AI Brain (Gemini) Configuration ---
-# Streamlit Secrets에 저장된 API Key를 호출합니다.
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # 비용 효율과 속도를 위해 1.5-flash 모델을 기본으로 사용합니다.
-    ai_model = genai.GenerativeModel('gemini-1.5-flash')
+# --- [Modified] AI Brain (Gemini) Configuration ---
+GEMINI_KEY = get_gemini_key()
 
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
+    try:
+        # [Modified] 최신 모델 명칭 사용
+        ai_model = genai.GenerativeModel('gemini-1.5-flash')
+    except:
+        # 혹시 모델을 찾지 못할 경우의 안전망 (구형 모델로 우회)
+        ai_model = genai.GenerativeModel('gemini-pro-vision')
+else:
+    ai_model = None
+    
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 # [Modified] 버전 및 업데이트 로그 v26.05.09.001
@@ -318,37 +325,48 @@ def load_all_trips_data():
     return pd.concat(all_dfs, ignore_index=True)
 
 def analyze_receipt_with_ai(image_file):
-    """[Added] Gemini AI를 사용하여 영수증 이미지를 분석하고 JSON 데이터를 반환합니다."""
-    if "GEMINI_API_KEY" not in st.secrets:
-        st.error("Gemini API Key가 설정되지 않았습니다.")
+    """Gemini AI를 사용하여 영수증 이미지를 분석합니다."""
+    if ai_model is None:
+        st.error("🔑 Gemini API Key가 설정되지 않았습니다.")
         return None
 
     try:
-        # 이미지를 AI가 읽을 수 있는 바이트로 변환
-        img_bytes = image_file.getvalue()
-        img_parts = [{"mime_type": "image/jpeg", "data": img_bytes}]
+        # [Modified] 이미지 바이트 추출 및 데이터 구조 최적화
+        image_data = image_file.getvalue()
         
+        # [Strategy] 프롬프트를 더 명확하게 하여 응답 속도와 정확도 향상
         prompt = """
-        이 영수증 사진을 분석해서 아래 JSON 형식으로만 응답해줘. 
-        모르는 항목은 빈 문자열로 둬. 금액은 숫자만 추출해.
+        이 영수증 사진을 아주 상세하게 읽어줘. 
+        반드시 아래 JSON 형식으로만 답하고, 다른 텍스트는 포함하지 마.
+        금액은 숫자로만, 통화는 기호가 아닌 ISO코드(VND, CNY, EUR, KRW 등)로 추출해.
         {
-            "store": "상호명",
+            "store": "상점 이름",
             "total_amount": 1234.56,
-            "currency": "VND 또는 CNY 또는 EUR 등",
-            "items": "품목1, 품목2, 품목3 (상세하게)",
+            "currency": "통화코드",
+            "items": "구매한 모든 품목 나열",
             "date": "YYYY-MM-DD"
         }
         """
-        response = ai_model.generate_content([prompt, img_parts[0]])
-        # 결과값에서 JSON만 추출 (정규식 사용)
+        
+        # [Modified] 컨텐츠 생성 방식 최적화
+        contents = [
+            prompt,
+            {"mime_type": "image/jpeg", "data": image_data}
+        ]
+        
+        response = ai_model.generate_content(contents)
+        
+        # [Logic] JSON 추출
         json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
         if json_match:
             import json
             return json.loads(json_match.group())
+            
     except Exception as e:
-        st.error(f"AI 분석 중 오류 발생: {e}")
+        # [Modified] 구체적인 에러 안내
+        st.error(f"🤖 AI 분석 엔진 오류: {e}")
+        st.info("💡 팁: 'requirements.txt'에 'google-generativeai>=0.7.0'이 있는지 확인해 주세요.")
     return None
-
 
 ### ⚙️ [Logic: Core Calculation] 전체 원장 재계산 (DB 저장 전)
 def recalculate_entire_ledger(df):
