@@ -18,31 +18,6 @@ st.set_page_config(page_title="Feelfree: 글로벌 여행 가계부", page_icon=
 TZ_KST = timezone(timedelta(hours=9))
 
 ### ⚙️[Logic: System Variable] 여행지 설정, 환율 및 매크로 매핑 데이터
-TRIP_CONFIGS = {
-    "🇻🇳 푸꾸옥 (2026)": {
-        "sheet": "PQ_2026",
-        "nodes": {"베트남": {"currency": "VND", "symbol": "₫", "timezone": 7, "multiplier": 100}},
-        "cats":["식사", "간식", "Grab", "VinBus", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "지하철", "항공권", "호텔", "보험"]
-    },
-    "🇨🇳 칭다오 (2025)": {
-        "sheet": "QD_2025",
-        "nodes": {"중국": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1}},
-        "cats":["식사", "간식", "DiDi", "지하철", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금"]
-    },
-    "🗺️발칸6국(2024)": {
-        "sheet": "BK_2024",
-        "nodes": {
-            "튀르키예": {"currency": "TRY", "symbol": "₺", "timezone": 3, "multiplier": 1},
-            "세르비아": {"currency": "RSD", "symbol": "din", "timezone": 1, "multiplier": 1},
-            "몬테네그로": {"currency": "EUR", "symbol": "€", "timezone": 1, "multiplier": 1},
-            "크로아티아": {"currency": "EUR", "symbol": "€", "timezone": 1, "multiplier": 1},
-            "헝가리": {"currency": "HUF", "symbol": "Ft", "timezone": 1, "multiplier": 100},
-            "중국(상하이)": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1},
-            "글로벌(달러)": {"currency": "USD", "symbol": "$", "timezone": 1, "multiplier": 1}
-        },
-        "cats":["식사", "간식", "교통", "렌트카", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금", "기타"]
-    }
-}
 
 MACRO_MAP = {
     "Grab": "🚗 교통", "VinBus": "🚗 교통", "DiDi": "🚗 교통", "지하철": "🚗 교통", "택시": "🚗 교통", "렌트카": "🚗 교통",
@@ -908,6 +883,52 @@ if st.button("🚀 일정 기록 완료", use_container_width=True):
                     st.cache_data.clear(); st.rerun()
                 except:
                     st.error(f"'{new_s_name}' 탭을 시트에서 수동으로 만든 뒤 다시 시도해 주세요.")
+
+    st.divider()
+    with st.expander("➕ 새로운 여행 추가 (GTL Provisioning)", expanded=False):
+        st.subheader("🌍 새로운 여행지 설계")
+        new_t_name = st.text_input("여행 이름", placeholder="예: 🇨🇿 프라하 2027")
+        new_s_name = st.text_input("시트 이름 (영문/숫자)", placeholder="예: PRG_2027")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            new_curr = st.text_input("통화 코드", value="USD")
+            new_sym = st.text_input("통화 기호", value="$")
+        with col2:
+            new_mult = st.selectbox("환율 배율 (Multiplier)", [1, 100], help="VND, HUF는 100, 그외는 1")
+            new_tz = st.number_input("현지 시차 (GMT)", value=9)
+        with col3:
+            new_country = st.text_input("대표 국가명", value="미국")
+
+        # [Added] 커스텀 카테고리 설계 (Dan의 핵심 요구사항)
+        default_cats = "식사,간식,마트,택시,지하철,투어,입장료,마사지,팁,수수료,통신,보증금,항공권,호텔,보험"
+        new_cats_str = st.text_area("카테고리 구성 (쉼표로 구분)", value=default_cats, help="트램(올드), 트램(현대) 등을 자유롭게 추가하세요.")
+
+        if st.button("🚀 신규 여행지 서버에 개설", use_container_width=True):
+            if new_t_name and new_s_name:
+                # 1. 마스터 설정 업데이트
+                cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+                new_entry = pd.DataFrame([{
+                    "TripName": new_t_name, "SheetName": new_s_name,
+                    "MainCountry": new_country, "Currency": new_curr,
+                    "Symbol": new_sym, "Timezone": new_tz,
+                    "Multiplier": new_mult, "Categories": new_cats_str
+                }])
+                updated_cfg = pd.concat([cfg_df, new_entry], ignore_index=True)
+                conn.update(worksheet=CONFIG_SHEET, data=updated_cfg)
+
+                # 2. 새로운 여행 탭 생성 및 헤더(14개) 주입
+                # [Added] 14개 표준 컬럼 자동 Provisioning
+                new_sheet_df = pd.DataFrame(columns=FINAL_COLUMNS)
+                try:
+                    conn.update(worksheet=new_s_name, data=new_sheet_df)
+                    st.success(f"🎉 {new_t_name} 여행지가 성공적으로 개설되었습니다!")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"시트 생성 중 오류 발생: {e}. 구글 시트에서 '{new_s_name}' 탭을 수동으로 생성한 뒤 다시 시도해 주세요.")
+            else:
+                st.warning("여행 이름과 시트 이름을 입력해야 합니다.")
 
 # ==============================================================================
 # --- SECTION 6: [Module D] History & Edit (🔍 조회 탭) ---
