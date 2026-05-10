@@ -387,7 +387,7 @@ def recalculate_entire_ledger(df):
                         take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                         total_cost_krw += take * batch['rate']
                         take_str = f"{take:,.2f}" if curr not in["VND", "HUF"] else f"{take:,.0f}"
-                        rate_str = f"{batch['rate']:.2f}" if curr not in ["HUF"] else f"{batch['rate']:.4f}"
+                        rate_str = f"{batch['rate']:.2f}" if curr not in ["VND", "HUF"] else f"{batch['rate']:.4f}"
                         decomposed.append(f"{take_str}@{rate_str}")
                 if qty > 0:
                     rate = total_cost_krw / qty if total_cost_krw > 0 else get_default_rate(curr)
@@ -524,19 +524,27 @@ with st.sidebar:
             st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
             st.markdown(f"<div style='margin-bottom:18px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
             
-            card_batches = current_inventory_batches.get(f"트래블로그({c})",[])
-            cash_batches = current_inventory_batches.get(f"현금({c})",[])
+            card_batches = current_inventory_batches.get(f"트래블로그({c})", [])
+            cash_batches = current_inventory_batches.get(f"현금({c})", [])
             
             if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
                 with st.expander("🔍 상세 배치", expanded=False):
+                    # [Added] 통화별 환율 표시 정밀도 결정
+                    r_fmt = ".4f" if c in ["VND", "HUF"] else ".2f"
+                    
                     if any(b['qty'] > 0 for b in card_batches):
                         st.caption("[카드]")
                         for b in card_batches:
-                            if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:.1f}")
+                            # [Modified] 하드코딩된 :.1f를 동적 r_fmt로 변경
+                            if b['qty'] > 0: 
+                                st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
+                                
                     if any(b['qty'] > 0 for b in cash_batches):
                         st.caption("[현금]")
                         for b in cash_batches:
-                            if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:.1f}")
+                            # [Modified] 하드코딩된 :.1f를 동적 r_fmt로 변경
+                            if b['qty'] > 0: 
+                                st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
             st.divider()
 
     ### 📊 [GUI: Chart/Table] 예산 및 지출 총액 요약
