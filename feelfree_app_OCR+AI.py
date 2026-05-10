@@ -617,15 +617,21 @@ with tab_in:
         col_desc, col_receipt = st.columns([3, 1])
         
         with col_receipt: 
-            uploaded_file = st.file_uploader("📸 영수증 첨부", type=['png', 'jpg', 'jpeg'], key="exp_receipt")
-            # [Added] 🎛️ 영수증 스캔 및 AI 번역 파이프라인 (Vision -> Gemini)
-            if uploaded_file is not None:
-                if st.button("🤖 영수증 AI 스캔 (스마트 번역)", use_container_width=True):
-                    with st.spinner("AI가 영수증을 분석하고 번역하는 중입니다..."):
-                        # 1단계: Vision API (눈)
-                        ext_text = extract_text_from_vision_api(uploaded_file.getvalue())
-                        # 2단계: Gemini API (뇌)
-                        smart_text = summarize_receipt_with_gemini(ext_text)
+            # [Modified] 다중 파일 업로드 허용 (accept_multiple_files=True)
+            uploaded_files = st.file_uploader("📸 영수증 첨부 (다중 가능)", type=['png', 'jpg', 'jpeg'], key="exp_receipt", accept_multiple_files=True)
+            
+            if uploaded_files:
+                if st.button("🤖 영수증 AI 스캔 (통합 번역)", use_container_width=True):
+                    with st.spinner(f"AI가 {len(uploaded_files)}장의 사진을 분석 중..."):
+                        all_raw_texts = []
+                        for file in uploaded_files:
+                            # 각 사진에서 텍스트 추출 (눈)
+                            raw_text = extract_text_from_vision_api(file.getvalue())
+                            all_raw_texts.append(raw_text)
+                        
+                        # 모든 텍스트를 하나로 합쳐서 AI 요약 (뇌)
+                        combined_text = "\n---\n".join(all_raw_texts)
+                        smart_text = summarize_receipt_with_gemini(combined_text)
                         
                         if smart_text:
                             st.session_state.exp_desc = st.session_state.get('exp_desc', '') + "\n" + smart_text
@@ -676,10 +682,15 @@ with tab_in:
             
         ### 🎛️ [GUI: Component] 최종 기록 버튼 및 ⚙️[Logic: DB Save]
         if st.button("🚀 지출 기록하기", use_container_width=True):
-            receipt_url = ""
-            if uploaded_file is not None:
-                with st.spinner("📸 영수증 링킹 중..."):
-                    receipt_url = upload_image_to_imgbb(uploaded_file)
+            # [Added] 다중 URL 처리 로직
+            final_receipt_urls = ""
+            if uploaded_files:
+                with st.spinner("📸 모든 영수증을 클라우드에 보관 중..."):
+                    url_list = []
+                    for file in uploaded_files:
+                        u = upload_image_to_imgbb(file)
+                        if u: url_list.append(u)
+                    final_receipt_urls = ",".join(url_list) # 쉼표로 구분하여 저장
             
             final_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
             new_row = pd.DataFrame([{
@@ -693,7 +704,7 @@ with tab_in:
                 'IsExpense': 1,
                 'AppliedRate': cr_final,
                 'Note': '',
-                'Receipt_URL': receipt_url
+                'Receipt_URL': final_receipt_urls # [Modified] 통합된 URL 저장
             }])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): 
                 st.session_state.clear_exp_desc = True
@@ -954,8 +965,13 @@ with tab_his:
                                 trans_item = smart_krw_translator(desc_full, rate_for_calc, curr_for_calc)
                                 st.markdown(f"**📝 내역:** {trans_item}", unsafe_allow_html=True)
                             
-                        if str(row_data['Receipt_URL']).startswith("http"):
-                            st.image(row_data['Receipt_URL'], use_container_width=True)
+                        # [Modified] 쉼표로 구분된 다중 URL을 분리하여 모두 출력
+                        receipt_data = str(row_data['Receipt_URL'])
+                        if receipt_data.strip().startswith("http"):
+                            urls = receipt_data.split(",")
+                            for idx, url in enumerate(urls):
+                                if url.strip():
+                                    st.image(url.strip(), use_container_width=True, caption=f"영수증 사진 #{idx+1}")
                         else:
                             st.info("첨부된 영수증 사진이 없습니다.")
                             
