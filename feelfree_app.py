@@ -325,10 +325,17 @@ def load_data():
         df['Date'] = df['Date'].apply(normalize_date)
         
         df = df.reindex(columns=FINAL_COLUMNS)
-        df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-        df['AppliedRate'] = pd.to_numeric(df['AppliedRate'], errors='coerce').fillna(0.0)
+        
+        # [Modified] 시스템 수치 컬럼 방어 로직 (글자가 들어있어도 숫자로 강제 변환)
+        numeric_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
+        for col in numeric_cols:
+            if col in df.columns:
+                # errors='coerce'를 통해 글자는 NaN으로 바꾸고, 다시 fillna(0)으로 숫자화함
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        
         df['IsExpense'] = pd.to_numeric(df['IsExpense'], errors='coerce').fillna(0).astype(int)
         df['Note'] = df['Note'].fillna("").astype(str)
+        
         df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
         return df
     except Exception: return pd.DataFrame(columns=FINAL_COLUMNS)
