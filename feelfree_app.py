@@ -165,6 +165,7 @@ if 'last_cat_name' not in st.session_state: st.session_state.last_cat_name = "�
 # ==============================================================================
 ### ⚙️ [Logic: Data Parsing] 텍스트 기반 자산 분류기
 
+def get_asset_class(text):    
     """결제 수단 명칭을 분석하여 자산 성격(CASH/PREPAID/DOMESTIC) 분류"""
     txt = str(text).replace(" ", "").upper() # 대문자 변환 및 공백 제거
     
