@@ -288,7 +288,16 @@ def normalize_date(d_str):
 def load_data():
     try:
         df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
-        if df is None or df.empty: return pd.DataFrame(columns=FINAL_COLUMNS)
+        # [Modified] 시트가 존재하지만 내용이 아예 없는 경우(수동 생성 직후) 초기화 로직
+        if df is None or df.empty: 
+            df_init = pd.DataFrame(columns=FINAL_COLUMNS)
+            try:
+                # 텅 빈 시트에 14개 헤더를 강제로 주입합니다.
+                conn.update(worksheet=ACTIVE_SHEET, data=df_init)
+                st.info(f"✨ '{ACTIVE_SHEET}' 탭을 GTL 표준 양식으로 초기화했습니다.")
+            except:
+                pass # 권한 이슈 등으로 업데이트 실패 시 그냥 빈 DF 반환
+            return df_init
 
         year_match = re.search(r'\((\d{4})\)', st.session_state.current_trip)
         trip_year = year_match.group(1) if year_match else "2024"
