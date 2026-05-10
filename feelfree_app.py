@@ -40,36 +40,51 @@ CONFIG_SHEET = "_GTL_CONFIG_"
 def get_trip_configs():
     """구글 시트에서 모든 여행 설정 로드 및 마이그레이션"""
     try:
+        # 1. 먼저 마스터 설정 시트를 읽어본다.
         cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-        if cfg_df is None or cfg_df.empty: raise ValueError("Empty Config")
-    except:
-        # [Fixed] 이관용 레거시 데이터 정의 (최초 1회 시트 생성용)
-        LEGACY_DATA = {
-            "🇻🇳 푸꾸옥 (2026)": {"sheet": "PQ_2026", "nodes": {"베트남": {"currency": "VND", "symbol": "₫", "timezone": 7, "multiplier": 100}}, "cats":["식사", "간식", "Grab", "VinBus", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "지하철", "항공권", "호텔", "보험"]},
-            "🇨🇳 칭다오 (2025)": {"sheet": "QD_2025", "nodes": {"중국": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1}}, "cats":["식사", "간식", "DiDi", "지하철", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금"]},
-            "🗺️발칸6국(2024)": {"sheet": "BK_2024", "nodes": {"글로벌(달러)": {"currency": "USD", "symbol": "$", "timezone": 1, "multiplier": 1}}, "cats":["식사", "간식", "교통", "렌트카", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금", "기타"]}
-        }
-        initial_data = []
-        for name, cfg in LEGACY_DATA.items():
-            node_name = list(cfg['nodes'].keys())[0]
-            node = cfg['nodes'][node_name]
-            initial_data.append({
-                "TripName": name, "SheetName": cfg['sheet'],
-                "MainCountry": node_name, "Currency": node['currency'],
-                "Symbol": node['symbol'], "Timezone": node['timezone'],
-                "Multiplier": node['multiplier'], "Categories": ",".join(cfg['cats'])
-            })
-        cfg_df = pd.DataFrame(initial_data)
-        conn.update(worksheet=CONFIG_SHEET, data=cfg_df)
-        st.success("✅ 기존 여행 데이터를 마스터 시트로 이관했습니다.")
+        if cfg_df is None or cfg_df.empty: 
+            raise ValueError("Config sheet is empty")
+    except Exception as e:
+        # 2. 시트가 없거나 읽기에 실패한 경우
+        if "WorksheetNotFound" in str(e) or "empty" in str(e):
+            # [Fix] 이관용 레거시 데이터 정의
+            LEGACY_DATA = {
+                "🇻🇳 푸꾸옥 (2026)": {"sheet": "PQ_2026", "nodes": {"베트남": {"currency": "VND", "symbol": "₫", "timezone": 7, "multiplier": 100}}, "cats":["식사", "간식", "Grab", "VinBus", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "지하철", "항공권", "호텔", "보험"]},
+                "🇨🇳 칭다오 (2025)": {"sheet": "QD_2025", "nodes": {"중국": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1}}, "cats":["식사", "간식", "DiDi", "지하철", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금"]},
+                "🗺️발칸6국(2024)": {"sheet": "BK_2024", "nodes": {"글로벌(달러)": {"currency": "USD", "symbol": "$", "timezone": 1, "multiplier": 1}}, "cats":["식사", "간식", "교통", "렌트카", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금", "기타"]}
+            }
+            initial_data = []
+            for name, cfg in LEGACY_DATA.items():
+                node_name = list(cfg['nodes'].keys())[0]
+                node = cfg['nodes'][node_name]
+                initial_data.append({
+                    "TripName": name, "SheetName": cfg['sheet'],
+                    "MainCountry": node_name, "Currency": node['currency'],
+                    "Symbol": node['symbol'], "Timezone": node['timezone'],
+                    "Multiplier": node['multiplier'], "Categories": ",".join(cfg['cats'])
+                })
+            cfg_df = pd.DataFrame(initial_data)
+            
+            try:
+                # 시트에 쓰기 시도
+                conn.update(worksheet=CONFIG_SHEET, data=cfg_df)
+                st.success("✅ 마스터 설정 시트를 생성하고 데이터를 이관했습니다.")
+            except:
+                # [Added] 탭 자체가 아예 없는 경우의 최후 가이드
+                st.error(f"🚨 **'{CONFIG_SHEET}' 탭을 찾을 수 없습니다.**")
+                st.info(f"💡 **해결 방법:** 연결된 구글 스프레드시트 파일에 접속하여 **'{CONFIG_SHEET}'**라는 이름의 빈 탭을 하나만 만들어주세요. 그 후 새로고침(F5)을 하면 시스템이 자동으로 설정을 초기화합니다.")
+                st.stop() # 탭이 만들어질 때까지 실행 중단
+        else:
+            st.error(f"데이터 로딩 중 예상치 못한 오류 발생: {e}")
+            st.stop()
     
     dynamic_configs = {}
     for _, row in cfg_df.iterrows():
         cats = [c.strip() for c in str(row['Categories']).split(",")]
-        dynamic_configs[row['TripName']] = {
-            "sheet": row['SheetName'],
+        dynamic_configs[str(row['TripName'])] = {
+            "sheet": str(row['SheetName']),
             "nodes": {str(row['MainCountry']): {
-                "currency": row['Currency'], "symbol": row['Symbol'], 
+                "currency": str(row['Currency']), "symbol": str(row['Symbol']), 
                 "timezone": int(row['Timezone']), "multiplier": int(row['Multiplier'])
             }},
             "cats": cats
