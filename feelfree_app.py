@@ -41,10 +41,16 @@ def get_trip_configs():
     """구글 시트에서 모든 여행 설정 로드 및 마이그레이션"""
     try:
         cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+        if cfg_df is None or cfg_df.empty: raise ValueError("Empty Config")
     except:
-        # 최초 실행 시 기존 하드코딩된 TRIP_CONFIGS를 기반으로 마스터 시트 생성
+        # [Fixed] 이관용 레거시 데이터 정의 (최초 1회 시트 생성용)
+        LEGACY_DATA = {
+            "🇻🇳 푸꾸옥 (2026)": {"sheet": "PQ_2026", "nodes": {"베트남": {"currency": "VND", "symbol": "₫", "timezone": 7, "multiplier": 100}}, "cats":["식사", "간식", "Grab", "VinBus", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "지하철", "항공권", "호텔", "보험"]},
+            "🇨🇳 칭다오 (2025)": {"sheet": "QD_2025", "nodes": {"중국": {"currency": "CNY", "symbol": "¥", "timezone": 8, "multiplier": 1}}, "cats":["식사", "간식", "DiDi", "지하철", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금"]},
+            "🗺️발칸6국(2024)": {"sheet": "BK_2024", "nodes": {"글로벌(달러)": {"currency": "USD", "symbol": "$", "timezone": 1, "multiplier": 1}}, "cats":["식사", "간식", "교통", "렌트카", "마사지", "팁", "마트", "선물", "투어", "입장료", "통신", "수수료", "택시", "항공권", "호텔", "보험", "보증금", "기타"]}
+        }
         initial_data = []
-        for name, cfg in TRIP_CONFIGS.items():
+        for name, cfg in LEGACY_DATA.items():
             node_name = list(cfg['nodes'].keys())[0]
             node = cfg['nodes'][node_name]
             initial_data.append({
@@ -62,13 +68,14 @@ def get_trip_configs():
         cats = [c.strip() for c in str(row['Categories']).split(",")]
         dynamic_configs[row['TripName']] = {
             "sheet": row['SheetName'],
-            "nodes": {row['MainCountry']: {
+            "nodes": {str(row['MainCountry']): {
                 "currency": row['Currency'], "symbol": row['Symbol'], 
                 "timezone": int(row['Timezone']), "multiplier": int(row['Multiplier'])
             }},
             "cats": cats
         }
     return dynamic_configs
+
 
 # [Modified] 버전 및 업데이트 로그 v26.05.10.005
 VERSION = "v26.05.10.005"
@@ -835,45 +842,41 @@ with tab_in:
     else:
         st.subheader("✈️ 출입국 일정 기록")
         io_type = st.radio("구분",["출국", "입국"], horizontal=True, key="io_radio")
-        desc = st.text_input("내용 (메모)", placeholder="편명, 시간 등", key="io_desc")
+        io_desc = st.text_input("내용 (메모)", placeholder="편명, 시간 등", key="io_desc_input")
         if st.button("🚀 일정 기록 완료", use_container_width=True):
-            new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
+            new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': io_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
-if st.button("🚀 일정 기록 완료", use_container_width=True):
-            new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
-            if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
-
-    # [Added] 새 여행 추가 (Provisioning) UI 영역
+    # [Added] 새 여행 추가 (Provisioning) UI 영역 - tab_in 블록 내부의 마지막에 위치
     st.divider()
     with st.expander("➕ 새로운 여행지 개설 (GTL Provisioning)", expanded=False):
         st.subheader("🌍 새로운 여행지 설계")
         new_t_name = st.text_input("여행 이름", placeholder="예: 🇨🇿 프라하 2027")
         new_s_name = st.text_input("시트 이름 (영문/숫자)", placeholder="예: PRG_2027")
         
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            new_curr = st.text_input("통화 코드", value="USD", key="n_curr")
-            new_sym = st.text_input("통화 기호", value="$", key="n_sym")
-        with c2:
-            new_mult = st.selectbox("환율 배율 (Multiplier)", [1, 100], help="VND, HUF는 100, 그외는 1")
-            new_tz = st.number_input("현지 시차 (GMT)", value=9)
-        with c3:
-            new_country = st.text_input("대표 국가명", value="미국")
+        c_p1, c_p2, c_p3 = st.columns(3)
+        with c_p1:
+            new_curr = st.text_input("통화 코드", value="USD", key="prov_curr")
+            new_sym = st.text_input("통화 기호", value="$", key="prov_sym")
+        with c_p2:
+            new_mult = st.selectbox("환율 배율 (Multiplier)", [1, 100], help="VND, HUF는 100, 그외는 1", key="prov_mult")
+            new_tz = st.number_input("현지 시차 (GMT)", value=9, key="prov_tz")
+        with c_p3:
+            new_country = st.text_input("대표 국가명", value="미국", key="prov_country")
 
         default_cats = "식사,간식,마트,택시,지하철,투어,입장료,마사지,팁,수수료,통신,보증금,항공권,호텔,보험"
-        new_cats_str = st.text_area("카테고리 구성 (쉼표로 구분)", value=default_cats)
+        new_cats_str = st.text_area("카테고리 구성 (쉼표로 구분)", value=default_cats, key="prov_cats")
 
         if st.button("🚀 신규 여행지 서버에 개설", use_container_width=True):
             if new_t_name and new_s_name:
-                cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+                cfg_df_p = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
                 new_entry = pd.DataFrame([{
                     "TripName": new_t_name, "SheetName": new_s_name,
                     "MainCountry": new_country, "Currency": new_curr,
                     "Symbol": new_sym, "Timezone": new_tz,
                     "Multiplier": new_mult, "Categories": new_cats_str
                 }])
-                conn.update(worksheet=CONFIG_SHEET, data=pd.concat([cfg_df, new_entry], ignore_index=True))
+                conn.update(worksheet=CONFIG_SHEET, data=pd.concat([cfg_df_p, new_entry], ignore_index=True))
                 
                 # 14개 표준 컬럼으로 빈 시트 생성
                 new_sheet_df = pd.DataFrame(columns=FINAL_COLUMNS)
@@ -883,52 +886,6 @@ if st.button("🚀 일정 기록 완료", use_container_width=True):
                     st.cache_data.clear(); st.rerun()
                 except:
                     st.error(f"'{new_s_name}' 탭을 시트에서 수동으로 만든 뒤 다시 시도해 주세요.")
-
-    st.divider()
-    with st.expander("➕ 새로운 여행 추가 (GTL Provisioning)", expanded=False):
-        st.subheader("🌍 새로운 여행지 설계")
-        new_t_name = st.text_input("여행 이름", placeholder="예: 🇨🇿 프라하 2027")
-        new_s_name = st.text_input("시트 이름 (영문/숫자)", placeholder="예: PRG_2027")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            new_curr = st.text_input("통화 코드", value="USD")
-            new_sym = st.text_input("통화 기호", value="$")
-        with col2:
-            new_mult = st.selectbox("환율 배율 (Multiplier)", [1, 100], help="VND, HUF는 100, 그외는 1")
-            new_tz = st.number_input("현지 시차 (GMT)", value=9)
-        with col3:
-            new_country = st.text_input("대표 국가명", value="미국")
-
-        # [Added] 커스텀 카테고리 설계 (Dan의 핵심 요구사항)
-        default_cats = "식사,간식,마트,택시,지하철,투어,입장료,마사지,팁,수수료,통신,보증금,항공권,호텔,보험"
-        new_cats_str = st.text_area("카테고리 구성 (쉼표로 구분)", value=default_cats, help="트램(올드), 트램(현대) 등을 자유롭게 추가하세요.")
-
-        if st.button("🚀 신규 여행지 서버에 개설", use_container_width=True):
-            if new_t_name and new_s_name:
-                # 1. 마스터 설정 업데이트
-                cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-                new_entry = pd.DataFrame([{
-                    "TripName": new_t_name, "SheetName": new_s_name,
-                    "MainCountry": new_country, "Currency": new_curr,
-                    "Symbol": new_sym, "Timezone": new_tz,
-                    "Multiplier": new_mult, "Categories": new_cats_str
-                }])
-                updated_cfg = pd.concat([cfg_df, new_entry], ignore_index=True)
-                conn.update(worksheet=CONFIG_SHEET, data=updated_cfg)
-
-                # 2. 새로운 여행 탭 생성 및 헤더(14개) 주입
-                # [Added] 14개 표준 컬럼 자동 Provisioning
-                new_sheet_df = pd.DataFrame(columns=FINAL_COLUMNS)
-                try:
-                    conn.update(worksheet=new_s_name, data=new_sheet_df)
-                    st.success(f"🎉 {new_t_name} 여행지가 성공적으로 개설되었습니다!")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"시트 생성 중 오류 발생: {e}. 구글 시트에서 '{new_s_name}' 탭을 수동으로 생성한 뒤 다시 시도해 주세요.")
-            else:
-                st.warning("여행 이름과 시트 이름을 입력해야 합니다.")
 
 # ==============================================================================
 # --- SECTION 6: [Module D] History & Edit (🔍 조회 탭) ---
