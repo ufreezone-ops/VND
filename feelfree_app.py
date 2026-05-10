@@ -862,45 +862,59 @@ with tab_in:
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': io_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
             if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
 
-    # [Added] 새 여행 추가 (Provisioning) UI 영역 - tab_in 블록 내부의 마지막에 위치
+    # --- 여기서부터 [Added] 블록입니다. 들여쓰기를 with tab_in: 에 맞춰주세요 ---
+    st.markdown("<br><br>", unsafe_allow_html=True)
     st.divider()
     with st.expander("➕ 새로운 여행지 개설 (GTL Provisioning)", expanded=False):
         st.subheader("🌍 새로운 여행지 설계")
-        new_t_name = st.text_input("여행 이름", placeholder="예: 🇨🇿 프라하 2027")
-        new_s_name = st.text_input("시트 이름 (영문/숫자)", placeholder="예: PRG_2027")
+        st.info("여기서 새로운 여행을 추가하면 구글 시트에 새로운 탭이 자동으로 생성됩니다.")
+        
+        new_t_name = st.text_input("1. 여행 이름", placeholder="예: 🇨🇿 프라하 2027")
+        new_s_name = st.text_input("2. 시트 이름 (영문/숫자만)", placeholder="예: PRG_2027")
         
         c_p1, c_p2, c_p3 = st.columns(3)
         with c_p1:
-            new_curr = st.text_input("통화 코드", value="USD", key="prov_curr")
-            new_sym = st.text_input("통화 기호", value="$", key="prov_sym")
+            new_curr = st.text_input("통화 코드", value="USD", key="prov_curr_v2")
+            new_sym = st.text_input("통화 기호", value="$", key="prov_sym_v2")
         with c_p2:
-            new_mult = st.selectbox("환율 배율 (Multiplier)", [1, 100], help="VND, HUF는 100, 그외는 1", key="prov_mult")
-            new_tz = st.number_input("현지 시차 (GMT)", value=9, key="prov_tz")
+            new_mult = st.selectbox("환율 배율 (Multiplier)", [1, 100], index=0, help="VND, HUF는 100, 그외는 1", key="prov_mult_v2")
+            new_tz = st.number_input("현지 시차 (GMT)", value=9, key="prov_tz_v2")
         with c_p3:
-            new_country = st.text_input("대표 국가명", value="미국", key="prov_country")
+            new_country = st.text_input("대표 국가명", value="미국", key="prov_country_v2")
 
-        default_cats = "식사,간식,마트,택시,지하철,투어,입장료,마사지,팁,수수료,통신,보증금,항공권,호텔,보험"
-        new_cats_str = st.text_area("카테고리 구성 (쉼표로 구분)", value=default_cats, key="prov_cats")
+        default_cats = "식사,간식,마트,택시,지하철,트램,투어,입장료,마사지,팁,수수료,통신,보증금,항공권,호텔,보험"
+        new_cats_str = st.text_area("3. 카테고리 구성 (쉼표로 구분)", value=default_cats, key="prov_cats_v2")
 
-        if st.button("🚀 신규 여행지 서버에 개설", use_container_width=True):
+        if st.button("🚀 서버에 새 여행지 즉시 개설", use_container_width=True, type="primary"):
             if new_t_name and new_s_name:
+                # 관제탑 시트 로드
                 cfg_df_p = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-                new_entry = pd.DataFrame([{
-                    "TripName": new_t_name, "SheetName": new_s_name,
-                    "MainCountry": new_country, "Currency": new_curr,
-                    "Symbol": new_sym, "Timezone": new_tz,
-                    "Multiplier": new_mult, "Categories": new_cats_str
-                }])
-                conn.update(worksheet=CONFIG_SHEET, data=pd.concat([cfg_df_p, new_entry], ignore_index=True))
-                
-                # 14개 표준 컬럼으로 빈 시트 생성
-                new_sheet_df = pd.DataFrame(columns=FINAL_COLUMNS)
-                try:
-                    conn.update(worksheet=new_s_name, data=new_sheet_df)
-                    st.success(f"🎉 {new_t_name} 여행지가 개설되었습니다!")
-                    st.cache_data.clear(); st.rerun()
-                except:
-                    st.error(f"'{new_s_name}' 탭을 시트에서 수동으로 만든 뒤 다시 시도해 주세요.")
+                # 중복 체크
+                if new_t_name in cfg_df_p['TripName'].values:
+                    st.error("이미 존재하는 여행 이름입니다.")
+                else:
+                    with st.spinner("새로운 여행지를 구축 중..."):
+                        # 1. 마스터 설정에 추가
+                        new_entry = pd.DataFrame([{
+                            "TripName": new_t_name, "SheetName": new_s_name,
+                            "MainCountry": new_country, "Currency": new_curr,
+                            "Symbol": new_sym, "Timezone": new_tz,
+                            "Multiplier": new_mult, "Categories": new_cats_str
+                        }])
+                        conn.update(worksheet=CONFIG_SHEET, data=pd.concat([cfg_df_p, new_entry], ignore_index=True))
+                        
+                        # 2. 14개 표준 컬럼으로 새 탭 생성
+                        new_sheet_df = pd.DataFrame(columns=FINAL_COLUMNS)
+                        try:
+                            conn.update(worksheet=new_s_name, data=new_sheet_df)
+                            st.success(f"🎉 '{new_t_name}' 여행지가 개설되었습니다! 리스트를 확인하세요.")
+                            st.cache_data.clear()
+                            time.sleep(2)
+                            st.rerun()
+                        except:
+                            st.warning(f"설정은 저장되었으나 시트 생성 권한이 부족합니다. 구글 시트에서 '{new_s_name}' 탭을 수동으로 생성해 주세요.")
+            else:
+                st.warning("여행 이름과 시트 이름은 필수입니다.")
 
 # ==============================================================================
 # --- SECTION 6: [Module D] History & Edit (🔍 조회 탭) ---
