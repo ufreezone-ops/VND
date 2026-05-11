@@ -169,7 +169,7 @@ if 'last_cat_name' not in st.session_state: st.session_state.last_cat_name = "�
 
 # [Module A] Data Engine (Modified)
 
-ddef get_asset_class(text):    
+def get_asset_class(text):    
     """결제 수단 명칭을 분석하여 자산 성격(CASH/PREPAID/CREDIT/DOMESTIC) 분류"""
     txt = str(text).replace(" ", "").upper()
     
