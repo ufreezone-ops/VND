@@ -37,6 +37,8 @@ BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 # [Added] 마스터 설정 시트 상수 (기존 BILLS 아래에 삽입)
 CONFIG_SHEET = "_GTL_CONFIG_"
 
+# [Modified] 10분 동안 여행 설정 정보를 메모리에 보관 (API 호출 절감)
+@st.cache_data(ttl=600)
 def get_trip_configs():
     """구글 시트에서 모든 여행 설정 로드 및 마이그레이션"""
     try:
@@ -299,10 +301,13 @@ def normalize_date(d_str):
     return d_str
 
 ### ⚙️ [Logic: DB Load] GSheet 데이터 로드 및 클리닝
-def load_data():
+# [Modified] 2분 동안 현재 장부 데이터를 메모리에 보관
+@st.cache_data(ttl=120)
+def load_data(sheet_name):
     try:
-        df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
-        # [Modified] 시트가 존재하지만 내용이 아예 없는 경우(수동 생성 직후) 초기화 로직
+        # 인자로 받은 sheet_name을 사용하여 읽기
+        df = conn.read(worksheet=sheet_name, ttl="0s")
+        
         if df is None or df.empty: 
             df_init = pd.DataFrame(columns=FINAL_COLUMNS)
             try:
@@ -474,8 +479,11 @@ def recalculate_entire_ledger(df):
     return temp_df
 
 ### ⚙️[Logic: DB Save] 구글 시트 동기화
+# [Modified] 저장할 때는 최신 데이터를 반영해야 하므로 캐시를 즉시 삭제
 def save_data(df, metrics=None):
     if df is None or len(df) == 0: return False
+    # 저장 직전 캐시 삭제
+    st.cache_data.clear() 
     with st.status("클라우드 동기화 중...", expanded=False):
         try:
             final_df = recalculate_entire_ledger(df)
@@ -489,7 +497,7 @@ def save_data(df, metrics=None):
         except Exception as e:
             st.error(f"Cloud 저장 실패. 해당 탭({ACTIVE_SHEET})이 구글 시트에 존재하는지 확인하세요. 에러: {e}"); return False
 
-ledger_df = load_data()
+ledger_df = load_data(ACTIVE_SHEET)
 
 # ==============================================================================
 # --- SECTION 3:[Module B] URDI Engine ---
