@@ -456,10 +456,10 @@ def recalculate_entire_ledger(df):
             elif curr != 'KRW':
                 # [Added/Modified] 외상(CREDIT) 자산일 경우 물리적 주머니를 건드리지 않음
                 if asset_cls == "CREDIT":
-                    rate = get_default_rate(curr) # 현재 기준 환율 적용
-                    temp_df.at[i, 'Note'] = "Credit (Not Deducted)"
+                    # [Modified] 외상은 인벤토리를 타지 않으므로 가중평균환율(WAR)을 적용해 평단을 맞춤
+                    rate = get_WAR(curr)
+                    temp_df.at[i, 'Note'] = "Credit (Debt Generated)"
                 else:
-                    # 실제 현금 또는 카드 주머니 결정
                     target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                     temp_qty = qty; total_cost_krw = 0.0; decomposed =[]
                     if target in inv_batches:
@@ -468,14 +468,19 @@ def recalculate_entire_ledger(df):
                             if batch['qty'] <= 0: continue
                             take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                             total_cost_krw += take * batch['rate']
-                            
-                        take_str = f"{take:,.2f}" if curr not in["VND", "HUF"] else f"{take:,.0f}"
-                        rate_str = f"{batch['rate']:.2f}" if curr not in ["VND", "HUF"] else f"{batch['rate']:.4f}"
-                        decomposed.append(f"{take_str}@{rate_str}")
-                if qty > 0:
-                    rate = total_cost_krw / qty if total_cost_krw > 0 else get_default_rate(curr)
-                    if decomposed: temp_df.at[i, 'Note'] = "Decomposed: " + " + ".join(decomposed)
-                else: rate = 0.0
+                            decomposed.append(f"{take:,.0f}@{batch['rate']:.2f}")
+
+                    # [Added] ★ 핵심: 잔액 부족분 보정 로직
+                    if temp_qty > 0:
+                        # 주머니에 없는 돈을 썼다면, 부족한 양(temp_qty)은 기본 환율로 가상 채움
+                        fallback_r = get_WAR(curr)
+                        total_cost_krw += temp_qty * fallback_r
+                        decomposed.append(f"{temp_qty:,.0f}@{fallback_r:.2f}(Shortage)")
+                    
+                    if qty > 0:
+                        rate = total_cost_krw / qty # 이제 분모가 전체 qty이므로 환율이 튀지 않음
+                        if decomposed: temp_df.at[i, 'Note'] = "Decomposed: " + " + ".join(decomposed)
+                    else: rate = 0.0
 
         row_country = temp_df.at[i, 'Country']
         nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
@@ -601,6 +606,16 @@ with st.sidebar:
     ### 📊 [GUI: Chart/Table] 통화별 잔고 표시
     for c in display_currs:
         if c == "KRW": continue
+
+        # [Added] 외상(Debt) 잔액 계산 및 표시
+        # CREDIT 클래스로 쓴 돈 - '상환' 카테고리로 낸 돈
+        debt_amt = ledger_df[(ledger_df['Currency']==c) & (ledger_df['PaymentMethod'].str.contains("외상|부채|CREDIT"))]['Amount'].sum()
+        repay_amt = ledger_df[(ledger_df['Currency']==c) & (ledger_df['Category']=="상환")]['Amount'].sum()
+        current_debt = debt_amt - repay_amt
+        
+        if current_debt > 0:
+            st.markdown(f"<div style='color:#FF4B4B; font-size:14px;'>📌 <b>미결제 외상: {fmt.format(current_debt)}</b></div>", unsafe_allow_html=True)
+        
         c_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블로그({c})",[])])
         c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
         
