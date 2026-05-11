@@ -24,7 +24,7 @@ MACRO_MAP = {
     "식사": "🍔 식음료", "간식": "🍔 식음료", "마트": "🍔 식음료",
     "마사지": "🏄 액티비티", "투어": "🏄 액티비티", "입장료": "🏄 액티비티",
     "선물": "🎁 쇼핑", "통신": "📱 통신/기타", "수수료": "📱 통신/기타", "팁": "📱 통신/기타",
-    "항공권": "✈️ 항공권", "호텔": "🏨 숙박", "보험": "🛡️ 보험", "보증금": "🏦 자산이동", "재환전": "🏦 자산이동"
+    "항공권": "✈️ 항공권", "호텔": "🏨 숙박", "보험": "🛡️ 보험", "보증금": "🏦 자산이동", "재환전": "🏦 자산이동", "상환": "🏦 자산이동" # [Added] 상환 추가
 }
 
 CORE_COLUMNS =['Date', 'Country', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'Receipt_URL']
@@ -399,10 +399,13 @@ def recalculate_entire_ledger(df):
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
         
-        is_exp = 1 if cat in EXPENSE_CATS and cat not in['환불', '보증금', '재환전'] else 0
+        # [Modified] '상환'을 지출 제외 목록에 추가하여 이중 합산 방지
+        is_exp = 1 if cat in EXPENSE_CATS and cat not in['환불', '보증금', '재환전', '상환'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
         
-        is_deductible = 1 if (is_exp == 1 or cat == '보증금') else 0
+        # [Modified] '상환'도 인벤토리 차감(Deductible) 대상에 포함 (실제 돈이 나가므로)
+        is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
+        
         rate = temp_df.at[i, 'AppliedRate'] 
         asset_cls = get_asset_class(method)
         
