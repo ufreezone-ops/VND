@@ -169,19 +169,17 @@ if 'last_cat_name' not in st.session_state: st.session_state.last_cat_name = "�
 
 # [Module A] Data Engine (Modified)
 
-def get_asset_class(text):    
+ddef get_asset_class(text):    
     """결제 수단 명칭을 분석하여 자산 성격(CASH/PREPAID/CREDIT/DOMESTIC) 분류"""
     txt = str(text).replace(" ", "").upper()
     
-    # 1. 현금성 자산
-    if any(k in txt for k in ["현금", "지폐", "CASH"]): 
-        return "CASH"
-    
-    # 2. 프리페이드/카드 자산
-    if any(k in txt for k in ["트래블", "로그", "월렛", "카드", "CARD", "PAY"]): 
+    # [Modified] '충전', 'PAY', 'CARD' 등 카드 자산 키워드 강화
+    if any(k in txt for k in ["트래블", "로그", "월렛", "카드", "CARD", "PAY", "WALLET", "충전"]): 
         return "PREPAID"
     
-    # 3. [Modified] 외상/부채 (가상 자산)
+    if any(k in txt for k in ["현금", "지폐", "CASH", "환전"]): 
+        return "CASH"
+    
     if any(k in txt for k in ["외상", "부채", "CREDIT"]):
         return "CREDIT" 
         
