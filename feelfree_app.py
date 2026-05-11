@@ -373,8 +373,9 @@ def recalculate_entire_ledger(df):
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
         
-        # [Modified] '상환'을 지출 제외 목록에 추가하여 이중 합산 방지
-        is_exp = 1 if cat in EXPENSE_CATS and cat not in['환불', '보증금', '재환전', '상환'] else 0
+        # [Modified] 매칭 정확도를 높이기 위해 EXPENSE_CATS의 모든 항목에서도 공백을 제거하고 비교
+        clean_expense_cats = [c.strip() for c in EXPENSE_CATS]
+        is_exp = 1 if cat in clean_expense_cats and cat not in['환불', '보증금', '재환전', '상환'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
         
         # [Modified] '상환'도 인벤토리 차감(Deductible) 대상에 포함 (실제 돈이 나가므로)
