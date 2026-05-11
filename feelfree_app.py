@@ -167,24 +167,25 @@ if 'last_cat_name' not in st.session_state: st.session_state.last_cat_name = "�
 # ==============================================================================
 ### ⚙️ [Logic: Data Parsing] 텍스트 기반 자산 분류기
 
+# [Module A] Data Engine (Modified)
+
 def get_asset_class(text):    
-    """결제 수단 명칭을 분석하여 자산 성격(CASH/PREPAID/DOMESTIC) 분류"""
-    txt = str(text).replace(" ", "").upper() # 대문자 변환 및 공백 제거
+    """결제 수단 명칭을 분석하여 자산 성격(CASH/PREPAID/CREDIT/DOMESTIC) 분류"""
+    txt = str(text).replace(" ", "").upper()
     
-    # 1. 현금성 자산 판별 (현금, 지폐, Cash 등)
-    if any(k in txt for k in ["현금", "지폐", "CASH", "CASH(EXCHANGE)"]): 
+    # 1. 현금성 자산
+    if any(k in txt for k in ["현금", "지폐", "CASH"]): 
         return "CASH"
     
-    # 2. 프리페이드/카드 자산 판별 (트래블, 로그, 월렛, 카드, PAY 등)
-    # [Added] '로그', 'PAY', 'CARD' 키워드 추가로 트래블로그(PHP) 등 인식 보장
-    if any(k in txt for k in ["트래블", "로그", "월렛", "카드", "CARD", "PAY", "WALLET"]): 
+    # 2. 프리페이드/카드 자산
+    if any(k in txt for k in ["트래블", "로그", "월렛", "카드", "CARD", "PAY"]): 
         return "PREPAID"
     
-    # 3. 특수 케이스 (외상/상환 등은 부채 성격이나 우선 현지 자산흐름으로 처리)
-    if any(k in txt for k in ["외상", "상환"]):
-        return "PREPAID" # 통계 왜곡 방지를 위해 가상 카드 자산으로 취급
+    # 3. [Modified] 외상/부채 (가상 자산)
+    if any(k in txt for k in ["외상", "부채", "CREDIT"]):
+        return "CREDIT" 
         
-    return "DOMESTIC" # 그 외(원화계좌 등)는 국내 자산으로 분류
+    return "DOMESTIC"
 
 ### ⚙️[Logic: Rate Fallback] 평균 환율 동적 추론
 def get_default_rate(curr):
