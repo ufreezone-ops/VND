@@ -454,14 +454,21 @@ def recalculate_entire_ledger(df):
                 c_budget += qty if curr == 'KRW' else qty * rate
                 rate = 1.0 if curr == 'KRW' else rate
             elif curr != 'KRW':
-                target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
-                temp_qty = qty; total_cost_krw = 0.0; decomposed =[]
-                if target in inv_batches:
-                    for batch in inv_batches[target]:
-                        if temp_qty <= 0: break
-                        if batch['qty'] <= 0: continue
-                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
-                        total_cost_krw += take * batch['rate']
+                # [Added/Modified] 외상(CREDIT) 자산일 경우 물리적 주머니를 건드리지 않음
+                if asset_cls == "CREDIT":
+                    rate = get_default_rate(curr) # 현재 기준 환율 적용
+                    temp_df.at[i, 'Note'] = "Credit (Not Deducted)"
+                else:
+                    # 실제 현금 또는 카드 주머니 결정
+                    target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                    temp_qty = qty; total_cost_krw = 0.0; decomposed =[]
+                    if target in inv_batches:
+                        for batch in inv_batches[target]:
+                            if temp_qty <= 0: break
+                            if batch['qty'] <= 0: continue
+                            take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
+                            total_cost_krw += take * batch['rate']
+                            
                         take_str = f"{take:,.2f}" if curr not in["VND", "HUF"] else f"{take:,.0f}"
                         rate_str = f"{batch['rate']:.2f}" if curr not in ["VND", "HUF"] else f"{batch['rate']:.4f}"
                         decomposed.append(f"{take_str}@{rate_str}")
