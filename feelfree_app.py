@@ -447,23 +447,33 @@ def recalculate_entire_ledger(df):
                 else:
                     target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                     temp_qty = qty; total_cost_krw = 0.0; decomposed =[]
+
+
+                    
                     if target in inv_batches:
                         for batch in inv_batches[target]:
                             if temp_qty <= 0: break
                             if batch['qty'] <= 0: continue
                             take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                             total_cost_krw += take * batch['rate']
-                            decomposed.append(f"{take:,.0f}@{batch['rate']:.2f}")
+                            
+                            # [Modified] 통화별 소수점 정밀도 동적 적용 (VND/HUF/PHP는 4자리)
+                            r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
+                            q_fmt = ":,.0f" if curr in ["VND", "HUF"] else ":,.2f"
+                            decomposed.append(f"{take{q_fmt}}@{batch['rate']:{r_prec}}")
 
                     # [Added] ★ 핵심: 잔액 부족분 보정 로직
                     if temp_qty > 0:
                         # 주머니에 없는 돈을 썼다면, 부족한 양(temp_qty)은 기본 환율로 가상 채움
                         fallback_r = get_WAR(curr)
                         total_cost_krw += temp_qty * fallback_r
-                        decomposed.append(f"{temp_qty:,.0f}@{fallback_r:.2f}(Shortage)")
+                        
+                        r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
+                        q_fmt = ":,.0f" if curr in ["VND", "HUF"] else ":,.2f"
+                        decomposed.append(f"{temp_qty{q_fmt}}@{fallback_r:{r_prec}}(Shortage)")
                     
                     if qty > 0:
-                        rate = total_cost_krw / qty # 이제 분모가 전체 qty이므로 환율이 튀지 않음
+                        rate = total_cost_krw / qty 
                         if decomposed: temp_df.at[i, 'Note'] = "Decomposed: " + " + ".join(decomposed)
                     else: rate = 0.0
 
@@ -858,7 +868,8 @@ with tab_in:
                 if "ATM" in ty:
                     inherited_r = auto_calc_fifo_rate(t_amt, f"트래블로그({curr_tr})", curr_tr)
                     st.info(f"💳 카드 재고 계승 환율: **{inherited_r:.5f}**")
-                    s_cost = st.number_input("인출 원금 확인", value=float(t_amt), key="tr_source_atm")
+                    # [Removed] 불필요한 원금 입력 칸을 제거하고 정보성 메시지로 대체
+                    st.success(f"💰 인출로 소모되는 원화 가치: **{(t_amt * inherited_r):,.0f} 원**")
                     applied_tr_rate = inherited_r
                 else:
                     s_cost = st.number_input("소요 원금 (KRW)", min_value=0, step=1, format="%d", key="tr_source_swap")
