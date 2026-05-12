@@ -602,9 +602,11 @@ with st.sidebar:
     for c in display_currs:
         if c == "KRW": continue
 
+        # [Modified] NameError 방지: fmt 정의를 루프 최상단으로 이동
+        fmt = "{:,.2f}" if c not in["VND", "HUF", "PHP"] else "{:,.0f}"
+
         # [Added] 외상(Debt) 잔액 계산 및 표시
-        # CREDIT 클래스로 쓴 돈 - '상환' 카테고리로 낸 돈
-        debt_amt = ledger_df[(ledger_df['Currency']==c) & (ledger_df['PaymentMethod'].str.contains("외상|부채|CREDIT"))]['Amount'].sum()
+        debt_amt = ledger_df[(ledger_df['Currency']==c) & (ledger_df['PaymentMethod'].str.contains("외상|부채|CREDIT", na=False))]['Amount'].sum()
         repay_amt = ledger_df[(ledger_df['Currency']==c) & (ledger_df['Category']=="상환")]['Amount'].sum()
         current_debt = debt_amt - repay_amt
         
@@ -616,7 +618,6 @@ with st.sidebar:
         
         if c_card > 0 or c_cash > 0 or c in trip_currs:
             st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
-            fmt = "{:,.2f}" if c not in["VND", "HUF"] else "{:,.0f}"
             st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
             st.markdown(f"<div style='margin-bottom:18px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
             
