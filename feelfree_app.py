@@ -457,10 +457,10 @@ def recalculate_entire_ledger(df):
                             take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                             total_cost_krw += take * batch['rate']
                             
-                            # [Modified] 통화별 소수점 정밀도 동적 적용 (VND/HUF/PHP는 4자리)
+                            # [Modified] 통화별 포맷팅 정의 (금액은 q_fmt, 환율은 r_prec)
                             r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
-                            q_fmt = ":,.0f" if curr in ["VND", "HUF"] else ":,.2f"
-                            decomposed.append(f"{take{q_fmt}}@{batch['rate']:{r_prec}}")
+                            q_fmt = ",.0f" if curr in ["VND", "HUF"] else ",.2f"
+                            decomposed.append(f"{take:{q_fmt}}@{batch['rate']:{r_prec}}")
 
                     # [Added] ★ 핵심: 잔액 부족분 보정 로직
                     if temp_qty > 0:
@@ -469,8 +469,8 @@ def recalculate_entire_ledger(df):
                         total_cost_krw += temp_qty * fallback_r
                         
                         r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
-                        q_fmt = ":,.0f" if curr in ["VND", "HUF"] else ":,.2f"
-                        decomposed.append(f"{temp_qty{q_fmt}}@{fallback_r:{r_prec}}(Shortage)")
+                        q_fmt = ",.0f" if curr in ["VND", "HUF"] else ",.2f"
+                        decomposed.append(f"{temp_qty:{q_fmt}}@{fallback_r:{r_prec}}(Shortage)")
                     
                     if qty > 0:
                         rate = total_cost_krw / qty 
