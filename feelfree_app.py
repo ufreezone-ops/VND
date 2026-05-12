@@ -1174,7 +1174,9 @@ with tab_stats:
             exp_df['IsSurvival'] = exp_df['Category'].apply(lambda x: 1 if x in SURVIVAL_CATS else 0)
 
             ### ⚙️[Logic: Net-ifier Engine] 환불 내역 역산 (지출에서 삭감)
-            r_df = ledger_df[ledger_df['Category'] == '환불'].copy()
+            r_df = ledger_df[(ledger_df['Category'] == '환불') & 
+                             (~ledger_df['Description'].str.contains("보증금|Deposit|deposit", na=False))].copy()
+            
             if not r_df.empty:
                 for _, r_row in r_df.iterrows():
                     desc = str(r_row['Description']).replace(" ", "")
