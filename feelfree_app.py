@@ -403,7 +403,24 @@ def recalculate_entire_ledger(df):
         
              
         elif cat == '환불':
-            if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
+            # [Modified] 보증금 환율 자동 계승 엔진 (Dan's Constitution Rule)
+            if curr != 'KRW' and (pd.isna(rate) or rate <= 1.0):
+                inherited_rate = None
+                # 현재 행(i)부터 역방향으로 가장 최근의 '보증금' 데이터 탐색
+                for j in range(i - 1, -1, -1):
+                    prev_cat = str(temp_df.at[j, 'Category']).strip()
+                    prev_curr = str(temp_df.at[j, 'Currency']).strip()
+                    # 같은 통화의 보증금 항목을 찾으면 환율을 계승
+                    if prev_cat == '보증금' and prev_curr == curr:
+                        inherited_rate = temp_df.at[j, 'AppliedRate']
+                        break
+                
+                if inherited_rate and inherited_rate > 0:
+                    rate = inherited_rate
+                    temp_df.at[i, 'Note'] = f"Inherited Deposit Rate: {rate:.9f}"
+                else:
+                    rate = get_default_rate(curr)
+            
             if asset_cls == "DOMESTIC": c_budget -= qty if curr == 'KRW' else qty * rate 
             else:
                 target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
