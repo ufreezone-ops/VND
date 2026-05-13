@@ -716,8 +716,8 @@ with tab_in:
         IN_CURR = IN_CFG["currency"]
         IN_MULTI = IN_CFG["multiplier"]
     with c_mode:
-        ### 🎛️ [GUI: Component] 기록 모드 라디오 버튼
-        mode = st.radio("기록 모드 선택",["일반 지출", "자산 이동", "환불(취소)", "출입국"], horizontal=True, key="mode_radio", label_visibility="collapsed")
+        ### 🎛️ [GUI: Component] 기록 모드 확장
+        mode = st.radio("기록 모드 선택",["일반 지출", "🛫 항공권(특수)", "🏨 호텔(특수)", "자산 이동", "환불(취소)", "출입국"], horizontal=True, key="mode_radio", label_visibility="collapsed")
     
     ### 🎛️ [GUI: Component] 날짜 입력
     dynamic_tz = timezone(timedelta(hours=IN_CFG["timezone"])) if "한국" not in str(st.session_state.current_tz) else TZ_KST
@@ -841,6 +841,62 @@ with tab_in:
                 st.session_state.clear_exp_desc = True
                 st.rerun()
 
+# ------------------------------------------------------------------
+    # [Mode: 🛫 항공권(특수)]
+    # ------------------------------------------------------------------
+    elif mode == "🛫 항공권(특수)":
+        st.subheader("✈️ 항공권 예약 상세 기록")
+        c1, c2 = st.columns(2)
+        with c1:
+            f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 비엣젯공홈, Trip.com, 인터파크")
+            f_carrier = st.text_input("2. 항공사", placeholder="예: 비엣젯 (제주항공 코드쉐어)")
+            f_baggage = st.radio("3. 위탁수화물", ["포함", "미포함", "일부포함"], horizontal=True)
+            f_dep_date = st.date_input("4. 출발일", value=sel_date)
+        with c2:
+            f_route = st.text_input("5. 내용 (노선/편명)", placeholder="예: 부산-호치민, VJ699편, 23:30 이륙")
+            f_asset = st.selectbox("6. 결제 수단", ["원화계좌(한국)", "트래블로그(VND)", "트래블로그(USD)", "현대카드(원화결제)"], key="f_asset")
+            f_curr = st.selectbox("7. 결제 통화", ["KRW", "VND", "USD", "PHP"], key="f_curr")
+            
+        c3, c4, c5 = st.columns(3)
+        with c3: f_amt = st.number_input(f"8. 결제 금액({f_curr})", min_value=0.0, step=1000.0)
+        with c4: f_rate = st.number_input("9. 적용 환율", value=1.0 if f_curr=="KRW" else get_default_rate(f_curr), format="%.4f")
+        with c5: f_fee = st.number_input("10. 환율 수수료(원)", min_value=0)
+
+        if st.button("🚀 항공권 기록 저장", use_container_width=True):
+            if not f_gw: st.warning("결제 플랫폼을 입력해야 저장할 수 있습니다."); st.stop()
+            # 정보 통합
+            full_desc = f"[{f_gw}] {f_carrier} | {f_route} | 수화물:{f_baggage} | 출발:{f_dep_date.strftime('%m/%d')}"
+            note_info = f"수수료:{f_fee}원 포함" if f_fee > 0 else ""
+            new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '항공권', 'Description': full_desc, 'Currency': f_curr, 'Amount': f_amt, 'PaymentMethod': f_asset, 'IsExpense': 1, 'AppliedRate': f_rate, 'Note': note_info}])
+            if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
+
+    # ------------------------------------------------------------------
+    # [Mode: 🏨 호텔(특수)]
+    # ------------------------------------------------------------------
+    elif mode == "🏨 호텔(특수)":
+        st.subheader("🏨 호텔/숙소 예약 상세 기록")
+        c1, c2 = st.columns(2)
+        with c1:
+            h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com, 호텔공홈")
+            h_name = st.text_input("2. 호텔명", placeholder="예: 인터콘티넨털 호치민")
+            h_stay = st.text_input("3. 숙박 기간", placeholder="예: 3박 (7/5 ~ 7/8)")
+            h_asset = st.selectbox("4. 결제 수단", ["원화계좌(한국)", "네이버페이", "트래블로그(VND)", "현대카드"], key="h_asset")
+        with c2:
+            h_detail = st.text_area("5. 내용 (룸타입/특징)", placeholder="예: 디럭스 더블, 수영장뷰, 30m2", height=100)
+            h_curr = st.selectbox("6. 결제 통화", ["KRW", "VND", "USD", "PHP"], key="h_curr")
+
+        c3, c4, c5 = st.columns(3)
+        with c3: h_amt = st.number_input(f"7. 결제 금액({h_curr})", min_value=0.0, step=1000.0)
+        with c4: h_rate = st.number_input("8. 적용 환율", value=1.0 if h_curr=="KRW" else get_default_rate(h_curr), format="%.4f")
+        with c5: h_fee = st.number_input("9. 환율 수수료(원)", min_value=0)
+
+        if st.button("🚀 호텔 예약 저장", use_container_width=True):
+            if not h_gw: st.warning("결제 플랫폼을 입력해야 저장할 수 있습니다."); st.stop()
+            full_desc = f"[{h_gw}] {h_name} | {h_stay} | {h_detail.replace('\\n', ' ')}"
+            note_info = f"수수료:{h_fee}원 포함" if h_fee > 0 else ""
+            new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': h_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': note_info}])
+            if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
+    
     # ------------------------------------------------------------------
     #[Mode 2: 자산 이동 및 환전]
     # ------------------------------------------------------------------
