@@ -681,12 +681,22 @@ with st.sidebar:
 # ==============================================================================
 st.title(f"{st.session_state.current_trip}")
 
-### 🎨[GUI: Layout] 메인 화면 상단 여행 선택 영역 분할
+# [Modified] 여행 목록을 연도별 최신순으로 정렬하여 드롭다운 생성
+# 1. 정렬된 여행 이름 리스트 생성
+def sort_trips(trip_names):
+    # 이름에서 (2025) 같은 연도를 찾아 숫자로 변환, 없으면 0으로 처리
+    return sorted(trip_names, 
+                  key=lambda x: (re.search(r'\((\d{4})\)', x).group(1) if re.search(r'\((\d{4})\)', x) else '0000', x), 
+                  reverse=True)
+
+sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
+
+### 🎨[GUI: Layout] 메인 화면 상단 여행 선택 영역
 c_trip_top, c_empty = st.columns([2, 2])
 with c_trip_top:
-    ### 🎛️ [GUI: Component] 여행 선택 드롭다운
-    sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", list(TRIP_CONFIGS.keys()), 
-                             index=list(TRIP_CONFIGS.keys()).index(st.session_state.current_trip),
+    ### 🎛️ [GUI: Component] 여행 선택 드롭다운 (정렬된 리스트 적용)
+    sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", sorted_trips, 
+                             index=sorted_trips.index(st.session_state.current_trip) if st.session_state.current_trip in sorted_trips else 0,
                              label_visibility="collapsed")
     if sel_trip != st.session_state.current_trip:
         st.session_state.current_trip = sel_trip; st.rerun()
