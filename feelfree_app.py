@@ -1519,35 +1519,3 @@ with tab_final:
         st.plotly_chart(fig_donut, use_container_width=True)
 
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
-
-
-# ==============================================================================
-# --- SECTION 8:[Module F] GTL Cross-Trip Navigator
-# ==============================================================================
-
-# [Module F] GTL Cross-Trip Navigator
-# [Modified]
-def render_ctn_dashboard():
-    """
-    5개 여행지 비교 대시보드 렌더링 (GTL-CPI 포함)
-    """
-    # 1. 데이터 호출 (Data Engine 호출)
-    trips_data = data_engine.fetch_active_trips()
-    
-    # 2. GTL-CPI 정밀 계산 (CPI 기준점: 푸꾸옥)
-    cpi_metrics = calculate_trip_cpi(trips_data, base_trip_id="PHU_QUOC_2026")
-    
-    # 3. 데이터 시각화 엔진 호출
-    render_table_view(trips_data, cpi_metrics)
-    render_radar_chart(trips_data)
-    
-    # [Added] 
-    # 대시보드 렌더링 로그 기록
-    log_module_event("CTN", "Dashboard Rendered Successfully")
-
-# [Modified] 
-# UI 렌더링 상세 (표 출력 부분)
-def render_table_view(data, cpi):
-    print("--- GTL Cross-Trip Navigator ---")
-    for trip_id, values in data.items():
-        print(f"여행지: {trip_id} | CPI: {cpi[trip_id]} | 지출효율: {values['efficiency_idx']}")
