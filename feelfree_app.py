@@ -1347,10 +1347,32 @@ with tab_final:
         
         ### 📊[GUI: Chart/Table] 결산 요약 트리맵 (전체비중)
         st.subheader("🌳 지출분석 (Treemap)")
-        fig_tree = px.treemap(exp_df, path=['Macro_Category', 'Category', 'Description'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
-        fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>%{percentRoot:.1%}")
-        fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=0), font=dict(size=14))
-        st.plotly_chart(fig_tree, use_container_width=True)
+        # [Added] 트리맵 가독성을 위한 데이터 전처리: 너무 긴 설명은 요약
+        chart_df = exp_df.copy()
+        chart_df['Short_Desc'] = chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
+        
+        # [Modified] 경로에 요약된 설명(Short_Desc) 사용
+        fig_tree = px.treemap(chart_df, 
+                             path=['Macro_Category', 'Category', 'Short_Desc'], 
+                             values='KRW_val', 
+                             color='KRW_val', 
+                             color_continuous_scale='Greens')
+        
+        # [Modified] 텍스트 템플릿 개선 및 글자 크기 강제
+        fig_tree.update_traces(
+            texttemplate="<b>%{label}</b><br>%{value:,.0f}원",
+            hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}",
+            textposition='middle center',
+            insidetextfont=dict(size=16) # 기본 폰트 크기 상향
+        )
+        
+        # [Added] 아무리 박스가 작아도 글자가 작아지지 않게 방어 (최소 12px)
+        fig_tree.update_layout(
+            margin=dict(l=0, r=0, t=30, b=0),
+            height=600, # 차트 높이 확장
+            uniformtext=dict(minsize=12, mode='show') # 글자가 박스보다 커도 일단 보여줌
+        )
+        st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
         
         ### 📊[GUI: Chart/Table] 카테고리별 도넛 차트
         st.subheader("🍕 지출비중")
