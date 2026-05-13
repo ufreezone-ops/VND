@@ -387,19 +387,22 @@ def recalculate_entire_ledger(df):
         if cat in['충전', '환전', '입금', '직접환전']:
             if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
             
-            # [Modified] 행위(Category) 기반 자산 강제 분류 로직 시작
+            # [Modified] 자산 분류 로직
             if cat == '충전':
-                final_dest_cls = "PREPAID" # 충전은 무조건 카드(트래블로그)로
+                final_dest_cls = "PREPAID"
             elif cat in ['환전', '직접환전']:
-                final_dest_cls = "CASH"    # 환전은 무조건 현금으로
+                final_dest_cls = "CASH"
             else:
-                final_dest_cls = get_asset_class(desc + method) # 나머지는 키워드 검색
+                final_dest_cls = get_asset_class(desc + method)
 
             target = f"트래블로그({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})"
-            # [Modified] 로직 끝
             
             if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
-            if asset_cls == "DOMESTIC": c_budget += qty if curr == 'KRW' else qty * rate
+            
+            # [Modified] 예산(c_budget) 합산 조건 강화
+            # 카테고리가 '충전'이거나 결제수단이 '국내자산'이면 예산으로 합산
+            if asset_cls == "DOMESTIC" or cat == '충전': 
+                c_budget += qty if curr == 'KRW' else qty * rate
         
              
         elif cat == '환불':
