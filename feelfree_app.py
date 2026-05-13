@@ -1520,25 +1520,33 @@ with tab_final:
 
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
-# [Modified] 비교 분석 탭 (Streamlit app.py 내 마지막 블록)
+# [Modified] 비교 분석 탭: 식비 기반 CPI 자동 산출 및 시각화
 with tab_nav:
     st.subheader("🧭 GTL Cross-Trip Navigator")
-    try:
-        df_nav = conn.read(worksheet="NAVIGATOR", ttl="0s")
+    
+    # 1. 통합 데이터 호출 (load_all_trips_data 함수 활용)
+    df_all = load_all_trips_data()
+    
+    if not df_all.empty:
+        # 2. 식사/간식 데이터만 필터링 (CPI 계산용)
+        df_food = df_all[df_all['Category'].isin(['식사', '간식'])].copy()
         
-        if df_nav is not None and not df_nav.empty:
-            # 시트의 데이터를 출력 (CPI_Index 컬럼이 포함되어 있을 것입니다)
-            st.dataframe(df_nav, use_container_width=True)
+        # 3. 나라별 식비 평균 계산
+        if not df_food.empty:
+            # 원화 환산된 금액 기준 (KRW_val이 없으면 Amount * AppliedRate 계산)
+            df_food['KRW_Amount'] = df_food.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
+            cpi_stats = df_food.groupby('Country')['KRW_Amount'].mean().reset_index()
             
-            # CPI_Index가 존재하면 차트 생성
-            if 'CPI_Index' in df_nav.columns:
-                # 숫자형으로 변환하여 안전하게 차트 생성
-                chart_df = df_nav.copy()
-                chart_df['CPI_Index'] = pd.to_numeric(chart_df['CPI_Index'], errors='coerce')
-                st.bar_chart(chart_df.set_index('TripName')['CPI_Index'], color="#FFA500")
-            else:
-                st.info("💡 '_GTL_CONFIG_' 시트 I열에 'CPI_Index' 데이터를 입력하세요.")
+            # 4. 물가 지수(CPI) 계산: 가장 저렴한 국가를 1.0으로 기준
+            min_food_cost = cpi_stats['KRW_Amount'].min()
+            cpi_stats['CPI_Index'] = cpi_stats['KRW_Amount'] / min_food_cost
+            
+            # 5. UI 시각화
+            st.markdown("### 📊 국가별 물가 지수 (식비 기준)")
+            st.dataframe(cpi_stats.sort_values(by='CPI_Index', ascending=False), use_container_width=True)
+            
+            st.bar_chart(cpi_stats.set_index('Country')['CPI_Index'], color="#FFA500")
         else:
-            st.warning("NAVIGATOR 데이터를 불러올 수 없습니다.")
-    except Exception as e:
-        st.error(f"대시보드 로드 오류: {e}")
+            st.info("💡 식비(식사, 간식) 기록이 충분하지 않아 CPI를 계산할 수 없습니다.")
+    else:
+        st.warning("여행 데이터가 존재하지 않습니다.")
