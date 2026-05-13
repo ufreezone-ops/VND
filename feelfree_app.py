@@ -715,8 +715,8 @@ with c_trip_top:
 
 st.divider() 
 
-### 🎨 [GUI: Layout] 4대 핵심 탭 컨테이너
-tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 요약"])
+### 🎨 [GUI: Layout] 5대 핵심 탭 컨테이너[Modified]
+tab_in, tab_his, tab_stats, tab_final, tab_nav = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 요약", "🧭 비교"])
 
 with tab_in:
     ### 🎨 [GUI: Layout] 입력 탭 최상단 옵션 (국가/모드)
@@ -1519,3 +1519,15 @@ with tab_final:
         st.plotly_chart(fig_donut, use_container_width=True)
 
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+
+# [Added] 비교 분석 탭 로직
+with tab_nav:
+    st.subheader("GTL Cross-Trip Navigator")
+    # 구글 시트의 NAVIGATOR 탭 데이터를 캐싱하여 로드
+    df_nav = gtl_data_engine.get_df_from_sheet("NAVIGATOR")
+    
+    # 1. 비교 테이블 출력
+    st.dataframe(df_nav, use_container_width=True)
+    
+    # 2. CPI 시각화 (간략)
+    st.bar_chart(df_nav.set_index('Trip_Name')['CPI_Index'])
