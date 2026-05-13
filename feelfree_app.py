@@ -1524,18 +1524,14 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v15)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v16)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        spi_mode = st.radio("🏨 체감 물가 계산 모드", ["호텔 포함 (종합 체감물가)", "호텔 제외 (순수 체류물가)"], horizontal=True)
+        # [Modified] 1. 토글 삭제 및 모든 핵심 생존/여행 카테고리 상시 포함
+        SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '렌트카', '마사지', '팁', '통신', '수수료', '투어', '입장료', '호텔', '숙박']
         
-        # [Modified] 1. SPI 카테고리에 '렌트카' 추가
-        SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '렌트카', '마사지', '팁', '통신', '수수료', '투어', '입장료']
-        if "포함" in spi_mode:
-            SPI_CATS.extend(['호텔', '숙박'])
-        
-        # 2. 체류일(Days) 산출 엔진 (0.5일 페널티 알고리즘)
+        # 2. 체류일(Days) 산출 엔진 (0.5일 페널티 알고리즘 적용)
         df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0], errors='coerce')
         
         stay_days = {}
@@ -1548,7 +1544,7 @@ with tab_nav:
             if not unique_dates:
                 stay_days[(trip, country)] = 1; continue
                 
-            segments = []
+            segments =[]
             current_seg = [unique_dates[0]]
             for d in unique_dates[1:]:
                 if (d - current_seg[-1]).days == 1: current_seg.append(d)
@@ -1558,7 +1554,7 @@ with tab_nav:
             total_days = sum([1 if len(seg) == 1 else (len(seg) - 1) for seg in segments])
             stay_days[(trip, country)] = max(1, total_days)
             
-        # 3. 데이터 필터링 및 집계
+        # 3. 데이터 필터링 및 SPI 세부 그룹핑 (누적 차트용)
         df_spi = df_all[
             (df_all['Category'].isin(SPI_CATS)) & 
             (~df_all['Country'].str.contains('글로벌|경유|크로아티아', na=False))
@@ -1566,7 +1562,17 @@ with tab_nav:
         
         if not df_spi.empty:
             df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate']), axis=1)
-            agg_data = df_spi.groupby(['TripName', 'Country'])['KRW_val'].sum().reset_index()
+            
+            # [Added] 누적 막대 차트를 위한 항목별 카테고리 그룹핑
+            def map_spi_group(cat):
+                if cat in ['렌트카']: return '🚗 렌트카'
+                if cat in ['호텔', '숙박']: return '🏨 숙박'
+                if cat in ['투어', '입장료', '마사지']: return '🏄 투어/액티비티'
+                if cat in ['식사', '간식', '마트']: return '🍔 식음료'
+                if cat in ['Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통']: return '🚕 로컬교통'
+                return '📱 기타' # 팁, 통신, 수수료
+
+            df_spi['SPI_Group'] = df_spi['Category'].apply(map_spi_group)
             
             try:
                 cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
@@ -1574,38 +1580,42 @@ with tab_nav:
             except:
                 travelers_map = {}
                 
-            agg_data['Travelers'] = agg_data['TripName'].map(travelers_map).fillna(1)
-            agg_data['Days'] = agg_data.apply(lambda r: stay_days.get((r['TripName'], r['Country']), 1), axis=1)
-            agg_data['Daily_SPI'] = (agg_data['KRW_val'] / agg_data['Travelers']) / agg_data['Days']
+            # [Modified] 차트를 그리기 위해 그룹별(SPI_Group)로 Daily_SPI 분리 계산
+            agg_group = df_spi.groupby(['TripName', 'Country', 'SPI_Group'])['KRW_val'].sum().reset_index()
+            agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(1)
+            agg_group['Days'] = agg_group.apply(lambda r: stay_days.get((r['TripName'], r['Country']), 1), axis=1)
+            agg_group['Daily_SPI'] = (agg_group['KRW_val'] / agg_group['Travelers']) / agg_group['Days']
             
-            # [Added] 4. 특이사항(Theme) 분석 엔진: 왜 비용이 높게 나왔는지 1인/1일 단가로 역추적
+            # [Modified] 테이블 및 정렬 기준을 위한 총합(Total) 별도 계산
+            agg_total = agg_group.groupby(['TripName', 'Country']).agg({'Daily_SPI': 'sum', 'Travelers': 'first', 'Days': 'first'}).reset_index()
+
+            # 4. 특이사항(Theme) 분석 엔진
             theme_notes =[]
-            for idx, row in agg_data.iterrows():
+            for idx, row in agg_total.iterrows():
                 t, c, pp_days = row['TripName'], row['Country'], row['Travelers'] * row['Days']
                 sub_df = df_spi[(df_spi['TripName'] == t) & (df_spi['Country'] == c)]
                 
-                hotel_v = sub_df[sub_df['Category'].str.contains('호텔|숙박', na=False)]['KRW_val'].sum()
-                rent_v = sub_df[sub_df['Category'].str.contains('렌트카', na=False)]['KRW_val'].sum()
+                hotel_v = sub_df[sub_df['SPI_Group'] == '🏨 숙박']['KRW_val'].sum()
+                rent_v = sub_df[sub_df['SPI_Group'] == '🚗 렌트카']['KRW_val'].sum()
                 tour_v = sub_df[sub_df['Category'].str.contains('투어|입장료', na=False)]['KRW_val'].sum()
                 
                 tags =[]
-                if hotel_v > 0 and "포함" in spi_mode: tags.append(f"🏨숙박 {hotel_v/pp_days/10000:.1f}만")
+                if hotel_v > 0: tags.append(f"🏨숙박 {hotel_v/pp_days/10000:.1f}만")
                 if rent_v > 0: tags.append(f"🚗렌트 {rent_v/pp_days/10000:.1f}만")
                 if tour_v > 0: tags.append(f"🏄투어 {tour_v/pp_days/10000:.1f}만")
                 
-                # 수동 테마 태그 주입
                 if "칭다오" in t: tags.append("👑 5성급 럭셔리 테마")
                 if "몬테네그로" in c: tags.append("🇭🇷 크로아 당일치기 루트")
                 
                 theme_notes.append(" | ".join(tags) if tags else "-")
                 
-            agg_data['Theme'] = theme_notes
+            agg_total['Theme'] = theme_notes
             
-            final_df = agg_data.sort_values(by='Daily_SPI', ascending=True)
+            final_total_df = agg_total.sort_values(by='Daily_SPI', ascending=True)
             
-            if not final_df.empty:
+            if not final_total_df.empty:
                 st.markdown("### 📊 국가별 1인당 1일 체감 물가 (KRW)")
-                st.caption("💡 특이사항 열(Column)을 확인하세요. 특정 여행의 물가가 높아 보이는 원인(고급 숙박, 렌트카 등)을 1일 단가(1만 원 단위)로 자동 추출했습니다.")
+                st.caption("💡 막대그래프를 항목별 누적 형태(Stacked)로 배치했습니다. 상단의 **렌트카(빨강)**와 **숙박(파랑)** 비중을 제외하고 보면, 순수한 체류 물가를 쉽게 비교할 수 있습니다.")
                 
                 def make_chart_label(r):
                     country, trip = str(r['Country']), str(r['TripName'])
@@ -1614,20 +1624,54 @@ with tab_nav:
                     city = match.group(1) if match else ""
                     return f"{country}({city})" if city and city not in country else country
 
-                final_df['Chart_Label'] = final_df.apply(make_chart_label, axis=1)
+                final_total_df['Chart_Label'] = final_total_df.apply(make_chart_label, axis=1)
                 
-                display_df = final_df.copy()
+                # 표 디스플레이 최적화
+                display_df = final_total_df.copy()
                 display_df['Daily_SPI_Fmt'] = display_df['Daily_SPI'].apply(lambda x: f"{x:,.0f} 원")
                 display_df = display_df.rename(columns={
                     'TripName': '여행명', 'Country': '국가', 'Travelers': '인원수', 
                     'Days': '실체류일', 'Daily_SPI_Fmt': '1일 체감물가', 'Theme': '💡 특이사항 및 요인'
                 })
                 
-                # 표에 특이사항 컬럼 추가 표시
                 st.dataframe(display_df[['여행명', '국가', '인원수', '실체류일', '1일 체감물가', '💡 특이사항 및 요인']], use_container_width=True, hide_index=True)
                 
-                chart_data = final_df.set_index('Chart_Label')[['Daily_SPI']]
-                st.bar_chart(chart_data, color="#FF8C00")
+                # [Added] 누적 막대 차트(Stacked Bar) 시각화 엔진
+                label_map = dict(zip(zip(final_total_df['TripName'], final_total_df['Country']), final_total_df['Chart_Label']))
+                agg_group['Chart_Label'] = agg_group.apply(lambda r: label_map.get((r['TripName'], r['Country']), r['Country']), axis=1)
+                
+                # X축 정렬 (총액 기준 오름차순)
+                category_order_x = final_total_df['Chart_Label'].tolist()
+                
+                # Y축 누적 순서 지정 (아래에서 위로 쌓임 -> 맨 뒤 원소가 맨 위)
+                stack_order = ['📱 기타', '🚕 로컬교통', '🍔 식음료', '🏄 투어/액티비티', '🏨 숙박', '🚗 렌트카']
+                
+                # 색상 매핑 (렌트카는 강렬한 빨강, 숙박은 파랑, 식음료는 초록 등)
+                color_map = {
+                    '🚗 렌트카': '#D32F2F', 
+                    '🏨 숙박': '#1976D2',   
+                    '🏄 투어/액티비티': '#9C27B0', 
+                    '🍔 식음료': '#4CAF50', 
+                    '🚕 로컬교통': '#00ACC1', 
+                    '📱 기타': '#795548' 
+                }
+
+                fig_stacked = px.bar(
+                    agg_group,
+                    x='Chart_Label', y='Daily_SPI', color='SPI_Group',
+                    color_discrete_map=color_map,
+                    category_orders={"Chart_Label": category_order_x, "SPI_Group": stack_order}
+                )
+                
+                fig_stacked.update_layout(
+                    barmode='stack',
+                    margin=dict(l=10, r=10, t=10, b=30),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5, title=None),
+                    xaxis_title=None, yaxis_title=None
+                )
+                fig_stacked.update_traces(hovertemplate="%{x}<br><b>%{data.name}</b>: %{y:,.0f}원<extra></extra>")
+                
+                st.plotly_chart(fig_stacked, use_container_width=True, config={'displaylogo': False})
             else:
                 st.info("비교할 SPI 데이터가 부족합니다.")
         else:
