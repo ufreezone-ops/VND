@@ -1524,46 +1524,62 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v9 - 고도화)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v10 - 국가 정밀 비교)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # 1. SPI 대상 카테고리 (렌트카 제외)
+        # 1. SPI 필수 카테고리 (렌트카 제외)
         SPI_CATS =['식사', '간식', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '마사지', '팁', '투어', '입장료', '통신', '수수료', '호텔']
         
-        # 2. 제외할 여행(TripName) 및 국가 필터링
-        exclude_trips =['🗺️발칸6국(2024)'] # 글로벌(달러) 포함
-        df_spi = df_all[df_all['Category'].isin(SPI_CATS) & (~df_all['TripName'].isin(exclude_trips))].copy()
+        # 2. 발칸 대상 국가 필터 (단, 튀르키예 등 타 지역 포함 가능)
+        target_countries =['튀르키예', '세르비아', '헝가리', '몬테네그로', '베트남', '필리핀', '중국']
+        
+        # 3. 데이터에 국가 태그를 강제로 심는 작업 (설명에 맞춰)
+        # Description에 '입국_OO' 또는 '출국_OO'이 있으면 해당 국가로 매핑
+        def get_country_from_tags(row):
+            match = re.search(r'(?:입국|출국)_([가-힣]+)', row['Description'])
+            return match.group(1) if match else row['Country']
+
+        df_all['Country_Tag'] = df_all.apply(get_country_from_tags, axis=1)
+        
+        # 4. 데이터 필터링
+        df_spi = df_all[df_all['Category'].isin(SPI_CATS) & (df_spi_filter := df_all['Country_Tag'].isin(target_countries))].copy()
         df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
         
-        # 3. 입출국 기록에서 'TripName + 국가'별 체류일 추출
-        io_df = df_all[df_all['Category'].str.contains('입국|출국', na=False)].copy()
+        # 5. 국가별 입/출국 날짜 기반 체류일 산출 (튀르키예 2회 방문 분리 핵심)
+        io_df = df_all[df_all['Description'].str.contains('입국_|출국_', na=False)].copy()
         io_df['Date_Obj'] = pd.to_datetime(io_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
-        io_df['Country_Tag'] = io_df['Category'].str.split('_').str[1]
-        io_df['Agg_Key'] = io_df['TripName'] + "_" + io_df['Country_Tag']
+        io_df['Country_Tag'] = io_df['Description'].str.extract(r'(?:입국|출국)_([가-힣]+)')[0]
         
-        stay_days = {}
-        for key in io_df['Agg_Key'].unique():
-            c_data = io_df[io_df['Agg_Key'] == key].sort_values('Date_Obj')
-            if len(c_data) >= 2:
-                stay_days[key] = (c_data['Date_Obj'].max() - c_data['Date_Obj'].min()).days + 1
-        
-        # 4. 데이터 집계 (TripName + Country 기준)
-        df_spi['Agg_Key'] = df_spi['TripName'] + "_" + df_spi['Country']
-        agg_data = df_spi.groupby(['TripName', 'Country', 'Agg_Key'])['KRW_val'].sum().reset_index()
-        
-        # 5. 일수 및 인원 매핑 (Config 시트 기준)
+        # 여행지마다 인원수가 다를 수 있으므로 인원수 매핑
         cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-        trav_map = dict(zip(cfg_df['TripName'], cfg_df['Travelers']))
+        trav_map = dict(zip(cfg_df['MainCountry'], cfg_df['Travelers']))
         
-        agg_data['Days'] = agg_data['Agg_Key'].map(stay_days).fillna(1)
-        agg_data['Travelers'] = agg_data['TripName'].map(trav_map).fillna(1)
+        # 6. 국가별 집계 및 계산
+        results =[]
+        for country in target_countries:
+            c_data = df_spi[df_spi['Country_Tag'] == country]
+            if c_data.empty: continue
+            
+            # 해당 국가의 체류 기간(입국~출국) 합산
+            c_io = io_df[io_df['Country_Tag'] == country].sort_values('Date_Obj')
+            total_days = 0
+            for i in range(0, len(c_io)-1, 2): # 쌍으로 묶어서 계산
+                total_days += (c_io.iloc[i+1]['Date_Obj'] - c_io.iloc[i]['Date_Obj']).days + 1
+            
+            total_cost = c_data['KRW_val'].sum()
+            travelers = trav_map.get(country, 1) # 국가별 인원 매핑
+            
+            results.append({
+                'Country': country,
+                'Daily_SPI': (total_cost / travelers) / max(total_days, 1)
+            })
+            
+        agg_data = pd.DataFrame(results)
         
-        # 6. 인당 일평균 계산
-        agg_data['Daily_SPI'] = (agg_data['KRW_val'] / agg_data['Travelers']) / agg_data['Days']
-        
-        # 7. 차트 표시 (이상치 제거: 베트남처럼 데이터 꼬인 곳은 제외 후 산출)
-        display_data = agg_data[agg_data['Days'] > 1].sort_values(by='Daily_SPI')
+        # 7. 출력
+        st.dataframe(agg_data.sort_values(by='Daily_SPI'), use_container_width=True)
+        st.bar_chart(agg_data.set_index('Country')['Daily_SPI'], color="#FF8C00")
         
         st.dataframe(display_data[['TripName', 'Country', 'Daily_SPI']], use_container_width=True)
         st.bar_chart(display_data.set_index('TripName')['Daily_SPI'], color="#FF8C00")
