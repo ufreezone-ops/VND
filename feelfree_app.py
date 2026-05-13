@@ -117,14 +117,15 @@ st.markdown("""
     [data-testid="stSidebar"] .stExpander div[data-testid="stVerticalBlock"] { gap: 2px !important; padding: 5px !important; }
     [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
 
-    # [Added] 모든 숫자 입력창의 +/- 버튼 제거 CSS
-    input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
+    # [Modified] 더 강력한 셀렉터로 숫자 입력창 버튼 제거
+    [data-testid="stNumberInputStepUp"], [data-testid="stNumberInputStepDown"] {
+        display: none !important;
+    }
+    div[data-testid="stNumberInput"] div[role="group"] {
+        display: none !important;
     }
     input[type=number] {
-      -moz-appearance: textfield;
+        -moz-appearance: textfield !important;
     }
     
     </style>
@@ -859,16 +860,18 @@ with tab_in:
         st.subheader("✈️ 항공권 및 스케줄 통합 기록")
         c1, c2 = st.columns(2)
         with c1:
-            f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 비엣젯공홈, Trip.com")
+            f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 트립닷컴, 비엣젯공홈")
             f_route = st.text_input("2. 노선", placeholder="예: 부산-호치민")
-            f_dep_info = st.text_input("3. 출국편 정보", placeholder="예: VJ969, 4/21 07:45 - 11:10")
+            f_dep_info = st.text_input("3. 출국편 정보", placeholder="예: VJ969, 07:45 - 11:10")
             f_dep_date = st.date_input("4. 출국 날짜", value=sel_date)
-            f_baggage = st.selectbox("5. 위탁수화물", ["포함", "미포함", "일부포함"])
         with c2:
             f_carrier = st.text_input("6. 항공사", placeholder="예: 비엣젯 (제주항공 코드쉐어)")
-            f_ret_info = st.text_input("7. 귀국편 정보", placeholder="예: VJ968, 4/27 23:10 - 06:40 (+1)")
+            f_ret_info = st.text_input("7. 귀국편 정보", placeholder="예: VJ968, 23:10 - 06:40 (+1)")
             f_ret_date = st.date_input("8. 입국 날짜", value=sel_date + timedelta(days=7))
-            f_bag_memo = st.text_input("9. 수화물 상세 메모", placeholder="예: 귀국편 1인 20kg 추가")
+            # [Modified] 위탁수화물 위치 이동 (9번 메모 앞으로)
+            c2_1, c2_2 = st.columns([1, 2])
+            with c2_1: f_baggage = st.selectbox("5. 위탁수화물", ["포함", "미포함", "일부포함"])
+            with c2_2: f_bag_memo = st.text_input("9. 수화물 상세 메모", placeholder="예: 귀국편 1인 20kg 추가")
             f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "트래블로그(VND)", "현대카드"])
 
         c3, c4, c5 = st.columns(3)
@@ -880,16 +883,19 @@ with tab_in:
         if st.button("🚀 항공권 및 출입국 일정 동시 기록", use_container_width=True):
             if not f_gw: st.warning("결제 플랫폼을 입력하세요."); st.stop()
             
-            # 1. 항공권 지출 기록 생성
-            full_desc = f"[{f_gw}] {f_route}({f_carrier}) | 출국:{f_dep_info} | 귀국:{f_ret_info} | 수화물:{f_baggage}({f_bag_memo})"
+            # [Modified] 결제수단 명칭에서 괄호 제외 (예: 네이버페이)
+            clean_asset = f_asset.split('(')[0]
+            
+            # 1. 항공권 지출 기록 생성 (Description 포맷: [플랫폼+결제수단])
+            full_desc = f"[{f_gw}+{clean_asset}] {f_route}({f_carrier}) | 출국:{f_dep_info} | 귀국:{f_ret_info} | 수화물:{f_baggage}({f_bag_memo})"
             flight_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '항공권', 'Description': full_desc, 'Currency': f_curr, 'Amount': f_amt, 'PaymentMethod': f_asset, 'IsExpense': 1, 'AppliedRate': f_rate, 'Note': f"수수료:{f_fee}원" if f_fee > 0 else ""}])
             
-            # 2. [Added] 출국/입국 일정 자동 생성
+            # 2. [Fixed] 출국/입국 일정 자동 생성 (카테고리 및 아이콘 정확히 분리)
             dep_row = pd.DataFrame([{'Date': f_dep_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '출국', 'Description': f"🛫 {f_route} 출국 ({f_dep_info})", 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
             arr_row = pd.DataFrame([{'Date': f_ret_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '입국', 'Description': f"🛬 {f_route} 입국 ({f_ret_info})", 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
             
             if save_data(pd.concat([ledger_df, flight_row, dep_row, arr_row], ignore_index=True)): st.rerun()
-
+                
     # ------------------------------------------------------------------
     # [Mode: 🏨 호텔(특수)]
     # ------------------------------------------------------------------
