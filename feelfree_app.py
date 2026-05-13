@@ -117,15 +117,15 @@ st.markdown("""
     [data-testid="stSidebar"] .stExpander div[data-testid="stVerticalBlock"] { gap: 2px !important; padding: 5px !important; }
     [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
 
-    # [Modified] 더 강력한 셀렉터로 숫자 입력창 버튼 제거
-    [data-testid="stNumberInputStepUp"], [data-testid="stNumberInputStepDown"] {
+    # [Modified] 현존하는 모든 브라우저/버전에서 숫자 버튼을 강제로 지우는 CSS
+    div[data-testid="stNumberInput"] button {
         display: none !important;
     }
-    div[data-testid="stNumberInput"] div[role="group"] {
-        display: none !important;
+    div[data-testid="stNumberInput"] input {
+        padding-right: 10px !important;
     }
-    input[type=number] {
-        -moz-appearance: textfield !important;
+    div[data-testid="stNumberInput"] [data-baseweb="input"] {
+        border-right-width: 1px !important;
     }
     
     </style>
@@ -858,43 +858,58 @@ with tab_in:
     # ------------------------------------------------------------------
     elif mode == "🛫 항공권(특수)":
         st.subheader("✈️ 항공권 및 스케줄 통합 기록")
-        c1, c2 = st.columns(2)
-        with c1:
-            f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 트립닷컴, 비엣젯공홈")
-            f_route = st.text_input("2. 노선", placeholder="예: 부산-호치민")
-            f_dep_info = st.text_input("3. 출국편 정보", placeholder="예: VJ969, 07:45 - 11:10")
-            f_dep_date = st.date_input("4. 출국 날짜", value=sel_date)
-        with c2:
-            f_carrier = st.text_input("6. 항공사", placeholder="예: 비엣젯 (제주항공 코드쉐어)")
-            f_ret_info = st.text_input("7. 귀국편 정보", placeholder="예: VJ968, 23:10 - 06:40 (+1)")
-            f_ret_date = st.date_input("8. 입국 날짜", value=sel_date + timedelta(days=7))
-            # [Modified] 위탁수화물 위치 이동 (9번 메모 앞으로)
-            c2_1, c2_2 = st.columns([1, 2])
-            with c2_1: f_baggage = st.selectbox("5. 위탁수화물", ["포함", "미포함", "일부포함"])
-            with c2_2: f_bag_memo = st.text_input("9. 수화물 상세 메모", placeholder="예: 귀국편 1인 20kg 추가")
-            f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "트래블로그(VND)", "현대카드"])
+        
+        # 1층: 기본 정보 (왼쪽에서 오른쪽으로 1, 2, 3 순서)
+        c1, c2, c3 = st.columns(3)
+        with c1: f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 트립닷컴")
+        with c2: f_carrier = st.text_input("2. 항공사", placeholder="예: 비엣젯")
+        with c3: f_route = st.text_input("3. 노선", placeholder="예: 부산-푸꾸옥")
 
-        c3, c4, c5 = st.columns(3)
-        f_curr = st.selectbox("11. 결제 통화", ["KRW", "VND", "USD", "PHP"], key="f_curr")
-        with c3: f_amt = st.number_input(f"12. 결제 금액({f_curr})", min_value=0.0, step=1.0)
-        with c4: f_rate = st.number_input("13. 적용 환율", value=1.0 if f_curr=="KRW" or "네이버" in f_asset else get_default_rate(f_curr), format="%.4f")
-        with c5: f_fee = st.number_input("14. 환율 수수료(원)", min_value=0)
+        # 2층: 출국 및 입국 스케줄
+        c4, c5 = st.columns(2)
+        with c4:
+            st.info("🛫 출국 스케줄")
+            f_dep_info = st.text_input("4. 출국편 정보", placeholder="예: VJ969, 07:45 - 11:10")
+            f_dep_date = st.date_input("5. 출국 날짜", value=sel_date)
+        with c5:
+            st.success("🛬 입국 스케줄")
+            f_ret_info = st.text_input("6. 귀국편 정보", placeholder="예: VJ968, 23:10 - 06:40 (+1)")
+            f_ret_date = st.date_input("7. 입국 날짜", value=sel_date + timedelta(days=7))
 
-        if st.button("🚀 항공권 및 출입국 일정 동시 기록", use_container_width=True):
-            if not f_gw: st.warning("결제 플랫폼을 입력하세요."); st.stop()
+        # 3층: 수화물 및 결제수단
+        c6, c7, c8 = st.columns([1, 2, 1])
+        with c6: f_baggage = st.selectbox("8. 위탁수화물", ["포함", "미포함", "일부포함"])
+        with c7: f_bag_memo = st.text_input("9. 수화물 상세 메모", placeholder="예: 귀국편 20kg 추가")
+        with c8: f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "트래블로그(VND)", "현대카드"])
+
+        # 4층: 금액 및 환율 (한 줄로 배치)
+        st.divider()
+        c9, c10, c11, c12 = st.columns([1, 2, 1, 1])
+        with c9: f_curr = st.selectbox("11. 통화", ["KRW", "VND", "USD", "PHP"])
+        with c10: f_amt = st.number_input(f"12. 결제 금액({f_curr})", min_value=0.0, step=1.0)
+        with c11: f_rate = st.number_input("13. 환율", value=1.0 if f_curr=="KRW" or "네이버" in f_asset else get_default_rate(f_curr), format="%.4f")
+        with c12: f_fee = st.number_input("14. 수수료(원)", min_value=0)
+
+        if st.button("🚀 항공권 및 출입국 일정 동시 기록", use_container_width=True, type="primary"):
+            if not f_gw or not f_route:
+                st.warning("결제 플랫폼과 노선 정보는 필수입니다."); st.stop()
             
-            # [Modified] 결제수단 명칭에서 괄호 제외 (예: 네이버페이)
-            clean_asset = f_asset.split('(')[0]
+            # [Refined] 결제수단 이름 정제 (예: 네이버페이(원화고정) -> 네이버페이)
+            clean_asset = f_asset.split('(')[0].strip()
             
-            # 1. 항공권 지출 기록 생성 (Description 포맷: [플랫폼+결제수단])
+            # 1. 항공권 메인 기록 (데이터 누락 방지)
             full_desc = f"[{f_gw}+{clean_asset}] {f_route}({f_carrier}) | 출국:{f_dep_info} | 귀국:{f_ret_info} | 수화물:{f_baggage}({f_bag_memo})"
             flight_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '항공권', 'Description': full_desc, 'Currency': f_curr, 'Amount': f_amt, 'PaymentMethod': f_asset, 'IsExpense': 1, 'AppliedRate': f_rate, 'Note': f"수수료:{f_fee}원" if f_fee > 0 else ""}])
             
-            # 2. [Fixed] 출국/입국 일정 자동 생성 (카테고리 및 아이콘 정확히 분리)
-            dep_row = pd.DataFrame([{'Date': f_dep_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '출국', 'Description': f"🛫 {f_route} 출국 ({f_dep_info})", 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
-            arr_row = pd.DataFrame([{'Date': f_ret_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '입국', 'Description': f"🛬 {f_route} 입국 ({f_ret_info})", 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
+            # 2. 출입국 일정 자동 기록 (정보 보존)
+            dep_desc = f"🛫 {f_route} 출국 ({f_dep_info})"
+            arr_desc = f"🛬 {f_route} 입국 ({f_ret_info})"
             
-            if save_data(pd.concat([ledger_df, flight_row, dep_row, arr_row], ignore_index=True)): st.rerun()
+            dep_row = pd.DataFrame([{'Date': f_dep_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '출국', 'Description': dep_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
+            arr_row = pd.DataFrame([{'Date': f_ret_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '입국', 'Description': arr_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
+            
+            if save_data(pd.concat([ledger_df, flight_row, dep_row, arr_row], ignore_index=True)):
+                st.success("항공권과 출입국 일정이 모두 기록되었습니다!"); time.sleep(1); st.rerun()
                 
     # ------------------------------------------------------------------
     # [Mode: 🏨 호텔(특수)]
