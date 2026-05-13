@@ -1521,48 +1521,43 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v3)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v4 - 인원수 보정)")
+    
+    # 1. 여행지 설정 및 인원수 로드
+    configs = get_trip_configs()
+    # GTL_CONFIG 시트를 다시 읽어 여행지별 인원수를 매핑
+    cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+    travelers_map = dict(zip(cfg_df['TripName'], cfg_df['Travelers']))
+    
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # [Modified] 렌트카 제외, 호텔 포함한 핵심 생존 카테고리
         SPI_CATS =['식사', '간식', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '마사지', '팁', '투어', '입장료', '통신', '수수료', '호텔']
         
-        # 1. 데이터 필터링 (렌트카 제외)
+        # 2. 데이터 필터링 및 렌트카 제외
         df_spi = df_all[df_all['Category'].isin(SPI_CATS)].copy()
-        
-        # 2. KRW 환산
         df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
         
-        # 3. 여행 일수 산출 로직 보강 (입출국 정보 없으면 Date 최소/최대 사용)
-        dates = df_all[df_all['Category'].isin(['출국', '입국'])].copy()
+        # 3. 여행 일수 계산 (출입국/경유 기록 기반)
+        # 경유지 등 기록이 복잡할 수 있으므로, 입/출국 날짜의 min/max를 사용
+        dates = df_all[df_all['Category'].isin(['출국', '입국', '경유'])].copy()
         dates['Date_Obj'] = pd.to_datetime(dates['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
-        
         days_df = dates.groupby('Country')['Date_Obj'].agg(['min', 'max'])
         days_df['Trip_Days'] = (days_df['max'] - days_df['min']).dt.days + 1
         
-        # 입출국 데이터 없는 경우를 위한 Fallback (해당 여행의 전체 데이터 Date 최소-최대)
-        all_dates = df_all.groupby('Country')['Date'].agg(['min', 'max'])
-        all_dates['min'] = pd.to_datetime(all_dates['min'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
-        all_dates['max'] = pd.to_datetime(all_dates['max'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
-        all_dates['Fallback_Days'] = (all_dates['max'] - all_dates['min']).dt.days + 1
-        
-        # days_df에 Fallback 병합
-        days_df = days_df.combine_first(all_dates.rename(columns={'Fallback_Days': 'Trip_Days'}))
-        
-        # 4. 국가별 집계
-        agg_data = df_spi.groupby('Country')['KRW_val'].sum().reset_index()
+        # 4. 인원수 보정 및 집계
+        agg_data = df_spi.groupby(['TripName', 'Country'])['KRW_val'].sum().reset_index()
         agg_data = agg_data.merge(days_df[['Trip_Days']], on='Country', how='left')
         
-        # 5. 일평균 및 SPI 지수
-        agg_data['Daily_SPI'] = agg_data['KRW_val'] / agg_data['Trip_Days'].fillna(1)
+        # 인원수 매핑 (TripName 기준)
+        agg_data['Travelers'] = agg_data['TripName'].map(travelers_map).fillna(1)
+        
+        # 5. 1인당 1일 평균 SPI 계산
+        agg_data['Daily_SPI'] = (agg_data['KRW_val'] / agg_data['Travelers']) / agg_data['Trip_Days'].fillna(1)
+        
+        # 6. 시각화
         min_spi = agg_data['Daily_SPI'].min()
         agg_data['SPI_Index'] = agg_data['Daily_SPI'] / min_spi
         
-        # 6. 결과 출력
-        st.dataframe(agg_data[['Country', 'Daily_SPI', 'SPI_Index']].sort_values(by='SPI_Index'), use_container_width=True)
+        st.dataframe(agg_data.sort_values(by='SPI_Index'), use_container_width=True)
         st.bar_chart(agg_data.set_index('Country')['SPI_Index'], color="#FF8C00")
-        
-        st.caption("✅ 포함: 식사, 간식, 교통, 마사지, 팁, 투어, 호텔 | ❌ 제외: 렌트카, 마트, 선물, 항공권, 보험")
-    else:
-        st.warning("데이터가 없습니다.")
