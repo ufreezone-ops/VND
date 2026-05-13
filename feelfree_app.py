@@ -1524,47 +1524,39 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v4)")
-    
-    # 1. 여행지 설정 및 인원수 로드
-    cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-    travelers_map = dict(zip(cfg_df['TripName'], cfg_df['Travelers']))
-    
-    # 2. 데이터 호출
+    st.subheader("🧭 GTL Survival Price Index (SPI v5)")
     df_all = load_all_trips_data()
     
-    # 3. 데이터 정합성 확인 및 로직 수행
-    if not df_all.empty and 'TripName' in df_all.columns and 'Country' in df_all.columns:
-        # SPI 대상 카테고리
+    if not df_all.empty:
+        # 1. 제외 항목 필터링 (렌트카, 글로벌 달러, 당일치기 국가 등)
+        # 칭다오(중국)와 세부(필리핀) 처럼 체류 기간이 짧은 곳은 3인 비용을 인원수로 나누어 보정
         SPI_CATS =['식사', '간식', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '마사지', '팁', '투어', '입장료', '통신', '수수료', '호텔']
+        exclude_countries =['글로벌(달러)', '크로아티아']
         
-        # 필터링 및 KRW 환산
-        df_spi = df_all[df_all['Category'].isin(SPI_CATS)].copy()
+        df_spi = df_all[df_all['Category'].isin(SPI_CATS) & (~df_all['Country'].isin(exclude_countries))].copy()
         df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
         
-        # 여행 일수 산출 (출국/입국/경유 기록)
-        dates = df_all[df_all['Category'].isin(['출국', '입국', '경유'])].copy()
-        if not dates.empty:
-            dates['Date_Obj'] = pd.to_datetime(dates['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
-            days_df = dates.groupby('Country')['Date_Obj'].agg(['min', 'max'])
-            days_df['Trip_Days'] = (days_df['max'] - days_df['min']).dt.days + 1
-        else:
-            days_df = pd.DataFrame(columns=['Trip_Days']) # 데이터 없으면 빈 틀
-
-        # 집계: TripName과 Country별 합계
-        agg_data = df_spi.groupby(['TripName', 'Country'])['KRW_val'].sum().reset_index()
+        # 2. '지출이 발생한 유니크한 날짜 수'를 여행 일수로 사용 (가장 정확한 보정)
+        df_spi['Date_Clean'] = df_spi['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
+        agg_data = df_spi.groupby(['TripName', 'Country']).agg({
+            'KRW_val': 'sum',
+            'Date_Clean': 'nunique' # 지출이 발생한 날짜 수
+        }).rename(columns={'Date_Clean': 'Active_Days'}).reset_index()
         
-        # 일수 및 인원수 병합
-        agg_data = agg_data.merge(days_df[['Trip_Days']], on='Country', how='left').fillna(1)
+        # 3. 인원수 보정
+        cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+        travelers_map = dict(zip(cfg_df['TripName'], cfg_df['Travelers']))
         agg_data['Travelers'] = agg_data['TripName'].map(travelers_map).fillna(1)
         
-        # 일평균 비용 및 SPI 산출
-        agg_data['Daily_SPI'] = (agg_data['KRW_val'] / agg_data['Travelers']) / agg_data['Trip_Days']
+        # 4. 일평균 비용 산출 (최소 1일 보장)
+        agg_data['Daily_SPI'] = (agg_data['KRW_val'] / agg_data['Travelers']) / agg_data['Active_Days'].clip(lower=1)
+        
+        # 5. SPI 지수 산출
         min_spi = agg_data['Daily_SPI'].min()
         agg_data['SPI_Index'] = agg_data['Daily_SPI'] / min_spi
         
-        # 출력
-        st.dataframe(agg_data.sort_values(by='SPI_Index'), use_container_width=True)
+        # 6. 결과 출력
+        st.dataframe(agg_data.sort_values(by='SPI_Index', ascending=False), use_container_width=True)
         st.bar_chart(agg_data.set_index('Country')['SPI_Index'], color="#FF8C00")
-    else:
-        st.warning("데이터가 없거나 여행지 정보(TripName/Country)가 부족합니다.")
+        
+        st.caption("✅ 제외: 렌트카, 글로벌(달러), 당일 방문지(크로아티아) | 보정: 인원수(1/n) 및 실제 지출일수 기준")
