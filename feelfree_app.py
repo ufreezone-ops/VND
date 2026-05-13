@@ -1520,33 +1520,37 @@ with tab_final:
 
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
-# [Modified] 정확한 CPI 계산 로직
 with tab_nav:
-    st.subheader("🧭 GTL Cross-Trip Navigator")
+    st.subheader("🧭 GTL Survival Price Index (SPI)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # 1. 일별 지출 데이터를 위해 Date를 날짜 객체로 변환
-        df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
+        # 1. 생존 카테고리 필터링
+        df_survival = df_all[df_all['Category'].isin(SURVIVAL_CATS)].copy()
         
-        # 2. 식비 데이터 필터링
-        df_food = df_all[df_all['Category'].isin(['식사', '간식'])].copy()
-        df_food['KRW_Amount'] = df_food.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
+        # 2. KRW 환산 금액 계산
+        df_survival['KRW_val'] = df_survival.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
         
-        # 3. 국가별 [식비 합계] 및 [여행 일수(max-min + 1)] 산출
-        country_stats = df_food.groupby('Country').agg({
-            'KRW_Amount': 'sum',
+        # 3. 국가별 [총 지출] 및 [여행 기간] 산출 (시작일~종료일 기준)
+        df_survival['Date_Obj'] = pd.to_datetime(df_survival['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
+        
+        agg_data = df_survival.groupby('Country').agg({
+            'KRW_val': 'sum',
             'Date_Obj': ['min', 'max']
         })
         
-        # 4. 1일 평균 식비 계산
-        country_stats['Trip_Days'] = (country_stats[('Date_Obj', 'max')] - country_stats[('Date_Obj', 'min')]).dt.days + 1
-        country_stats['Daily_Avg_Food'] = country_stats[('KRW_Amount', 'sum')] / country_stats['Trip_Days']
+        # 4. 일수 보정 (여행이 1일이라도 기간은 1일로 계산)
+        agg_data['Days'] = (agg_data[('Date_Obj', 'max')] - agg_data[('Date_Obj', 'min')]).dt.days + 1
+        agg_data['Daily_Survival_Cost'] = agg_data[('KRW_val', 'sum')] / agg_data['Days']
         
-        # 5. CPI 산출
-        min_daily_avg = country_stats['Daily_Avg_Food'].min()
-        country_stats['CPI_Index'] = country_stats['Daily_Avg_Food'] / min_daily_avg
+        # 5. SPI 지수 산출 (가장 저렴한 국가 대비 비율)
+        min_cost = agg_data['Daily_Survival_Cost'].min()
+        agg_data['SPI_Index'] = agg_data['Daily_Survival_Cost'] / min_cost
         
-        # 6. 시각화
-        st.dataframe(country_stats[['Daily_Avg_Food', 'CPI_Index']])
-        st.bar_chart(country_stats['CPI_Index'], color="#FFA500")
+        # 6. 결과 시각화
+        st.dataframe(agg_data[['Daily_Survival_Cost', 'SPI_Index']].sort_values(by='SPI_Index'), use_container_width=True)
+        st.bar_chart(agg_data['SPI_Index'], color="#FF8C00")
+        
+        st.info("💡 SPI는 매일 소비하는 식사, 교통, 마사지 등 생존 비용의 일평균 합계입니다.")
+    else:
+        st.warning("기록된 데이터가 없습니다.")
