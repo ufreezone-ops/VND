@@ -1524,28 +1524,57 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v12)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v13)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # [Modified] 1. SPI 필수 카테고리 (호텔, 투어, 입장료 등 물가 왜곡 주범 제외, 생존 필수 항목 위주)
-        SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '마사지', '팁', '통신', '수수료']
+        # [Added] UI: 호텔 포함 여부 토글
+        spi_mode = st.radio("🏨 체감 물가 계산 모드", ["호텔 포함 (종합 체감물가)", "호텔 제외 (순수 체류물가)"], horizontal=True)
         
-        # [Modified] 2. 체류일(Days) 산출 엔진: 사전예약(한국결제)으로 인한 일수 뻥튀기 원천 차단
+        # [Modified] 1. SPI 카테고리 (투어, 입장료 복구)
+        SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '마사지', '팁', '통신', '수수료', '투어', '입장료']
+        if "포함" in spi_mode:
+            SPI_CATS.extend(['호텔', '숙박'])
+        
+        # [Modified] 2. 체류일(Days) 산출 엔진: 0.5일 페널티 알고리즘 (연속성 파악)
+        df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0], errors='coerce')
+        
         stay_days = {}
         for (trip, country), group in df_all.groupby(['TripName', 'Country']):
-            # 현지에서 직접 발생한 생존 지출만 필터링 (한국 계좌 결제는 사전예약으로 간주하여 제외)
+            # 한국 사전 결제건을 제외한 '현지 발생 비용'의 고유 날짜만 추출
             local_expenses = group[
                 (group['Category'].isin(SPI_CATS)) & 
                 (~group['PaymentMethod'].str.contains('한국', na=False))
             ]
             
-            if not local_expenses.empty:
-                # 현지 지출이 발생한 '고유한 날짜(Unique Date)'의 수를 실제 체류일로 카운트
-                days = local_expenses['Date'].nunique()
-            else:
-                days = 1
-            stay_days[(trip, country)] = max(1, days)
+            unique_dates = sorted(local_expenses['Date_Obj'].dropna().dt.date.unique())
+            
+            if not unique_dates:
+                stay_days[(trip, country)] = 1
+                continue
+                
+            # 날짜 연속성(Segment) 그룹화 로직
+            segments = []
+            current_seg = [unique_dates[0]]
+            for d in unique_dates[1:]:
+                # 이전 날짜와의 차이가 1일이면 연속된 일정
+                if (d - current_seg[-1]).days == 1:
+                    current_seg.append(d)
+                else:
+                    # 차이가 벌어지면 다른 방문(다른 세그먼트)으로 간주
+                    segments.append(current_seg)
+                    current_seg = [d]
+            segments.append(current_seg)
+            
+            # 각 세그먼트별로 입출국일(첫날 0.5일 + 막날 0.5일 = -1일) 페널티 적용
+            total_days = 0
+            for seg in segments:
+                if len(seg) == 1:
+                    total_days += 1  # 당일치기는 1일로 보장
+                else:
+                    total_days += (len(seg) - 1)  # N일 연속 방문 시 (N - 1)일로 계산
+                    
+            stay_days[(trip, country)] = max(1, total_days)
             
         # [Modified] 3. 데이터 필터링 및 집계 (당일치기 크로아티아 제외)
         df_spi = df_all[
@@ -1567,8 +1596,6 @@ with tab_nav:
                 travelers_map = {}
                 
             agg_data['Travelers'] = agg_data['TripName'].map(travelers_map).fillna(1)
-            
-            # 일수 병합 (위에서 계산한 Active Days 적용)
             agg_data['Days'] = agg_data.apply(lambda r: stay_days.get((r['TripName'], r['Country']), 1), axis=1)
             
             # 6. 인당 일평균 산출
@@ -1579,6 +1606,7 @@ with tab_nav:
             
             if not final_df.empty:
                 st.markdown("### 📊 국가별 1인당 1일 체감 물가 (KRW)")
+                st.caption("💡 1회의 방문(연속된 날짜)마다 첫날과 마지막 날을 0.5일씩 차감하여 여행자의 실제 체류 감각에 맞췄습니다.")
                 
                 # 표 디스플레이 최적화
                 display_df = final_df.copy()
