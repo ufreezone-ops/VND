@@ -1520,33 +1520,33 @@ with tab_final:
 
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
-# [Modified] 비교 분석 탭: 식비 기반 CPI 자동 산출 및 시각화
+# [Modified] 정확한 CPI 계산 로직
 with tab_nav:
     st.subheader("🧭 GTL Cross-Trip Navigator")
-    
-    # 1. 통합 데이터 호출 (load_all_trips_data 함수 활용)
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # 2. 식사/간식 데이터만 필터링 (CPI 계산용)
-        df_food = df_all[df_all['Category'].isin(['식사', '간식'])].copy()
+        # 1. 일별 지출 데이터를 위해 Date를 날짜 객체로 변환
+        df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
         
-        # 3. 나라별 식비 평균 계산
-        if not df_food.empty:
-            # 원화 환산된 금액 기준 (KRW_val이 없으면 Amount * AppliedRate 계산)
-            df_food['KRW_Amount'] = df_food.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
-            cpi_stats = df_food.groupby('Country')['KRW_Amount'].mean().reset_index()
-            
-            # 4. 물가 지수(CPI) 계산: 가장 저렴한 국가를 1.0으로 기준
-            min_food_cost = cpi_stats['KRW_Amount'].min()
-            cpi_stats['CPI_Index'] = cpi_stats['KRW_Amount'] / min_food_cost
-            
-            # 5. UI 시각화
-            st.markdown("### 📊 국가별 물가 지수 (식비 기준)")
-            st.dataframe(cpi_stats.sort_values(by='CPI_Index', ascending=False), use_container_width=True)
-            
-            st.bar_chart(cpi_stats.set_index('Country')['CPI_Index'], color="#FFA500")
-        else:
-            st.info("💡 식비(식사, 간식) 기록이 충분하지 않아 CPI를 계산할 수 없습니다.")
-    else:
-        st.warning("여행 데이터가 존재하지 않습니다.")
+        # 2. 식비 데이터 필터링
+        df_food = df_all[df_all['Category'].isin(['식사', '간식'])].copy()
+        df_food['KRW_Amount'] = df_food.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
+        
+        # 3. 국가별 [식비 합계] 및 [여행 일수(max-min + 1)] 산출
+        country_stats = df_food.groupby('Country').agg({
+            'KRW_Amount': 'sum',
+            'Date_Obj': ['min', 'max']
+        })
+        
+        # 4. 1일 평균 식비 계산
+        country_stats['Trip_Days'] = (country_stats[('Date_Obj', 'max')] - country_stats[('Date_Obj', 'min')]).dt.days + 1
+        country_stats['Daily_Avg_Food'] = country_stats[('KRW_Amount', 'sum')] / country_stats['Trip_Days']
+        
+        # 5. CPI 산출
+        min_daily_avg = country_stats['Daily_Avg_Food'].min()
+        country_stats['CPI_Index'] = country_stats['Daily_Avg_Food'] / min_daily_avg
+        
+        # 6. 시각화
+        st.dataframe(country_stats[['Daily_Avg_Food', 'CPI_Index']])
+        st.bar_chart(country_stats['CPI_Index'], color="#FFA500")
