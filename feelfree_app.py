@@ -1520,23 +1520,25 @@ with tab_final:
 
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
-# [Modified] 비교 분석 탭 로직 (시스템 정합성 반영)
+# [Modified] 비교 분석 탭 (Streamlit app.py 내 마지막 블록)
 with tab_nav:
     st.subheader("🧭 GTL Cross-Trip Navigator")
     try:
-        # 1. 시트 데이터 호출 (conn.read 활용)
         df_nav = conn.read(worksheet="NAVIGATOR", ttl="0s")
         
         if df_nav is not None and not df_nav.empty:
-            # 2. 비교 테이블 출력
+            # 시트의 데이터를 출력 (CPI_Index 컬럼이 포함되어 있을 것입니다)
             st.dataframe(df_nav, use_container_width=True)
             
-            # 3. CPI 시각화 (Trip_Name이 컬럼에 있다고 가정)
-            if 'CPI_Index' in df_nav.columns and 'Trip_Name' in df_nav.columns:
-                st.bar_chart(df_nav.set_index('Trip_Name')['CPI_Index'], color="#FFA500")
+            # CPI_Index가 존재하면 차트 생성
+            if 'CPI_Index' in df_nav.columns:
+                # 숫자형으로 변환하여 안전하게 차트 생성
+                chart_df = df_nav.copy()
+                chart_df['CPI_Index'] = pd.to_numeric(chart_df['CPI_Index'], errors='coerce')
+                st.bar_chart(chart_df.set_index('TripName')['CPI_Index'], color="#FFA500")
             else:
-                st.info("💡 NAVIGATOR 시트에 'Trip_Name' 및 'CPI_Index' 컬럼을 추가하면 비교 차트가 나타납니다.")
+                st.info("💡 '_GTL_CONFIG_' 시트 I열에 'CPI_Index' 데이터를 입력하세요.")
         else:
-            st.warning("NAVIGATOR 탭의 데이터를 불러올 수 없습니다. 수식을 확인하세요.")
+            st.warning("NAVIGATOR 데이터를 불러올 수 없습니다.")
     except Exception as e:
         st.error(f"대시보드 로드 오류: {e}")
