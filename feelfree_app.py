@@ -1524,24 +1524,23 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v13)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v14)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
         # [Added] UI: 호텔 포함 여부 토글
         spi_mode = st.radio("🏨 체감 물가 계산 모드", ["호텔 포함 (종합 체감물가)", "호텔 제외 (순수 체류물가)"], horizontal=True)
         
-        # [Modified] 1. SPI 카테고리 (투어, 입장료 복구)
+        # 1. SPI 카테고리 (투어, 입장료 복구)
         SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '마사지', '팁', '통신', '수수료', '투어', '입장료']
         if "포함" in spi_mode:
             SPI_CATS.extend(['호텔', '숙박'])
         
-        # [Modified] 2. 체류일(Days) 산출 엔진: 0.5일 페널티 알고리즘 (연속성 파악)
+        # 2. 체류일(Days) 산출 엔진: 0.5일 페널티 알고리즘 (연속성 파악)
         df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0], errors='coerce')
         
         stay_days = {}
         for (trip, country), group in df_all.groupby(['TripName', 'Country']):
-            # 한국 사전 결제건을 제외한 '현지 발생 비용'의 고유 날짜만 추출
             local_expenses = group[
                 (group['Category'].isin(SPI_CATS)) & 
                 (~group['PaymentMethod'].str.contains('한국', na=False))
@@ -1557,26 +1556,23 @@ with tab_nav:
             segments = []
             current_seg = [unique_dates[0]]
             for d in unique_dates[1:]:
-                # 이전 날짜와의 차이가 1일이면 연속된 일정
                 if (d - current_seg[-1]).days == 1:
                     current_seg.append(d)
                 else:
-                    # 차이가 벌어지면 다른 방문(다른 세그먼트)으로 간주
                     segments.append(current_seg)
                     current_seg = [d]
             segments.append(current_seg)
             
-            # 각 세그먼트별로 입출국일(첫날 0.5일 + 막날 0.5일 = -1일) 페널티 적용
             total_days = 0
             for seg in segments:
                 if len(seg) == 1:
-                    total_days += 1  # 당일치기는 1일로 보장
+                    total_days += 1
                 else:
-                    total_days += (len(seg) - 1)  # N일 연속 방문 시 (N - 1)일로 계산
+                    total_days += (len(seg) - 1)
                     
             stay_days[(trip, country)] = max(1, total_days)
             
-        # [Modified] 3. 데이터 필터링 및 집계 (당일치기 크로아티아 제외)
+        # 3. 데이터 필터링 및 집계 (당일치기 크로아티아 제외)
         df_spi = df_all[
             (df_all['Category'].isin(SPI_CATS)) & 
             (~df_all['Country'].str.contains('글로벌|경유|크로아티아', na=False))
@@ -1601,12 +1597,29 @@ with tab_nav:
             # 6. 인당 일평균 산출
             agg_data['Daily_SPI'] = (agg_data['KRW_val'] / agg_data['Travelers']) / agg_data['Days']
             
-            # 7. 차트 표시
+            # 7. 차트 표시 준비
             final_df = agg_data.sort_values(by='Daily_SPI', ascending=True)
             
             if not final_df.empty:
                 st.markdown("### 📊 국가별 1인당 1일 체감 물가 (KRW)")
                 st.caption("💡 1회의 방문(연속된 날짜)마다 첫날과 마지막 날을 0.5일씩 차감하여 여행자의 실제 체류 감각에 맞췄습니다.")
+                
+                # [Added] 차트 시각화를 위한 고유 라벨(X축) 동적 생성기
+                def make_chart_label(r):
+                    country = str(r['Country'])
+                    trip = str(r['TripName'])
+                    # 발칸 등 다국가 여행은 국가명만 유지
+                    if "발칸" in trip: return country 
+                    
+                    # 'VN 푸꾸옥 (2026)' 등에서 한글 핵심 단어('푸꾸옥')만 추출
+                    match = re.search(r'([가-힣]+)', trip)
+                    city = match.group(1) if match else ""
+                    
+                    if city and city not in country:
+                        return f"{country}({city})"
+                    return country
+
+                final_df['Chart_Label'] = final_df.apply(make_chart_label, axis=1)
                 
                 # 표 디스플레이 최적화
                 display_df = final_df.copy()
@@ -1615,8 +1628,8 @@ with tab_nav:
                 
                 st.dataframe(display_df[['여행명', '국가', '인원수', '실체류일', '1일 체감물가']], use_container_width=True, hide_index=True)
                 
-                # 바 차트
-                chart_data = final_df.set_index('Country')[['Daily_SPI']]
+                # [Modified] 바 차트 인덱스를 고유 라벨로 설정하여 중복 합산 원천 차단
+                chart_data = final_df.set_index('Chart_Label')[['Daily_SPI']]
                 st.bar_chart(chart_data, color="#FF8C00")
             else:
                 st.info("비교할 SPI 데이터가 부족합니다.")
