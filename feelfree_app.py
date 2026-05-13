@@ -1524,11 +1524,11 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v16)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v17)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # [Modified] 1. 토글 삭제 및 모든 핵심 생존/여행 카테고리 상시 포함
+        # 1. 토글 삭제 및 모든 핵심 생존/여행 카테고리 상시 포함
         SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '렌트카', '마사지', '팁', '통신', '수수료', '투어', '입장료', '호텔', '숙박']
         
         # 2. 체류일(Days) 산출 엔진 (0.5일 페널티 알고리즘 적용)
@@ -1563,14 +1563,14 @@ with tab_nav:
         if not df_spi.empty:
             df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate']), axis=1)
             
-            # [Added] 누적 막대 차트를 위한 항목별 카테고리 그룹핑
+            # 누적 막대 차트를 위한 항목별 카테고리 그룹핑
             def map_spi_group(cat):
                 if cat in ['렌트카']: return '🚗 렌트카'
                 if cat in ['호텔', '숙박']: return '🏨 숙박'
                 if cat in ['투어', '입장료', '마사지']: return '🏄 투어/액티비티'
                 if cat in ['식사', '간식', '마트']: return '🍔 식음료'
                 if cat in ['Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통']: return '🚕 로컬교통'
-                return '📱 기타' # 팁, 통신, 수수료
+                return '📱 기타' 
 
             df_spi['SPI_Group'] = df_spi['Category'].apply(map_spi_group)
             
@@ -1580,13 +1580,13 @@ with tab_nav:
             except:
                 travelers_map = {}
                 
-            # [Modified] 차트를 그리기 위해 그룹별(SPI_Group)로 Daily_SPI 분리 계산
+            # 차트를 그리기 위해 그룹별(SPI_Group)로 Daily_SPI 분리 계산 (1인당)
             agg_group = df_spi.groupby(['TripName', 'Country', 'SPI_Group'])['KRW_val'].sum().reset_index()
             agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(1)
             agg_group['Days'] = agg_group.apply(lambda r: stay_days.get((r['TripName'], r['Country']), 1), axis=1)
             agg_group['Daily_SPI'] = (agg_group['KRW_val'] / agg_group['Travelers']) / agg_group['Days']
             
-            # [Modified] 테이블 및 정렬 기준을 위한 총합(Total) 별도 계산
+            # 테이블 및 정렬 기준을 위한 총합(Total) 별도 계산
             agg_total = agg_group.groupby(['TripName', 'Country']).agg({'Daily_SPI': 'sum', 'Travelers': 'first', 'Days': 'first'}).reset_index()
 
             # 4. 특이사항(Theme) 분석 엔진
@@ -1600,9 +1600,10 @@ with tab_nav:
                 tour_v = sub_df[sub_df['Category'].str.contains('투어|입장료', na=False)]['KRW_val'].sum()
                 
                 tags =[]
-                if hotel_v > 0: tags.append(f"🏨숙박 {hotel_v/pp_days/10000:.1f}만")
-                if rent_v > 0: tags.append(f"🚗렌트 {rent_v/pp_days/10000:.1f}만")
-                if tour_v > 0: tags.append(f"🏄투어 {tour_v/pp_days/10000:.1f}만")
+                # [Modified] 인원수(Travelers) 분할 해제 -> 1박당 객실 요금, 1일당 차량 렌트비로 직관성 부여
+                if hotel_v > 0: tags.append(f"🏨 1박평균 {hotel_v/row['Days']/10000:.1f}만")
+                if rent_v > 0: tags.append(f"🚗 1일렌트 {rent_v/row['Days']/10000:.1f}만")
+                if tour_v > 0: tags.append(f"🏄 투어(1인/1일) {tour_v/pp_days/10000:.1f}만")
                 
                 if "칭다오" in t: tags.append("👑 5성급 럭셔리 테마")
                 if "몬테네그로" in c: tags.append("🇭🇷 크로아 당일치기 루트")
@@ -1626,7 +1627,6 @@ with tab_nav:
 
                 final_total_df['Chart_Label'] = final_total_df.apply(make_chart_label, axis=1)
                 
-                # 표 디스플레이 최적화
                 display_df = final_total_df.copy()
                 display_df['Daily_SPI_Fmt'] = display_df['Daily_SPI'].apply(lambda x: f"{x:,.0f} 원")
                 display_df = display_df.rename(columns={
@@ -1636,17 +1636,12 @@ with tab_nav:
                 
                 st.dataframe(display_df[['여행명', '국가', '인원수', '실체류일', '1일 체감물가', '💡 특이사항 및 요인']], use_container_width=True, hide_index=True)
                 
-                # [Added] 누적 막대 차트(Stacked Bar) 시각화 엔진
                 label_map = dict(zip(zip(final_total_df['TripName'], final_total_df['Country']), final_total_df['Chart_Label']))
                 agg_group['Chart_Label'] = agg_group.apply(lambda r: label_map.get((r['TripName'], r['Country']), r['Country']), axis=1)
                 
-                # X축 정렬 (총액 기준 오름차순)
                 category_order_x = final_total_df['Chart_Label'].tolist()
-                
-                # Y축 누적 순서 지정 (아래에서 위로 쌓임 -> 맨 뒤 원소가 맨 위)
                 stack_order = ['📱 기타', '🚕 로컬교통', '🍔 식음료', '🏄 투어/액티비티', '🏨 숙박', '🚗 렌트카']
                 
-                # 색상 매핑 (렌트카는 강렬한 빨강, 숙박은 파랑, 식음료는 초록 등)
                 color_map = {
                     '🚗 렌트카': '#D32F2F', 
                     '🏨 숙박': '#1976D2',   
