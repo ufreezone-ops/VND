@@ -1521,36 +1521,48 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v3)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # 1. 생존 카테고리 필터링
-        df_survival = df_all[df_all['Category'].isin(SURVIVAL_CATS)].copy()
+        # [Modified] 렌트카 제외, 호텔 포함한 핵심 생존 카테고리
+        SPI_CATS =['식사', '간식', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '마사지', '팁', '투어', '입장료', '통신', '수수료', '호텔']
         
-        # 2. KRW 환산 금액 계산
-        df_survival['KRW_val'] = df_survival.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
+        # 1. 데이터 필터링 (렌트카 제외)
+        df_spi = df_all[df_all['Category'].isin(SPI_CATS)].copy()
         
-        # 3. 국가별 [총 지출] 및 [여행 기간] 산출 (시작일~종료일 기준)
-        df_survival['Date_Obj'] = pd.to_datetime(df_survival['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
+        # 2. KRW 환산
+        df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
         
-        agg_data = df_survival.groupby('Country').agg({
-            'KRW_val': 'sum',
-            'Date_Obj': ['min', 'max']
-        })
+        # 3. 여행 일수 산출 로직 보강 (입출국 정보 없으면 Date 최소/최대 사용)
+        dates = df_all[df_all['Category'].isin(['출국', '입국'])].copy()
+        dates['Date_Obj'] = pd.to_datetime(dates['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
         
-        # 4. 일수 보정 (여행이 1일이라도 기간은 1일로 계산)
-        agg_data['Days'] = (agg_data[('Date_Obj', 'max')] - agg_data[('Date_Obj', 'min')]).dt.days + 1
-        agg_data['Daily_Survival_Cost'] = agg_data[('KRW_val', 'sum')] / agg_data['Days']
+        days_df = dates.groupby('Country')['Date_Obj'].agg(['min', 'max'])
+        days_df['Trip_Days'] = (days_df['max'] - days_df['min']).dt.days + 1
         
-        # 5. SPI 지수 산출 (가장 저렴한 국가 대비 비율)
-        min_cost = agg_data['Daily_Survival_Cost'].min()
-        agg_data['SPI_Index'] = agg_data['Daily_Survival_Cost'] / min_cost
+        # 입출국 데이터 없는 경우를 위한 Fallback (해당 여행의 전체 데이터 Date 최소-최대)
+        all_dates = df_all.groupby('Country')['Date'].agg(['min', 'max'])
+        all_dates['min'] = pd.to_datetime(all_dates['min'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
+        all_dates['max'] = pd.to_datetime(all_dates['max'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0])
+        all_dates['Fallback_Days'] = (all_dates['max'] - all_dates['min']).dt.days + 1
         
-        # 6. 결과 시각화
-        st.dataframe(agg_data[['Daily_Survival_Cost', 'SPI_Index']].sort_values(by='SPI_Index'), use_container_width=True)
-        st.bar_chart(agg_data['SPI_Index'], color="#FF8C00")
+        # days_df에 Fallback 병합
+        days_df = days_df.combine_first(all_dates.rename(columns={'Fallback_Days': 'Trip_Days'}))
         
-        st.info("💡 SPI는 매일 소비하는 식사, 교통, 마사지 등 생존 비용의 일평균 합계입니다.")
+        # 4. 국가별 집계
+        agg_data = df_spi.groupby('Country')['KRW_val'].sum().reset_index()
+        agg_data = agg_data.merge(days_df[['Trip_Days']], on='Country', how='left')
+        
+        # 5. 일평균 및 SPI 지수
+        agg_data['Daily_SPI'] = agg_data['KRW_val'] / agg_data['Trip_Days'].fillna(1)
+        min_spi = agg_data['Daily_SPI'].min()
+        agg_data['SPI_Index'] = agg_data['Daily_SPI'] / min_spi
+        
+        # 6. 결과 출력
+        st.dataframe(agg_data[['Country', 'Daily_SPI', 'SPI_Index']].sort_values(by='SPI_Index'), use_container_width=True)
+        st.bar_chart(agg_data.set_index('Country')['SPI_Index'], color="#FF8C00")
+        
+        st.caption("✅ 포함: 식사, 간식, 교통, 마사지, 팁, 투어, 호텔 | ❌ 제외: 렌트카, 마트, 선물, 항공권, 보험")
     else:
-        st.warning("기록된 데이터가 없습니다.")
+        st.warning("데이터가 없습니다.")
