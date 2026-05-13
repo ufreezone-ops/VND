@@ -726,7 +726,7 @@ with tab_in:
         IN_CFG = TRIP_CONFIGS[st.session_state.current_trip]["nodes"][sel_node]
         IN_CURR = IN_CFG["currency"]
         IN_MULTI = IN_CFG["multiplier"]
-    with c_mode:with c_mode:
+    with c_mode:
         ### 🎛️ [GUI: Component] 기록 모드 선택기 (출입국 삭제됨)
         mode = st.radio("기록 모드 선택",["일반 지출", "🛫 항공권(특수)", "🏨 호텔(특수)", "자산 이동", "환불(취소)"], horizontal=True, key="mode_radio", label_visibility="collapsed")
     
