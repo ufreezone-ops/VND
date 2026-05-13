@@ -1374,18 +1374,37 @@ with tab_stats:
             else:
                 st.info("현지 지출 데이터가 없습니다.")
 
+            # [Modified] 일일 탭 사전결제 트리맵 가독성 향상 버전
             dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
             if not dom_df.empty:
                 st.divider()
-                ### 📊 [GUI: Chart/Table] 사전결제(국내) 트리맵 차트
-                fig1 = px.treemap(dom_df, path=['Macro_Category', 'Category', 'Description'], values=y_col, color='Macro_Category', color_discrete_map=macro_color_map)
-                fig1.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
-                fig1.update_layout(
-                    margin=dict(l=10, r=10, t=30, b=30), 
-                    height=500,
-                    uniformtext=dict(minsize=10, mode='hide') 
-                )
                 st.markdown("<h4 style='text-align: center;'>🛫 사전결제(Treemap)</h4>", unsafe_allow_html=True)
+                
+                # [Added] 요약 탭과 동일한 15자 요약 데이터 생성
+                dom_chart_df = dom_df.copy()
+                dom_chart_df['Short_Desc'] = dom_chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
+                
+                # [Modified] 경로에 Short_Desc 적용 및 색상 맵 활성화
+                fig1 = px.treemap(dom_chart_df, 
+                                 path=['Macro_Category', 'Category', 'Short_Desc'], 
+                                 values=y_col, 
+                                 color='Macro_Category', 
+                                 color_discrete_map=macro_color_map)
+                
+                # [Modified] 텍스트 가독성 설정 (요약 탭과 동일 사양)
+                fig1.update_traces(
+                    texttemplate="<b>%{label}</b><br>%{value:,.0f}원",
+                    hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원",
+                    textposition='middle center',
+                    insidetextfont=dict(size=16) # 기본 폰트 크기 상향
+                )
+                
+                # [Added] 글자 겹침 방지 및 레이아웃 최적화
+                fig1.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=550, # 높이 적절히 조절
+                    uniformtext=dict(minsize=11, mode='hide') # 11pt 이하로 작아지면 숨김
+                )
                 st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
 
             if len(TRIP_CONFIGS[st.session_state.current_trip]["nodes"]) > 1 and not ovr_df.empty:
