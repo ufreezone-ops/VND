@@ -1524,37 +1524,46 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v17)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v18)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # 1. 토글 삭제 및 모든 핵심 생존/여행 카테고리 상시 포함
+        # 1. 모든 핵심 생존/여행 카테고리 상시 포함
         SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '렌트카', '마사지', '팁', '통신', '수수료', '투어', '입장료', '호텔', '숙박']
         
-        # 2. 체류일(Days) 산출 엔진 (0.5일 페널티 알고리즘 적용)
+        # 2. 정확한 숙박 일수(Nights) 산출 엔진 (Segment Smoothing 알고리즘 적용)
         df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0], errors='coerce')
         
         stay_days = {}
         for (trip, country), group in df_all.groupby(['TripName', 'Country']):
-            local_expenses = group[
-                (group['Category'].isin(SPI_CATS)) & 
-                (~group['PaymentMethod'].str.contains('한국', na=False))
-            ]
-            unique_dates = sorted(local_expenses['Date_Obj'].dropna().dt.date.unique())
-            if not unique_dates:
+            # 현지 결제일 및 출입국 태그 날짜 모두 수집 (한국 결제 제외)
+            travel_mask = (
+                (~group['PaymentMethod'].str.contains('한국', na=False)) | 
+                (group['Category'].isin(['출국', '입국']))
+            )
+            valid_dates = group.loc[travel_mask, 'Date_Obj'].dropna()
+            
+            if valid_dates.empty:
                 stay_days[(trip, country)] = 1; continue
                 
-            segments =[]
+            unique_dates = sorted(valid_dates.dt.date.unique())
+            
+            segments = []
             current_seg = [unique_dates[0]]
             for d in unique_dates[1:]:
-                if (d - current_seg[-1]).days == 1: current_seg.append(d)
-                else: segments.append(current_seg); current_seg = [d]
+                # [Modified] 지갑을 안 여는 날(무지출일)이 있더라도 최대 5일의 공백은 하나의 여행으로 이어붙임
+                if (d - current_seg[-1]).days <= 5: 
+                    current_seg.append(d)
+                else: 
+                    segments.append(current_seg)
+                    current_seg = [d]
             segments.append(current_seg)
             
-            total_days = sum([1 if len(seg) == 1 else (len(seg) - 1) for seg in segments])
-            stay_days[(trip, country)] = max(1, total_days)
+            # [Modified] 각 연속된 세그먼트의 (마지막 날 - 첫 날)은 정확히 '숙박 일수(Nights)'와 일치함
+            total_nights = sum([max(1, (seg[-1] - seg[0]).days) for seg in segments])
+            stay_days[(trip, country)] = total_nights
             
-        # 3. 데이터 필터링 및 SPI 세부 그룹핑 (누적 차트용)
+        # 3. 데이터 필터링 및 SPI 세부 그룹핑
         df_spi = df_all[
             (df_all['Category'].isin(SPI_CATS)) & 
             (~df_all['Country'].str.contains('글로벌|경유|크로아티아', na=False))
@@ -1563,7 +1572,6 @@ with tab_nav:
         if not df_spi.empty:
             df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate']), axis=1)
             
-            # 누적 막대 차트를 위한 항목별 카테고리 그룹핑
             def map_spi_group(cat):
                 if cat in ['렌트카']: return '🚗 렌트카'
                 if cat in ['호텔', '숙박']: return '🏨 숙박'
@@ -1580,16 +1588,14 @@ with tab_nav:
             except:
                 travelers_map = {}
                 
-            # 차트를 그리기 위해 그룹별(SPI_Group)로 Daily_SPI 분리 계산 (1인당)
             agg_group = df_spi.groupby(['TripName', 'Country', 'SPI_Group'])['KRW_val'].sum().reset_index()
             agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(1)
             agg_group['Days'] = agg_group.apply(lambda r: stay_days.get((r['TripName'], r['Country']), 1), axis=1)
             agg_group['Daily_SPI'] = (agg_group['KRW_val'] / agg_group['Travelers']) / agg_group['Days']
             
-            # 테이블 및 정렬 기준을 위한 총합(Total) 별도 계산
             agg_total = agg_group.groupby(['TripName', 'Country']).agg({'Daily_SPI': 'sum', 'Travelers': 'first', 'Days': 'first'}).reset_index()
 
-            # 4. 특이사항(Theme) 분석 엔진
+            # 4. 특이사항(Theme) 분석 엔진 (정확한 Nights 기반 산출)
             theme_notes =[]
             for idx, row in agg_total.iterrows():
                 t, c, pp_days = row['TripName'], row['Country'], row['Travelers'] * row['Days']
@@ -1600,7 +1606,7 @@ with tab_nav:
                 tour_v = sub_df[sub_df['Category'].str.contains('투어|입장료', na=False)]['KRW_val'].sum()
                 
                 tags =[]
-                # [Modified] 인원수(Travelers) 분할 해제 -> 1박당 객실 요금, 1일당 차량 렌트비로 직관성 부여
+                # 이제 row['Days']는 네가 기록한 실제 숙박 일수와 정확히 100% 일치함
                 if hotel_v > 0: tags.append(f"🏨 1박평균 {hotel_v/row['Days']/10000:.1f}만")
                 if rent_v > 0: tags.append(f"🚗 1일렌트 {rent_v/row['Days']/10000:.1f}만")
                 if tour_v > 0: tags.append(f"🏄 투어(1인/1일) {tour_v/pp_days/10000:.1f}만")
@@ -1631,10 +1637,10 @@ with tab_nav:
                 display_df['Daily_SPI_Fmt'] = display_df['Daily_SPI'].apply(lambda x: f"{x:,.0f} 원")
                 display_df = display_df.rename(columns={
                     'TripName': '여행명', 'Country': '국가', 'Travelers': '인원수', 
-                    'Days': '실체류일', 'Daily_SPI_Fmt': '1일 체감물가', 'Theme': '💡 특이사항 및 요인'
+                    'Days': '실숙박(일)', 'Daily_SPI_Fmt': '1일 체감물가', 'Theme': '💡 특이사항 및 요인'
                 })
                 
-                st.dataframe(display_df[['여행명', '국가', '인원수', '실체류일', '1일 체감물가', '💡 특이사항 및 요인']], use_container_width=True, hide_index=True)
+                st.dataframe(display_df[['여행명', '국가', '인원수', '실숙박(일)', '1일 체감물가', '💡 특이사항 및 요인']], use_container_width=True, hide_index=True)
                 
                 label_map = dict(zip(zip(final_total_df['TripName'], final_total_df['Country']), final_total_df['Chart_Label']))
                 agg_group['Chart_Label'] = agg_group.apply(lambda r: label_map.get((r['TripName'], r['Country']), r['Country']), axis=1)
