@@ -477,20 +477,18 @@ def recalculate_entire_ledger(df):
                             take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                             total_cost_krw += take * batch['rate']
                             
-                            # [Modified] 통화별 포맷팅 정의 (금액은 q_fmt, 환율은 r_prec)
+                            # [Modified] VND/PHP/HUF는 환율 4자리, 금액은 정수(콤마) 표시
                             r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
                             q_fmt = ",.0f" if curr in ["VND", "HUF"] else ",.2f"
                             decomposed.append(f"{take:{q_fmt}}@{batch['rate']:{r_prec}}")
 
-                    # [Added] ★ 핵심: 잔액 부족분 보정 로직
+                    # [Modified] 부족분(자동충전) 발생 시에도 동일 포맷 적용
                     if temp_qty > 0:
-                        # 주머니에 없는 돈을 썼다면, 부족한 양(temp_qty)은 기본 환율로 가상 채움
                         fallback_r = get_WAR(curr)
                         total_cost_krw += temp_qty * fallback_r
-                        
                         r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
                         q_fmt = ",.0f" if curr in ["VND", "HUF"] else ",.2f"
-                        decomposed.append(f"{temp_qty:{q_fmt}}@{fallback_r:{r_prec}}(Shortage)")
+                        decomposed.append(f"{temp_qty:{q_fmt}}@{fallback_r:{r_prec}}(Auto-Topup?)")
                     
                     if qty > 0:
                         rate = total_cost_krw / qty 
@@ -889,7 +887,7 @@ with tab_in:
                 if "ATM" in ty:
                     inherited_r = auto_calc_fifo_rate(t_amt, f"트래블로그({curr_tr})", curr_tr)
                     st.info(f"💳 카드 재고 계승 환율: **{inherited_r:.5f}**")
-                    # [Removed] 불필요한 원금 입력 칸을 제거하고 정보성 메시지로 대체
+                    # 원금 입력칸을 삭제하고, 계산된 결과를 정보 메시지로 보여줍니다.
                     st.success(f"💰 인출로 소모되는 원화 가치: **{(t_amt * inherited_r):,.0f} 원**")
                     applied_tr_rate = inherited_r
                 else:
@@ -1273,7 +1271,11 @@ with tab_stats:
                 ### 📊 [GUI: Chart/Table] 사전결제(국내) 트리맵 차트
                 fig1 = px.treemap(dom_df, path=['Macro_Category', 'Category', 'Description'], values=y_col, color='Macro_Category', color_discrete_map=macro_color_map)
                 fig1.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
-                fig1.update_layout(margin=dict(l=10, r=10, t=30, b=30))
+                fig1.update_layout(
+                    margin=dict(l=10, r=10, t=30, b=30), 
+                    height=500,
+                    uniformtext=dict(minsize=10, mode='hide') 
+                )
                 st.markdown("<h4 style='text-align: center;'>🛫 사전결제(Treemap)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
 
@@ -1282,7 +1284,11 @@ with tab_stats:
                 ### 📊 [GUI: Chart/Table] 국가별 현지지출 트리맵 차트
                 fig_country = px.treemap(ovr_df, path=['Country', 'Macro_Category', 'Category'], values=y_col, color='Country', color_discrete_sequence=px.colors.qualitative.Pastel)
                 fig_country.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
-                fig_country.update_layout(margin=dict(l=10, r=10, t=30, b=30))
+                fig_country.update_layout(
+                    margin=dict(l=10, r=10, t=30, b=30), 
+                    height=500,
+                    uniformtext=dict(minsize=10, mode='hide') 
+                )
                 st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지지출(Treemap)</h4>", unsafe_allow_html=True)
                 st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
 
@@ -1369,8 +1375,8 @@ with tab_final:
         # [Added] 아무리 박스가 작아도 글자가 작아지지 않게 방어 (최소 12px)
         fig_tree.update_layout(
             margin=dict(l=0, r=0, t=30, b=0),
-            height=600, # 차트 높이 확장
-            uniformtext=dict(minsize=12, mode='show') # 글자가 박스보다 커도 일단 보여줌
+            height=650, 
+            uniformtext=dict(minsize=11, mode='hide') # 글자가 박스보다 크면 숨겨서 겹침 방지
         )
         st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
         
