@@ -1511,10 +1511,14 @@ with tab_final:
         ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
         
         #[Modified] 일일 평균 계산 로직 동적 적용
-        local_v = exp_df[(exp_df['IsSurvival'] == 1) & (exp_df['Currency'].str.strip() == TRAVEL_CURRENCY)].copy()
+        # 수정: 모든 외화(KRW가 아닌) 생존 지출을 대상으로 계산 (전체 통화 합산)
+        local_v = exp_df[(exp_df['IsSurvival'] == 1) & (exp_df['Currency'].str.strip() != 'KRW')].copy()
+        
         denom = (travelers * total_nights)
         avg_local_krw = local_v['KRW_val'].sum() / denom if denom > 0 else 0
-        avg_local_loc = local_v['Local_val'].sum() / denom if denom > 0 else 0
+        
+        # avg_local_loc은 다중 통화일 경우 의미가 없으므로 0으로 처리하거나 생략
+        avg_local_loc = 0 if len(local_v['Currency'].unique()) > 1 else (local_v['Local_val'].sum() / denom if denom > 0 else 0)
         
         fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
         def kpi_box(title, krw, loc=None):
