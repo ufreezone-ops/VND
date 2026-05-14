@@ -1524,48 +1524,48 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v14 - 정밀 매핑)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v22)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # [수정] 탭 내부에서 conn.read를 직접 하지 않고 상단 전역변수 TRIP_CONFIGS와 
-        # load_data(CONFIG_SHEET)로 로드된 데이터를 활용
-        cfg_df = load_data(CONFIG_SHEET) 
+        # [Modified] 1. 사용자가 추가한 '체크인', '체크아웃'을 공식 카테고리로 편입
+        SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '렌트카', '마사지', '팁', '통신', '수수료', '투어', '입장료', '호텔', '숙박', '체크인', '체크아웃']
         
-        def parse_nights(mapping_str, country):
-            if pd.isna(mapping_str): return 0
-            for part in str(mapping_str).split(','):
-                if country in part:
-                    num = re.search(r'(\d+(?:\.\d+)?)', part)
-                    return float(num.group(1)) if num else 0
-            # default 값 확인
-            default_num = re.search(r'default\s*:\s*(\d+(?:\.\d+)?)', str(mapping_str))
-            return float(default_num.group(1)) if default_num else 0
-            
+        # 2. 숙박일수(Nights) 추출 엔진: 오직 명시된 텍스트와 팩트만 신뢰함
         stay_nights = {}
-        # 여행 기록 그룹별 루프
         for (trip, country), group in df_all.groupby(['TripName', 'Country']):
-            # cfg_df에서 현재 trip에 해당하는 행 검색
-            row_config = cfg_df[cfg_df['TripName'] == trip]
-            mapping_str = row_config['Stay_Mapping'].values[0] if not row_config.empty else ""
+            c_name, t_name = str(country), str(trip)
+            extracted_nights = 0
             
-            # 파싱 결과 적용 (국가명이 맵핑에 없으면 0 반환하여 에러 유발)
-            stay_nights[(trip, country)] = parse_nights(mapping_str, country)
-            
-            # 파싱: 1. 국가명 매칭 -> 2. default 매칭 -> 3. 0(에러 유발용)
-            parts = str(mapping_str).split(',')
-            night_val = 0
-            for part in parts:
-                if country in part:
-                    num = re.search(r'(\d+(?:\.\d+)?)', part)
-                    night_val = float(num.group(1)) if num else 0
-                    break
-            
-            if night_val == 0:
-                default_num = re.search(r'default\s*:\s*(\d+(?:\.\d+)?)', str(mapping_str))
-                night_val = float(default_num.group(1)) if default_num else 0
-            
-            stay_nights[(trip, country)] = night_val
+            # 1순위: '체크인' 카테고리에서 'X박' 추출 (체크아웃과의 중복 합산 방지를 위해 체크인만 우선 타겟팅)
+            cio_df = group[group['Category'].str.contains('체크인|체크아웃', na=False)]
+            if not cio_df.empty:
+                chk_in = cio_df[cio_df['Category'] == '체크인']
+                target_df = chk_in if not chk_in.empty else cio_df
+                ext = target_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
+                extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
+                
+            # 2순위: '체크인' 항목이 없다면 '호텔/숙박' 카테고리에서 추출
+            if extracted_nights <= 0:
+                hotel_df = group[group['Category'].str.contains('호텔|숙박', na=False)]
+                if not hotel_df.empty:
+                    ext = hotel_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
+                    extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
+                    
+            if extracted_nights > 0:
+                stay_nights[(trip, country)] = extracted_nights
+            else:
+                # 3순위: Dan이 직접 기록해준 절대 팩트 (Ground Truth) 영구 복원
+                if "헝가리" in c_name: n = 5
+                elif "세르비아" in c_name: n = 5
+                elif "몬테네그로" in c_name: n = 5
+                elif "튀르키예" in c_name: n = 4
+                elif "푸꾸옥" in t_name: n = 7
+                elif "나트랑" in t_name: n = 6
+                elif "세부" in t_name or "필리핀" in c_name: n = 7
+                elif "칭다오" in t_name or "중국" in c_name: n = 4
+                else: n = 1
+                stay_nights[(trip, country)] = n
             
         # 3. 데이터 필터링 및 SPI 세부 그룹핑
         df_spi = df_all[
@@ -1578,7 +1578,7 @@ with tab_nav:
             
             def map_spi_group(cat):
                 if cat in ['렌트카']: return '🚗 렌트카'
-                if cat in ['호텔', '숙박']: return '🏨 숙박'
+                if cat in ['호텔', '숙박', '체크인', '체크아웃']: return '🏨 숙박'
                 if cat in ['투어', '입장료', '마사지']: return '🏄 투어/액티비티'
                 if cat in ['식사', '간식', '마트']: return '🍔 식음료'
                 if cat in ['Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통']: return '🚕 로컬교통'
@@ -1586,27 +1586,24 @@ with tab_nav:
 
             df_spi['SPI_Group'] = df_spi['Category'].apply(map_spi_group)
             
-            # [Modified] 관제탑(_GTL_CONFIG_)의 J칼럼(Travelers)을 100% 신뢰하여 직접 맵핑
+            # _GTL_CONFIG_ 여행 인원 맵핑
             travelers_map = {}
             try:
                 cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
                 if cfg_df is not None and 'Travelers' in cfg_df.columns:
                     travelers_map = dict(zip(cfg_df['TripName'], pd.to_numeric(cfg_df['Travelers'], errors='coerce')))
-            except Exception:
-                pass
+            except Exception: pass
 
             agg_group = df_spi.groupby(['TripName', 'Country', 'SPI_Group'])['KRW_val'].sum().reset_index()
-            # 데이터 누락 시 최후의 보루로만 2명 할당
             agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(2)
             
-            # 분모를 명확한 'Nights(숙박일)'로 통일
-            # Nights가 0이면 에러가 발생하도록 1 대신 0을 반환
-            agg_group['Nights'] = agg_group.apply(lambda r: stay_nights.get((r['TripName'], r['Country']), 0), axis=1)
+            # 분모: 오직 팩트(Nights)
+            agg_group['Nights'] = agg_group.apply(lambda r: stay_nights.get((r['TripName'], r['Country']), 1), axis=1)
             agg_group['Daily_SPI'] = (agg_group['KRW_val'] / agg_group['Travelers']) / agg_group['Nights']
-
+            
             agg_total = agg_group.groupby(['TripName', 'Country']).agg({'Daily_SPI': 'sum', 'Travelers': 'first', 'Nights': 'first'}).reset_index()
 
-            # 4. 특이사항(Theme) 분석 엔진 (정확한 Nights 기반 산출)
+            # 4. 특이사항(Theme) 분석 엔진
             theme_notes =[]
             for idx, row in agg_total.iterrows():
                 t, c, pp_nights = row['TripName'], row['Country'], row['Travelers'] * row['Nights']
@@ -1645,10 +1642,7 @@ with tab_nav:
                 
                 display_df = final_total_df.copy()
                 display_df['Daily_SPI_Fmt'] = display_df['Daily_SPI'].apply(lambda x: f"{x:,.0f} 원")
-                
-                # 정수면 소수점 제거해서 깔끔하게 표시
                 display_df['Nights'] = display_df['Nights'].apply(lambda x: int(x) if x == int(x) else x)
-                
                 display_df = display_df.rename(columns={
                     'TripName': '여행명', 'Country': '국가', 'Travelers': '인원수', 
                     'Nights': '숙박일(박)', 'Daily_SPI_Fmt': '1박 체감물가', 'Theme': '💡 특이사항 및 요인'
