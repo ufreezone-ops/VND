@@ -69,11 +69,11 @@ def get_trip_configs():
         }
     return dynamic_configs
 
+# [Modified] 버전 및 업데이트 로그 v26.05.14.004
+VERSION = "v26.05.14.004"
 
-# [Modified] 버전 및 업데이트 로그 v26.05.10.005
-VERSION = "v26.05.10.005"
-
-UPDATE_LOG_TEXT = """* `[Fixed]` 영수증 상세 뷰어의 Deep-Reader(자동 환산 엔진) 고도화. 용량/수량(ml, g, cm, 개 등)을 뜻하는 숫자는 무시하고, 실제 결제 금액(VND, USD 등)만 정확하게 선별하여 원화로 환산하도록 정규식(Regex) 논리 개선."""
+UPDATE_LOG_TEXT = """* `[Added]` 관제탑(`_GTL_CONFIG_`)의 Travelers 및 Stay_Mapping 컬럼을 100% 신뢰하여 SPI에 직결.
+* `[Fixed]` 환불 금액이 SPI에서 삭감되지 않아 호텔 체감 비용이 왜곡되던 현상 해결 (Global Net-ifier 탑재)."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -90,7 +90,42 @@ def auto_update_log_to_gsheets():
         except: pass
 auto_update_log_to_gsheets()
 
-# [Added] 하드코딩된 TRIP_CONFIGS를 동적 로더 결과로 덮어쓰기
+# [Modified] 10분 동안 여행 설정 정보를 메모리에 보관 (관제탑 데이터 직결)
+@st.cache_data(ttl=600)
+def get_trip_configs():
+    try:
+        cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+        if cfg_df is None or cfg_df.empty: 
+            raise ValueError("Config sheet is empty")
+    except Exception as e:
+        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}')을 로드할 수 없습니다.**")
+        st.info(f"💡 **해결 방법:** 구글 시트에 **'{CONFIG_SHEET}'** 탭이 있는지 확인해 주세요.")
+        st.stop()
+    
+    dynamic_configs = {}
+    for _, row in cfg_df.iterrows():
+        raw_cats = str(row['Categories']).replace("，", ",").split(",") 
+        cats = [c.strip() for c in raw_cats if c.strip()]
+        
+        # [Added] J열(Travelers) 및 K열(Stay_Mapping) 파싱
+        travelers = int(row['Travelers']) if 'Travelers' in row and pd.notna(row['Travelers']) else 2
+        stay_mapping = str(row['Stay_Mapping']).strip() if 'Stay_Mapping' in row and pd.notna(row['Stay_Mapping']) else ""
+        
+        dynamic_configs[str(row['TripName'])] = {
+            "sheet": str(row['SheetName']),
+            "nodes": {str(row['MainCountry']).strip(): {
+                "currency": str(row['Currency']).strip(), 
+                "symbol": str(row['Symbol']).strip(), 
+                "timezone": int(row['Timezone']), 
+                "multiplier": int(row['Multiplier'])
+            }},
+            "cats": cats,
+            "travelers": travelers,
+            "stay_mapping": stay_mapping
+        }
+    return dynamic_configs
+
+# 하드코딩된 TRIP_CONFIGS를 동적 로더 결과로 덮어쓰기
 TRIP_CONFIGS = get_trip_configs()
 
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
@@ -1524,50 +1559,53 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v22)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v23)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # [Modified] 1. 사용자가 추가한 '체크인', '체크아웃'을 공식 카테고리로 편입
         SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '렌트카', '마사지', '팁', '통신', '수수료', '투어', '입장료', '호텔', '숙박', '체크인', '체크아웃']
         
-        # 2. 숙박일수(Nights) 추출 엔진: 오직 명시된 텍스트와 팩트만 신뢰함
+        # [Modified] 관제탑(CONFIG)의 Stay_Mapping(K열) 및 Travelers(J열) 100% 매핑 엔진
         stay_nights = {}
-        for (trip, country), group in df_all.groupby(['TripName', 'Country']):
-            c_name, t_name = str(country), str(trip)
-            extracted_nights = 0
+        travelers_map = {}
+        
+        for trip_name, config in TRIP_CONFIGS.items():
+            travelers_map[trip_name] = config.get("travelers", 2)
+            mapping_str = config.get("stay_mapping", "")
             
-            # 1순위: '체크인' 카테고리에서 'X박' 추출 (체크아웃과의 중복 합산 방지를 위해 체크인만 우선 타겟팅)
-            cio_df = group[group['Category'].str.contains('체크인|체크아웃', na=False)]
-            if not cio_df.empty:
-                chk_in = cio_df[cio_df['Category'] == '체크인']
-                target_df = chk_in if not chk_in.empty else cio_df
-                ext = target_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
-                extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
-                
-            # 2순위: '체크인' 항목이 없다면 '호텔/숙박' 카테고리에서 추출
-            if extracted_nights <= 0:
-                hotel_df = group[group['Category'].str.contains('호텔|숙박', na=False)]
-                if not hotel_df.empty:
-                    ext = hotel_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
-                    extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
-                    
-            if extracted_nights > 0:
-                stay_nights[(trip, country)] = extracted_nights
+            # 발칸6국 같은 복합 매핑 파싱 ("튀르키예 : 4박, 세르비아: 5박")
+            if ":" in mapping_str or " : " in mapping_str:
+                for p in mapping_str.replace(" ", "").split(","):
+                    if ":" in p:
+                        c_name, n_str = p.split(":", 1)
+                        n_match = re.search(r'(\d+(?:\.\d+)?)', n_str)
+                        if n_match: stay_nights[(trip_name, c_name.strip())] = float(n_match.group(1))
             else:
-                # 3순위: Dan이 직접 기록해준 절대 팩트 (Ground Truth) 영구 복원
-                if "헝가리" in c_name: n = 5
-                elif "세르비아" in c_name: n = 5
-                elif "몬테네그로" in c_name: n = 5
-                elif "튀르키예" in c_name: n = 4
-                elif "푸꾸옥" in t_name: n = 7
-                elif "나트랑" in t_name: n = 6
-                elif "세부" in t_name or "필리핀" in c_name: n = 7
-                elif "칭다오" in t_name or "중국" in c_name: n = 4
-                else: n = 1
-                stay_nights[(trip, country)] = n
-            
-        # 3. 데이터 필터링 및 SPI 세부 그룹핑
+                # 푸꾸옥 같은 단일 매핑 ("7박")
+                n_match = re.search(r'(\d+(?:\.\d+)?)', mapping_str)
+                if n_match:
+                    for c_name in config["nodes"].keys():
+                        stay_nights[(trip_name, c_name)] = float(n_match.group(1))
+        
+        df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0], errors='coerce')
+        
+        # 만약 관제탑에 명시되지 않은 데이터가 있다면 개별 시트에서 텍스트(X박) 역산 (안전장치)
+        for (trip, country), group in df_all.groupby(['TripName', 'Country']):
+            if (trip, country) not in stay_nights:
+                extracted_nights = 0
+                cio_df = group[group['Category'].str.contains('체크인|체크아웃', na=False)]
+                if not cio_df.empty:
+                    target_df = cio_df[cio_df['Category'] == '체크인'] if '체크인' in cio_df['Category'].values else cio_df
+                    ext = target_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
+                    extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
+                if extracted_nights <= 0:
+                    hotel_df = group[group['Category'].str.contains('호텔|숙박', na=False)]
+                    if not hotel_df.empty:
+                        ext = hotel_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
+                        extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
+                stay_nights[(trip, country)] = max(1, extracted_nights if extracted_nights > 0 else 1)
+
+        # 데이터 필터링 및 SPI 세부 그룹핑
         df_spi = df_all[
             (df_all['Category'].isin(SPI_CATS)) & 
             (~df_all['Country'].str.contains('글로벌|경유|크로아티아', na=False))
@@ -1576,7 +1614,28 @@ with tab_nav:
         if not df_spi.empty:
             df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate']), axis=1)
             
+            # [Added] Global Net-ifier: 환불 금액을 마이너스(-)로 합산하여 순수 체감 물가 정밀 보정
+            refund_df = df_all[(df_all['Category'] == '환불') & (~df_all['Country'].str.contains('글로벌|경유|크로아티아', na=False))].copy()
+            if not refund_df.empty:
+                # 환불은 마이너스 값으로 적용
+                refund_df['KRW_val'] = refund_df.apply(lambda r: -(r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate'])), axis=1)
+                
+                def map_refund_group(desc):
+                    desc = str(desc).replace(" ", "").lower()
+                    # 보증금 반환은 실제 지출 환불이 아니므로 제외
+                    if any(k in desc for k in ["보증금", "deposit", "디파짓"]): return '제외'
+                    if any(k in desc for k in ["호텔", "숙박", "인페라", "라이온", "스플랜디도", "벨몬트"]): return '🏨 숙박'
+                    if any(k in desc for k in ["투어", "입장료"]): return '🏄 투어/액티비티'
+                    if any(k in desc for k in ["렌트카"]): return '🚗 렌트카'
+                    return '제외'
+                    
+                refund_df['SPI_Group'] = refund_df['Description'].apply(map_refund_group)
+                refund_df = refund_df[refund_df['SPI_Group'] != '제외']
+                if not refund_df.empty:
+                    df_spi = pd.concat([df_spi, refund_df], ignore_index=True)
+
             def map_spi_group(cat):
+                if pd.isna(cat): return '📱 기타'
                 if cat in ['렌트카']: return '🚗 렌트카'
                 if cat in ['호텔', '숙박', '체크인', '체크아웃']: return '🏨 숙박'
                 if cat in ['투어', '입장료', '마사지']: return '🏄 투어/액티비티'
@@ -1584,34 +1643,29 @@ with tab_nav:
                 if cat in ['Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통']: return '🚕 로컬교통'
                 return '📱 기타' 
 
-            df_spi['SPI_Group'] = df_spi['Category'].apply(map_spi_group)
-            
-            # _GTL_CONFIG_ 여행 인원 맵핑
-            travelers_map = {}
-            try:
-                cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-                if cfg_df is not None and 'Travelers' in cfg_df.columns:
-                    travelers_map = dict(zip(cfg_df['TripName'], pd.to_numeric(cfg_df['Travelers'], errors='coerce')))
-            except Exception: pass
+            # 환불 데이터(이미 SPI_Group 존재) 보존 후, 일반 지출 카테고리 매핑
+            df_spi['SPI_Group'] = df_spi.apply(lambda r: r['SPI_Group'] if pd.notna(r.get('SPI_Group')) else map_spi_group(r['Category']), axis=1)
 
             agg_group = df_spi.groupby(['TripName', 'Country', 'SPI_Group'])['KRW_val'].sum().reset_index()
             agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(2)
-            
-            # 분모: 오직 팩트(Nights)
             agg_group['Nights'] = agg_group.apply(lambda r: stay_nights.get((r['TripName'], r['Country']), 1), axis=1)
+            
+            # 마이너스 환불로 인해 그룹 총액이 음수가 되는 것을 방지 (최소 0)
+            agg_group['KRW_val'] = agg_group['KRW_val'].apply(lambda x: max(0, x))
             agg_group['Daily_SPI'] = (agg_group['KRW_val'] / agg_group['Travelers']) / agg_group['Nights']
             
             agg_total = agg_group.groupby(['TripName', 'Country']).agg({'Daily_SPI': 'sum', 'Travelers': 'first', 'Nights': 'first'}).reset_index()
 
-            # 4. 특이사항(Theme) 분석 엔진
             theme_notes =[]
             for idx, row in agg_total.iterrows():
                 t, c, pp_nights = row['TripName'], row['Country'], row['Travelers'] * row['Nights']
-                sub_df = df_spi[(df_spi['TripName'] == t) & (df_spi['Country'] == c)]
                 
-                hotel_v = sub_df[sub_df['SPI_Group'] == '🏨 숙박']['KRW_val'].sum()
-                rent_v = sub_df[sub_df['SPI_Group'] == '🚗 렌트카']['KRW_val'].sum()
-                tour_v = sub_df[sub_df['Category'].str.contains('투어|입장료', na=False)]['KRW_val'].sum()
+                # 그룹화된 agg_group에서 이미 환불이 차감된 정확한 넷(Net) 값을 추출
+                sub_group = agg_group[(agg_group['TripName'] == t) & (agg_group['Country'] == c)]
+                
+                hotel_v = sub_group[sub_group['SPI_Group'] == '🏨 숙박']['KRW_val'].sum()
+                rent_v = sub_group[sub_group['SPI_Group'] == '🚗 렌트카']['KRW_val'].sum()
+                tour_v = sub_group[sub_group['SPI_Group'] == '🏄 투어/액티비티']['KRW_val'].sum()
                 
                 tags =[]
                 if hotel_v > 0: tags.append(f"🏨 1박평균 {hotel_v/row['Nights']/10000:.1f}만")
