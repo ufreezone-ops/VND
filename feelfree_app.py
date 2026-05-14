@@ -1490,19 +1490,31 @@ with tab_stats:
                 with st.expander("상세내역", expanded=False):
                     st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
+# [Modified] [Module E] 요약 탭 KPI 로직 동기화
 with tab_final:
     if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
         total_trip_krw = exp_df['KRW_val'].sum()
         total_trip_loc = exp_df['Local_val'].sum()
         
+        # [Added] 동적 인원 및 숙박일수 가져오기
+        trip_cfg = TRIP_CONFIGS.get(st.session_state.current_trip, {})
+        travelers = trip_cfg.get("travelers", 2)
+        mapping_str = trip_cfg.get("stay_mapping", "")
+        # 총 숙박일수 산출 (복합 매핑 대응)
+        nights_match = re.findall(r'(\d+(?:\.\d+)?)', mapping_str)
+        total_nights = sum(float(n) for n in nights_match) if nights_match else 7
+        if total_nights == 0: total_nights = 7 # 0박 방지
+
         is_fixed_cost_final = (exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') | (exp_df['Category'].isin(FIXED_COST_CATS))
         dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum()
         ovr_total_krw = total_trip_krw - dom_total_krw
         ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
         
+        #[Modified] 일일 평균 계산 로직 동적 적용
         local_v = exp_df[(exp_df['IsSurvival'] == 1) & (exp_df['Currency'].str.strip() == TRAVEL_CURRENCY)].copy()
-        avg_local_krw = local_v['KRW_val'].sum() / 7 if not local_v.empty else 0
-        avg_local_loc = local_v['Local_val'].sum() / 7 if not local_v.empty else 0
+        denom = (travelers * total_nights)
+        avg_local_krw = local_v['KRW_val'].sum() / denom if denom > 0 else 0
+        avg_local_loc = local_v['Local_val'].sum() / denom if denom > 0 else 0
         
         fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
         def kpi_box(title, krw, loc=None):
