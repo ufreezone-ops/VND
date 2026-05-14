@@ -1524,51 +1524,39 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v19)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v21)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
         # 1. 모든 핵심 생존/여행 카테고리 상시 포함
         SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '렌트카', '마사지', '팁', '통신', '수수료', '투어', '입장료', '호텔', '숙박']
         
-        # [Modified] 2. 실숙박 일수(Nights) 추출 엔진 (명시적 기록 및 Ground Truth 팩트 최우선)
         df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0], errors='coerce')
         
         stay_nights = {}
         for (trip, country), group in df_all.groupby(['TripName', 'Country']):
-            c_name, t_name = str(country), str(trip)
-            
-            # 1순위: 호텔/숙박 카테고리의 Description에서 'X박' 추출
+            # [Modified] 1순위: 호텔/숙박 카테고리의 Description에서 'X박' 추출 (하드코딩 제거)
             hotel_df = group[group['Category'].isin(['호텔', '숙박'])]
             extracted_nights = 0
             if not hotel_df.empty:
-                extracted = hotel_df['Description'].str.extract(r'(\d+)\s*박')
-                extracted_nights = int(pd.to_numeric(extracted[0], errors='coerce').fillna(0).sum())
+                # '3박(실제 2.5박)' -> 첫 번째 매칭인 '3' 우선 추출
+                extracted = hotel_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
+                extracted_nights = pd.to_numeric(extracted[0], errors='coerce').fillna(0).sum()
                 
             if extracted_nights > 0:
                 stay_nights[(trip, country)] = extracted_nights
             else:
-                # 2순위: Dan이 직접 알려준 Ground Truth 팩트 데이터 하드코딩 매핑
-                if "헝가리" in c_name: n = 5
-                elif "세르비아" in c_name: n = 5
-                elif "몬테네그로" in c_name: n = 5
-                elif "튀르키예" in c_name: n = 4
-                elif "푸꾸옥" in t_name: n = 7
-                elif "나트랑" in t_name: n = 6
-                elif "세부" in t_name or "필리핀" in c_name: n = 7
-                elif "칭다오" in t_name or "중국" in c_name: n = 4
+                # 2순위: 명시적 텍스트가 없을 경우에만 결제일 기반 연속성(0.5일 페널티)으로 역산 (안전장치)
+                valid_dates = group.loc[~group['PaymentMethod'].str.contains('한국', na=False), 'Date_Obj'].dropna()
+                unique_dates = sorted(valid_dates.dt.date.unique())
+                if not unique_dates: n = 1
                 else:
-                    # 3순위 (미래의 새로운 여행지): 과거 v17의 '연속일 기반 0.5일 페널티' 로직 복원 (안전장치)
-                    valid_dates = group.loc[~group['PaymentMethod'].str.contains('한국', na=False), 'Date_Obj'].dropna()
-                    unique_dates = sorted(valid_dates.dt.date.unique())
-                    if not unique_dates: n = 1
-                    else:
-                        segments, current_seg = [], [unique_dates[0]]
-                        for d in unique_dates[1:]:
-                            if (d - current_seg[-1]).days == 1: current_seg.append(d)
-                            else: segments.append(current_seg); current_seg = [d]
-                        segments.append(current_seg)
-                        n = sum([1 if len(seg) == 1 else (len(seg) - 1) for seg in segments])
+                    segments, current_seg = [], [unique_dates[0]]
+                    for d in unique_dates[1:]:
+                        if (d - current_seg[-1]).days == 1: current_seg.append(d)
+                        else: segments.append(current_seg); current_seg = [d]
+                    segments.append(current_seg)
+                    n = sum([1 if len(seg) == 1 else (len(seg) - 1) for seg in segments])
                 stay_nights[(trip, country)] = max(1, n)
             
         # 3. 데이터 필터링 및 SPI 세부 그룹핑
@@ -1590,15 +1578,20 @@ with tab_nav:
 
             df_spi['SPI_Group'] = df_spi['Category'].apply(map_spi_group)
             
+            # [Modified] 관제탑(_GTL_CONFIG_)의 J칼럼(Travelers)을 100% 신뢰하여 직접 맵핑
+            travelers_map = {}
             try:
                 cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-                travelers_map = dict(zip(cfg_df['TripName'], pd.to_numeric(cfg_df['Travelers'], errors='coerce').fillna(1)))
-            except:
-                travelers_map = {}
-                
+                if cfg_df is not None and 'Travelers' in cfg_df.columns:
+                    travelers_map = dict(zip(cfg_df['TripName'], pd.to_numeric(cfg_df['Travelers'], errors='coerce')))
+            except Exception:
+                pass
+
             agg_group = df_spi.groupby(['TripName', 'Country', 'SPI_Group'])['KRW_val'].sum().reset_index()
-            agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(1)
-            # [Modified] 분모를 'Days'가 아닌 명확한 'Nights(숙박일)'로 통일
+            # 데이터 누락 시 최후의 보루로만 2명 할당
+            agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(2)
+            
+            # 분모를 명확한 'Nights(숙박일)'로 통일
             agg_group['Nights'] = agg_group.apply(lambda r: stay_nights.get((r['TripName'], r['Country']), 1), axis=1)
             agg_group['Daily_SPI'] = (agg_group['KRW_val'] / agg_group['Travelers']) / agg_group['Nights']
             
@@ -1615,7 +1608,6 @@ with tab_nav:
                 tour_v = sub_df[sub_df['Category'].str.contains('투어|입장료', na=False)]['KRW_val'].sum()
                 
                 tags =[]
-                # 분모(Nights)가 팩트와 일치하므로 역산된 단가도 기록과 100% 일치함
                 if hotel_v > 0: tags.append(f"🏨 1박평균 {hotel_v/row['Nights']/10000:.1f}만")
                 if rent_v > 0: tags.append(f"🚗 1일렌트 {rent_v/row['Nights']/10000:.1f}만")
                 if tour_v > 0: tags.append(f"🏄 투어(1인) {tour_v/pp_nights/10000:.1f}만")
@@ -1644,6 +1636,10 @@ with tab_nav:
                 
                 display_df = final_total_df.copy()
                 display_df['Daily_SPI_Fmt'] = display_df['Daily_SPI'].apply(lambda x: f"{x:,.0f} 원")
+                
+                # 정수면 소수점 제거해서 깔끔하게 표시
+                display_df['Nights'] = display_df['Nights'].apply(lambda x: int(x) if x == int(x) else x)
+                
                 display_df = display_df.rename(columns={
                     'TripName': '여행명', 'Country': '국가', 'Travelers': '인원수', 
                     'Nights': '숙박일(박)', 'Daily_SPI_Fmt': '1박 체감물가', 'Theme': '💡 특이사항 및 요인'
