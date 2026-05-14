@@ -1535,29 +1535,24 @@ with tab_nav:
         
         stay_nights = {}
         for (trip, country), group in df_all.groupby(['TripName', 'Country']):
-            # [Modified] 1순위: 호텔/숙박 카테고리의 Description에서 'X박' 추출 (하드코딩 제거)
-            hotel_df = group[group['Category'].isin(['호텔', '숙박'])]
-            extracted_nights = 0
-            if not hotel_df.empty:
-                # '3박(실제 2.5박)' -> 첫 번째 매칭인 '3' 우선 추출
-                extracted = hotel_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
-                extracted_nights = pd.to_numeric(extracted[0], errors='coerce').fillna(0).sum()
-                
-            if extracted_nights > 0:
-                stay_nights[(trip, country)] = extracted_nights
-            else:
-                # 2순위: 명시적 텍스트가 없을 경우에만 결제일 기반 연속성(0.5일 페널티)으로 역산 (안전장치)
-                valid_dates = group.loc[~group['PaymentMethod'].str.contains('한국', na=False), 'Date_Obj'].dropna()
-                unique_dates = sorted(valid_dates.dt.date.unique())
-                if not unique_dates: n = 1
-                else:
-                    segments, current_seg = [], [unique_dates[0]]
-                    for d in unique_dates[1:]:
-                        if (d - current_seg[-1]).days == 1: current_seg.append(d)
-                        else: segments.append(current_seg); current_seg = [d]
-                    segments.append(current_seg)
-                    n = sum([1 if len(seg) == 1 else (len(seg) - 1) for seg in segments])
-                stay_nights[(trip, country)] = max(1, n)
+            # 팩트 기반 매핑: _GTL_CONFIG_의 Stay_Mapping 읽기
+            row_cfg = cfg_df[cfg_df['TripName'] == trip]
+            mapping_str = row_cfg['Stay_Mapping'].values[0] if not row_cfg.empty else ""
+            
+            # 파싱: 1. 국가명 매칭 -> 2. default 매칭 -> 3. 0(에러 유발용)
+            parts = str(mapping_str).split(',')
+            night_val = 0
+            for part in parts:
+                if country in part:
+                    num = re.search(r'(\d+(?:\.\d+)?)', part)
+                    night_val = float(num.group(1)) if num else 0
+                    break
+            
+            if night_val == 0:
+                default_num = re.search(r'default\s*:\s*(\d+(?:\.\d+)?)', str(mapping_str))
+                night_val = float(default_num.group(1)) if default_num else 0
+            
+            stay_nights[(trip, country)] = night_val
             
         # 3. 데이터 필터링 및 SPI 세부 그룹핑
         df_spi = df_all[
@@ -1592,9 +1587,10 @@ with tab_nav:
             agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(2)
             
             # 분모를 명확한 'Nights(숙박일)'로 통일
-            agg_group['Nights'] = agg_group.apply(lambda r: stay_nights.get((r['TripName'], r['Country']), 1), axis=1)
+            # Nights가 0이면 에러가 발생하도록 1 대신 0을 반환
+            agg_group['Nights'] = agg_group.apply(lambda r: stay_nights.get((r['TripName'], r['Country']), 0), axis=1)
             agg_group['Daily_SPI'] = (agg_group['KRW_val'] / agg_group['Travelers']) / agg_group['Nights']
-            
+
             agg_total = agg_group.groupby(['TripName', 'Country']).agg({'Daily_SPI': 'sum', 'Travelers': 'first', 'Nights': 'first'}).reset_index()
 
             # 4. 특이사항(Theme) 분석 엔진 (정확한 Nights 기반 산출)
