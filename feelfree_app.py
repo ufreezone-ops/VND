@@ -1524,20 +1524,33 @@ with tab_final:
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
 
 with tab_nav:
-    st.subheader("🧭 GTL Survival Price Index (SPI v21)")
+    st.subheader("🧭 GTL Survival Price Index (SPI v14 - 정밀 매핑)")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
-        # 1. 모든 핵심 생존/여행 카테고리 상시 포함
-        SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '렌트카', '마사지', '팁', '통신', '수수료', '투어', '입장료', '호텔', '숙박']
+        # [수정] 탭 내부에서 conn.read를 직접 하지 않고 상단 전역변수 TRIP_CONFIGS와 
+        # load_data(CONFIG_SHEET)로 로드된 데이터를 활용
+        cfg_df = load_data(CONFIG_SHEET) 
         
-        df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0], errors='coerce')
-        
+        def parse_nights(mapping_str, country):
+            if pd.isna(mapping_str): return 0
+            for part in str(mapping_str).split(','):
+                if country in part:
+                    num = re.search(r'(\d+(?:\.\d+)?)', part)
+                    return float(num.group(1)) if num else 0
+            # default 값 확인
+            default_num = re.search(r'default\s*:\s*(\d+(?:\.\d+)?)', str(mapping_str))
+            return float(default_num.group(1)) if default_num else 0
+            
         stay_nights = {}
+        # 여행 기록 그룹별 루프
         for (trip, country), group in df_all.groupby(['TripName', 'Country']):
-            # 팩트 기반 매핑: _GTL_CONFIG_의 Stay_Mapping 읽기
-            row_cfg = cfg_df[cfg_df['TripName'] == trip]
-            mapping_str = row_cfg['Stay_Mapping'].values[0] if not row_cfg.empty else ""
+            # cfg_df에서 현재 trip에 해당하는 행 검색
+            row_config = cfg_df[cfg_df['TripName'] == trip]
+            mapping_str = row_config['Stay_Mapping'].values[0] if not row_config.empty else ""
+            
+            # 파싱 결과 적용 (국가명이 맵핑에 없으면 0 반환하여 에러 유발)
+            stay_nights[(trip, country)] = parse_nights(mapping_str, country)
             
             # 파싱: 1. 국가명 매칭 -> 2. default 매칭 -> 3. 0(에러 유발용)
             parts = str(mapping_str).split(',')
