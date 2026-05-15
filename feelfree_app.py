@@ -325,61 +325,72 @@ def normalize_date(d_str):
 ### ⚙️ [Logic: DB Load] GSheet 데이터 로드 및 클리닝
 # [Modified] 2분 동안 현재 장부 데이터를 메모리에 보관
 @st.cache_data(ttl=120)
+# [Modified] 버전 및 업데이트 로그 v26.05.15.001
+VERSION = "v26.05.15.001"
+
+UPDATE_LOG_TEXT = """* `[Fixed]` 치명적 버그 해결(Wipe Anomaly): 구글 시트 일괄 편집 직후, 앱에서 새 내역을 추가할 때 전체 데이터가 1줄로 덮어씌워지며 증발하는 현상을 'Live Injection Protocol' 및 강력한 'Vault Guard'를 통해 완벽 차단."""
+
+# ... (버전 로그 업데이트 함수 등 기존 코드 유지) ...
+
+### ⚙️ [Logic: DB Load] GSheet 데이터 로드 및 클리닝
+# [Modified] 2분 동안 현재 장부 데이터를 메모리에 보관
+@st.cache_data(ttl=120)
 def load_data(sheet_name):
     try:
         # 인자로 받은 sheet_name을 사용하여 읽기
         df = conn.read(worksheet=sheet_name, ttl="0s")
+    except Exception as e:
+        # [Modified] 에러 발생 시 빈 데이터프레임 반환 금지 및 시스템 강제 중단 (데이터 증발 원천 차단)
+        st.error(f"🚨 **치명적 오류:** 클라우드 데이터베이스 연결에 실패했습니다. 데이터를 덮어쓰는 대참사를 막기 위해 시스템을 즉시 중단합니다. ({e})")
+        st.stop()
         
-        if df is None or df.empty: 
-            df_init = pd.DataFrame(columns=FINAL_COLUMNS)
-            try:
-                # 텅 빈 시트에 14개 헤더를 강제로 주입합니다.
-                conn.update(worksheet=ACTIVE_SHEET, data=df_init)
-                st.info(f"✨ '{ACTIVE_SHEET}' 탭을 GTL 표준 양식으로 초기화했습니다.")
-            except:
-                pass # 권한 이슈 등으로 업데이트 실패 시 그냥 빈 DF 반환
-            return df_init
+    if df is None or df.empty: 
+        df_init = pd.DataFrame(columns=FINAL_COLUMNS)
+        try:
+            # 텅 빈 시트에 14개 헤더를 강제로 주입합니다.
+            conn.update(worksheet=ACTIVE_SHEET, data=df_init)
+            st.info(f"✨ '{ACTIVE_SHEET}' 탭을 GTL 표준 양식으로 초기화했습니다.")
+        except:
+            pass # 권한 이슈 등으로 업데이트 실패 시 그냥 빈 DF 반환
+        return df_init
 
-        year_match = re.search(r'\((\d{4})\)', st.session_state.current_trip)
-        trip_year = year_match.group(1) if year_match else "2024"
+    year_match = re.search(r'\((\d{4})\)', st.session_state.current_trip)
+    trip_year = year_match.group(1) if year_match else "2024"
 
-        if 'Country' not in df.columns: df.insert(1, 'Country', FIRST_NODE_NAME)
-        else:
-            df['Country'] = df['Country'].astype(str).str.strip().replace(['nan', 'None', ''], None)
-            df['Country'] = df['Country'].fillna(FIRST_NODE_NAME)
+    if 'Country' not in df.columns: df.insert(1, 'Country', FIRST_NODE_NAME)
+    else:
+        df['Country'] = df['Country'].astype(str).str.strip().replace(['nan', 'None', ''], None)
+        df['Country'] = df['Country'].fillna(FIRST_NODE_NAME)
+    
+    if 'Cum_Card_VND' in df.columns: df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
+    if 'Cum_Cash_VND' in df.columns: df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
+    if 'Receipt_URL' not in df.columns: df['Receipt_URL'] = ""
         
-        if 'Cum_Card_VND' in df.columns: df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
-        if 'Cum_Cash_VND' in df.columns: df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
-        if 'Receipt_URL' not in df.columns: df['Receipt_URL'] = ""
-            
-        df = df.dropna(subset=['Date', 'Category'], how='any')
-        df['Category'] = df['Category'].astype(str).str.strip()
-        df['PaymentMethod'] = df['PaymentMethod'].astype(str).str.strip()
-        df['Currency'] = df['Currency'].astype(str).str.strip()
-        
-        def fix_legacy_date(d):
-            d = str(d).strip()
-            if d and not re.match(r'^\d{4}', d): return f"{trip_year}-{d.replace('/', '-')}"
-            return d
+    df = df.dropna(subset=['Date', 'Category'], how='any')
+    df['Category'] = df['Category'].astype(str).str.strip()
+    df['PaymentMethod'] = df['PaymentMethod'].astype(str).str.strip()
+    df['Currency'] = df['Currency'].astype(str).str.strip()
+    
+    def fix_legacy_date(d):
+        d = str(d).strip()
+        if d and not re.match(r'^\d{4}', d): return f"{trip_year}-{d.replace('/', '-')}"
+        return d
 
-        df['Date'] = df['Date'].apply(fix_legacy_date)
-        df['Date'] = df['Date'].apply(normalize_date)
-        
-        df = df.reindex(columns=FINAL_COLUMNS)
-        
-        # [Modified] 시스템 수치 컬럼 방어 로직 (글자가 들어있어도 숫자로 강제 변환)
-        numeric_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
-        for col in numeric_cols:
-            if col in df.columns:
-                # errors='coerce'를 통해 글자는 NaN으로 바꾸고, 다시 fillna(0)으로 숫자화함
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
-        
-        df['IsExpense'] = pd.to_numeric(df['IsExpense'], errors='coerce').fillna(0).astype(int)
-        df['Note'] = df['Note'].fillna("").astype(str)
-        
-        df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
-        return df
-    except Exception: return pd.DataFrame(columns=FINAL_COLUMNS)
+    df['Date'] = df['Date'].apply(fix_legacy_date)
+    df['Date'] = df['Date'].apply(normalize_date)
+    
+    df = df.reindex(columns=FINAL_COLUMNS)
+    
+    numeric_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+    
+    df['IsExpense'] = pd.to_numeric(df['IsExpense'], errors='coerce').fillna(0).astype(int)
+    df['Note'] = df['Note'].fillna("").astype(str)
+    
+    df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
+    return df
 
 ### ⚙️[Logic: DB Load All] 모든 여행 가계부 로드 (조회 전용)
 def load_all_trips_data():
@@ -390,7 +401,6 @@ def load_all_trips_data():
                 df_t = conn.read(worksheet=config['sheet'], ttl="0s")
                 if df_t is None or df_t.empty: continue
                 
-                # [Modified] 여행 이름 정보 추가
                 df_t['TripName'] = trip_name 
                 
                 first_node_name = list(config["nodes"].keys())[0]
@@ -423,12 +433,10 @@ def recalculate_entire_ledger(df):
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
         
-        # [Modified] 매칭 정확도를 높이기 위해 EXPENSE_CATS의 모든 항목에서도 공백을 제거하고 비교
         clean_expense_cats = [c.strip() for c in EXPENSE_CATS]
         is_exp = 1 if cat in clean_expense_cats and cat not in['환불', '보증금', '재환전', '상환'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
         
-        # [Modified] '상환'도 인벤토리 차감(Deductible) 대상에 포함 (실제 돈이 나가므로)
         is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
         
         rate = temp_df.at[i, 'AppliedRate'] 
@@ -437,33 +445,23 @@ def recalculate_entire_ledger(df):
         if cat in['충전', '환전', '입금', '직접환전']:
             if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
             
-            # [Modified] 자산 분류 로직
-            if cat == '충전':
-                final_dest_cls = "PREPAID"
-            elif cat in ['환전', '직접환전']:
-                final_dest_cls = "CASH"
-            else:
-                final_dest_cls = get_asset_class(desc + method)
+            if cat == '충전': final_dest_cls = "PREPAID"
+            elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
+            else: final_dest_cls = get_asset_class(desc + method)
 
             target = f"트래블로그({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})"
             
             if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
             
-            # [Modified] 예산(c_budget) 합산 조건 강화
-            # 카테고리가 '충전'이거나 결제수단이 '국내자산'이면 예산으로 합산
             if asset_cls == "DOMESTIC" or cat == '충전': 
                 c_budget += qty if curr == 'KRW' else qty * rate
         
-             
         elif cat == '환불':
-            # [Modified] 보증금 환율 자동 계승 엔진 (Dan's Constitution Rule)
             if curr != 'KRW' and (pd.isna(rate) or rate <= 1.0):
                 inherited_rate = None
-                # 현재 행(i)부터 역방향으로 가장 최근의 '보증금' 데이터 탐색
                 for j in range(i - 1, -1, -1):
                     prev_cat = str(temp_df.at[j, 'Category']).strip()
                     prev_curr = str(temp_df.at[j, 'Currency']).strip()
-                    # 같은 통화의 보증금 항목을 찾으면 환율을 계승
                     if prev_cat == '보증금' and prev_curr == curr:
                         inherited_rate = temp_df.at[j, 'AppliedRate']
                         break
@@ -471,8 +469,7 @@ def recalculate_entire_ledger(df):
                 if inherited_rate and inherited_rate > 0:
                     rate = inherited_rate
                     temp_df.at[i, 'Note'] = f"Inherited Deposit Rate: {rate:.9f}"
-                else:
-                    rate = get_default_rate(curr)
+                else: rate = get_default_rate(curr)
             
             if asset_cls == "DOMESTIC": c_budget -= qty if curr == 'KRW' else qty * rate 
             else:
@@ -509,16 +506,12 @@ def recalculate_entire_ledger(df):
                 c_budget += qty if curr == 'KRW' else qty * rate
                 rate = 1.0 if curr == 'KRW' else rate
             elif curr != 'KRW':
-                # [Added/Modified] 외상(CREDIT) 자산일 경우 물리적 주머니를 건드리지 않음
                 if asset_cls == "CREDIT":
-                    # [Modified] 외상은 인벤토리를 타지 않으므로 가중평균환율(WAR)을 적용해 평단을 맞춤
                     rate = get_WAR(curr)
                     temp_df.at[i, 'Note'] = "Credit (Debt Generated)"
                 else:
                     target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                     temp_qty = qty; total_cost_krw = 0.0; decomposed =[]
-
-
                     
                     if target in inv_batches:
                         for batch in inv_batches[target]:
@@ -527,12 +520,10 @@ def recalculate_entire_ledger(df):
                             take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                             total_cost_krw += take * batch['rate']
                             
-                            # [Modified] VND/PHP/HUF는 환율 4자리, 금액은 정수(콤마) 표시
                             r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
                             q_fmt = ",.0f" if curr in ["VND", "HUF"] else ",.2f"
                             decomposed.append(f"{take:{q_fmt}}@{batch['rate']:{r_prec}}")
 
-                    # [Modified] 부족분(자동충전) 발생 시에도 동일 포맷 적용
                     if temp_qty > 0:
                         fallback_r = get_WAR(curr)
                         total_cost_krw += temp_qty * fallback_r
@@ -558,8 +549,7 @@ def recalculate_entire_ledger(df):
     return temp_df
 
 ### ⚙️[Logic: DB Save] 구글 시트 동기화
-# [Modified] 저장할 때는 최신 데이터를 반영해야 하므로 캐시를 즉시 삭제
-# [Modified] 데이터 보존 프로토콜이 적용된 안전한 저장 로직
+# [Modified] 데이터 보존 프로토콜이 적용된 안전한 저장 로직 (Vault Guard)
 def save_data(df, metrics=None):
     if df is None or df.empty: 
         st.error("🚨 저장하려는 데이터가 비어있습니다. 데이터 보호를 위해 저장을 중단합니다.")
@@ -568,14 +558,16 @@ def save_data(df, metrics=None):
     # 1. 저장 전 현재 시트의 전체 데이터를 다시 한번 안전하게 읽어옴
     try:
         existing_df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
-    except:
-        existing_df = pd.DataFrame(columns=FINAL_COLUMNS)
-    
-    # 2. 만약 기존 데이터가 있는데 읽어온 데이터가 너무 작다면 경고 (안전장치)
-    # 기존 데이터가 10건인데 1건만 저장하려 한다면 위험하다고 판단
-    if existing_df is not None and len(existing_df) > 5 and len(df) < len(existing_df) - 5:
-        st.warning(f"⚠️ 데이터 급감 감지! (기존 {len(existing_df)}건 -> 저장시 {len(df)}건)")
-        if not st.checkbox("데이터 삭제가 확실합니까?"):
+    except Exception as e:
+        # 안전장치용 읽기조차 실패하면 즉시 저장 강제 차단
+        st.error(f"🚨 클라우드 상태 확인 실패! 덮어쓰기 참사를 막기 위해 저장을 차단합니다. ({e})")
+        return False
+
+    # 2. 치명적인 Wipe(초기화 덮어쓰기) 버그 완벽 차단 로직 (Vault Guard)
+    if existing_df is not None and len(existing_df) > 5:
+        if len(df) <= 3:
+            st.error(f"🚨 **치명적 데이터 증발(Wipe) 시도 차단됨!** (클라우드: {len(existing_df)}건 -> 저장시도: {len(df)}건)")
+            st.info("💡 과거의 빈 캐시 상태에서 새 데이터 1~2건만 전체 덮어쓰기 되려는 현상을 막았습니다. 브라우저를 새로고침 후 다시 시도하세요.")
             return False
 
     # 3. 로직 재계산
@@ -589,6 +581,13 @@ def save_data(df, metrics=None):
     except Exception as e:
         st.error(f"🚨 클라우드 저장 실패: {e}")
         return False
+
+# [Added] 캐시 충돌로 인한 덮어쓰기(Wipe) 방지용 전용 데이터 주입 함수 (Live Injection Protocol)
+def append_new_data(new_rows_df):
+    st.cache_data.clear() # 캐시를 강제로 비워 절대적으로 최신 클라우드 데이터를 가져오게 함
+    latest_df = load_data(ACTIVE_SHEET)
+    merged_df = pd.concat([latest_df, new_rows_df], ignore_index=True)
+    return save_data(merged_df)
         
 ledger_df = load_data(ACTIVE_SHEET)
 
@@ -780,7 +779,7 @@ with tab_in:
         IN_CURR = IN_CFG["currency"]
         IN_MULTI = IN_CFG["multiplier"]
     with c_mode:
-        ### 🎛️ [GUI: Component] 기록 모드 선택기 (출입국 삭제됨)
+        ### 🎛️ [GUI: Component] 기록 모드 선택기
         mode = st.radio("기록 모드 선택",["일반 지출", "🛫 항공권(특수)", "🏨 호텔(특수)", "자산 이동", "환불(취소)"], horizontal=True, key="mode_radio", label_visibility="collapsed")
     
     ### 🎛️ [GUI: Component] 날짜 입력
@@ -797,7 +796,6 @@ with tab_in:
         cat = st.radio("항목 선택", EXPENSE_CATS, index=def_index, horizontal=True, key="exp_cat")
         st.session_state.last_cat_name = cat
         
-        # [Fixed] 안전한 메모칸 초기화 로직
         if st.session_state.get('clear_exp_desc', False):
             st.session_state.exp_desc = ""
             st.session_state.clear_exp_desc = False
@@ -806,7 +804,6 @@ with tab_in:
         col_desc, col_receipt = st.columns([3, 1])
         
         with col_receipt: 
-            # [Modified] 다중 파일 업로드 허용 (accept_multiple_files=True)
             uploaded_files = st.file_uploader("📸 영수증 첨부 (다중 가능)", type=['png', 'jpg', 'jpeg'], key="exp_receipt", accept_multiple_files=True)
             
             if uploaded_files:
@@ -814,11 +811,9 @@ with tab_in:
                     with st.spinner(f"AI가 {len(uploaded_files)}장의 사진을 분석 중..."):
                         all_raw_texts = []
                         for file in uploaded_files:
-                            # 각 사진에서 텍스트 추출 (눈)
                             raw_text = extract_text_from_vision_api(file.getvalue())
                             all_raw_texts.append(raw_text)
                         
-                        # 모든 텍스트를 하나로 합쳐서 AI 요약 (뇌)
                         combined_text = "\n---\n".join(all_raw_texts)
                         smart_text = summarize_receipt_with_gemini(combined_text)
                         
@@ -832,13 +827,10 @@ with tab_in:
         ### 🎨 [GUI: Layout] 통화/수단/게이트웨이
         col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
         with col_m1: 
-            ### 🎛️[GUI: Component] 통화 선택
             curr_opts =[IN_CURR, "KRW", "USD"] +[c for c in available_currs if c not in[IN_CURR, "KRW", "USD"]]
             curr = st.selectbox("통화", curr_opts, key="exp_curr")
         with col_m2:
-            ### 🎛️ [GUI: Component] 결제 자산 수단
             if curr != "KRW":
-                # [Modified] 현금, 카드 외에 '호텔외상' 옵션을 동적으로 추가
                 met_options = [f"현금({curr})", f"트래블로그({curr})", f"호텔외상({curr})", "원화계좌(한국)", "원화계좌(현지)"]
             else:
                 met_options = ["원화계좌(한국)", "원화계좌(현지)"]
@@ -846,7 +838,6 @@ with tab_in:
             met = st.selectbox("결제 자산(Asset)", met_options, index=0, key="exp_met")
             
         with col_m3:
-            ### 🎛️ [GUI: Component] 게이트웨이(결제플랫폼) 선택
             harvested_tags = set()
             if not ledger_df.empty:
                 extracted = ledger_df['Description'].str.extractall(r'\[(.*?)\]')
@@ -862,13 +853,11 @@ with tab_in:
         ### 🎨[GUI: Layout] 금액 및 환율 설정 영역
         col_a1, col_a2 = st.columns(2)
         with col_a1:
-            ### 🎛️ [GUI: Component] 금액 입력
             if curr == "KRW" or (curr == IN_CURR and IN_MULTI == 100):
                 amt = st.number_input(f"금액 ({curr})", min_value=0, step=1000 if curr != "KRW" else 1, format="%d", key="exp_amt_int")
             else:
                 amt = st.number_input(f"금액 ({curr})", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
         with col_a2:
-            ### 🎛️ [GUI: Component] 환율 조율 (FIFO 자동 표시)
             if curr != "KRW" and amt > 0:
                 calc_rate = auto_calc_fifo_rate(amt, met, curr)
                 st.caption(f"💡 {curr} 인벤토리 계산 환율: **{calc_rate:.5f}**")
@@ -877,7 +866,6 @@ with tab_in:
             
         ### 🎛️ [GUI: Component] 최종 기록 버튼 및 ⚙️[Logic: DB Save]
         if st.button("🚀 지출 기록하기", use_container_width=True):
-            # [Added] 다중 URL 처리 로직
             final_receipt_urls = ""
             if uploaded_files:
                 with st.spinner("📸 모든 영수증을 클라우드에 보관 중..."):
@@ -885,7 +873,7 @@ with tab_in:
                     for file in uploaded_files:
                         u = upload_image_to_imgbb(file)
                         if u: url_list.append(u)
-                    final_receipt_urls = ",".join(url_list) # 쉼표로 구분하여 저장
+                    final_receipt_urls = ",".join(url_list)
             
             final_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
             new_row = pd.DataFrame([{
@@ -899,9 +887,10 @@ with tab_in:
                 'IsExpense': 1,
                 'AppliedRate': cr_final,
                 'Note': '',
-                'Receipt_URL': final_receipt_urls # [Modified] 통합된 URL 저장
+                'Receipt_URL': final_receipt_urls
             }])
-            if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): 
+            # [Modified] Live Injection 적용
+            if append_new_data(new_row): 
                 st.session_state.clear_exp_desc = True
                 st.rerun()
 
@@ -911,13 +900,11 @@ with tab_in:
     elif mode == "🛫 항공권(특수)":
         st.subheader("✈️ 항공권 및 스케줄 통합 기록")
         
-        # 1층: 기본 정보 (왼쪽에서 오른쪽으로 1, 2, 3 순서)
         c1, c2, c3 = st.columns(3)
         with c1: f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 트립닷컴")
         with c2: f_carrier = st.text_input("2. 항공사", placeholder="예: 비엣젯")
         with c3: f_route = st.text_input("3. 노선", placeholder="예: 부산-푸꾸옥")
 
-        # 2층: 출국 및 입국 스케줄
         c4, c5 = st.columns(2)
         with c4:
             st.info("🛫 출국 스케줄")
@@ -928,13 +915,11 @@ with tab_in:
             f_ret_info = st.text_input("6. 귀국편 정보", placeholder="예: VJ968, 23:10 - 06:40 (+1)")
             f_ret_date = st.date_input("7. 입국 날짜", value=sel_date + timedelta(days=7))
 
-        # 3층: 수화물 및 결제수단
         c6, c7, c8 = st.columns([1, 2, 1])
         with c6: f_baggage = st.selectbox("8. 위탁수화물", ["포함", "미포함", "일부포함"])
         with c7: f_bag_memo = st.text_input("9. 수화물 상세 메모", placeholder="예: 귀국편 20kg 추가")
         with c8: f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "트래블로그(VND)", "현대카드"])
 
-        # 4층: 금액 및 환율 (한 줄로 배치)
         st.divider()
         c9, c10, c11, c12 = st.columns([1, 2, 1, 1])
         with c9: f_curr = st.selectbox("11. 통화", ["KRW", "VND", "USD", "PHP"])
@@ -946,21 +931,19 @@ with tab_in:
             if not f_gw or not f_route:
                 st.warning("결제 플랫폼과 노선 정보는 필수입니다."); st.stop()
             
-            # [Refined] 결제수단 이름 정제 (예: 네이버페이(원화고정) -> 네이버페이)
             clean_asset = f_asset.split('(')[0].strip()
             
-            # 1. 항공권 메인 기록 (데이터 누락 방지)
             full_desc = f"[{f_gw}+{clean_asset}] {f_route}({f_carrier}) | 출국:{f_dep_info} | 귀국:{f_ret_info} | 수화물:{f_baggage}({f_bag_memo})"
             flight_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '항공권', 'Description': full_desc, 'Currency': f_curr, 'Amount': f_amt, 'PaymentMethod': f_asset, 'IsExpense': 1, 'AppliedRate': f_rate, 'Note': f"수수료:{f_fee}원" if f_fee > 0 else ""}])
             
-            # 2. 출입국 일정 자동 기록 (정보 보존)
             dep_desc = f"🛫 {f_route} 출국 ({f_dep_info})"
             arr_desc = f"🛬 {f_route} 입국 ({f_ret_info})"
             
             dep_row = pd.DataFrame([{'Date': f_dep_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '출국', 'Description': dep_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
             arr_row = pd.DataFrame([{'Date': f_ret_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '입국', 'Description': arr_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
             
-            if save_data(pd.concat([ledger_df, flight_row, dep_row, arr_row], ignore_index=True)):
+            # [Modified] Live Injection 적용
+            if append_new_data(pd.concat([flight_row, dep_row, arr_row], ignore_index=True)):
                 st.success("항공권과 출입국 일정이 모두 기록되었습니다!"); time.sleep(1); st.rerun()
                 
     # ------------------------------------------------------------------
@@ -990,18 +973,17 @@ with tab_in:
             if not h_gw: st.warning("결제 플랫폼을 입력하세요."); st.stop()
             full_desc = f"[{h_gw}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': h_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else ""}])
-            if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
+            # [Modified] Live Injection 적용
+            if append_new_data(new_row): st.rerun()
                 
     # ------------------------------------------------------------------
     #[Mode 2: 자산 이동 및 환전]
     # ------------------------------------------------------------------
     elif mode == "자산 이동":
         st.subheader("🔁 자산 이동 및 환전")
-        ### 🎛️[GUI: Component] 자산 이동 유형
         ty = st.selectbox("유형",["직접환전 (원화계좌 -> 지폐)", "충전 (원화계좌 -> 카드)", "ATM출금 (카드 -> 지폐)", "재환전 (외화 -> 원화계좌)"], key="tr_type")
         c1, c2 = st.columns(2)
         
-        #[재환전 (외화 매도) 프로세스]
         if "재환전" in ty:
             with c1:
                 curr_opts_tr =[c for c in available_currs if c not in ["KRW"]]
@@ -1021,21 +1003,20 @@ with tab_in:
                         elif fx_diff > 1: st.success(f"📈 환차익(이익) 발생: {fx_diff:,.0f} 원")
                         else: st.success("⚖️ 환차손익 없음")
                         
-            ### 🎛️ [GUI: Component] 재환전 기록 버튼
             if st.button("🔄 재환전 실행 (환차손익 분할기록)", use_container_width=True):
                 applied_sell_rate = rcv_krw / s_amt if s_amt > 0 else 0
                 main_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '재환전', 'Description': f"남은 {curr_tr} 재환전 (외화매도)", 'Currency': curr_tr, 'Amount': s_amt, 'PaymentMethod': source_met, 'IsExpense': 0, 'AppliedRate': applied_sell_rate, 'Note': f"원화 {rcv_krw}원 입금", 'Receipt_URL': ''}])
-                final_entry = pd.concat([ledger_df, main_row], ignore_index=True)
                 
+                # [Modified] 리스트 결합 및 Live Injection 적용
+                new_rows = [main_row]
                 fx_diff = rcv_krw - (s_amt * auto_calc_fifo_rate(s_amt, source_met, curr_tr)) if s_amt > 0 else 0
                 if abs(fx_diff) >= 1:
                     fx_amt = -abs(fx_diff) if fx_diff > 0 else abs(fx_diff)
                     desc_fx = f"[{curr_tr} 재환전] 환차익" if fx_diff > 0 else f"[{curr_tr} 재환전] 환차손"
                     fx_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '수수료', 'Description': desc_fx, 'Currency': 'KRW', 'Amount': fx_amt, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': 'Auto-FX Diff', 'Receipt_URL': ''}])
-                    final_entry = pd.concat([final_entry, fx_row], ignore_index=True)
-                if save_data(final_entry): st.rerun()
+                    new_rows.append(fx_row)
+                if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
                 
-        #[일반 자산 이동 (충전, 환전, ATM)]
         else:
             with c1:
                 curr_opts_tr =[IN_CURR, "USD"] +[c for c in available_currs if c not in[IN_CURR, "USD", "KRW"]]
@@ -1048,7 +1029,6 @@ with tab_in:
                 if "ATM" in ty:
                     inherited_r = auto_calc_fifo_rate(t_amt, f"트래블로그({curr_tr})", curr_tr)
                     st.info(f"💳 카드 재고 계승 환율: **{inherited_r:.5f}**")
-                    # 원금 입력칸을 삭제하고, 계산된 결과를 정보 메시지로 보여줍니다.
                     st.success(f"💰 인출로 소모되는 원화 가치: **{(t_amt * inherited_r):,.0f} 원**")
                     applied_tr_rate = inherited_r
                 else:
@@ -1060,24 +1040,24 @@ with tab_in:
                 else:
                     fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0.0, step=1.0, format="%.2f", key="tr_fee_flt")
                     
-            ### 🎛️ [GUI: Component] 이동 기록 버튼
             if st.button("🔄 이동 실행", use_container_width=True):
                 dest = f"트래블로그({curr_tr})" if "카드" in ty else f"현금({curr_tr})"
                 source = "원화계좌(한국)" if "원화계좌" in ty else f"트래블로그({curr_tr})"
                 main_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': ty.split(" ")[0], 'Description': f"{ty.split(' ')[0]} (-> {dest})", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': source, 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': '', 'Receipt_URL': ''}])
-                final_entry = pd.concat([ledger_df, main_row], ignore_index=True)
+                
+                # [Modified] 리스트 결합 및 Live Injection 적용
+                new_rows = [main_row]
                 if fee_amt > 0:
                     fee_rate = auto_calc_fifo_rate(fee_amt, f"트래블로그({curr_tr})", curr_tr)
                     fee_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': "수수료", 'Description': f"{ty.split(' ')[0]} 수수료", 'Currency': curr_tr, 'Amount': fee_amt, 'PaymentMethod': f"트래블로그({curr_tr})", 'IsExpense': 1, 'AppliedRate': fee_rate, 'Note': '', 'Receipt_URL': ''}])
-                    final_entry = pd.concat([final_entry, fee_row], ignore_index=True)
-                if save_data(final_entry): st.rerun()
+                    new_rows.append(fee_row)
+                if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
 
     # ------------------------------------------------------------------
     #[Mode 3: 환불 및 취소 롤백]
     # ------------------------------------------------------------------
     elif mode == "환불(취소)":
         st.subheader("🔙 결제 취소 및 환불 (Rollback)")
-        ### 🎨 [GUI: Layout] 환불 정보 입력부
         col_r1, col_r2 = st.columns(2)
         with col_r1:
             curr_opts_rf =[IN_CURR, "KRW", "USD"] +[c for c in available_currs if c not in[IN_CURR, "KRW", "USD"]]
@@ -1092,10 +1072,10 @@ with tab_in:
             r_rate = st.number_input("과거 결제 시 적용됐던 환율", value=(1.0 if r_curr=="KRW" else get_default_rate(r_curr)), format="%.5f", key="rf_rate")
             r_desc = st.text_input("취소 내역 메모", placeholder="예: 호텔 보증금 반환", key="rf_desc")
             
-        ### 🎛️[GUI: Component] 환불 롤백 실행 버튼
         if st.button("🔙 환불 인벤토리 롤백 실행", use_container_width=True):
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
-            if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
+            # [Modified] Live Injection 적용
+            if append_new_data(new_row): st.rerun()
 
     # ------------------------------------------------------------------
     #[Mode 4: 출입국 일정 기록]
@@ -1106,7 +1086,8 @@ with tab_in:
         io_desc = st.text_input("내용 (메모)", placeholder="편명, 시간 등", key="io_desc_input")
         if st.button("🚀 일정 기록 완료", use_container_width=True):
             new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': io_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
-            if save_data(pd.concat([ledger_df, new_row], ignore_index=True)): st.rerun()
+            # [Modified] Live Injection 적용
+            if append_new_data(new_row): st.rerun()
 
     # [Added] 새 여행지 개설 UI (중복 제거된 단일 블록)
     st.markdown("<br><br>", unsafe_allow_html=True)
