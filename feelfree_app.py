@@ -330,9 +330,14 @@ def load_data(sheet_name):
         # 인자로 받은 sheet_name을 사용하여 읽기
         df = conn.read(worksheet=sheet_name, ttl="0s")
     except Exception as e:
-        # [Modified] 에러 발생 시 빈 데이터프레임 반환 금지 및 시스템 강제 중단
-        st.error(f"🚨 **치명적 오류:** 클라우드 데이터베이스 연결에 실패했습니다. 데이터 덮어쓰기를 막기 위해 시스템을 즉시 중단합니다. ({e})")
-        st.stop()
+        err_msg = str(e)
+        # [Modified] 429 할당량 초과 에러 시 부드러운 안내 메시지로 전환
+        if "429" in err_msg or "Quota" in err_msg or "RATE_LIMIT_EXCEEDED" in err_msg:
+            st.error("🚨 **[구글 통신량 한도 초과]** 단기간에 많은 조작이 발생하여 구글 시트 1분 API 요청 한도(60회)를 초과했습니다. 데이터는 안전합니다. 약 1분 정도 기다리신 후 새로고침 해주세요.")
+            st.stop()
+        else:
+            st.error(f"🚨 **치명적 오류:** 클라우드 연결에 실패했습니다. 데이터 덮어쓰기를 막기 위해 시스템을 즉시 중단합니다. ({e})")
+            st.stop()
         
     if df is None or df.empty: 
         df_init = pd.DataFrame(columns=FINAL_COLUMNS)
@@ -383,9 +388,11 @@ def load_data(sheet_name):
     return df
 
 ### ⚙️[Logic: DB Load All] 모든 여행 가계부 로드 (조회 전용)
+# [Added] 429 쿼터 한도 초과 에러를 박멸하기 위한 10분 메모리 쉴드(Cache)
+@st.cache_data(ttl=600)
 def load_all_trips_data():
     all_dfs =[]
-    with st.spinner("🌍 모든 여행 기록을 불러오는 중..."):
+    with st.spinner("🌍 모든 여행 기록을 불러오는 중... (한 번 불러오면 10분간 보관됩니다)"):
         for trip_name, config in TRIP_CONFIGS.items():
             try:
                 df_t = conn.read(worksheet=config['sheet'], ttl="0s")
