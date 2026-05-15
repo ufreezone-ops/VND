@@ -559,23 +559,37 @@ def recalculate_entire_ledger(df):
 
 ### ⚙️[Logic: DB Save] 구글 시트 동기화
 # [Modified] 저장할 때는 최신 데이터를 반영해야 하므로 캐시를 즉시 삭제
+# [Modified] 데이터 보존 프로토콜이 적용된 안전한 저장 로직
 def save_data(df, metrics=None):
-    if df is None or len(df) == 0: return False
-    # 저장 직전 캐시 삭제
-    st.cache_data.clear() 
-    with st.status("클라우드 동기화 중...", expanded=False):
-        try:
-            final_df = recalculate_entire_ledger(df)
-            conn.update(worksheet=ACTIVE_SHEET, data=final_df.reindex(columns=FINAL_COLUMNS))
-            if metrics:
-                current_time_str = datetime.now(st.session_state.current_tz).strftime("%H:%M")
-                summary = pd.DataFrame({"항목":["🏦 예산(KRW)", f"💳 카드({TRAVEL_CURRENCY})", f"💵 현금({TRAVEL_CURRENCY})", "🕒 업데이트"], "수치":[f"{metrics[0]:,.0f}", f"{metrics[1]:,.0f}", f"{metrics[2]:,.0f}", current_time_str]})
-                try: conn.update(worksheet="summary", data=summary)
-                except: pass
-            st.cache_data.clear(); return True
-        except Exception as e:
-            st.error(f"Cloud 저장 실패. 해당 탭({ACTIVE_SHEET})이 구글 시트에 존재하는지 확인하세요. 에러: {e}"); return False
+    if df is None or df.empty: 
+        st.error("🚨 저장하려는 데이터가 비어있습니다. 데이터 보호를 위해 저장을 중단합니다.")
+        return False
+    
+    # 1. 저장 전 현재 시트의 전체 데이터를 다시 한번 안전하게 읽어옴
+    try:
+        existing_df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
+    except:
+        existing_df = pd.DataFrame(columns=FINAL_COLUMNS)
+    
+    # 2. 만약 기존 데이터가 있는데 읽어온 데이터가 너무 작다면 경고 (안전장치)
+    # 기존 데이터가 10건인데 1건만 저장하려 한다면 위험하다고 판단
+    if existing_df is not None and len(existing_df) > 5 and len(df) < len(existing_df) - 5:
+        st.warning(f"⚠️ 데이터 급감 감지! (기존 {len(existing_df)}건 -> 저장시 {len(df)}건)")
+        if not st.checkbox("데이터 삭제가 확실합니까?"):
+            return False
 
+    # 3. 로직 재계산
+    final_df = recalculate_entire_ledger(df)
+    
+    # 4. 강제 덮어쓰기 대신, 최종 확인된 final_df 전체를 업데이트
+    try:
+        conn.update(worksheet=ACTIVE_SHEET, data=final_df.reindex(columns=FINAL_COLUMNS))
+        st.cache_data.clear() # 캐시 초기화
+        return True
+    except Exception as e:
+        st.error(f"🚨 클라우드 저장 실패: {e}")
+        return False
+        
 ledger_df = load_data(ACTIVE_SHEET)
 
 # ==============================================================================
