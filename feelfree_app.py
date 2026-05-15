@@ -325,23 +325,13 @@ def normalize_date(d_str):
 ### ⚙️ [Logic: DB Load] GSheet 데이터 로드 및 클리닝
 # [Modified] 2분 동안 현재 장부 데이터를 메모리에 보관
 @st.cache_data(ttl=120)
-# [Modified] 버전 및 업데이트 로그 v26.05.15.001
-VERSION = "v26.05.15.001"
-
-UPDATE_LOG_TEXT = """* `[Fixed]` 치명적 버그 해결(Wipe Anomaly): 구글 시트 일괄 편집 직후, 앱에서 새 내역을 추가할 때 전체 데이터가 1줄로 덮어씌워지며 증발하는 현상을 'Live Injection Protocol' 및 강력한 'Vault Guard'를 통해 완벽 차단."""
-
-# ... (버전 로그 업데이트 함수 등 기존 코드 유지) ...
-
-### ⚙️ [Logic: DB Load] GSheet 데이터 로드 및 클리닝
-# [Modified] 2분 동안 현재 장부 데이터를 메모리에 보관
-@st.cache_data(ttl=120)
 def load_data(sheet_name):
     try:
         # 인자로 받은 sheet_name을 사용하여 읽기
         df = conn.read(worksheet=sheet_name, ttl="0s")
     except Exception as e:
-        # [Modified] 에러 발생 시 빈 데이터프레임 반환 금지 및 시스템 강제 중단 (데이터 증발 원천 차단)
-        st.error(f"🚨 **치명적 오류:** 클라우드 데이터베이스 연결에 실패했습니다. 데이터를 덮어쓰는 대참사를 막기 위해 시스템을 즉시 중단합니다. ({e})")
+        # [Modified] 에러 발생 시 빈 데이터프레임 반환 금지 및 시스템 강제 중단
+        st.error(f"🚨 **치명적 오류:** 클라우드 데이터베이스 연결에 실패했습니다. 데이터 덮어쓰기를 막기 위해 시스템을 즉시 중단합니다. ({e})")
         st.stop()
         
     if df is None or df.empty: 
@@ -351,7 +341,7 @@ def load_data(sheet_name):
             conn.update(worksheet=ACTIVE_SHEET, data=df_init)
             st.info(f"✨ '{ACTIVE_SHEET}' 탭을 GTL 표준 양식으로 초기화했습니다.")
         except:
-            pass # 권한 이슈 등으로 업데이트 실패 시 그냥 빈 DF 반환
+            pass 
         return df_init
 
     year_match = re.search(r'\((\d{4})\)', st.session_state.current_trip)
@@ -555,36 +545,31 @@ def save_data(df, metrics=None):
         st.error("🚨 저장하려는 데이터가 비어있습니다. 데이터 보호를 위해 저장을 중단합니다.")
         return False
     
-    # 1. 저장 전 현재 시트의 전체 데이터를 다시 한번 안전하게 읽어옴
     try:
         existing_df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
     except Exception as e:
-        # 안전장치용 읽기조차 실패하면 즉시 저장 강제 차단
         st.error(f"🚨 클라우드 상태 확인 실패! 덮어쓰기 참사를 막기 위해 저장을 차단합니다. ({e})")
         return False
 
-    # 2. 치명적인 Wipe(초기화 덮어쓰기) 버그 완벽 차단 로직 (Vault Guard)
     if existing_df is not None and len(existing_df) > 5:
         if len(df) <= 3:
             st.error(f"🚨 **치명적 데이터 증발(Wipe) 시도 차단됨!** (클라우드: {len(existing_df)}건 -> 저장시도: {len(df)}건)")
             st.info("💡 과거의 빈 캐시 상태에서 새 데이터 1~2건만 전체 덮어쓰기 되려는 현상을 막았습니다. 브라우저를 새로고침 후 다시 시도하세요.")
             return False
 
-    # 3. 로직 재계산
     final_df = recalculate_entire_ledger(df)
     
-    # 4. 강제 덮어쓰기 대신, 최종 확인된 final_df 전체를 업데이트
     try:
         conn.update(worksheet=ACTIVE_SHEET, data=final_df.reindex(columns=FINAL_COLUMNS))
-        st.cache_data.clear() # 캐시 초기화
+        st.cache_data.clear() 
         return True
     except Exception as e:
         st.error(f"🚨 클라우드 저장 실패: {e}")
         return False
 
-# [Added] 캐시 충돌로 인한 덮어쓰기(Wipe) 방지용 전용 데이터 주입 함수 (Live Injection Protocol)
+# [Added] 캐시 충돌로 인한 덮어쓰기 방지용 전용 데이터 주입 함수 (Live Injection)
 def append_new_data(new_rows_df):
-    st.cache_data.clear() # 캐시를 강제로 비워 절대적으로 최신 클라우드 데이터를 가져오게 함
+    st.cache_data.clear() 
     latest_df = load_data(ACTIVE_SHEET)
     merged_df = pd.concat([latest_df, new_rows_df], ignore_index=True)
     return save_data(merged_df)
