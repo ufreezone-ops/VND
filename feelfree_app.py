@@ -36,11 +36,11 @@ BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 CONFIG_SHEET = "_GTL_CONFIG_"
 
-# [Modified] 버전 및 업데이트 로그 v26.05.16.002
-VERSION = "v26.05.16.002"
+# [Modified] 버전 및 업데이트 로그 v26.05.16.005
+VERSION = "v26.05.16.005"
 
-UPDATE_LOG_TEXT = """* `[Fixed]` 대소문자 표기 충돌로 인해 특정 내역(직접환전 등)에서 잔고가 반영되지 않던 버그 완벽 해결(대문자 강제 정규화).
-* `[Fixed]` 전체 캐시 초기화 대신 정밀 타격(Smart Cache Clear) 방식과 백그라운드 지연 로딩(10m TTL)을 도입하여 구글 API 429(할당량 초과) 에러 원천 차단."""
+UPDATE_LOG_TEXT = """* `[Refactored]` 🧭 비교(SPI) 탭을 개별 여행에서 완전히 분리하여 '전체 여행 비교 모드'로 승격 (불필요한 데이터 호출 및 429 API 과부하 원천 차단).
+* `[Fixed]` SPI 모드: 예약이 취소되어 관제탑에 없는 국가(불가리아 등)의 잔여 지출이 강제로 1박으로 계산되어 나타나던 'Ghost Country' 버그 해결 (제외 필터 강화)."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
