@@ -600,11 +600,11 @@ def get_inventory_status(df):
                     take = min(temp_qty, batch['qty']); batch['qty'] -= take
                     inv_batches[target_to].append({'rate': batch['rate'], 'qty': take, 'initial': take}); temp_qty -= take
             
-            # [Fixed] 잔고 부족 시에도 무조건 현금 생성 보장
             if temp_qty > 0:
                 inv_batches[target_to].append({'rate': get_WAR(curr), 'qty': temp_qty, 'initial': temp_qty})
                 
-        elif (row['IsExpense'] == 1 or cat in['보증금', '재환전']) and curr != 'KRW':
+        # [Fixed] 잔고 차감 조건에 '상환'을 추가하여 유령 잔고 버그 완전 박멸
+        elif (row['IsExpense'] == 1 or cat in['보증금', '재환전', '상환']) and curr != 'KRW':
             if asset_cls != "DOMESTIC" and asset_cls != "CREDIT":
                 target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
