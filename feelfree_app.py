@@ -34,72 +34,53 @@ FINAL_COLUMNS = CORE_COLUMNS + SYSTEM_LOGIC_COLUMNS
 IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
-# [Added] 마스터 설정 시트 상수 (기존 BILLS 아래에 삽입)
 CONFIG_SHEET = "_GTL_CONFIG_"
 
-# [Modified] 10분 동안 여행 설정 정보를 메모리에 보관 (API 호출 절감)
-@st.cache_data(ttl=600)
-def get_trip_configs():
-    """구글 시트에서 모든 여행 설정 로드 (레거시 코드 제거 버전)"""
-    try:
-        cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-        if cfg_df is None or cfg_df.empty: 
-            raise ValueError("Config sheet is empty")
-    except Exception as e:
-        # [Refactored] 이제 긴 데이터 리스트 대신 안내 메시지만 출력합니다.
-        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}')을 로드할 수 없습니다.**")
-        st.info(f"💡 **해결 방법:** 구글 시트에 **'{CONFIG_SHEET}'** 탭이 있는지, 그리고 여행 설정 데이터가 들어있는지 확인해 주세요.")
-        st.stop()
-    
-    dynamic_configs = {}
-    for _, row in cfg_df.iterrows():
-        # [Modified] 카테고리 로딩 시 공백 제거 및 유효성 검사 강화
-        raw_cats = str(row['Categories']).replace("，", ",").split(",") # 전각 쉼표 대응
-        cats = [c.strip() for c in raw_cats if c.strip()]
-        
-        dynamic_configs[str(row['TripName'])] = {
-            "sheet": str(row['SheetName']),
-            "nodes": {str(row['MainCountry']).strip(): {
-                "currency": str(row['Currency']).strip(), 
-                "symbol": str(row['Symbol']).strip(), 
-                "timezone": int(row['Timezone']), 
-                "multiplier": int(row['Multiplier'])
-            }},
-            "cats": cats
-        }
-    return dynamic_configs
+# [Modified] 버전 및 업데이트 로그 v26.05.16.001
+VERSION = "v26.05.16.001"
 
-# [Modified] 버전 및 업데이트 로그 v26.05.14.004
-VERSION = "v26.05.14.004"
-
-UPDATE_LOG_TEXT = """* `[Added]` 관제탑(`_GTL_CONFIG_`)의 Travelers 및 Stay_Mapping 컬럼을 100% 신뢰하여 SPI에 직결.
-* `[Fixed]` 환불 금액이 SPI에서 삭감되지 않아 호텔 체감 비용이 왜곡되던 현상 해결 (Global Net-ifier 탑재)."""
+UPDATE_LOG_TEXT = """* `[Fixed]` 구글 API 429(할당량 초과) 발생 시 앱이 뻗지 않고 2~4초 대기 후 자동 재시도하는 'Auto-Retry' 엔진 탑재.
+* `[Fixed]` 카드 잔고가 없는 상태에서 ATM 출금을 기록할 경우 현금이 늘어나지 않고 공중분해되던 논리적 버그(고스트 출금) 완벽 해결."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def auto_update_log_to_gsheets():
-    try:
-        log_df = conn.read(worksheet="version_log", ttl="0s")
-        if log_df is None or log_df.empty: log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
-    except: log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
-    
-    if VERSION not in log_df['Version'].values:
-        new_log = pd.DataFrame([{"Version": VERSION, "Date": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"), "Log": UPDATE_LOG_TEXT}])
-        log_df = pd.concat([new_log, log_df], ignore_index=True)
-        try: conn.update(worksheet="version_log", data=log_df)
-        except: pass
+    for attempt in range(3):
+        try:
+            log_df = conn.read(worksheet="version_log", ttl="0s")
+            if log_df is None or log_df.empty: log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
+            if VERSION not in log_df['Version'].values:
+                new_log = pd.DataFrame([{"Version": VERSION, "Date": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"), "Log": UPDATE_LOG_TEXT}])
+                log_df = pd.concat([new_log, log_df], ignore_index=True)
+                conn.update(worksheet="version_log", data=log_df)
+            break
+        except Exception as e:
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+                time.sleep(2)
+                continue
+            break
+
 auto_update_log_to_gsheets()
 
-# [Modified] 10분 동안 여행 설정 정보를 메모리에 보관 (관제탑 데이터 직결)
+# [Modified] 10분 메모리 보관 및 429 에러 방어(Auto-Retry)가 적용된 동적 로더
 @st.cache_data(ttl=600)
 def get_trip_configs():
-    try:
-        cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-        if cfg_df is None or cfg_df.empty: 
-            raise ValueError("Config sheet is empty")
-    except Exception as e:
-        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}')을 로드할 수 없습니다.**")
-        st.info(f"💡 **해결 방법:** 구글 시트에 **'{CONFIG_SHEET}'** 탭이 있는지 확인해 주세요.")
+    cfg_df = None
+    for attempt in range(3):
+        try:
+            cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+            if cfg_df is not None and not cfg_df.empty:
+                break
+        except Exception as e:
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+                time.sleep(2.5) # 구글 쿼터 해제를 위해 2.5초 대기 후 재시도
+                continue
+            st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}') 로드 실패 (API 과부하).**")
+            st.info("💡 단기간에 많은 접속으로 구글 시트 요청 한도에 도달했습니다. 약 10초 후 새로고침 해주세요.")
+            st.stop()
+            
+    if cfg_df is None or cfg_df.empty:
+        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}')이 비어있습니다.**")
         st.stop()
     
     dynamic_configs = {}
@@ -107,7 +88,6 @@ def get_trip_configs():
         raw_cats = str(row['Categories']).replace("，", ",").split(",") 
         cats = [c.strip() for c in raw_cats if c.strip()]
         
-        # [Added] J열(Travelers) 및 K열(Stay_Mapping) 파싱
         travelers = int(row['Travelers']) if 'Travelers' in row and pd.notna(row['Travelers']) else 2
         stay_mapping = str(row['Stay_Mapping']).strip() if 'Stay_Mapping' in row and pd.notna(row['Stay_Mapping']) else ""
         
@@ -125,7 +105,6 @@ def get_trip_configs():
         }
     return dynamic_configs
 
-# 하드코딩된 TRIP_CONFIGS를 동적 로더 결과로 덮어쓰기
 TRIP_CONFIGS = get_trip_configs()
 
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
@@ -323,30 +302,24 @@ def normalize_date(d_str):
     return d_str
 
 ### ⚙️ [Logic: DB Load] GSheet 데이터 로드 및 클리닝
-# [Modified] 2분 동안 현재 장부 데이터를 메모리에 보관
 @st.cache_data(ttl=120)
 def load_data(sheet_name):
-    try:
-        # 인자로 받은 sheet_name을 사용하여 읽기
-        df = conn.read(worksheet=sheet_name, ttl="0s")
-    except Exception as e:
-        err_msg = str(e)
-        # [Modified] 429 할당량 초과 에러 시 부드러운 안내 메시지로 전환
-        if "429" in err_msg or "Quota" in err_msg or "RATE_LIMIT_EXCEEDED" in err_msg:
-            st.error("🚨 **[구글 통신량 한도 초과]** 단기간에 많은 조작이 발생하여 구글 시트 1분 API 요청 한도(60회)를 초과했습니다. 데이터는 안전합니다. 약 1분 정도 기다리신 후 새로고침 해주세요.")
-            st.stop()
-        else:
-            st.error(f"🚨 **치명적 오류:** 클라우드 연결에 실패했습니다. 데이터 덮어쓰기를 막기 위해 시스템을 즉시 중단합니다. ({e})")
+    df = None
+    for attempt in range(3):
+        try:
+            df = conn.read(worksheet=sheet_name, ttl="0s")
+            break
+        except Exception as e:
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+                time.sleep(2)
+                continue
+            st.error(f"🚨 **치명적 오류:** 클라우드 데이터베이스 연결에 실패했습니다. ({e})")
             st.stop()
         
     if df is None or df.empty: 
         df_init = pd.DataFrame(columns=FINAL_COLUMNS)
-        try:
-            # 텅 빈 시트에 14개 헤더를 강제로 주입합니다.
-            conn.update(worksheet=ACTIVE_SHEET, data=df_init)
-            st.info(f"✨ '{ACTIVE_SHEET}' 탭을 GTL 표준 양식으로 초기화했습니다.")
-        except:
-            pass 
+        try: conn.update(worksheet=ACTIVE_SHEET, data=df_init)
+        except: pass 
         return df_init
 
     year_match = re.search(r'\((\d{4})\)', st.session_state.current_trip)
@@ -383,30 +356,30 @@ def load_data(sheet_name):
     
     df['IsExpense'] = pd.to_numeric(df['IsExpense'], errors='coerce').fillna(0).astype(int)
     df['Note'] = df['Note'].fillna("").astype(str)
-    
     df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
     return df
 
 ### ⚙️[Logic: DB Load All] 모든 여행 가계부 로드 (조회 전용)
-# [Added] 429 쿼터 한도 초과 에러를 박멸하기 위한 10분 메모리 쉴드(Cache)
 @st.cache_data(ttl=600)
 def load_all_trips_data():
     all_dfs =[]
-    with st.spinner("🌍 모든 여행 기록을 불러오는 중... (한 번 불러오면 10분간 보관됩니다)"):
+    with st.spinner("🌍 모든 여행 기록을 불러오는 중..."):
         for trip_name, config in TRIP_CONFIGS.items():
-            try:
-                df_t = conn.read(worksheet=config['sheet'], ttl="0s")
-                if df_t is None or df_t.empty: continue
-                
-                df_t['TripName'] = trip_name 
-                
-                first_node_name = list(config["nodes"].keys())[0]
-                if 'Country' not in df_t.columns: df_t.insert(1, 'Country', first_node_name)
-                else:
-                    df_t['Country'] = df_t['Country'].astype(str).str.strip().fillna(first_node_name)
-                
-                all_dfs.append(df_t)
-            except: continue
+            for attempt in range(3):
+                try:
+                    df_t = conn.read(worksheet=config['sheet'], ttl="0s")
+                    if df_t is not None and not df_t.empty:
+                        df_t['TripName'] = trip_name 
+                        first_node_name = list(config["nodes"].keys())[0]
+                        if 'Country' not in df_t.columns: df_t.insert(1, 'Country', first_node_name)
+                        else: df_t['Country'] = df_t['Country'].astype(str).str.strip().fillna(first_node_name)
+                        all_dfs.append(df_t)
+                    break
+                except Exception as e:
+                    if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+                        time.sleep(1.5)
+                        continue
+                    break
     if not all_dfs: return pd.DataFrame(columns=FINAL_COLUMNS + ['TripName'])
     return pd.concat(all_dfs, ignore_index=True)
 
@@ -435,23 +408,18 @@ def recalculate_entire_ledger(df):
         temp_df.at[i, 'IsExpense'] = is_exp
         
         is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
-        
         rate = temp_df.at[i, 'AppliedRate'] 
         asset_cls = get_asset_class(method)
         
         if cat in['충전', '환전', '입금', '직접환전']:
             if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
-            
             if cat == '충전': final_dest_cls = "PREPAID"
             elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
             else: final_dest_cls = get_asset_class(desc + method)
 
             target = f"트래블로그({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})"
-            
             if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
-            
-            if asset_cls == "DOMESTIC" or cat == '충전': 
-                c_budget += qty if curr == 'KRW' else qty * rate
+            if asset_cls == "DOMESTIC" or cat == '충전': c_budget += qty if curr == 'KRW' else qty * rate
         
         elif cat == '환불':
             if curr != 'KRW' and (pd.isna(rate) or rate <= 1.0):
@@ -462,7 +430,6 @@ def recalculate_entire_ledger(df):
                     if prev_cat == '보증금' and prev_curr == curr:
                         inherited_rate = temp_df.at[j, 'AppliedRate']
                         break
-                
                 if inherited_rate and inherited_rate > 0:
                     rate = inherited_rate
                     temp_df.at[i, 'Note'] = f"Inherited Deposit Rate: {rate:.9f}"
@@ -481,9 +448,7 @@ def recalculate_entire_ledger(df):
                     for batch in inv_batches[target_from]:
                         if temp_qty <= 0: break
                         if batch['qty'] <= 0: continue
-                        take = min(temp_qty, batch['qty'])
-                        batch['qty'] -= take
-                        temp_qty -= take
+                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                 if pd.notna(rate) and rate > 0: c_budget -= qty * rate
         
         elif cat == 'ATM출금':
@@ -494,7 +459,15 @@ def recalculate_entire_ledger(df):
                     if temp_qty <= 0: break
                     if batch['qty'] <= 0: continue
                     take = min(temp_qty, batch['qty']); batch['qty'] -= take
-                    inv_batches[target_to].append({'rate': batch['rate'], 'qty': take}); total_inherited_krw += take * batch['rate']; temp_qty -= take
+                    inv_batches[target_to].append({'rate': batch['rate'], 'qty': take})
+                    total_inherited_krw += take * batch['rate']; temp_qty -= take
+            
+            # [Fixed] ATM 출금 시 카드 잔고가 모자라도 무조건 물리적 현금은 생성되도록 강제 보정
+            if temp_qty > 0:
+                fallback_r = get_WAR(curr)
+                inv_batches[target_to].append({'rate': fallback_r, 'qty': temp_qty})
+                total_inherited_krw += temp_qty * fallback_r
+                
             if qty > 0: rate = total_inherited_krw / qty if total_inherited_krw > 0 else get_default_rate(curr)
         
         elif is_deductible == 1:
@@ -516,7 +489,6 @@ def recalculate_entire_ledger(df):
                             if batch['qty'] <= 0: continue
                             take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                             total_cost_krw += take * batch['rate']
-                            
                             r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
                             q_fmt = ",.0f" if curr in ["VND", "HUF"] else ",.2f"
                             decomposed.append(f"{take:{q_fmt}}@{batch['rate']:{r_prec}}")
@@ -546,35 +518,42 @@ def recalculate_entire_ledger(df):
     return temp_df
 
 ### ⚙️[Logic: DB Save] 구글 시트 동기화
-# [Modified] 데이터 보존 프로토콜이 적용된 안전한 저장 로직 (Vault Guard)
 def save_data(df, metrics=None):
     if df is None or df.empty: 
         st.error("🚨 저장하려는 데이터가 비어있습니다. 데이터 보호를 위해 저장을 중단합니다.")
         return False
     
-    try:
-        existing_df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
-    except Exception as e:
-        st.error(f"🚨 클라우드 상태 확인 실패! 덮어쓰기 참사를 막기 위해 저장을 차단합니다. ({e})")
-        return False
+    existing_df = None
+    for attempt in range(3):
+        try:
+            existing_df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
+            break
+        except Exception as e:
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+                time.sleep(2)
+                continue
+            st.error(f"🚨 클라우드 상태 확인 실패! 덮어쓰기 참사를 막기 위해 저장을 차단합니다. ({e})")
+            return False
 
     if existing_df is not None and len(existing_df) > 5:
         if len(df) <= 3:
             st.error(f"🚨 **치명적 데이터 증발(Wipe) 시도 차단됨!** (클라우드: {len(existing_df)}건 -> 저장시도: {len(df)}건)")
-            st.info("💡 과거의 빈 캐시 상태에서 새 데이터 1~2건만 전체 덮어쓰기 되려는 현상을 막았습니다. 브라우저를 새로고침 후 다시 시도하세요.")
             return False
 
     final_df = recalculate_entire_ledger(df)
     
-    try:
-        conn.update(worksheet=ACTIVE_SHEET, data=final_df.reindex(columns=FINAL_COLUMNS))
-        st.cache_data.clear() 
-        return True
-    except Exception as e:
-        st.error(f"🚨 클라우드 저장 실패: {e}")
-        return False
+    for attempt in range(3):
+        try:
+            conn.update(worksheet=ACTIVE_SHEET, data=final_df.reindex(columns=FINAL_COLUMNS))
+            st.cache_data.clear() 
+            return True
+        except Exception as e:
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+                time.sleep(2.5)
+                continue
+            st.error(f"🚨 클라우드 저장 실패: {e}")
+            return False
 
-# [Added] 캐시 충돌로 인한 덮어쓰기 방지용 전용 데이터 주입 함수 (Live Injection)
 def append_new_data(new_rows_df):
     st.cache_data.clear() 
     latest_df = load_data(ACTIVE_SHEET)
@@ -612,8 +591,13 @@ def get_inventory_status(df):
                     if batch['qty'] <= 0: continue
                     take = min(temp_qty, batch['qty']); batch['qty'] -= take
                     inv_batches[target_to].append({'rate': batch['rate'], 'qty': take, 'initial': take}); temp_qty -= take
+            
+            # [Fixed] 잔고 부족 시에도 무조건 현금 생성 보장
+            if temp_qty > 0:
+                inv_batches[target_to].append({'rate': get_WAR(curr), 'qty': temp_qty, 'initial': temp_qty})
+                
         elif (row['IsExpense'] == 1 or cat in['보증금', '재환전']) and curr != 'KRW':
-            if asset_cls != "DOMESTIC":
+            if asset_cls != "DOMESTIC" and asset_cls != "CREDIT":
                 target = f"트래블로그({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
                 if target in inv_batches:
