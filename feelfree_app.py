@@ -36,18 +36,18 @@ BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 CONFIG_SHEET = "_GTL_CONFIG_"
 
-# [Modified] 버전 및 업데이트 로그 v26.05.16.001
-VERSION = "v26.05.16.001"
+# [Modified] 버전 및 업데이트 로그 v26.05.16.002
+VERSION = "v26.05.16.002"
 
-UPDATE_LOG_TEXT = """* `[Fixed]` 구글 API 429(할당량 초과) 발생 시 앱이 뻗지 않고 2~4초 대기 후 자동 재시도하는 'Auto-Retry' 엔진 탑재.
-* `[Fixed]` 카드 잔고가 없는 상태에서 ATM 출금을 기록할 경우 현금이 늘어나지 않고 공중분해되던 논리적 버그(고스트 출금) 완벽 해결."""
+UPDATE_LOG_TEXT = """* `[Fixed]` 대소문자 표기 충돌로 인해 특정 내역(직접환전 등)에서 잔고가 반영되지 않던 버그 완벽 해결(대문자 강제 정규화).
+* `[Fixed]` 전체 캐시 초기화 대신 정밀 타격(Smart Cache Clear) 방식과 백그라운드 지연 로딩(10m TTL)을 도입하여 구글 API 429(할당량 초과) 에러 원천 차단."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def auto_update_log_to_gsheets():
     for attempt in range(3):
         try:
-            log_df = conn.read(worksheet="version_log", ttl="0s")
+            log_df = conn.read(worksheet="version_log", ttl="10m") # [Modified] 10분 지연 로드
             if log_df is None or log_df.empty: log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
             if VERSION not in log_df['Version'].values:
                 new_log = pd.DataFrame([{"Version": VERSION, "Date": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"), "Log": UPDATE_LOG_TEXT}])
@@ -68,12 +68,13 @@ def get_trip_configs():
     cfg_df = None
     for attempt in range(3):
         try:
-            cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+            # [Modified] Config 탭은 매번 실시간으로 부를 필요 없음 (10m TTL 적용)
+            cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="10m")
             if cfg_df is not None and not cfg_df.empty:
                 break
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
-                time.sleep(2.5) # 구글 쿼터 해제를 위해 2.5초 대기 후 재시도
+                time.sleep(2.5)
                 continue
             st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}') 로드 실패 (API 과부하).**")
             st.info("💡 단기간에 많은 접속으로 구글 시트 요청 한도에 도달했습니다. 약 10초 후 새로고침 해주세요.")
@@ -94,7 +95,7 @@ def get_trip_configs():
         dynamic_configs[str(row['TripName'])] = {
             "sheet": str(row['SheetName']),
             "nodes": {str(row['MainCountry']).strip(): {
-                "currency": str(row['Currency']).strip(), 
+                "currency": str(row['Currency']).strip().upper(), # [Fixed] 영문 대소문자 통일 버그 해결
                 "symbol": str(row['Symbol']).strip(), 
                 "timezone": int(row['Timezone']), 
                 "multiplier": int(row['Multiplier'])
@@ -337,7 +338,7 @@ def load_data(sheet_name):
     df = df.dropna(subset=['Date', 'Category'], how='any')
     df['Category'] = df['Category'].astype(str).str.strip()
     df['PaymentMethod'] = df['PaymentMethod'].astype(str).str.strip()
-    df['Currency'] = df['Currency'].astype(str).str.strip()
+    df['Currency'] = df['Currency'].astype(str).str.strip().str.upper() # [Fixed] 대소문자 강제 정규화
     
     def fix_legacy_date(d):
         d = str(d).strip()
@@ -363,11 +364,12 @@ def load_data(sheet_name):
 @st.cache_data(ttl=600)
 def load_all_trips_data():
     all_dfs =[]
-    with st.spinner("🌍 모든 여행 기록을 불러오는 중..."):
+    with st.spinner("🌍 모든 여행 기록을 불러오는 중... (한 번 불러오면 10분간 보관됩니다)"):
         for trip_name, config in TRIP_CONFIGS.items():
             for attempt in range(3):
                 try:
-                    df_t = conn.read(worksheet=config['sheet'], ttl="0s")
+                    # [Modified] 과거 기록은 10분 캐싱을 적용해 429 API 폭탄 원천 차단
+                    df_t = conn.read(worksheet=config['sheet'], ttl="10m")
                     if df_t is not None and not df_t.empty:
                         df_t['TripName'] = trip_name 
                         first_node_name = list(config["nodes"].keys())[0]
@@ -382,6 +384,13 @@ def load_all_trips_data():
                     break
     if not all_dfs: return pd.DataFrame(columns=FINAL_COLUMNS + ['TripName'])
     return pd.concat(all_dfs, ignore_index=True)
+
+### ⚙️[Logic: Smart Cache] 429 에러 방지용 정밀 타격 캐시 클리너
+def smart_cache_clear():
+    try: load_data.clear(ACTIVE_SHEET)
+    except: pass
+    try: load_all_trips_data.clear()
+    except: pass
 
 ### ⚙️[Logic: Core Calculation] 전체 원장 재계산 (DB 저장 전)
 def recalculate_entire_ledger(df):
@@ -462,7 +471,6 @@ def recalculate_entire_ledger(df):
                     inv_batches[target_to].append({'rate': batch['rate'], 'qty': take})
                     total_inherited_krw += take * batch['rate']; temp_qty -= take
             
-            # [Fixed] ATM 출금 시 카드 잔고가 모자라도 무조건 물리적 현금은 생성되도록 강제 보정
             if temp_qty > 0:
                 fallback_r = get_WAR(curr)
                 inv_batches[target_to].append({'rate': fallback_r, 'qty': temp_qty})
@@ -545,7 +553,7 @@ def save_data(df, metrics=None):
     for attempt in range(3):
         try:
             conn.update(worksheet=ACTIVE_SHEET, data=final_df.reindex(columns=FINAL_COLUMNS))
-            st.cache_data.clear() 
+            smart_cache_clear() # [Fixed] 무식한 전체 캐시 삭제 대신 정밀 타격
             return True
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
@@ -555,7 +563,7 @@ def save_data(df, metrics=None):
             return False
 
 def append_new_data(new_rows_df):
-    st.cache_data.clear() 
+    smart_cache_clear() # [Fixed] 
     latest_df = load_data(ACTIVE_SHEET)
     merged_df = pd.concat([latest_df, new_rows_df], ignore_index=True)
     return save_data(merged_df)
