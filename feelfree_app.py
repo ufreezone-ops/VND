@@ -1,9 +1,9 @@
 ## [v26.05.17.002] - 2026-05-17
-**Architect**: Gem
-**Focus**: Flight Module Upgrade & Asset Nomenclature Standardization
-* `[Added]` 항공권 입력 폼에 '여정 구분(왕복/편도)' 라디오 버튼 추가. 편도 선택 시 귀국편 입력란이 비활성화되며, 일정 데이터(Row)도 출국편만 단일 생성되도록 로직 분기.
-* `[Added]` 결제 후 잦은 스케줄 변경 이력을 보존하기 위해 항공권 전용 '비고/메모' 필드 신설.
-* `[Refactored]` 외환 인벤토리 엔진 및 사이드바 지갑 명칭을 '트래블로그'에서 '트래블카드'로 전면 개편. 호텔 및 항공 특수 입력 시 결제수단에서 '트래블카드(외화)' 선택 후 결제 통화(EUR, USD 등)에 따라 `트래블카드(EUR)` 등으로 동적 저장되도록 개선.
+## **Architect**: Gem
+## **Focus**: Flight Module Upgrade & Asset Nomenclature Standardization
+## * `[Added]` 항공권 입력 폼에 '여정 구분(왕복/편도)' 라디오 버튼 추가. 편도 선택 시 귀국편 입력란이 비활성화되며, 일정 데이터(Row)도 출국편만 단일 생성되도록 로직 분기.
+## * `[Added]` 결제 후 잦은 스케줄 변경 이력을 보존하기 위해 항공권 전용 '비고/메모' 필드 신설.
+## * `[Refactored]` 외환 인벤토리 엔진 및 사이드바 지갑 명칭을 '트래블로그'에서 '트래블카드'로 전면 개편. 호텔 및 항공 특수 입력 시 결제수단에서 '트래블카드(외화)' 선택 후 결제 통화(EUR, USD 등)에 따라 `트래블카드(EUR)` 등으로 동적 저장되도록 개선.
 
 import streamlit as st
 import pandas as pd
