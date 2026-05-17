@@ -36,18 +36,18 @@ BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 CONFIG_SHEET = "_GTL_CONFIG_"
 
-# [Modified] 버전 및 업데이트 로그 v26.05.16.005
-VERSION = "v26.05.16.005"
+# [Modified] 버전 및 업데이트 로그 v26.05.17.001
+VERSION = "v26.05.17.001"
 
-UPDATE_LOG_TEXT = """* `[Refactored]` 🧭 비교(SPI) 탭을 개별 여행에서 완전히 분리하여 '전체 여행 비교 모드'로 승격 (불필요한 데이터 호출 및 429 API 과부하 원천 차단).
-* `[Fixed]` SPI 모드: 예약이 취소되어 관제탑에 없는 국가(불가리아 등)의 잔여 지출이 강제로 1박으로 계산되어 나타나던 'Ghost Country' 버그 해결 (제외 필터 강화)."""
+UPDATE_LOG_TEXT = """* `[Added]` 🌍 **GTL 다중 국가 노드 동적 활성화**: 하나의 여행 시트 내에서 여러 국가의 통화와 인벤토리를 개별적으로 추적하는 'Multi-Node' 기능 탑재 (시트 분할 불필요).
+* `[Refactored]` 관제탑(`_GTL_CONFIG_`)의 `Stay_Mapping` 정보를 파싱하여, 입력창의 국가 목록과 로컬 통화(TRY, TND, EUR 등)를 동적으로 스위칭하도록 업그레이드."""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def auto_update_log_to_gsheets():
     for attempt in range(3):
         try:
-            log_df = conn.read(worksheet="version_log", ttl="10m") # [Modified] 10분 지연 로드
+            log_df = conn.read(worksheet="version_log", ttl="10m") 
             if log_df is None or log_df.empty: log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
             if VERSION not in log_df['Version'].values:
                 new_log = pd.DataFrame([{"Version": VERSION, "Date": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"), "Log": UPDATE_LOG_TEXT}])
@@ -62,13 +62,12 @@ def auto_update_log_to_gsheets():
 
 auto_update_log_to_gsheets()
 
-# [Modified] 10분 메모리 보관 및 429 에러 방어(Auto-Retry)가 적용된 동적 로더
+# [Modified] 다중 국가 지원(Stay_Mapping 파싱 로직 추가)이 적용된 동적 로더
 @st.cache_data(ttl=600)
 def get_trip_configs():
     cfg_df = None
     for attempt in range(3):
         try:
-            # [Modified] Config 탭은 매번 실시간으로 부를 필요 없음 (10m TTL 적용)
             cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="10m")
             if cfg_df is not None and not cfg_df.empty:
                 break
@@ -83,6 +82,22 @@ def get_trip_configs():
     if cfg_df is None or cfg_df.empty:
         st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}')이 비어있습니다.**")
         st.stop()
+        
+    # [Added] 국가명에 따른 현지 통화 자동 추론 헬퍼
+    def infer_node_info(c_name, def_c, def_s, def_t, def_m):
+        c_upper = c_name.upper().replace(" ", "")
+        if any(k in c_upper for k in ["튀르키예", "터키"]): return "TRY", "₺", 3, 1
+        if any(k in c_upper for k in ["튀니지"]): return "TND", "د.ت", 1, 1
+        if any(k in c_upper for k in ["그리스", "크루즈", "몬테네그로", "크로아티아", "이탈리아", "프랑스", "스페인", "독일"]): return "EUR", "€", def_t, 1
+        if any(k in c_upper for k in ["세르비아"]): return "RSD", "din", 1, 1
+        if any(k in c_upper for k in ["헝가리"]): return "HUF", "Ft", 1, 1
+        if any(k in c_upper for k in ["싱가폴", "싱가포르"]): return "SGD", "S$", 8, 1
+        if any(k in c_upper for k in ["인천", "한국", "KOREA"]): return "KRW", "₩", 9, 1
+        if any(k in c_upper for k in ["중국", "CHINA"]): return "CNY", "¥", 8, 1
+        if any(k in c_upper for k in ["필리핀", "CEBU"]): return "PHP", "₱", 8, 1
+        if any(k in c_upper for k in ["베트남", "다낭", "푸꾸옥", "나트랑"]): return "VND", "₫", 7, 100
+        if any(k in c_upper for k in ["미국", "달러", "글로벌"]): return "USD", "$", def_t, 1
+        return def_c, def_s, def_t, def_m
     
     dynamic_configs = {}
     for _, row in cfg_df.iterrows():
@@ -92,14 +107,38 @@ def get_trip_configs():
         travelers = int(row['Travelers']) if 'Travelers' in row and pd.notna(row['Travelers']) else 2
         stay_mapping = str(row['Stay_Mapping']).strip() if 'Stay_Mapping' in row and pd.notna(row['Stay_Mapping']) else ""
         
+        main_country = str(row['MainCountry']).strip()
+        main_curr = str(row['Currency']).strip().upper()
+        main_sym = str(row['Symbol']).strip()
+        main_tz = int(row['Timezone']) if pd.notna(row['Timezone']) else 9
+        main_mult = int(row['Multiplier']) if pd.notna(row['Multiplier']) else 1
+        
+        # 1. Base Node 설정
+        nodes = {main_country: {
+            "currency": main_curr,
+            "symbol": main_sym, 
+            "timezone": main_tz, 
+            "multiplier": main_mult
+        }}
+        
+        # [Added] 2. Stay_Mapping을 분석하여 경유하는 다중 국가(Multi-Node) 동적 생성
+        if stay_mapping:
+            parts = stay_mapping.replace(" ", "").split(",")
+            for p in parts:
+                if ":" in p:
+                    c_name = p.split(":")[0].strip()
+                    if c_name and c_name not in nodes:
+                        inf_c, inf_s, inf_t, inf_m = infer_node_info(c_name, main_curr, main_sym, main_tz, main_mult)
+                        nodes[c_name] = {
+                            "currency": inf_c,
+                            "symbol": inf_s,
+                            "timezone": inf_t,
+                            "multiplier": inf_m
+                        }
+        
         dynamic_configs[str(row['TripName'])] = {
             "sheet": str(row['SheetName']),
-            "nodes": {str(row['MainCountry']).strip(): {
-                "currency": str(row['Currency']).strip().upper(), # [Fixed] 영문 대소문자 통일 버그 해결
-                "symbol": str(row['Symbol']).strip(), 
-                "timezone": int(row['Timezone']), 
-                "multiplier": int(row['Multiplier'])
-            }},
+            "nodes": nodes,
             "cats": cats,
             "travelers": travelers,
             "stay_mapping": stay_mapping
@@ -196,7 +235,9 @@ def get_default_rate(curr):
             df_curr = ledger_df[(ledger_df['Currency'].str.strip() == curr) & (ledger_df['AppliedRate'] > 0)]
             if not df_curr.empty: return df_curr['AppliedRate'].mean()
     except: pass
-    fallback_rates = {"VND": 0.056, "CNY": 190.0, "USD": 1350.0, "EUR": 1480.0, "TRY": 45.0, "RSD": 12.6, "HUF": 3.8}
+    
+    # [Modified] TRY(리라), TND(디나르), SGD(싱가폴달러) 추가 지원 (2023-2024년 기준 대략치)
+    fallback_rates = {"VND": 0.056, "CNY": 190.0, "USD": 1350.0, "EUR": 1480.0, "TRY": 45.0, "TND": 430.0, "SGD": 1000.0, "RSD": 12.6, "HUF": 3.8}
     return fallback_rates.get(curr, 1.0)
 
 ### ⚙️ [Logic: API] ImgBB 영수증 업로드
