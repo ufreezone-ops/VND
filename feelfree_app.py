@@ -760,7 +760,7 @@ st.divider()
 # --- [Module F] Global SPI Comparison Mode (독립 뷰) ---
 # ==============================================================================
 if st.session_state.show_spi:
-    st.title("🧭 GTL 글로벌 여행 물가 비교 (SPI v23)")
+    st.title("여행지 물가비교")
     df_all = load_all_trips_data()
     
     if not df_all.empty:
@@ -874,7 +874,7 @@ if st.session_state.show_spi:
             final_total_df = agg_total.sort_values(by='Daily_SPI', ascending=True)
             
             if not final_total_df.empty:
-                st.markdown("### 📊 국가별 1인당 1박 체감 물가 (KRW)")
+                st.markdown("### 여행지별 1박 체감물가 (KRW)")
                 st.caption("💡 모든 지표는 글로벌 여행 표준인 **'1박당(Per Night)'** 기준으로 계산되어 숫자의 왜곡이 없습니다. 누적 막대그래프의 렌트카(빨강)와 숙박(파랑)을 제외하면 순수 체류 물가를 비교할 수 있습니다.")
                 
                 def make_chart_label(r):
