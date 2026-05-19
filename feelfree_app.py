@@ -1,9 +1,8 @@
-## ## [v26.05.19.001] - 2026-05-19
+## [v26.05.19.002] - 2026-05-19
 ## **Architect**: Gem
-## **Focus**: Cross-Currency Exchange Engine & Terminology Refinement
-## * `[Added]` 자산 이동 탭에 '이종환전 (외화지폐 -> 로컬현금)' 옵션 신설. 이종환전 시 '지불하는 통화'의 FIFO 원가가 계산되어 '얻게 되는 통화'의 매입 단가로 정확히 승계되도록 듀얼 트랜잭션(차감+충전) 로직 구현.
-## * `[Added]` 원장 엔진(Module A, B)에 `이종환전` 카테고리 예외 처리 추가. (누적 예산(Cum_Budget_KRW)의 중복 계산을 방지하면서 재고만 안전하게 스왑)
-## * `[Refactored]` 사용자 경험 향상을 위해 '지폐'라는 모호한 단어를 '로컬현금'으로 일괄 치환 및 UI 반영.
+## **Focus**: Budget Calculation Bug Fix & Wire Transfer UI Enhancement
+## * `[Fixed]` `get_asset_class` 함수의 과도한 키워드 매칭("카드", "PAY")을 제거. '현대카드' 등 국내 카드가 PREPAID 자산으로 오분류되어 사전결제 예산에 합산되지 않던 중대 버그를 수정.
+## * `[Added]` 일반 지출, 항공권, 호텔 입력 폼의 결제 수단에 '해외송금(한국계좌)' 옵션을 추가하여, 은행 환전/송금을 통한 직접 외화 지불을 원활하게 기록하도록 지원.
 
 import streamlit as st
 import pandas as pd
@@ -222,7 +221,8 @@ def get_asset_class(text):
     """결제 수단 명칭을 분석하여 자산 성격(CASH/PREPAID/CREDIT/DOMESTIC) 분류"""
     txt = str(text).replace(" ", "").upper()
     
-    if any(k in txt for k in ["트래블", "로그", "월렛", "카드", "CARD", "PAY", "WALLET", "충전"]): 
+    # [Modified] "카드", "PAY" 등 범용 단어 제거 (현대카드, 네이버페이가 PREPAID로 오인되는 치명적 버그 해결)
+    if any(k in txt for k in ["트래블", "로그", "월렛", "선불", "외화통장"]): 
         return "PREPAID"
     
     if any(k in txt for k in ["현금", "지폐", "CASH", "환전"]): 
@@ -1053,8 +1053,8 @@ else:
                 curr_opts =[IN_CURR, "KRW", "USD"] +[c for c in available_currs if c not in[IN_CURR, "KRW", "USD"]]
                 curr = st.selectbox("통화", curr_opts, key="exp_curr")
             with col_m2:
-                # [Modified] 결제수단 '트래블카드'로 명칭 통일
-                if curr != "KRW": met_options = [f"현금({curr})", f"트래블카드({curr})", f"호텔외상({curr})", "원화계좌(한국)", "원화계좌(현지)"]
+                # [Added] '해외송금(한국계좌)' 옵션 추가
+                if curr != "KRW": met_options = [f"현금({curr})", f"트래블카드({curr})", f"호텔외상({curr})", "원화계좌(한국)", "해외송금(한국계좌)", "원화계좌(현지)"]
                 else: met_options = ["원화계좌(한국)", "원화계좌(현지)"]
                 met = st.selectbox("결제 자산(Asset)", met_options, index=0, key="exp_met")
                 
@@ -1138,8 +1138,9 @@ else:
             c6, c7, c8 = st.columns([1, 1, 1])
             with c6: f_baggage = st.selectbox("8. 위탁수화물", ["포함", "미포함", "일부포함"])
             with c7: f_bag_memo = st.text_input("9. 수화물 상세", placeholder="예: 귀국편 20kg 추가")
-            with c8: f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
-
+            # [Added] '해외송금(한국계좌)' 옵션 추가
+            with c8: f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
+                
             f_memo = st.text_input("📝 비고/메모 (결제 후 변경 이력 등 기록)", placeholder="예: 3/10 결제 후, 3/12에 항공사 스케줄 1회 변경됨")
 
             st.divider()
@@ -1190,7 +1191,8 @@ else:
                 h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com")
                 h_name = st.text_input("2. 호텔명", placeholder="예: 인터콘티넨털 호치민")
                 h_checkin = st.date_input("3. 체크인", value=sel_date)
-                h_asset = st.selectbox("4. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
+                # [Added] '해외송금(한국계좌)' 옵션 추가
+                h_asset = st.selectbox("4. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
             with c2:
                 h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1)
                 h_checkout = h_checkin + timedelta(days=h_nights)
