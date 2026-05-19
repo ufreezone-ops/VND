@@ -1,9 +1,9 @@
-## [v26.05.17.002] - 2026-05-17
+## ## [v26.05.19.001] - 2026-05-19
 ## **Architect**: Gem
-## **Focus**: Flight Module Upgrade & Asset Nomenclature Standardization
-## * `[Added]` 항공권 입력 폼에 '여정 구분(왕복/편도)' 라디오 버튼 추가. 편도 선택 시 귀국편 입력란이 비활성화되며, 일정 데이터(Row)도 출국편만 단일 생성되도록 로직 분기.
-## * `[Added]` 결제 후 잦은 스케줄 변경 이력을 보존하기 위해 항공권 전용 '비고/메모' 필드 신설.
-## * `[Refactored]` 외환 인벤토리 엔진 및 사이드바 지갑 명칭을 '트래블로그'에서 '트래블카드'로 전면 개편. 호텔 및 항공 특수 입력 시 결제수단에서 '트래블카드(외화)' 선택 후 결제 통화(EUR, USD 등)에 따라 `트래블카드(EUR)` 등으로 동적 저장되도록 개선.
+## **Focus**: Cross-Currency Exchange Engine & Terminology Refinement
+## * `[Added]` 자산 이동 탭에 '이종환전 (외화지폐 -> 로컬현금)' 옵션 신설. 이종환전 시 '지불하는 통화'의 FIFO 원가가 계산되어 '얻게 되는 통화'의 매입 단가로 정확히 승계되도록 듀얼 트랜잭션(차감+충전) 로직 구현.
+## * `[Added]` 원장 엔진(Module A, B)에 `이종환전` 카테고리 예외 처리 추가. (누적 예산(Cum_Budget_KRW)의 중복 계산을 방지하면서 재고만 안전하게 스왑)
+## * `[Refactored]` 사용자 경험 향상을 위해 '지폐'라는 모호한 단어를 '로컬현금'으로 일괄 치환 및 UI 반영.
 
 import streamlit as st
 import pandas as pd
@@ -502,7 +502,7 @@ def recalculate_entire_ledger(df):
                 
         elif cat == '재환전':
             if curr != 'KRW':
-                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})" # [Modified]
+                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
                 if target_from in inv_batches:
                     for batch in inv_batches[target_from]:
@@ -510,6 +510,17 @@ def recalculate_entire_ledger(df):
                         if batch['qty'] <= 0: continue
                         take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                 if pd.notna(rate) and rate > 0: c_budget -= qty * rate
+                
+        # [Added] 이종환전 시 외화 지갑(소스)에서 정확히 차감 (누적 예산은 변동 없음)
+        elif cat == '이종환전':
+            if curr != 'KRW':
+                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                temp_qty = qty
+                if target_from in inv_batches:
+                    for batch in inv_batches[target_from]:
+                        if temp_qty <= 0: break
+                        if batch['qty'] <= 0: continue
+                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
         
         elif cat == 'ATM출금':
             temp_qty = qty; total_inherited_krw = 0.0
@@ -654,9 +665,10 @@ def get_inventory_status(df):
             if temp_qty > 0:
                 inv_batches[target_to].append({'rate': get_WAR(curr), 'qty': temp_qty, 'initial': temp_qty})
                 
-        elif (row['IsExpense'] == 1 or cat in['보증금', '재환전', '상환']) and curr != 'KRW':
+        # [Modified] '이종환전'을 차감 조건에 추가하여 유로/달러 지갑에서 정상 차감되도록 보장
+        elif (row['IsExpense'] == 1 or cat in['보증금', '재환전', '상환', '이종환전']) and curr != 'KRW':
             if asset_cls != "DOMESTIC" and asset_cls != "CREDIT":
-                target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})" # [Modified]
+                target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
                 if target in inv_batches:
                     for batch in inv_batches[target]:
@@ -1205,10 +1217,51 @@ else:
         # [Modified] 자산 이동 (결제수단 트래블카드로 통일)
         elif mode == "자산 이동":
             st.subheader("🔁 자산 이동 및 환전")
-            ty = st.selectbox("유형",["직접환전 (원화계좌 -> 지폐)", "충전 (원화계좌 -> 카드)", "ATM출금 (카드 -> 지폐)", "재환전 (외화 -> 원화계좌)"], key="tr_type")
+            # [Modified] 명칭 정규화 및 이종환전 옵션 추가
+            ty = st.selectbox("유형",[
+                "직접환전 (원화계좌 -> 로컬현금)", 
+                "이종환전 (외화지폐 -> 로컬현금)",
+                "충전 (원화계좌 -> 트래블카드)", 
+                "ATM출금 (카드 -> 로컬현금)", 
+                "재환전 (외화 -> 원화계좌)"
+            ], key="tr_type")
             c1, c2 = st.columns(2)
             
-            if "재환전" in ty:
+            # [Added] 이종환전 전용 처리 로직 (듀얼 트랜잭션)
+            if "이종환전" in ty:
+                with c1:
+                    curr_opts_tr = [c for c in available_currs if c not in ["KRW"]]
+                    curr_tr = st.selectbox("얻게 되는 통화 (Target)", curr_opts_tr, key="tr_target_curr")
+                    if curr_tr == IN_CURR and IN_MULTI == 100: 
+                        t_amt = st.number_input(f"얻은 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
+                    else: 
+                        t_amt = st.number_input(f"얻은 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_target_flt")
+                with c2:
+                    curr_opts_src = [c for c in available_currs if c not in ["KRW", curr_tr]]
+                    curr_src = st.selectbox("지불하는 외화 (Source)", curr_opts_src, key="tr_source_curr")
+                    src_met = st.selectbox("지불 재원", [f"현금({curr_src})", f"트래블카드({curr_src})"], key="tr_source_met")
+                    s_amt = st.number_input(f"지불한 금액 ({curr_src})", min_value=0.0, step=10.0, format="%.2f", key="tr_source_flt")
+                    
+                    if s_amt > 0 and t_amt > 0:
+                        fifo_rate = auto_calc_fifo_rate(s_amt, src_met, curr_src)
+                        est_krw_cost = s_amt * fifo_rate
+                        target_rate = est_krw_cost / t_amt
+                        st.info(f"💡 시스템 내 지불 원가: **{est_krw_cost:,.0f} 원**")
+                        st.success(f"🎯 획득한 {curr_tr}의 산출 환율: **{target_rate:.5f}**")
+                        
+                if st.button("🔄 이종환전 실행 (차감 및 충전 동시기록)", use_container_width=True, type="primary"):
+                    fifo_rate = auto_calc_fifo_rate(s_amt, src_met, curr_src)
+                    target_rate = (s_amt * fifo_rate) / t_amt if t_amt > 0 else 0
+                    
+                    desc_src = f"이종환전 지불 (-> {curr_tr} {t_amt})"
+                    row_src = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '이종환전', 'Description': desc_src, 'Currency': curr_src, 'Amount': s_amt, 'PaymentMethod': src_met, 'IsExpense': 0, 'AppliedRate': fifo_rate, 'Note': '', 'Receipt_URL': ''}])
+                    
+                    desc_tgt = f"이종환전 획득 (<- {curr_src} {s_amt})"
+                    row_tgt = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '직접환전', 'Description': desc_tgt, 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': src_met, 'IsExpense': 0, 'AppliedRate': target_rate, 'Note': '', 'Receipt_URL': ''}])
+                    
+                    if append_new_data(pd.concat([row_src, row_tgt], ignore_index=True)): st.rerun()
+
+            elif "재환전" in ty:
                 with c1:
                     curr_opts_tr =[c for c in available_currs if c not in ["KRW"]]
                     curr_tr = st.selectbox("팔(Sell) 통화", curr_opts_tr, key="tr_curr")
@@ -1260,8 +1313,10 @@ else:
                     else: fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0.0, step=1.0, format="%.2f", key="tr_fee_flt")
                         
                 if st.button("🔄 이동 실행", use_container_width=True):
-                    dest = f"트래블카드({curr_tr})" if "카드" in ty else f"현금({curr_tr})"
+                    # [Modified] 타겟과 소스 지갑을 안전하게 지정하도록 로직 강화
+                    dest = f"트래블카드({curr_tr})" if "충전" in ty else f"현금({curr_tr})"
                     source = "원화계좌(한국)" if "원화계좌" in ty else f"트래블카드({curr_tr})"
+                    
                     main_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': ty.split(" ")[0], 'Description': f"{ty.split(' ')[0]} (-> {dest})", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': source, 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': '', 'Receipt_URL': ''}])
                     
                     new_rows = [main_row]
@@ -1270,7 +1325,7 @@ else:
                         fee_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': "수수료", 'Description': f"{ty.split(' ')[0]} 수수료", 'Currency': curr_tr, 'Amount': fee_amt, 'PaymentMethod': f"트래블카드({curr_tr})", 'IsExpense': 1, 'AppliedRate': fee_rate, 'Note': '', 'Receipt_URL': ''}])
                         new_rows.append(fee_row)
                     if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
-
+                        
         # [Modified] 환불 취소 (트래블카드로 통일)
         elif mode == "환불(취소)":
             st.subheader("🔙 결제 취소 및 환불 (Rollback)")
