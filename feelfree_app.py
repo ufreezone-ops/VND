@@ -1137,7 +1137,7 @@ else:
                 
                 final_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
                 new_row = pd.DataFrame([{
-                    'Date': sel_date.strftime("%Y-%m-%d(%a)"),
+                    'Date': sel_date.strftime("'%y %-m/%-d(%a)"),
                     'Country': sel_node,
                     'Category': cat,
                     'Description': final_desc,
