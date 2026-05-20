@@ -1,9 +1,9 @@
-## [v26.05.20.002]
+## [v26.05.20.003]
 ## - **Date:** 2026-05-20
 ## - **Update Log:**
-## - [Fixed] 파이썬 스코프(Scope) 문제로 인한 치명적 버그 `NameError: get_WAR is not defined` 완전 해결.
-## - [Added] `get_inventory_status(df)` 내부에 전역 변수에 의존하지 않는 독립적인 `get_WAR(curr)` 내부 헬퍼 함수를 추가하여 인벤토리 추적 엔진의 무결성 강화.
-      
+## - [Fixed] Data Engine과 URDI Engine 간의 인벤토리 차감 평가 기준 불일치로 인한 '사이드바 잔액 미차감 버그(Phantom Balance)' 완전 해결.
+## - [Modified] `get_inventory_status` 로직을 `recalculate_entire_ledger`와 구조적으로 100% 동일하게 동기화하여, 데이터 타입 강제 변환 오류로부터 독립적인 실시간 평가(Dynamic Evaluation) 구조 적용.     
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -636,45 +636,80 @@ ledger_df = load_data(ACTIVE_SHEET)
 # --- SECTION 3:[Module B] URDI Engine ---
 # ==============================================================================
 ### ⚙️[Logic: URDI Engine] 인벤토리 잔고 추적
+# [Modified] Data Engine과 구조적으로 100% 동일하게 동기화하여 차감 무결성 보장
 def get_inventory_status(df):
     from collections import defaultdict
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True) if not df.empty else df
     inv_batches = defaultdict(list)
-
-    # [Added] NameError 버그 방지를 위한 내부 헬퍼 함수 선언 (파라미터 df 기준 동적 계산)
-    def get_WAR(curr):
-        sw_df = df[(df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (df['Currency'].str.strip() == curr)]
+    
+    def get_WAR(currency_account):
+        sw_df = df[(df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (df['Currency'].str.strip() == currency_account)]
         if not sw_df.empty and sw_df['Amount'].sum() > 0: return (sw_df['Amount'] * sw_df['AppliedRate']).sum() / sw_df['Amount'].sum()
-        return get_default_rate(curr)
+        return get_default_rate(currency_account)
 
     if temp_df.empty: return dict(inv_batches)
+    
+    clean_expense_cats = [c.strip() for c in EXPENSE_CATS]
+    
     for _, row in temp_df.iterrows():
-        qty, rate, desc, cat, method, curr = row['Amount'], row['AppliedRate'], str(row['Description']), str(row['Category']).strip(), str(row['PaymentMethod']), row['Currency']
+        qty, curr = row['Amount'], row['Currency']
+        cat = str(row['Category']).strip()
+        method = str(row['PaymentMethod']).strip()
+        desc = str(row['Description']).strip()
+        rate = row['AppliedRate']
+        
+        # [Added] 데이터 타입 오류 방지를 위한 동적 평가 로직 (recalculate_entire_ledger와 완전 동일)
+        is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환'] else 0
+        is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
+        
         asset_cls = get_asset_class(method)
         
-        if cat in['충전', '환전', '입금', '직접환전']:
-            dest_cls = get_asset_class(desc + method)
-            target = f"트래블카드({curr})" if dest_cls == "PREPAID" else f"현금({curr})" # [Modified]
+        if cat in ['충전', '환전', '입금', '직접환전']:
+            if cat == '충전': final_dest_cls = "PREPAID"
+            elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
+            else: final_dest_cls = get_asset_class(desc + method)
+            
+            target = f"트래블카드({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})"
             if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty, 'initial': qty})
+            
         elif cat == '환불':
             if asset_cls != "DOMESTIC":
-                target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})" # [Modified]
+                target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty, 'initial': qty})
+                
         elif cat == 'ATM출금':
-            temp_qty = qty; target_from = f"트래블카드({curr})"; target_to = f"현금({curr})" # [Modified]
+            temp_qty = qty; target_from = f"트래블카드({curr})"; target_to = f"현금({curr})"
             if target_from in inv_batches:
                 for batch in inv_batches[target_from]:
                     if temp_qty <= 0: break
                     if batch['qty'] <= 0: continue
                     take = min(temp_qty, batch['qty']); batch['qty'] -= take
                     inv_batches[target_to].append({'rate': batch['rate'], 'qty': take, 'initial': take}); temp_qty -= take
-            
             if temp_qty > 0:
                 inv_batches[target_to].append({'rate': get_WAR(curr), 'qty': temp_qty, 'initial': temp_qty})
                 
-        # [Modified] '이종환전'을 차감 조건에 추가하여 유로/달러 지갑에서 정상 차감되도록 보장
-        elif (row['IsExpense'] == 1 or cat in['보증금', '재환전', '상환', '이종환전']) and curr != 'KRW':
-            if asset_cls != "DOMESTIC" and asset_cls != "CREDIT":
+        elif cat == '재환전':
+            if curr != 'KRW':
+                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                temp_qty = qty
+                if target_from in inv_batches:
+                    for batch in inv_batches[target_from]:
+                        if temp_qty <= 0: break
+                        if batch['qty'] <= 0: continue
+                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
+                        
+        elif cat == '이종환전':
+            if curr != 'KRW':
+                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                temp_qty = qty
+                if target_from in inv_batches:
+                    for batch in inv_batches[target_from]:
+                        if temp_qty <= 0: break
+                        if batch['qty'] <= 0: continue
+                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
+                        
+        elif is_deductible == 1:
+            if asset_cls != "DOMESTIC" and asset_cls != "CREDIT" and curr != 'KRW':
                 target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
                 if target in inv_batches:
@@ -682,6 +717,7 @@ def get_inventory_status(df):
                         if temp_qty <= 0: break
                         if batch['qty'] <= 0: continue
                         take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
+                        
     return dict(inv_batches)
 
 current_inventory_batches = get_inventory_status(ledger_df)
