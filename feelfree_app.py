@@ -1137,7 +1137,7 @@ else:
                 
                 final_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
                 new_row = pd.DataFrame([{
-                    'Date': sel_date.strftime("'%y %-m/%-d(%a)"),
+                    'Date': sel_date.strftime("%Y-%m-%d(%a)"),
                     'Country': sel_node,
                     'Category': cat,
                     'Description': final_desc,
@@ -1438,7 +1438,6 @@ else:
                         st.warning(f"탭 '{new_s_name}'을 수동으로 생성해 주세요.")
                         st.cache_data.clear(); time.sleep(2); st.rerun()
 
-    # [Module D] UI: History & Edit (조회 탭) 
     with tab_his:
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 바로 아래에 상세 내역 수정과 영수증 첨부 화면이 펼쳐집니다!**")
         viewer_placeholder = st.empty()
@@ -1463,21 +1462,17 @@ else:
         if st.button(f"🔄 '{st.session_state.current_trip}' 가계부 정합성 재계산", use_container_width=True, type="primary"):
             if save_data(ledger_df):
                 st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
-
+                
         if not display_df.empty: 
             display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
             display_df = display_df.reindex(columns=FINAL_COLUMNS)
             link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
             
             if edit_mode:
-                # 수정 모드: 날것의 데이터프레임(Raw Data) 에디터 제공
                 edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
                 if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
                     if save_data(edited_df): st.rerun()
             else:
-                # -------------------------------------------------------------
-                # [Added] 뷰어 모드(View Layer) - 동적 포매팅 및 Pandas Styler 적용
-                # -------------------------------------------------------------
                 if search_query.strip():
                     mask = (
                         display_df['Category'].str.contains(search_query, case=False, na=False) | 
@@ -1485,76 +1480,12 @@ else:
                         display_df['Note'].str.contains(search_query, case=False, na=False) |
                         display_df['Country'].str.contains(search_query, case=False, na=False) 
                     )
-                    render_df = display_df[mask].copy()
+                    render_df = display_df[mask]
                     st.write(f"🔎 검색 결과: {len(render_df)}건")
                 else:
-                    render_df = display_df.copy()
-
-                # 데이터 포매팅을 위한 가상 복사본 생성
-                view_df = render_df.copy()
-                
-                # 1. 날짜 동적 변환 ('26 05/20(수))
-                def format_ui_date(d_str):
-                    try:
-                        match = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(d_str))
-                        if match:
-                            y, m, d = match.groups()
-                            dt_obj = datetime(int(y), int(m), int(d))
-                            day_kr = ["월","화","수","목","금","토","일"][dt_obj.weekday()]
-                            return f"'{y[2:]} {m}/{d}({day_kr})"
-                    except: pass
-                    return d_str
-
-                view_df['Date'] = view_df['Date'].apply(format_ui_date)
-
-                # 2. 통화(Currency)에 따른 콤마, 소수점, 100배수 동적 적용
-                for i, row in view_df.iterrows():
-                    curr = row['Currency']
-                    is_100x = 100 if curr in ["VND", "IDR"] else 1
+                    render_df = display_df
                     
-                    # F열: Amount
-                    try: 
-                        v = float(row['Amount'])
-                        view_df.at[i, 'Amount'] = f"{v:,.0f}" if curr in ['KRW', 'VND', 'IDR'] else f"{v:,.2f}"
-                    except: pass
-                    
-                    # J열: AppliedRate (100배수 스케일업 처리)
-                    try:
-                        r = float(row['AppliedRate'])
-                        if r == 0: view_df.at[i, 'AppliedRate'] = "-"
-                        else: view_df.at[i, 'AppliedRate'] = f"{r * is_100x:,.2f}" if curr != 'KRW' else "-"
-                    except: pass
-                    
-                    # K열: Cum_Budget_KRW (항상 소수점 없음)
-                    try: view_df.at[i, 'Cum_Budget_KRW'] = f"{float(row['Cum_Budget_KRW']):,.0f}"
-                    except: pass
-                    
-                    # L, M열: 로컬 잔고 (통화에 따라 분기)
-                    for col in ['Cum_Card_Local', 'Cum_Cash_Local']:
-                        try:
-                            cv = float(row[col])
-                            view_df.at[i, col] = f"{cv:,.0f}" if curr in ['KRW', 'VND', 'IDR'] else f"{cv:,.2f}"
-                        except: pass
-                        
-                    # I열: IsExpense = 0 기호 추가 및 전처리
-                    if row['IsExpense'] == 0:
-                        view_df.at[i, 'Category'] = f"🚫 {row['Category']}"
-
-                # 3. Pandas Styler 적용 (색상 및 정렬)
-                def style_dataframe(df):
-                    def row_style(row):
-                        if "🚫" in str(row['Category']): 
-                            return ['color: #888888 !important; background-color: #2b2b2b !important'] * len(row)
-                        return [''] * len(row)
-                    
-                    return df.style.apply(row_style, axis=1) \
-                             .set_properties(subset=['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local'], **{'text-align': 'right'}) \
-                             .set_properties(subset=['Date', 'Country', 'Category', 'Description', 'Currency', 'PaymentMethod', 'Note'], **{'text-align': 'left'})
-
-                styled_df = style_dataframe(view_df)
-                
-                # 4. Dataframe 렌더링
-                df_event = st.dataframe(styled_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
+                df_event = st.dataframe(render_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
                 
                 if df_event.selection.rows:
                     selected_idx = df_event.selection.rows[0]
