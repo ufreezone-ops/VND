@@ -1,9 +1,9 @@
-## [v26.05.19.002] - 2026-05-19
-## **Architect**: Gem
-## **Focus**: Budget Calculation Bug Fix & Wire Transfer UI Enhancement
-## * `[Fixed]` `get_asset_class` 함수의 과도한 키워드 매칭("카드", "PAY")을 제거. '현대카드' 등 국내 카드가 PREPAID 자산으로 오분류되어 사전결제 예산에 합산되지 않던 중대 버그를 수정.
-## * `[Added]` 일반 지출, 항공권, 호텔 입력 폼의 결제 수단에 '해외송금(한국계좌)' 옵션을 추가하여, 은행 환전/송금을 통한 직접 외화 지불을 원활하게 기록하도록 지원.
-
+## [v26.05.20.002]
+## - **Date:** 2026-05-20
+## - **Update Log:**
+## - [Fixed] 파이썬 스코프(Scope) 문제로 인한 치명적 버그 `NameError: get_WAR is not defined` 완전 해결.
+## - [Added] `get_inventory_status(df)` 내부에 전역 변수에 의존하지 않는 독립적인 `get_WAR(curr)` 내부 헬퍼 함수를 추가하여 인벤토리 추적 엔진의 무결성 강화.
+      
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -640,6 +640,13 @@ def get_inventory_status(df):
     from collections import defaultdict
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True) if not df.empty else df
     inv_batches = defaultdict(list)
+
+    # [Added] NameError 버그 방지를 위한 내부 헬퍼 함수 선언 (파라미터 df 기준 동적 계산)
+    def get_WAR(curr):
+        sw_df = df[(df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (df['Currency'].str.strip() == curr)]
+        if not sw_df.empty and sw_df['Amount'].sum() > 0: return (sw_df['Amount'] * sw_df['AppliedRate']).sum() / sw_df['Amount'].sum()
+        return get_default_rate(curr)
+
     if temp_df.empty: return dict(inv_batches)
     for _, row in temp_df.iterrows():
         qty, rate, desc, cat, method, curr = row['Amount'], row['AppliedRate'], str(row['Description']), str(row['Category']).strip(), str(row['PaymentMethod']), row['Currency']
