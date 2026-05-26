@@ -752,7 +752,13 @@ def calculate_summary_metrics(df):
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True)
     b_total = temp_df['Cum_Budget_KRW'].iloc[-1] if 'Cum_Budget_KRW' in temp_df.columns else 0
     gross_spent = temp_df[temp_df['IsExpense'] == 1].apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
-    expense_refunds = temp_df[(temp_df['Category'] == '환불') & (temp_df['PaymentMethod'].apply(get_asset_class) == 'DOMESTIC')]
+    
+    # [Modified] 지출 성격이 아닌 보증금 환불(Deposit Refund) 건은 사이드바 지출총액 차감 대상에서 예외 처리하여 이중 차감 버그 해결
+    expense_refunds = temp_df[
+        (temp_df['Category'] == '환불') & 
+        (temp_df['PaymentMethod'].apply(get_asset_class) == 'DOMESTIC') &
+        (~temp_df['Description'].str.contains("보증금|Deposit|deposit", na=False))
+    ]
     refund_total = expense_refunds.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
     return b_total, gross_spent - refund_total
 
