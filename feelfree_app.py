@@ -458,7 +458,7 @@ def recalculate_entire_ledger(df):
     from collections import defaultdict
     inv_batches = defaultdict(list)
     c_budget = 0.0
-    
+
     for i, row in temp_df.iterrows():
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
@@ -578,12 +578,17 @@ def recalculate_entire_ledger(df):
         row_country = temp_df.at[i, 'Country']
         nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
         row_curr = nodes.get(row_country, FIRST_NODE)["currency"] if nodes else "USD"
-        rnd_dec = 0 if row_curr in["VND", "HUF", "KRW"] else 2
+
+
+        
+        active_curr = curr if curr != 'KRW' else row_curr
+        rnd_dec = 0 if active_curr in ["VND", "HUF", "KRW"] else 2
         
         temp_df.at[i, 'AppliedRate'] = rate
         temp_df.at[i, 'Cum_Budget_KRW'] = round(c_budget, 2)
-        temp_df.at[i, 'Cum_Card_Local'] = round(sum([b['qty'] for b in inv_batches[f"트래블카드({row_curr})"]]), rnd_dec) # [Modified]
-        temp_df.at[i, 'Cum_Cash_Local'] = round(sum([b['qty'] for b in inv_batches[f"현금({row_curr})"]]), rnd_dec)
+        # [Modified] 동적으로 매핑된 active_curr를 기준으로 각 지갑 인벤토리 잔량 실시간 집계
+        temp_df.at[i, 'Cum_Card_Local'] = round(sum([b['qty'] for b in inv_batches[f"트래블카드({active_curr})"]]), rnd_dec)
+        temp_df.at[i, 'Cum_Cash_Local'] = round(sum([b['qty'] for b in inv_batches[f"현금({active_curr})"]]), rnd_dec)
         
     return temp_df
 
