@@ -1273,21 +1273,23 @@ else:
         # [Modified] 자산 이동 (결제수단 트래블카드로 통일)
         elif mode == "자산 이동":
             st.subheader("🔁 자산 이동 및 환전")
-            # [Modified] 명칭 정규화 및 이종환전 옵션 추가
             ty = st.selectbox("유형",[
                 "직접환전 (원화계좌 -> 로컬현금)", 
-                "이종환전 (외화지폐 -> 로컬현금)",
+                "이종환전 (외화 -> 타국 외화)", # [Modified] 명칭 일반화
                 "충전 (원화계좌 -> 트래블카드)", 
                 "ATM출금 (카드 -> 로컬현금)", 
                 "재환전 (외화 -> 원화계좌)"
             ], key="tr_type")
             c1, c2 = st.columns(2)
             
-            # [Added] 이종환전 전용 처리 로직 (듀얼 트랜잭션)
+            # [Added] 이종환전 전용 처리 로직 (듀얼 트랜잭션 고도화: 카드-카드, 카드-현금 완벽 지원)
             if "이종환전" in ty:
                 with c1:
                     curr_opts_tr = [c for c in available_currs if c not in ["KRW"]]
                     curr_tr = st.selectbox("얻게 되는 통화 (Target)", curr_opts_tr, key="tr_target_curr")
+                    # [Added] 얻은 통화를 보관할 지갑 형태 지정 (카테고리 자동 유추에 사용)
+                    tr_target_met = st.selectbox("얻은 통화 보관 자산", [f"트래블카드({curr_tr})", f"현금({curr_tr})"], key="tr_target_met")
+                    
                     if curr_tr == IN_CURR and IN_MULTI == 100: 
                         t_amt = st.number_input(f"얻은 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
                     else: 
@@ -1295,7 +1297,7 @@ else:
                 with c2:
                     curr_opts_src = [c for c in available_currs if c not in ["KRW", curr_tr]]
                     curr_src = st.selectbox("지불하는 외화 (Source)", curr_opts_src, key="tr_source_curr")
-                    src_met = st.selectbox("지불 재원", [f"현금({curr_src})", f"트래블카드({curr_src})"], key="tr_source_met")
+                    src_met = st.selectbox("지불 재원 출처", [f"트래블카드({curr_src})", f"현금({curr_src})"], key="tr_source_met")
                     s_amt = st.number_input(f"지불한 금액 ({curr_src})", min_value=0.0, step=10.0, format="%.2f", key="tr_source_flt")
                     
                     if s_amt > 0 and t_amt > 0:
@@ -1306,16 +1308,26 @@ else:
                         st.success(f"🎯 획득한 {curr_tr}의 산출 환율: **{target_rate:.5f}**")
                         
                 if st.button("🔄 이종환전 실행 (차감 및 충전 동시기록)", use_container_width=True, type="primary"):
+                    if s_amt <= 0 or t_amt <= 0:
+                        st.warning("금액을 정확히 입력해 주세요.")
+                        st.stop()
+                    
                     fifo_rate = auto_calc_fifo_rate(s_amt, src_met, curr_src)
                     target_rate = (s_amt * fifo_rate) / t_amt if t_amt > 0 else 0
                     
+                    # 1. 지불 외화 차감 기록 (이종환전 카테고리)
                     desc_src = f"이종환전 지불 (-> {curr_tr} {t_amt})"
                     row_src = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '이종환전', 'Description': desc_src, 'Currency': curr_src, 'Amount': s_amt, 'PaymentMethod': src_met, 'IsExpense': 0, 'AppliedRate': fifo_rate, 'Note': '', 'Receipt_URL': ''}])
                     
+                    # 2. 획득 외화 충전 기록 (보관자산 형태에 따라 '충전' 또는 '직접환전'으로 동적 매핑하여 카드/현금 인벤토리 완벽 분류)
+                    tgt_cat = "충전" if "트래블카드" in tr_target_met else "직접환전"
                     desc_tgt = f"이종환전 획득 (<- {curr_src} {s_amt})"
-                    row_tgt = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '직접환전', 'Description': desc_tgt, 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': src_met, 'IsExpense': 0, 'AppliedRate': target_rate, 'Note': '', 'Receipt_URL': ''}])
+                    row_tgt = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': tgt_cat, 'Description': desc_tgt, 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': src_met, 'IsExpense': 0, 'AppliedRate': target_rate, 'Note': '', 'Receipt_URL': ''}])
                     
-                    if append_new_data(pd.concat([row_src, row_tgt], ignore_index=True)): st.rerun()
+                    if append_new_data(pd.concat([row_src, row_tgt], ignore_index=True)): 
+                        st.success("이종 자산 환전 기록이 성공적으로 완료되었습니다!")
+                        time.sleep(1)
+                        st.rerun()
 
             elif "재환전" in ty:
                 with c1:
