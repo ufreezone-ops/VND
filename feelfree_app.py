@@ -102,6 +102,11 @@ def get_trip_configs():
         if any(k in c_upper for k in ["필리핀", "CEBU"]): return "PHP", "₱", 8, 1
         if any(k in c_upper for k in ["베트남", "다낭", "푸꾸옥", "나트랑"]): return "VND", "₫", 7, 100
         if any(k in c_upper for k in ["미국", "달러", "글로벌"]): return "USD", "$", def_t, 1
+        
+        # ➔ 🚀 [Added] 사이프러스 및 이스라엘 기항지 금융 정보 동적 해석 룰 주입
+        if any(k in c_upper for k in ["이스라엘", "ISRAEL"]): return "ILS", "₪", 2, 1
+        if any(k in c_upper for k in ["사이프러스", "CYPRUS", "키프로스"]): return "EUR", "€", 2, 1
+        
         return def_c, def_s, def_t, def_m
     
     dynamic_configs = {}
