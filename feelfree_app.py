@@ -496,10 +496,24 @@ def recalculate_entire_ledger(df):
                     temp_df.at[i, 'Note'] = f"Inherited Deposit Rate: {rate:.9f}"
                 else: rate = get_default_rate(curr)
             
-            if asset_cls == "DOMESTIC": c_budget -= qty if curr == 'KRW' else qty * rate 
+            # ➔ 🚀 [Modified] 환불 자산 성격에 따라 예산 정합성 분기 수정
+            is_dep = str(row['Description']).replace(" ", "").lower()
+            is_deposit_refund = any(k in is_dep for k in ["보증금", "deposit"])
+            
+            if not is_deposit_refund:
+                # 1. 일반 지출 환불(항공/호텔 취소)은 카드/현금 가리지 않고 무조건 전체 여행 예산(c_budget) 감액 (Net 정합성 반영)
+                c_budget -= qty if curr == 'KRW' else qty * rate
+                # 2. 외화 카드/현금 지갑으로 환불된 경우 해당 외화 지갑 인벤토리(inv_batches)에 충전 처리
+                if asset_cls != "DOMESTIC":
+                    target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                    if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
             else:
-                target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})" # [Modified]
-                if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
+                # 3. 보증금 환불은 최초 결제 시 DOMESTIC(원화신용카드 등)이었던 경우만 예산 차감 (PREPAID 보증금은 예산 변동 없음)
+                if asset_cls == "DOMESTIC":
+                    c_budget -= qty if curr == 'KRW' else qty * rate
+                else:
+                    target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                    if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
                 
         elif cat in ['재환전', '개인지출']: # [Modified] 개인지출 시에도 동일하게 잔고 차감 및 c_budget(총예산)에서 취득원가만큼 자동 감액 처리
             if curr != 'KRW':
@@ -753,17 +767,16 @@ def auto_calc_fifo_rate(amount, method, curr=TRAVEL_CURRENCY):
     if remaining > 0: total_cost_krw += remaining * available_batches[-1]['rate']
     return total_cost_krw / amount if amount > 0 else 0
 
-### ⚙️[Logic: Metrics] 대시보드 지표 추출
+# ➔ 🚀 [Modified] 아래와 같이 수정 (모든 일반 지출 환불을 사이드바 지출총액 감액에 반영)
 def calculate_summary_metrics(df):
     if df.empty: return 0.0, 0.0
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True)
     b_total = temp_df['Cum_Budget_KRW'].iloc[-1] if 'Cum_Budget_KRW' in temp_df.columns else 0
     gross_spent = temp_df[temp_df['IsExpense'] == 1].apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
     
-    # [Modified] 지출 성격이 아닌 보증금 환불(Deposit Refund) 건은 사이드바 지출총액 차감 대상에서 예외 처리하여 이중 차감 버그 해결
+    # [Modified] 지불 자산(DOMESTIC/PREPAID/CASH)에 상관없이 모든 일반 지출 환불액을 사이드바 지출총액에서 차감하도록 변경
     expense_refunds = temp_df[
         (temp_df['Category'] == '환불') & 
-        (temp_df['PaymentMethod'].apply(get_asset_class) == 'DOMESTIC') &
         (~temp_df['Description'].str.contains("보증금|Deposit|deposit", na=False))
     ]
     refund_total = expense_refunds.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
