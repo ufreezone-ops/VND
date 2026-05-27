@@ -501,7 +501,7 @@ def recalculate_entire_ledger(df):
                 target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})" # [Modified]
                 if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
                 
-       elif cat in ['재환전', '개인지출']: # [Modified] 개인지출 시에도 동일하게 잔고 차감 및 c_budget(총예산)에서 취득원가만큼 자동 감액 처리
+        elif cat in ['재환전', '개인지출']: # [Modified] 개인지출 시에도 동일하게 잔고 차감 및 c_budget(총예산)에서 취득원가만큼 자동 감액 처리
             if curr != 'KRW':
                 target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
