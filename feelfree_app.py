@@ -25,13 +25,15 @@ TZ_KST = timezone(timedelta(hours=9))
 
 ### ⚙️[Logic: System Variable] 여행지 설정, 환율 및 매크로 매핑 데이터
 
+# ➔ 🚀 [Modified] 아래와 같이 수정 ("개인지출" 매핑 추가 및 버전 업데이트)
 MACRO_MAP = {
     "Grab": "🚗 교통", "VinBus": "🚗 교통", "DiDi": "🚗 교통", "지하철": "🚗 교통", "택시": "🚗 교통", "렌트카": "🚗 교통",
     "식사": "🍔 식음료", "간식": "🍔 식음료", "마트": "🍔 식음료",
     "마사지": "🏄 액티비티", "투어": "🏄 액티비티", "입장료": "🏄 액티비티",
     "선물": "🎁 쇼핑", "통신": "📱 통신/기타", "수수료": "📱 통신/기타", "팁": "📱 통신/기타",
-    "항공권": "✈️ 항공권", "호텔": "🏨 숙박", "보험": "🛡️ 보험", "보증금": "🏦 자산이동", "재환전": "🏦 자산이동", "상환": "🏦 자산이동" # [Added] 상환 추가
+    "항공권": "✈️ 항공권", "호텔": "🏨 숙박", "보험": "🛡️ 보험", "보증금": "🏦 자산이동", "재환전": "🏦 자산이동", "상환": "🏦 자산이동", "개인지출": "🏦 자산이동" # [Modified] 개인지출 추가
 }
+VERSION = "v26.05.27.002" # [Modified]
 
 CORE_COLUMNS =['Date', 'Country', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'Receipt_URL']
 SYSTEM_LOGIC_COLUMNS =['IsExpense', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local', 'Note']
@@ -41,9 +43,6 @@ IMGBB_API_KEY = "81181bf834001b6191aaa90fa772c6f9"
 BILLS =[500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 
 CONFIG_SHEET = "_GTL_CONFIG_"
-
-# [Modified] 버전 및 업데이트 로그 v26.05.17.001
-VERSION = "v26.05.17.001"
 
 UPDATE_LOG_TEXT = """* `[Added]` 🌍 **GTL 다중 국가 노드 동적 활성화**: 하나의 여행 시트 내에서 여러 국가의 통화와 인벤토리를 개별적으로 추적하는 'Multi-Node' 기능 탑재 (시트 분할 불필요).
 * `[Refactored]` 관제탑(`_GTL_CONFIG_`)의 `Stay_Mapping` 정보를 파싱하여, 입력창의 국가 목록과 로컬 통화(TRY, TND, EUR 등)를 동적으로 스위칭하도록 업그레이드."""
@@ -463,8 +462,10 @@ def recalculate_entire_ledger(df):
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
         
+        # ➔ 🚀 [Modified] 아래와 같이 수정 ('개인지출' 예외 및 계산식 일괄 바인딩)
         clean_expense_cats = [c.strip() for c in EXPENSE_CATS]
-        is_exp = 1 if cat in clean_expense_cats and cat not in['환불', '보증금', '재환전', '상환'] else 0
+        # [Modified] 지출 대상에서 개인지출(IsExpense = 0) 완벽 제외
+        is_exp = 1 if cat in clean_expense_cats and cat not in['환불', '보증금', '재환전', '상환', '개인지출'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
         
         is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
@@ -500,7 +501,7 @@ def recalculate_entire_ledger(df):
                 target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})" # [Modified]
                 if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
                 
-        elif cat == '재환전':
+       elif cat in ['재환전', '개인지출']: # [Modified] 개인지출 시에도 동일하게 잔고 차감 및 c_budget(총예산)에서 취득원가만큼 자동 감액 처리
             if curr != 'KRW':
                 target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
@@ -664,7 +665,8 @@ def get_inventory_status(df):
         rate = row['AppliedRate']
         
         # [Added] 데이터 타입 오류 방지를 위한 동적 평가 로직 (recalculate_entire_ledger와 완전 동일)
-        is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환'] else 0
+        # [Modified] 개인지출 제외 추가
+        is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출'] else 0
         is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
         
         asset_cls = get_asset_class(method)
@@ -693,7 +695,7 @@ def get_inventory_status(df):
             if temp_qty > 0:
                 inv_batches[target_to].append({'rate': get_WAR(curr), 'qty': temp_qty, 'initial': temp_qty})
                 
-        elif cat == '재환전':
+        elif cat in ['재환전', '개인지출']: # [Modified] 실시간 사이드바 잔량 계산에도 개인지출에 따른 차감 반영
             if curr != 'KRW':
                 target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
@@ -1271,14 +1273,16 @@ else:
                 if append_new_data(new_row): st.rerun()
                     
         # [Modified] 자산 이동 (결제수단 트래블카드로 통일)
+        # ➔ 🚀 [Modified] 및 [Added] 아래와 같이 수정/추가
         elif mode == "자산 이동":
             st.subheader("🔁 자산 이동 및 환전")
             ty = st.selectbox("유형",[
                 "직접환전 (원화계좌 -> 로컬현금)", 
-                "이종환전 (외화 -> 타국 외화)", # [Modified] 명칭 일반화
+                "이종환전 (외화 -> 타국 외화)",
                 "충전 (원화계좌 -> 트래블카드)", 
                 "ATM출금 (카드 -> 로컬현금)", 
-                "재환전 (외화 -> 원화계좌)"
+                "재환전 (외화 -> 원화계좌)",
+                "개인지출 (외화잔액 -> 여행외 소비)" # [Added] 개인지출 유형 추가
             ], key="tr_type")
             c1, c2 = st.columns(2)
             
@@ -1360,7 +1364,46 @@ else:
                         fx_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '수수료', 'Description': desc_fx, 'Currency': 'KRW', 'Amount': fx_amt, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': 'Auto-FX Diff', 'Receipt_URL': ''}])
                         new_rows.append(fx_row)
                     if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
+
+            # [Added] 개인지출 전용 입력기 설계 및 FIFO 계산 루틴 탑재
+            elif "개인지출" in ty:
+                with c1:
+                    curr_opts_tr = [c for c in available_currs if c not in ["KRW"]]
+                    curr_tr = st.selectbox("사용 외화 통화", curr_opts_tr, key="tr_curr")
+                    s_amt = st.number_input(f"사용 외화 금액 ({curr_tr})", min_value=0.0, step=1.0, format="%.2f", key="tr_sell_flt")
+                    source_met = st.selectbox("외화 출처", [f"트래블카드({curr_tr})", f"현금({curr_tr})"], key="tr_sell_met")
+                with c2:
+                    s_desc = st.text_input("상세 용도 (예: 알리익스프레스 결제)", placeholder="여행 경비가 아닌 개인지출 용도 입력", key="tr_sell_desc")
+                    if s_amt > 0:
+                        fifo_rate = auto_calc_fifo_rate(s_amt, source_met, curr_tr)
+                        fifo_cost = s_amt * fifo_rate
+                        st.info(f"💡 시스템 내 회수 원가(FIFO): **{fifo_cost:,.0f} 원**")
+                        st.caption(f"적용 환율: {fifo_rate:.4f}")
+                        
+                if st.button("🚀 개인지출 기록하기 (여행비용 제외 및 잔고 차감)", use_container_width=True):
+                    if s_amt <= 0 or not s_desc:
+                        st.warning("금액과 상세 용도를 정확히 입력해 주세요.")
+                        st.stop()
                     
+                    fifo_rate = auto_calc_fifo_rate(s_amt, source_met, curr_tr)
+                    new_row = pd.DataFrame([{
+                        'Date': sel_date.strftime("%Y-%m-%d(%a)"),
+                        'Country': sel_node,
+                        'Category': '개인지출',
+                        'Description': f"[개인지출] {s_desc}",
+                        'Currency': curr_tr,
+                        'Amount': s_amt,
+                        'PaymentMethod': source_met,
+                        'IsExpense': 0, # IsExpense = 0 으로 지출 집계에서 무조건 제외
+                        'AppliedRate': fifo_rate,
+                        'Note': 'Exclude from Travel',
+                        'Receipt_URL': ''
+                    }])
+                    if append_new_data(new_row):
+                        st.success("개인지출 기록 완료 (여행 비용 및 지출 통계에서 완벽 배제되었습니다!)")
+                        time.sleep(1)
+                        st.rerun()
+            
             else:
                 with c1:
                     curr_opts_tr =[IN_CURR, "USD"] +[c for c in available_currs if c not in[IN_CURR, "USD", "KRW"]]
