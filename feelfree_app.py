@@ -901,173 +901,373 @@ if st.session_state.show_spi:
     df_all = load_all_trips_data()
     
     if not df_all.empty:
+
+        # [Added] 물가비교, 호텔비교, 항공비교 3개 서브탭 생성
+        sub_tab_spi, sub_tab_hotel, sub_tab_flight = st.tabs(["📊 물가비교", "🏨 호텔비교", "✈️ 항공비교"])
+      
+        # ----------------------------------------------------------------------
+        # 채널 1: 물가비교 (기존 SPI 엔진 유지)
+        # ----------------------------------------------------------------------
+        with sub_tab_spi:
+        
         SPI_CATS = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '렌트카', '마사지', '팁', '통신', '수수료', '투어', '입장료', '호텔', '숙박', '체크인', '체크아웃']
-        stay_nights = {}
-        travelers_map = {}
-        
-        for trip_name, config in TRIP_CONFIGS.items():
-            travelers_map[trip_name] = config.get("travelers", 2)
-            mapping_str = config.get("stay_mapping", "")
+            stay_nights = {}
+            travelers_map = {}
             
-            if ":" in mapping_str or " : " in mapping_str:
-                for p in mapping_str.replace(" ", "").split(","):
-                    if ":" in p:
-                        c_name, n_str = p.split(":", 1)
-                        n_match = re.search(r'(\d+(?:\.\d+)?)', n_str)
-                        if n_match: stay_nights[(trip_name, c_name.strip())] = float(n_match.group(1))
-            else:
-                n_match = re.search(r'(\d+(?:\.\d+)?)', mapping_str)
-                if n_match:
-                    for c_name in config["nodes"].keys():
-                        stay_nights[(trip_name, c_name)] = float(n_match.group(1))
-        
-        df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0], errors='coerce')
-        
-        for (trip, country), group in df_all.groupby(['TripName', 'Country']):
-            if (trip, country) not in stay_nights:
-                extracted_nights = 0
-                cio_df = group[group['Category'].str.contains('체크인|체크아웃', na=False)]
-                if not cio_df.empty:
-                    target_df = cio_df[cio_df['Category'] == '체크인'] if '체크인' in cio_df['Category'].values else cio_df
-                    ext = target_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
-                    extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
-                if extracted_nights <= 0:
-                    hotel_df = group[group['Category'].str.contains('호텔|숙박', na=False)]
-                    if not hotel_df.empty:
-                        ext = hotel_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
+            for trip_name, config in TRIP_CONFIGS.items():
+                travelers_map[trip_name] = config.get("travelers", 2)
+                mapping_str = config.get("stay_mapping", "")
+                
+                if ":" in mapping_str or " : " in mapping_str:
+                    for p in mapping_str.replace(" ", "").split(","):
+                        if ":" in p:
+                            c_name, n_str = p.split(":", 1)
+                            n_match = re.search(r'(\d+(?:\.\d+)?)', n_str)
+                            if n_match: stay_nights[(trip_name, c_name.strip())] = float(n_match.group(1))
+                else:
+                    n_match = re.search(r'(\d+(?:\.\d+)?)', mapping_str)
+                    if n_match:
+                        for c_name in config["nodes"].keys():
+                            stay_nights[(trip_name, c_name)] = float(n_match.group(1))
+            
+            df_all['Date_Obj'] = pd.to_datetime(df_all['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0], errors='coerce')
+            
+            for (trip, country), group in df_all.groupby(['TripName', 'Country']):
+                if (trip, country) not in stay_nights:
+                    extracted_nights = 0
+                    cio_df = group[group['Category'].str.contains('체크인|체크아웃', na=False)]
+                    if not cio_df.empty:
+                        target_df = cio_df[cio_df['Category'] == '체크인'] if '체크인' in cio_df['Category'].values else cio_df
+                        ext = target_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
                         extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
-                stay_nights[(trip, country)] = max(1, extracted_nights if extracted_nights > 0 else 1)
+                    if extracted_nights <= 0:
+                        hotel_df = group[group['Category'].str.contains('호텔|숙박', na=False)]
+                        if not hotel_df.empty:
+                            ext = hotel_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
+                            extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
+                    stay_nights[(trip, country)] = max(1, extracted_nights if extracted_nights > 0 else 1)
 
-        # [Fixed] 취소된 불가리아 등 숙박하지 않은 국가가 1박으로 강제 산정되는 버그 차단
-        df_spi = df_all[
-            (df_all['Category'].isin(SPI_CATS)) & 
-            (~df_all['Country'].str.contains('글로벌|경유|크로아티아|불가리아', na=False))
-        ].copy()
-        
-        if not df_spi.empty:
-            df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate']), axis=1)
+            df_spi = df_all[(df_all['Category'].isin(SPI_CATS)) & (~df_all['Country'].str.contains('글로벌|경유|크로아티아|불가리아', na=False))].copy()
             
-            refund_df = df_all[(df_all['Category'] == '환불') & (~df_all['Country'].str.contains('글로벌|경유|크로아티아|불가리아', na=False))].copy()
-            if not refund_df.empty:
-                refund_df['KRW_val'] = refund_df.apply(lambda r: -(r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate'])), axis=1)
-                
-                def map_refund_group(desc):
-                    desc = str(desc).replace(" ", "").lower()
-                    if any(k in desc for k in ["보증금", "deposit", "디파짓"]): return '제외'
-                    if any(k in desc for k in ["호텔", "숙박", "인페라", "라이온", "스플랜디도", "벨몬트"]): return '🏨 숙박'
-                    if any(k in desc for k in ["투어", "입장료"]): return '🏄 투어/액티비티'
-                    if any(k in desc for k in ["렌트카"]): return '🚗 렌트카'
-                    return '제외'
-                    
-                refund_df['SPI_Group'] = refund_df['Description'].apply(map_refund_group)
-                refund_df = refund_df[refund_df['SPI_Group'] != '제외']
+            if not df_spi.empty:
+                df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate']), axis=1)
+                refund_df = df_all[(df_all['Category'] == '환불') & (~df_all['Country'].str.contains('글로벌|경유|크로아티아|불가리아', na=False))].copy()
                 if not refund_df.empty:
-                    df_spi = pd.concat([df_spi, refund_df], ignore_index=True)
+                    refund_df['KRW_val'] = refund_df.apply(lambda r: -(r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate'])), axis=1)
+                    def map_refund_group(desc):
+                        desc = str(desc).replace(" ", "").lower()
+                        if any(k in desc for k in ["보증금", "deposit", "디파짓"]): return '제외'
+                        if any(k in desc for k in ["호텔", "숙박", "인페라", "라이온", "스플랜디도", "벨몬트"]): return '🏨 숙박'
+                        if any(k in desc for k in ["투어", "입장료"]): return '🏄 투어/액티비티'
+                        if any(k in desc for k in ["렌트카"]): return '🚗 렌트카'
+                        return '제외'
+                    refund_df['SPI_Group'] = refund_df['Description'].apply(map_refund_group)
+                    refund_df = refund_df[refund_df['SPI_Group'] != '제외']
+                    if not refund_df.empty:
+                        df_spi = pd.concat([df_spi, refund_df], ignore_index=True)
 
-            def map_spi_group(cat):
-                if pd.isna(cat): return '📱 기타'
-                if cat in ['렌트카']: return '🚗 렌트카'
-                if cat in ['호텔', '숙박', '체크인', '체크아웃']: return '🏨 숙박'
-                if cat in ['투어', '입장료', '마사지']: return '🏄 투어/액티비티'
-                if cat in ['식사', '간식', '마트']: return '🍔 식음료'
-                if cat in ['Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통']: return '🚕 로컬교통'
-                return '📱 기타' 
+                def map_spi_group(cat):
+                    if pd.isna(cat): return '📱 기타'
+                    if cat in ['렌트카']: return '🚗 렌트카'
+                    if cat in ['호텔', '숙박', '체크인', '체크아웃']: return '🏨 숙박'
+                    if cat in ['투어', '입장료', '마사지']: return '🏄 투어/액티비티'
+                    if cat in ['식사', '간식', '마트']: return '🍔 식음료'
+                    if cat in ['Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통']: return '🚕 로컬교통'
+                    return '📱 기타'
 
-            df_spi['SPI_Group'] = df_spi.apply(lambda r: r['SPI_Group'] if pd.notna(r.get('SPI_Group')) else map_spi_group(r['Category']), axis=1)
+                df_spi['SPI_Group'] = df_spi.apply(lambda r: r['SPI_Group'] if pd.notna(r.get('SPI_Group')) else map_spi_group(r['Category']), axis=1)
+                agg_group = df_spi.groupby(['TripName', 'Country', 'SPI_Group'])['KRW_val'].sum().reset_index()
+                agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(2)
+                agg_group['Nights'] = agg_group.apply(lambda r: stay_nights.get((r['TripName'], r['Country']), 1), axis=1)
+                agg_group['KRW_val'] = agg_group['KRW_val'].apply(lambda x: max(0, x))
+                agg_group['Nights'] = agg_group['Nights'].apply(lambda x: x if x > 0 else 1)
+                agg_group['Daily_SPI'] = (agg_group['KRW_val'] / agg_group['Travelers']) / agg_group['Nights']
+                
+                agg_total = agg_group.groupby(['TripName', 'Country']).agg({'Daily_SPI': 'sum', 'Travelers': 'first', 'Nights': 'first'}).reset_index()
 
-            agg_group = df_spi.groupby(['TripName', 'Country', 'SPI_Group'])['KRW_val'].sum().reset_index()
-            agg_group['Travelers'] = agg_group['TripName'].map(travelers_map).fillna(2)
-            agg_group['Nights'] = agg_group.apply(lambda r: stay_nights.get((r['TripName'], r['Country']), 1), axis=1)
+                theme_notes = []
+                for idx, row in agg_total.iterrows():
+                    t, c, pp_nights = row['TripName'], row['Country'], row['Travelers'] * row['Nights']
+                    sub_group = agg_group[(agg_group['TripName'] == t) & (agg_group['Country'] == c)]
+                    hotel_v = sub_group[sub_group['SPI_Group'] == '🏨 숙박']['KRW_val'].sum()
+                    rent_v = sub_group[sub_group['SPI_Group'] == '🚗 렌트카']['KRW_val'].sum()
+                    tour_v = sub_group[sub_group['SPI_Group'] == '🏄 투어/액티비티']['KRW_val'].sum()
+                    
+                    tags = []
+                    if hotel_v > 0: tags.append(f"🏨 1박평균 {hotel_v/row['Nights']/10000:.1f}만")
+                    if rent_v > 0: tags.append(f"🚗 1일렌트 {rent_v/row['Nights']/10000:.1f}만")
+                    if tour_v > 0: tags.append(f"🏄 투어(1인) {tour_v/pp_nights/10000:.1f}만")
+                    theme_notes.append(" | ".join(tags) if tags else "-")
+                    
+                agg_total['Theme'] = theme_notes
+                final_total_df = agg_total.sort_values(by='Daily_SPI', ascending=True)
+                
+                if not final_total_df.empty:
+                    st.markdown("### 여행지별 1박 체감물가 (KRW)")
+                    def make_chart_label(r):
+                        country, trip = str(r['Country']), str(r['TripName'])
+                        if "발칸" in trip: return country 
+                        match = re.search(r'([가-힣]+)', trip)
+                        city = match.group(1) if match else ""
+                        return f"{country}({city})" if city and city not in country else country
+
+                    final_total_df['Chart_Label'] = final_total_df.apply(make_chart_label, axis=1)
+                    display_df = final_total_df.copy()
+                    display_df['Daily_SPI_Fmt'] = display_df['Daily_SPI'].apply(lambda x: f"{x:,.0f} 원")
+                    display_df = display_df.rename(columns={'TripName': '여행명', 'Country': '국가', 'Travelers': '인원수', 'Nights': '숙박일(박)', 'Daily_SPI_Fmt': '1박 체감물가', 'Theme': '💡 특이사항 및 요인'})
+                    st.dataframe(display_df[['여행명', '국가', '인원수', '숙박일(박)', '1박 체감물가', '💡 특이사항 및 요인']], use_container_width=True, hide_index=True)
+                    
+                    label_map = dict(zip(zip(final_total_df['TripName'], final_total_df['Country']), final_total_df['Chart_Label']))
+                    agg_group['Chart_Label'] = agg_group.apply(lambda r: label_map.get((r['TripName'], r['Country']), r['Country']), axis=1)
+                    category_order_x = final_total_df['Chart_Label'].tolist()
+                    stack_order = ['📱 기타', '🚕 로컬교통', '🍔 식음료', '🏄 투어/액티비티', '🏨 숙박', '🚗 렌트카']
+                    color_map = {'🚗 렌트카': '#D32F2F', '🏨 숙박': '#1976D2', '🏄 투어/액티비티': '#9C27B0', '🍔 식음료': '#4CAF50', '🚕 로컬교통': '#00ACC1', '📱 기타': '#795548'}
+                    fig_stacked = px.bar(agg_group, x='Chart_Label', y='Daily_SPI', color='SPI_Group', color_discrete_map=color_map, category_orders={"Chart_Label": category_order_x, "SPI_Group": stack_order})
+                    fig_stacked.update_layout(barmode='stack', margin=dict(l=10, r=10, t=10, b=30), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5, title=None), xaxis_title=None, yaxis_title=None)
+                    st.plotly_chart(fig_stacked, use_container_width=True)
+
+        # ----------------------------------------------------------------------
+        # [Added] 채널 2: 호텔비교 (1박 실질 투숙 비용 역산 엔진)
+        # ----------------------------------------------------------------------
+        with sub_tab_hotel:
+            st.subheader("🏨 호텔 1박 실질 요금 비교")
+            st.caption("💡 각 호텔의 내용(Description) 혹은 체크인 기록에 'X박'이 명확히 기재된 내역만 반영하며 기재되지 않은 숙소는 자동 배제합니다. 도시세(City Tax)를 호텔 지출에 동적 합산하고, 환불 발생 시 취소율 및 취소 시점 환율 차이로 발생한 환차손익을 병행 산출합니다.")
             
-            agg_group['KRW_val'] = agg_group['KRW_val'].apply(lambda x: max(0, x))
+            hotel_records = []
+            hotel_refund_rows = []
+            city_tax_rows = []
             
-            # [Added] 0박으로 계산되어 나누기 에러가 발생하는 것을 방지
-            agg_group['Nights'] = agg_group['Nights'].apply(lambda x: x if x > 0 else 1)
-            agg_group['Daily_SPI'] = (agg_group['KRW_val'] / agg_group['Travelers']) / agg_group['Nights']
+            # 1. 1차 분류 수집
+            for _, row in df_all.iterrows():
+                cat = str(row['Category']).strip()
+                desc = str(row['Description']).strip()
+                
+                if cat == '환불':
+                    desc_lower = desc.lower()
+                    if any(k in desc_lower for k in ["호텔", "숙박", "인페라", "라이온", "스플랜디도", "벨몬트", "센터호텔", "agoda", "아고다", "booking", "소피아"]):
+                        hotel_refund_rows.append(row)
+                        continue
+                
+                if cat in ['호텔', '숙박', '수수료', '기타']:
+                    desc_lower = desc.lower()
+                    if any(k in desc_lower for k in ["도시세", "시티택스", "시티 택스", "citytax", "city tax", "tourist tax", "세금"]):
+                        city_tax_rows.append(row)
+                        continue
+                
+                if cat in ['호텔', '숙박', '체크인']:
+                    match_nights = re.search(r'(\d+)\s*박', desc)
+                    if match_nights: # [Fixed] 박수가 명시된 것만 투숙 요금 분석에 포함
+                        nights = int(match_nights.group(1))
+                        # 상호명 깔끔하게 파싱 (대괄호 제거 및 문자 정리)
+                        clean_name = re.sub(r'^\[.*?\]\s*', '', desc)
+                        clean_name = re.split(r'[|(\-,]', clean_name)[0].strip()
+                        
+                        hotel_records.append({
+                            'TripName': row['TripName'],
+                            'Country': row['Country'],
+                            'Date': row['Date'],
+                            'Original_Desc': desc,
+                            'Clean_Name': clean_name if clean_name else "알 수 없는 호텔",
+                            'Nights': nights,
+                            'Currency': row['Currency'],
+                            'Amount': row['Amount'],
+                            'AppliedRate': row['AppliedRate'],
+                            'Cost_KRW': row['Amount'] if row['Currency'] == 'KRW' else row['Amount'] * row['AppliedRate'],
+                            'City_Tax_KRW': 0.0,
+                            'Refund_KRW': 0.0,
+                            'Refund_Foreign': 0.0,
+                            'Cancellation_Rate': 0.0,
+                            'FX_GainLoss': 0.0
+                        })
             
-            agg_total = agg_group.groupby(['TripName', 'Country']).agg({'Daily_SPI': 'sum', 'Travelers': 'first', 'Nights': 'first'}).reset_index()
+            # 2. 환불/도시세 매칭 연산
+            for h in hotel_records:
+                # 동일 여행지 내 도시세 매칭 (메모에 호텔 이름이 들어가거나 기항지가 일치할 경우 합산)
+                for ct in city_tax_rows:
+                    if ct['TripName'] == h['TripName'] and ct['Country'] == h['Country']:
+                        ct_cost = ct['Amount'] if ct['Currency'] == 'KRW' else ct['Amount'] * ct['AppliedRate']
+                        if h['Clean_Name'].lower() in str(ct['Description']).lower() or len([x for x in hotel_records if x['TripName']==h['TripName'] and x['Country']==h['Country']]) == 1:
+                            h['City_Tax_KRW'] += ct_cost
+                
+                # 동일 여행지 내 취소 환불 매칭 및 환율 오차 연산
+                for r in hotel_refund_rows:
+                    if r['TripName'] == h['TripName']:
+                        r_desc = str(r['Description']).lower()
+                        if h['Clean_Name'].lower() in r_desc or any(k in r_desc for k in h['Clean_Name'].lower().split()):
+                            r_cost_krw = r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate']
+                            h['Refund_KRW'] += r_cost_krw
+                            h['Refund_Foreign'] += r['Amount']
+                            
+                            # 외화 기준 취소율 계산 및 결제 환율 기준과 실제 환불 환율 기준 비교로 환차손익 도출
+                            h['Cancellation_Rate'] = min(100.0, (h['Refund_Foreign'] / h['Amount']) * 100.0) if h['Amount'] > 0 else 0.0
+                            expected_refund_krw = h['Refund_Foreign'] * h['AppliedRate']
+                            h['FX_GainLoss'] = r_cost_krw - expected_refund_krw # r_cost_krw가 크면 환차익(+), 작으면 환차손(-)
 
-            theme_notes =[]
-            for idx, row in agg_total.iterrows():
-                t, c, pp_nights = row['TripName'], row['Country'], row['Travelers'] * row['Nights']
+            if hotel_records:
+                display_hotel_rows = []
+                chart_data = []
                 
-                sub_group = agg_group[(agg_group['TripName'] == t) & (agg_group['Country'] == c)]
+                for h in hotel_records:
+                    net_cost = h['Cost_KRW'] + h['City_Tax_KRW'] - h['Refund_KRW']
+                    nights = h['Nights']
+                    avg_rate = net_cost / nights if nights > 0 and h['Cancellation_Rate'] < 100.0 else 0.0
+                    
+                    status_str = "정상 투숙"
+                    if h['Cancellation_Rate'] >= 100.0: status_str = "🔴 100% 취소"
+                    elif h['Cancellation_Rate'] > 0.0: status_str = f"🟡 부분취소 ({h['Cancellation_Rate']:.1f}%)"
+                    
+                    fx_diff = h['FX_GainLoss']
+                    fx_loss_str = f"{fx_diff:+,.0f}원" if fx_diff != 0 else "-"
+                    
+                    display_hotel_rows.append({
+                        '여행명': h['TripName'],
+                        '국가': h['Country'],
+                        '호텔명': h['Clean_Name'],
+                        '숙박일수': f"{nights}박",
+                        '기본숙박비': f"{h['Cost_KRW']:,.0f}원",
+                        '도시세(합산)': f"{h['City_Tax_KRW']:,.0f}원" if h['City_Tax_KRW'] > 0 else "-",
+                        '환불액': f"{h['Refund_KRW']:,.0f}원" if h['Refund_KRW'] > 0 else "-",
+                        '실지불 순액(Net)': f"{max(0, net_cost):,.0f}원",
+                        '1박당 평균': f"{avg_rate:,.0f}원" if avg_rate > 0 else "-",
+                        '상태': status_str,
+                        '환차손익(환율차이)': fx_loss_str
+                    })
+                    
+                    if h['Cancellation_Rate'] < 100.0 and avg_rate > 0:
+                        chart_data.append({
+                            'Hotel_Label': f"{h['Clean_Name']} ({h['TripName']})",
+                            '1박당 요금(원)': avg_rate
+                        })
                 
-                hotel_v = sub_group[sub_group['SPI_Group'] == '🏨 숙박']['KRW_val'].sum()
-                rent_v = sub_group[sub_group['SPI_Group'] == '🚗 렌트카']['KRW_val'].sum()
-                tour_v = sub_group[sub_group['SPI_Group'] == '🏄 투어/액티비티']['KRW_val'].sum()
+                st.dataframe(pd.DataFrame(display_hotel_rows), use_container_width=True, hide_index=True)
                 
-                tags =[]
-                if hotel_v > 0: tags.append(f"🏨 1박평균 {hotel_v/row['Nights']/10000:.1f}만")
-                if rent_v > 0: tags.append(f"🚗 1일렌트 {rent_v/row['Nights']/10000:.1f}만")
-                if tour_v > 0: tags.append(f"🏄 투어(1인) {tour_v/pp_nights/10000:.1f}만")
-                
-                if "칭다오" in t: tags.append("👑 5성급 럭셔리 테마")
-                if "몬테네그로" in c: tags.append("🇭🇷 크로아 당일치기 루트")
-                
-                theme_notes.append(" | ".join(tags) if tags else "-")
-                
-            agg_total['Theme'] = theme_notes
-            final_total_df = agg_total.sort_values(by='Daily_SPI', ascending=True)
-            
-            if not final_total_df.empty:
-                st.markdown("### 여행지별 1박 체감물가 (KRW)")
-                st.caption("💡 모든 지표는 글로벌 여행 표준인 **'1박당(Per Night)'** 기준으로 계산되어 숫자의 왜곡이 없습니다. 누적 막대그래프의 렌트카(빨강)와 숙박(파랑)을 제외하면 순수 체류 물가를 비교할 수 있습니다.")
-                
-                def make_chart_label(r):
-                    country, trip = str(r['Country']), str(r['TripName'])
-                    if "발칸" in trip: return country 
-                    match = re.search(r'([가-힣]+)', trip)
-                    city = match.group(1) if match else ""
-                    return f"{country}({city})" if city and city not in country else country
-
-                final_total_df['Chart_Label'] = final_total_df.apply(make_chart_label, axis=1)
-                
-                display_df = final_total_df.copy()
-                display_df['Daily_SPI_Fmt'] = display_df['Daily_SPI'].apply(lambda x: f"{x:,.0f} 원")
-                display_df['Nights'] = display_df['Nights'].apply(lambda x: int(x) if x == int(x) else x)
-                display_df = display_df.rename(columns={
-                    'TripName': '여행명', 'Country': '국가', 'Travelers': '인원수', 
-                    'Nights': '숙박일(박)', 'Daily_SPI_Fmt': '1박 체감물가', 'Theme': '💡 특이사항 및 요인'
-                })
-                
-                st.dataframe(display_df[['여행명', '국가', '인원수', '숙박일(박)', '1박 체감물가', '💡 특이사항 및 요인']], use_container_width=True, hide_index=True)
-                
-                label_map = dict(zip(zip(final_total_df['TripName'], final_total_df['Country']), final_total_df['Chart_Label']))
-                agg_group['Chart_Label'] = agg_group.apply(lambda r: label_map.get((r['TripName'], r['Country']), r['Country']), axis=1)
-                
-                category_order_x = final_total_df['Chart_Label'].tolist()
-                stack_order = ['📱 기타', '🚕 로컬교통', '🍔 식음료', '🏄 투어/액티비티', '🏨 숙박', '🚗 렌트카']
-                
-                color_map = {
-                    '🚗 렌트카': '#D32F2F', 
-                    '🏨 숙박': '#1976D2',   
-                    '🏄 투어/액티비티': '#9C27B0', 
-                    '🍔 식음료': '#4CAF50', 
-                    '🚕 로컬교통': '#00ACC1', 
-                    '📱 기타': '#795548' 
-                }
-
-                fig_stacked = px.bar(
-                    agg_group,
-                    x='Chart_Label', y='Daily_SPI', color='SPI_Group',
-                    color_discrete_map=color_map,
-                    category_orders={"Chart_Label": category_order_x, "SPI_Group": stack_order}
-                )
-                
-                fig_stacked.update_layout(
-                    barmode='stack',
-                    margin=dict(l=10, r=10, t=10, b=30),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5, title=None),
-                    xaxis_title=None, yaxis_title=None
-                )
-                fig_stacked.update_traces(hovertemplate="%{x}<br><b>%{data.name}</b>: %{y:,.0f}원<extra></extra>")
-                
-                st.plotly_chart(fig_stacked, use_container_width=True, config={'displaylogo': False})
+                if chart_data:
+                    chart_df = pd.DataFrame(chart_data).sort_values(by='1박당 요금(원)', ascending=True)
+                    fig_hotel = px.bar(chart_df, x='Hotel_Label', y='1박당 요금(원)', color='1박당 요금(원)', color_continuous_scale='Blues', title="🏨 숙소별 1박 실질 투숙 비용 비교 (도시세 포함/취소 제외)")
+                    fig_hotel.update_layout(xaxis_title=None, yaxis_title="1박 평균 요금 (원)", margin=dict(l=10, r=10, t=30, b=100))
+                    st.plotly_chart(fig_hotel, use_container_width=True, config={'displaylogo': False})
             else:
-                st.info("비교할 SPI 데이터가 부족합니다.")
-        else:
-            st.info("SPI 기준에 부합하는 데이터가 없습니다.")
+                st.info("비교할 호텔 숙박 내역이 없습니다. (카테고리가 '호텔', '숙박'이며 내용에 'X박'이 명시되어야 합니다.)")
+
+        # ----------------------------------------------------------------------
+        # [Added] 채널 3: 항공비교 (왕복 환산 및 부분 취소 분석기)
+        # ----------------------------------------------------------------------
+        with sub_tab_flight:
+            st.subheader("✈️ 항공권 요금 및 환불율 비교")
+            st.caption("💡 각 항공권의 왕복/편도 여정을 구분하여 '왕복 환산 요금'으로 동등비교 합니다. 취소 및 부분 환불 발생 시, 동일 노선(출발-도착) 기준 매칭을 통해 정확한 환불율과 위약금(손실액)을 연산합니다.")
+            
+            flight_records = []
+            flight_refund_rows = []
+            
+            # 노선 추출용 헬퍼 (출발공항-도착공항 포맷 자동 검출)
+            def extract_airport_route(text):
+                match = re.search(r'([가-힣a-zA-Z\s]+)-([가-힣a-zA-Z\s]+)', str(text))
+                if match:
+                    dep = match.group(1).replace('[', '').replace(']', '').strip()
+                    arr = match.group(2).replace('[', '').replace(']', '').strip()
+                    dep_clean = dep.split()[-1] if dep.split() else dep
+                    arr_clean = arr.split()[0] if arr.split() else arr
+                    return f"{dep_clean}-{arr_clean}"
+                return None
+
+            # 1. 항공/환불 분류 수집
+            for _, row in df_all.iterrows():
+                cat = str(row['Category']).strip()
+                desc = str(row['Description']).strip()
+                
+                if cat == '항공권':
+                    route = extract_airport_route(desc)
+                    desc_lower = desc.lower()
+                    if any(k in desc_lower for k in ["왕복", "귀국", "rt", "round"]): f_type = "왕복"
+                    elif any(k in desc_lower for k in ["편도", "ow", "one"]): f_type = "편도"
+                    else: f_type = "왕복" # 귀국 정보 등이 있으면 왕복으로 자동 추론 기본값
+                    
+                    fee_val = 0.0
+                    match_fee = re.search(r'수수료:(\d+)원', str(row['Note']))
+                    if match_fee: fee_val = float(match_fee.group(1))
+                    
+                    flight_records.append({
+                        'TripName': row['TripName'],
+                        'Country': row['Country'],
+                        'Date': row['Date'],
+                        'Original_Desc': desc,
+                        'Route': route,
+                        'Type': f_type,
+                        'Currency': row['Currency'],
+                        'Amount': row['Amount'],
+                        'AppliedRate': row['AppliedRate'],
+                        'Ticket_KRW': row['Amount'] if row['Currency'] == 'KRW' else row['Amount'] * row['AppliedRate'],
+                        'Extra_Fee_KRW': fee_val,
+                        'Refund_KRW': 0.0,
+                        'Refund_Foreign': 0.0,
+                        'Refund_Rate': 0.0,
+                        'Loss_KRW': 0.0
+                    })
+                elif cat == '환불':
+                    desc_lower = desc.lower()
+                    if any(k in desc_lower for k in ["항공", "비행기", "페가수스", "세르비아", "항공사", "flight", "airline"]):
+                        flight_refund_rows.append(row)
+
+            # 2. 노선별 항공사 환불 매칭 연산
+            for f in flight_records:
+                for r in flight_refund_rows:
+                    if r['TripName'] == f['TripName']:
+                        f_route = f['Route']
+                        r_route = extract_airport_route(r['Description'])
+                        
+                        # 출발-도착 공항명이 정확히 일치할 경우 매칭 성공
+                        if f_route and r_route and f_route == r_route:
+                            r_cost_krw = r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate']
+                            f['Refund_KRW'] += r_cost_krw
+                            f['Refund_Foreign'] += r['Amount']
+                
+                # 계산 루틴
+                total_initial = f['Ticket_KRW'] + f['Extra_Fee_KRW']
+                f['Net_Cost_KRW'] = total_initial - f['Refund_KRW']
+                f['Refund_Rate'] = min(100.0, (f['Refund_Foreign'] / f['Amount']) * 100.0) if f['Amount'] > 0 else 0.0
+                f['Loss_KRW'] = f['Ticket_KRW'] - f['Refund_KRW'] if f['Refund_KRW'] > 0 else 0.0
+                
+                # 편도의 경우 왕복과 공정한 1대1 비교를 위해 2배의 가중치를 두어 왕복 환산 요금(RT Equivalent) 산출
+                if f['Type'] == "편도": f['RT_Equivalent_KRW'] = f['Net_Cost_KRW'] * 2
+                else: f['RT_Equivalent_KRW'] = f['Net_Cost_KRW']
+
+            if flight_records:
+                display_flight_rows = []
+                chart_flight_data = []
+                
+                for f in flight_records:
+                    status_str = f"정상 ({f['Type']})"
+                    if f['Refund_Rate'] >= 100.0: status_str = "🔴 100% 취소"
+                    elif f['Refund_Rate'] > 0.0: status_str = f"🟡 부분환불 ({f['Refund_Rate']:.1f}%)"
+                    
+                    display_flight_rows.append({
+                        '여행명': f['TripName'],
+                        '노선(공항)': f['Route'] if f['Route'] else "일반 항공권",
+                        '구분': f['Type'],
+                        '구매 요금': f"{(f['Ticket_KRW'] + f['Extra_Fee_KRW']):,.0f}원",
+                        '환불액': f"{f['Refund_KRW']:,.0f}원" if f['Refund_KRW'] > 0 else "-",
+                        '환불율': f"{f['Refund_Rate']:.1f}%" if f['Refund_Rate'] > 0 else "-",
+                        '취소 손실(위약금)': f"{f['Loss_KRW']:,.0f}원" if f['Loss_KRW'] > 0 else "-",
+                        '실지불 순액(Net)': f"{max(0, f['Net_Cost_KRW']):,.0f}원",
+                        '왕복 환산 요금': f"{f['RT_Equivalent_KRW']:,.0f}원" if f['RT_Equivalent_KRW'] > 0 else "-",
+                        '상태': status_str
+                    })
+                    
+                    if f['Refund_Rate'] < 100.0 and f['RT_Equivalent_KRW'] > 0:
+                        chart_flight_data.append({
+                            'Flight_Label': f"{f['Route'] if f['Route'] else '항공권'} ({f['TripName']})",
+                            '왕복 환산 요금(원)': f['RT_Equivalent_KRW']
+                        })
+                
+                st.dataframe(pd.DataFrame(display_flight_rows), use_container_width=True, hide_index=True)
+                
+                if chart_flight_data:
+                    chart_flight_df = pd.DataFrame(chart_flight_data).sort_values(by='왕복 환산 요금(원)', ascending=True)
+                    fig_flight = px.bar(chart_flight_df, x='Flight_Label', y='왕복 환산 요금(원)', color='왕복 환산 요금(원)', color_continuous_scale='Reds', title="✈️ 왕복 기준 항공요금 공평 비교 (편도 노선 2배 환산 적용/취소 제외)")
+                    fig_flight.update_layout(xaxis_title=None, yaxis_title="왕복 환산 요금 (원)", margin=dict(l=10, r=10, t=30, b=100))
+                    st.plotly_chart(fig_flight, use_container_width=True, config={'displaylogo': False})
+            else:
+                st.info("비교할 항공권 내역이 없습니다.")
 
 # ==============================================================================
 # --- [Modules C, D, E] Individual Trip Mode ---
