@@ -1525,15 +1525,39 @@ else:
     with tab_his:
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 바로 아래에 상세 내역 수정과 영수증 첨부 화면이 펼쳐집니다!**")
         viewer_placeholder = st.empty()
-        c_filter, c_search, c_tog = st.columns([2, 3, 1])
-        with c_filter:
-            filter_options =["모든 여행가계부", "이번 여행가계부"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())
-            country_filter = st.selectbox("🌍 국가 필터", filter_options, index=1, key="his_country")
-        with c_search: 
-            search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 카테고리 등", key="his_search", label_visibility="collapsed")
-        with c_tog: 
-            edit_mode = st.toggle("✏️ 직접 수정 모드", value=False, key="his_edit_toggle")
 
+        
+        # ➔ 🚀 [Modified] AND 연산 기반 다차원 필터링 레이아웃으로 변경
+        # 세션 스테이트 초기화 및 로드 데이터 기준 동적 카테고리 생성 준비
+        initial_country = st.session_state.get('his_country', "이번 여행가계부")
+        if initial_country == "모든 여행가계부":
+            temp_display_df = load_all_trips_data()
+        else:
+            temp_display_df = ledger_df.copy()
+            if initial_country != "이번 여행가계부":
+                temp_display_df = temp_display_df[temp_display_df['Country'] == initial_country]
+        
+        # 현재 데이터에 들어있는 유니크 카테고리만 동적으로 추출
+        if not temp_display_df.empty:
+            cat_list = sorted(list(temp_display_df['Category'].dropna().unique()))
+            cat_options = ["모든 카테고리"] + cat_list
+        else:
+            cat_options = ["모든 카테고리"]
+
+        # 4분할 레이아웃 배치
+        c_filter, c_cat, c_search, c_tog = st.columns([2.5, 2.5, 3.5, 1.5])
+        with c_filter:
+            filter_options = ["모든 여행가계부", "이번 여행가계부"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())
+            country_filter = st.selectbox("🌍 국가 필터", filter_options, index=filter_options.index(initial_country) if initial_country in filter_options else 1, key="his_country")
+        with c_cat:
+            cat_filter = st.selectbox("📂 카테고리 필터", cat_options, index=0, key="his_cat")
+        with c_search: 
+            search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모 등 검색", key="his_search")
+        with c_tog: 
+            st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+            edit_mode = st.toggle("✏️ 직접 수정", value=False, key="his_edit_toggle")
+        
+        # ➔ 🚀 [Modified] 필터 선택에 따른 원본 데이터셋 확보 및 정합성 재계산
         if country_filter == "모든 여행가계부":
             st.warning("⚠️ '모든 여행가계부' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
             edit_mode = False 
@@ -1557,17 +1581,26 @@ else:
                 if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
                     if save_data(edited_df): st.rerun()
             else:
+                
+                
+                # ➔ 🚀 [Modified] 카테고리 필터와 검색 키워드의 정교한 AND 결합 연산 수행
+                render_df = display_df.copy()
+                
+                # 1차 필터: 카테고리 AND 조건
+                if cat_filter != "모든 카테고리":
+                    render_df = render_df[render_df['Category'] == cat_filter]
+                
+                # 2차 필터: 검색어 AND 조건 (상호명, 메모, 노트 등 전체 탐색)
                 if search_query.strip():
                     mask = (
-                        display_df['Category'].str.contains(search_query, case=False, na=False) | 
-                        display_df['Description'].str.contains(search_query, case=False, na=False) | 
-                        display_df['Note'].str.contains(search_query, case=False, na=False) |
-                        display_df['Country'].str.contains(search_query, case=False, na=False) 
+                        render_df['Category'].str.contains(search_query, case=False, na=False) | 
+                        render_df['Description'].str.contains(search_query, case=False, na=False) | 
+                        render_df['Note'].str.contains(search_query, case=False, na=False) |
+                        render_df['Country'].str.contains(search_query, case=False, na=False) 
                     )
-                    render_df = display_df[mask]
-                    st.write(f"🔎 검색 결과: {len(render_df)}건")
-                else:
-                    render_df = display_df
+                    render_df = render_df[mask]
+                    
+                st.write(f"🔎 검색 결과: {len(render_df)}건")
                     
                 df_event = st.dataframe(render_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
                 
