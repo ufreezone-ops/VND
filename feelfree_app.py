@@ -1026,12 +1026,12 @@ if st.session_state.show_spi:
                     fig_stacked.update_layout(barmode='stack', margin=dict(l=10, r=10, t=10, b=30), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5, title=None), xaxis_title=None, yaxis_title=None)
                     st.plotly_chart(fig_stacked, use_container_width=True)
 
-        # ----------------------------------------------------------------------
-        # [Modified] 채널 2: 호텔비교 (1박 실질 투숙 비용 역산 및 정밀 매칭 엔진)
+         # ----------------------------------------------------------------------
+        # [Modified] 채널 2: 호텔비교 (금융 크기 기반 우선순위 정렬 및 정밀 매칭 엔진)
         # ----------------------------------------------------------------------
         with sub_tab_hotel:
             st.subheader("🏨 호텔 1박 실질 요금 비교")
-            st.caption("💡 실제 요금 지불이 발생한 예약 정보(Amount > 0)만 수집하며, 단순 일정 기록인 '체크인/체크아웃'(Amount = 0) 행은 분석 대상에서 완전히 제외합니다. 현장 룸 업그레이드 및 추가 비용 지출(surcharge)은 별도의 숙박일수 증가 없이 해당 호텔의 총액에 합산하여 1박 평균요금의 정합성을 유지합니다.")
+            st.caption("💡 실제 지출이 발생한 호텔 결제 정보(Category='호텔', Amount > 0)만 수집하며, 단순 일정인 체크인은 제외합니다. 동일 호텔명으로 기록된 여러 결제 건 중 '가장 금액이 큰 건'을 기본숙박비로 지정하여 투숙일수를 추출하고, '그 외 금액이 작은 결제 건'은 일수 증가 없이 기타추가비용(업그레이드/세금 등)으로 자동 분류하여 정합성을 보장합니다.")
             
             # 정교한 호텔명 클리닝 헬퍼
             def clean_hotel_name(desc):
@@ -1042,128 +1042,121 @@ if st.session_state.show_spi:
                 name = re.sub(r'\s*\d+\s*박.*$', '', name)
                 return name.strip()
             
-            primary_hotel_stays = []
-            surcharges = []
+            raw_hotel_rows = []
             refund_rows = []
             
-            # Surcharge/Upgrade 판단용 키워드 정의
-            surcharge_keywords = ["업그레이드", "추가비용", "추가요금", "추가결제", "현장결제", "surcharge", "룸업", "도시세", "시티택스", "시티 택스", "citytax", "city tax", "tourist tax", "세금", "tax"]
-            
-            # 1. 1차 분류 및 수집
+            # 1. 1차 수집 (지출액이 존재하는 호텔/수수료 내역만 텍스트 차단 없이 우선 긁어모음)
             for _, row in df_all.iterrows():
                 cat = str(row['Category']).strip()
                 desc = str(row['Description']).strip()
                 amt = float(row['Amount'])
+                is_exp = int(row['IsExpense']) if 'IsExpense' in row else 1
                 
-                # Identify hotel refunds
+                # 1-1. 환불 내역 수집
                 if cat == '환불':
                     desc_lower = desc.lower()
-                    if any(k in desc_lower for k in ["호텔", "숙박", "인페라", "라이온", "스플랜디도", "벨몬트", "센터호텔", "agoda", "아고다", "booking", "소피아", "코럴베이"]):
+                    if any(k in desc_lower for k in ["호텔", "숙박", "인페라", "라이온", "스플랜디도", "벨몬트", "센터호텔", "agoda", "아고다", "booking", "소피아", "코럴베이", "파노라마"]):
                         refund_rows.append(row)
                         continue
                 
-                # Identify Hotel related rows (Amount > 0)
-                if cat in ['호텔', '숙박', '수수료', '기타'] and amt > 0:
+                # 1-2. 실제 지출이 발생한 호텔 카테고리 수집 (IsExpense == 1, Amount > 0)
+                if cat in ['호텔', '숙박'] and is_exp == 1 and amt > 0:
+                    h_name = clean_hotel_name(desc)
+                    # 텍스트 내 박수 정보 사전 추출
+                    match_nights = re.search(r'(\d+)\s*박', desc)
+                    nights = int(match_nights.group(1)) if match_nights else 0
+                    
+                    raw_hotel_rows.append({
+                        'TripName': row['TripName'],
+                        'Country': row['Country'],
+                        'Date': row['Date'],
+                        'Original_Desc': desc,
+                        'Clean_Name': h_name if h_name else "알 수 없는 호텔",
+                        'Nights': nights,
+                        'Currency': row['Currency'],
+                        'Amount': amt,
+                        'AppliedRate': row['AppliedRate'],
+                        'Cost_KRW': amt if row['Currency'] == 'KRW' else amt * row['AppliedRate'],
+                        'Type': 'HOTEL_ROW'
+                    })
+                    
+                # 1-3. 카테고리는 호텔이 아니지만, 별도의 도시세 수수료로 기록된 행 수집
+                elif cat in ['수수료', '기타'] and is_exp == 1 and amt > 0:
                     desc_lower = desc.lower()
-                    
-                    # 룸업그레이드, 추가 비용 등 surcharge 요소 분리 검사
-                    is_surcharge = any(k in desc_lower for k in surcharge_keywords)
-                    
-                    if not is_surcharge:
-                        # 정상 투숙(Primary)으로 먼저 검증
-                        match_nights = re.search(r'(\d+)\s*박', desc)
-                        if match_nights:
-                            nights = int(match_nights.group(1))
-                            h_name = clean_hotel_name(desc)
-                            
-                            primary_hotel_stays.append({
-                                'TripName': row['TripName'],
-                                'Country': row['Country'],
-                                'Date': row['Date'],
-                                'Original_Desc': desc,
-                                'Clean_Name': h_name if h_name else "알 수 없는 호텔",
-                                'Nights': nights,
-                                'Currency': row['Currency'],
-                                'Amount': amt,
-                                'AppliedRate': row['AppliedRate'],
-                                'Cost_KRW': amt if row['Currency'] == 'KRW' else amt * row['AppliedRate'],
-                                'City_Tax_KRW': 0.0,
-                                'Upgrade_Cost_KRW': 0.0,
-                                'Refund_KRW': 0.0,
-                                'Refund_Foreign': 0.0,
-                                'Cancellation_Rate': 0.0,
-                                'FX_GainLoss': 0.0
-                            })
-                        else:
-                            # 'X박'이 없더라도 카테고리가 '호텔'이고 금액이 있으면 surcharge 성격으로 자동 이관
-                            surcharges.append(row)
-                    else:
-                        # 업그레이드 및 세금 키워드가 포착되면 무조건 Surcharge 리스트로 이관
-                        surcharges.append(row)
+                    if any(k in desc_lower for k in ["도시세", "시티택스", "시티 택스", "citytax", "city tax", "tourist tax"]):
+                        h_name = clean_hotel_name(desc)
+                        raw_hotel_rows.append({
+                            'TripName': row['TripName'],
+                            'Country': row['Country'],
+                            'Date': row['Date'],
+                            'Original_Desc': desc,
+                            'Clean_Name': h_name if h_name else "알 수 없는 호텔",
+                            'Nights': 0,
+                            'Currency': row['Currency'],
+                            'Amount': amt,
+                            'AppliedRate': row['AppliedRate'],
+                            'Cost_KRW': amt if row['Currency'] == 'KRW' else amt * row['AppliedRate'],
+                            'Type': 'SURCHARGE_ROW'
+                        })
             
-            # 2. Surcharge(업그레이드/도시세) 및 환불 매칭 연산
-            for h in primary_hotel_stays:
-                h_name_lower = h['Clean_Name'].lower()
-                
-                # 도시세 및 업그레이드 비용 매칭 분기
-                for s in surcharges:
-                    if s['TripName'] == h['TripName'] and s['Country'] == h['Country']:
-                        s_desc_lower = str(s['Description']).lower()
-                        s_cost_krw = s['Amount'] if s['Currency'] == 'KRW' else s['Amount'] * s['AppliedRate']
-                        
-                        # 어근/상호명 포함 여부 혹은 기항지 1대1 일치 여부 체크
-                        if h_name_lower in s_desc_lower or len([x for x in primary_hotel_stays if x['TripName']==h['TripName'] and x['Country']==h['Country']]) == 1:
-                            # 세금 여부 검사
-                            if any(k in s_desc_lower for k in ["도시세", "시티택스", "시티 택스", "citytax", "city tax", "tourist tax"]):
-                                h['City_Tax_KRW'] += s_cost_krw
-                            else:
-                                # 일반 업그레이드 비용
-                                h['Upgrade_Cost_KRW'] += s_cost_krw
-                
-                # 동일 여행지 내 취소 환불 매칭 및 환율 오차 연산
-                for r in refund_rows:
-                    if r['TripName'] == h['TripName']:
-                        r_desc = str(r['Description']).lower()
-                        if h_name_lower in r_desc or any(k in r_desc for k in h_name_lower.split()):
-                            r_cost_krw = r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate']
-                            h['Refund_KRW'] += r_cost_krw
-                            h['Refund_Foreign'] += r['Amount']
-                            h['Cancellation_Rate'] = min(100.0, (h['Refund_Foreign'] / h['Amount']) * 100.0) if h['Amount'] > 0 else 0.0
-                            expected_refund_krw = h['Refund_Foreign'] * h['AppliedRate']
-                            h['FX_GainLoss'] = r_cost_krw - expected_refund_krw
-
-            # 3. 동일한 호텔이 여러 전표로 나뉘어 결제된 경우의 1대1 이름 매칭 기반 병합(Deduplication)
+            # 2. 동일 호텔 매칭 그룹화 (TripName, Country, Clean_Name 기준)
             from collections import defaultdict
             grouped_hotels = defaultdict(list)
-            
-            for h in primary_hotel_stays:
-                key = (h['TripName'], h['Country'], h['Clean_Name'])
-                grouped_hotels[key].append(h)
+            for r in raw_hotel_rows:
+                key = (r['TripName'], r['Country'], r['Clean_Name'])
+                grouped_hotels[key].append(r)
                 
             consolidated_hotels = []
             for key, rows in grouped_hotels.items():
                 trip_name, country, clean_name = key
                 
-                total_cost = sum(r['Cost_KRW'] for r in rows)
-                total_upgrade = sum(r['Upgrade_Cost_KRW'] for r in rows)
-                total_city_tax = sum(r['City_Tax_KRW'] for r in rows)
-                total_refund = sum(r['Refund_KRW'] for r in rows)
-                total_refund_foreign = sum(r['Refund_Foreign'] for r in rows)
-                total_fx_loss = sum(r['FX_GainLoss'] for r in rows)
+                # [Magnitude Priority Sorting] 원화 요금 기준 크기순 내림차순 정렬!
+                rows_sorted = sorted(rows, key=lambda x: x['Cost_KRW'], reverse=True)
                 
-                total_nights = sum(r['Nights'] for r in rows)
+                # 가장 금액이 큰 행을 '기본 숙박비' 핵심 지표로 채택하고 투숙일수 상속
+                primary_stay = rows_sorted[0]
+                base_cost = primary_stay['Cost_KRW']
+                nights = primary_stay['Nights']
                 
-                initial_amount = sum(r['Amount'] for r in rows)
-                cancellation_rate = min(100.0, (total_refund_foreign / initial_amount) * 100.0) if initial_amount > 0 else 0.0
+                # 만약 가장 금액이 큰 행에 "X박" 정보가 없고 서브 행에 있다면 서브 행에서 일수를 백업 상속
+                if nights == 0:
+                    for r in rows_sorted[1:]:
+                        if r['Nights'] > 0:
+                            nights = r['Nights']
+                            break
+                
+                # 박수가 명시되지 않은 호텔은 비교 차트 및 정규 산정에서 엄격하게 자동 배제
+                if nights == 0:
+                    continue
+                
+                # 그 외 크기가 작은 결제 건들은 일수 증가 없는 '기타 추가비용'으로 자동 분류 및 누적합산
+                extra_fees = sum(r['Cost_KRW'] for r in rows_sorted[1:])
+                
+                # 환불 내역 매칭 연산
+                total_refund = 0.0
+                total_refund_foreign = 0.0
+                total_fx_loss = 0.0
+                
+                for r in refund_rows:
+                    if r['TripName'] == trip_name:
+                        r_desc = str(r['Description']).lower()
+                        if clean_name.lower() in r_desc or any(k in r_desc for k in clean_name.lower().split()):
+                            r_cost_krw = r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate']
+                            total_refund += r_cost_krw
+                            total_refund_foreign += r['Amount']
+                            
+                            expected_refund_krw = r['Amount'] * primary_stay['AppliedRate']
+                            total_fx_loss += (r_cost_krw - expected_refund_krw)
+                
+                cancellation_rate = min(100.0, (total_refund_foreign / primary_stay['Amount']) * 100.0) if primary_stay['Amount'] > 0 else 0.0
                 
                 consolidated_hotels.append({
                     'TripName': trip_name,
                     'Country': country,
                     'Clean_Name': clean_name,
-                    'Nights': total_nights,
-                    'Cost_KRW': total_cost,
-                    'Upgrade_Cost_KRW': total_upgrade,
-                    'City_Tax_KRW': total_city_tax,
+                    'Nights': nights,
+                    'Cost_KRW': base_cost,
+                    'Upgrade_Cost_KRW': extra_fees, # 이종 결제나 도시세, 업그레이드 등 모든 추가 결제는 여기에 병합!
                     'Refund_KRW': total_refund,
                     'Cancellation_Rate': cancellation_rate,
                     'FX_GainLoss': total_fx_loss
@@ -1175,7 +1168,7 @@ if st.session_state.show_spi:
                 
                 for h in consolidated_hotels:
                     # 기본 숙박비 + 업그레이드 비용 + 도시세 - 환불액 = 실지불 순액
-                    net_cost = h['Cost_KRW'] + h['Upgrade_Cost_KRW'] + h['City_Tax_KRW'] - h['Refund_KRW']
+                    net_cost = h['Cost_KRW'] + h['Upgrade_Cost_KRW'] - h['Refund_KRW']
                     nights = h['Nights']
                     avg_rate = net_cost / nights if nights > 0 and h['Cancellation_Rate'] < 100.0 else 0.0
                     
@@ -1195,7 +1188,6 @@ if st.session_state.show_spi:
                         '호텔명': h['Clean_Name'],
                         '숙박일수': f"{nights}박",
                         '기본숙박비(업글포함)': f"{base_price:,.0f}원",
-                        '도시세(합산)': f"{h['City_Tax_KRW']:,.0f}원" if h['City_Tax_KRW'] > 0 else "-",
                         '환불액': f"{h['Refund_KRW']:,.0f}원" if h['Refund_KRW'] > 0 else "-",
                         '실지불 순액(Net)': f"{max(0, net_cost):,.0f}원",
                         '1박당 평균': f"{avg_rate:,.0f}원" if avg_rate > 0 else "-",
