@@ -1245,10 +1245,19 @@ if st.session_state.show_spi:
                     
                     # [Modified] 여정 유형 자동 감별 규칙 고도화
                     # Description에 '귀국' 혹은 '왕복'이 들어가야 왕복으로 인정하며, 그 외는 '편도'로 기본 설정하여 기항지 간 편도 항공권 완벽 수용
-                    if any(k in desc_lower for k in ["왕복", "귀국", "rt", "round"]):
+                    # ➔ 🚀 [Modified] Dan의 명시적 키워드('다구간', '왕복', '편도') 우선 감별 룰 수립
+                    if "다구간" in desc_lower:
+                        f_type = "다구간"
+                    elif "왕복" in desc_lower:
                         f_type = "왕복"
-                    else:
+                    elif "편도" in desc_lower:
                         f_type = "편도"
+                    else:
+                        # 폴백 조건: 키워드가 모두 없는 과거 데이터 구제
+                        if any(k in desc_lower for k in ["귀국", "rt", "round"]):
+                            f_type = "왕복"
+                        else:
+                            f_type = "편도"
                     
                     fee_val = 0.0
                     match_fee = re.search(r'수수료:(\d+)원', str(row['Note']))
