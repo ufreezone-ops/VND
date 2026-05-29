@@ -872,7 +872,7 @@ def sort_trips(trip_names):
 sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
 
 # [Modified] 비교(SPI) 모드를 풀다운 메뉴의 가장 마지막 독립 메뉴로 승격
-SPECIAL_MODE = "📊 모든 여행 물가비교"
+SPECIAL_MODE = "📊 모든 여행지 물가비교"
 dropdown_options = sorted_trips + [SPECIAL_MODE]
 
 if 'show_spi' not in st.session_state: st.session_state.show_spi = False
