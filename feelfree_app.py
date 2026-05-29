@@ -872,7 +872,7 @@ def sort_trips(trip_names):
 sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
 
 # [Modified] 비교(SPI) 모드를 풀다운 메뉴의 가장 마지막 독립 메뉴로 승격
-SPECIAL_MODE = "📊 모든 여행 간 비교 (SPI)"
+SPECIAL_MODE = "📊 모든 여행 비교"
 dropdown_options = sorted_trips + [SPECIAL_MODE]
 
 if 'show_spi' not in st.session_state: st.session_state.show_spi = False
@@ -902,11 +902,11 @@ if st.session_state.show_spi:
     
     if not df_all.empty:
 
-        # [Added] 물가비교, 호텔비교, 항공비교 3개 서브탭 생성
-        sub_tab_spi, sub_tab_hotel, sub_tab_flight = st.tabs(["📊 물가비교", "🏨 호텔비교", "✈️ 항공비교"])
+        # [Added] 1일비용, 호텔, 항공 3개 서브탭 생성
+        sub_tab_spi, sub_tab_hotel, sub_tab_flight = st.tabs(["📊 1일비용", "🏨 호텔", "✈️ 항공"])
       
         # ----------------------------------------------------------------------
-        # 채널 1: 물가비교 (기존 SPI 엔진 유지)
+        # 채널 1: 1일비용 (기존 SPI 엔진 유지)
         # ----------------------------------------------------------------------
         with sub_tab_spi:
         
@@ -1003,7 +1003,7 @@ if st.session_state.show_spi:
                 final_total_df = agg_total.sort_values(by='Daily_SPI', ascending=True)
                 
                 if not final_total_df.empty:
-                    st.markdown("### 여행지별 1박 체감물가 (KRW)")
+                    st.markdown("### 여행지 1박비용(원)")
                     def make_chart_label(r):
                         country, trip = str(r['Country']), str(r['TripName'])
                         if "발칸" in trip: return country 
@@ -1027,10 +1027,10 @@ if st.session_state.show_spi:
                     st.plotly_chart(fig_stacked, use_container_width=True)
 
          # ----------------------------------------------------------------------
-        # [Modified] 채널 2: 호텔비교 (금융 크기 기반 우선순위 정렬 및 정밀 매칭 엔진)
+        # [Modified] 채널 2: 호텔 (금융 크기 기반 우선순위 정렬 및 정밀 매칭 엔진)
         # ----------------------------------------------------------------------
         with sub_tab_hotel:
-            st.subheader("🏨 호텔 1박 실질 요금 비교")
+            st.subheader("🏨 호텔 1박 요금 비교")
             st.caption("💡 실제 지출이 발생한 호텔 결제 정보(Category='호텔', Amount > 0)만 수집하며, 단순 일정인 체크인은 제외합니다. 동일 호텔명으로 기록된 여러 결제 건 중 '가장 금액이 큰 건'을 기본숙박비로 지정하여 투숙일수를 추출하고, '그 외 금액이 작은 결제 건'은 일수 증가 없이 기타추가비용(업그레이드/세금 등)으로 자동 분류하여 정합성을 보장합니다.")
             
             # 정교한 호텔명 클리닝 헬퍼
@@ -1212,10 +1212,10 @@ if st.session_state.show_spi:
                 st.info("비교할 호텔 숙박 내역이 없습니다. (카테고리가 '호텔', '숙박'이며 내용에 'X박'이 명시되어야 합니다.)")
                 
         # ----------------------------------------------------------------------
-        # [Modified] 채널 3: 항공비교 (왕복 환산 및 1인당 요금 정밀 추적 엔진)
+        # [Modified] 채널 3: 항공 (왕복 환산 및 1인당 요금 정밀 추적 엔진)
         # ----------------------------------------------------------------------
         with sub_tab_flight:
-            st.subheader("✈️ 항공권 요금 및 환불율 비교")
+            st.subheader("✈️ 항공권 요금 비교")
             st.caption("💡 각 항공권의 왕복/편도 여정을 구분하여 '1인당 왕복 환산 요금'으로 공평하게 비교합니다. 노선(Route)이 기재되지 않은 수화물/수수료 행은 해당 여행지의 메인 항공권에 자동으로 합산되며, 여행지별 설정된 인원수(Travelers)로 나누어 실질적인 '1인당 비용'을 산출합니다.")
             
             # 노선 추출용 헬퍼 (출발공항-도착공항 포맷 자동 검출)
