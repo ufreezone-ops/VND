@@ -688,8 +688,9 @@ def get_inventory_status(df):
         
         asset_cls = get_asset_class(method)
         
-        if cat in ['충전', '환전', '입금', '직접환전']:
-            if cat == '충전': final_dest_cls = "PREPAID"
+        if cat in ['충전', '환전', '입금', '직접환전', '이월잔액']: # [Modified] 이월잔액 추가
+            if cat == '이월잔액': final_dest_cls = "CASH" # [Added]
+            elif cat == '충전': final_dest_cls = "PREPAID"
             elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
             else: final_dest_cls = get_asset_class(desc + method)
             
@@ -1605,6 +1606,7 @@ else:
         elif mode == "자산 이동":
             st.subheader("🔁 자산 이동 및 환전")
             ty = st.selectbox("유형",[
+                "이월잔액 (지난여행 -> 현금잔액)", # [Added] 이월잔액 항목 추가
                 "직접환전 (원화계좌 -> 로컬현금)", 
                 "이종환전 (외화 -> 타국 외화)",
                 "충전 (원화계좌 -> 트래블카드)", 
@@ -1660,6 +1662,20 @@ else:
                         st.success("이종 자산 환전 기록이 성공적으로 완료되었습니다!")
                         time.sleep(1)
                         st.rerun()
+
+            # [Added] 이월잔액 전용 입력기 설계 및 FIFO 계산 루틴 탑재
+            elif "이월잔액" in ty:
+                with c1:
+                    curr_opts_tr = [IN_CURR, "USD"] + [c for c in available_currs if c not in [IN_CURR, "USD", "KRW"]]
+                    curr_tr = st.selectbox("대상 통화", curr_opts_tr, key="tr_curr")
+                    if curr_tr == IN_CURR and IN_MULTI == 100: t_amt = st.number_input(f"가져온 잔돈 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
+                    else: t_amt = st.number_input(f"가져온 잔돈 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_target_flt")
+                with c2:
+                    applied_tr_rate = st.number_input("당시 취득 환율 (원가)", value=get_default_rate(curr_tr), format="%.5f")
+                    st.caption(f"💡 시스템 투입 가치: **{(t_amt * applied_tr_rate):,.0f} 원**")
+                if st.button("🚀 이월잔고 현금지갑에 투입", use_container_width=True, type="primary"):
+                    new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '이월잔액', 'Description': f"지난여행 잔돈 유입 (-> 현금({curr_tr}))", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': '기타(지난여행)', 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': 'Carry-over Asset', 'Receipt_URL': ''}])
+                    if append_new_data(new_row): st.rerun()
 
             elif "재환전" in ty:
                 with c1:
