@@ -447,7 +447,6 @@ def smart_cache_clear():
     try: load_all_trips_data.clear()
     except: pass
 
-### ⚙️[Logic: Core Calculation] 전체 원장 재계산 (DB 저장 전)
 def recalculate_entire_ledger(df):
     temp_df = df.copy()
     temp_df = temp_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
@@ -477,15 +476,16 @@ def recalculate_entire_ledger(df):
         rate = temp_df.at[i, 'AppliedRate'] 
         asset_cls = get_asset_class(method)
         
-        if cat in['충전', '환전', '입금', '직접환전']:
+        if cat in['충전', '환전', '입금', '직접환전', '이월잔액']: # [Modified] 이월잔액 추가
             if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
-            if cat == '충전': final_dest_cls = "PREPAID"
+            if cat == '이월잔액': final_dest_cls = "CASH" # [Added] 이월잔액은 현금유입으로 처리
+            elif cat == '충전': final_dest_cls = "PREPAID"
             elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
             else: final_dest_cls = get_asset_class(desc + method)
 
             target = f"트래블카드({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})" # [Modified]
             if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
-            if asset_cls == "DOMESTIC" or cat == '충전': c_budget += qty if curr == 'KRW' else qty * rate
+            if asset_cls == "DOMESTIC" or cat == '충전' or cat == '이월잔액': c_budget += qty if curr == 'KRW' else qty * rate # [Modified]
         
         elif cat == '환불':
             if curr != 'KRW' and (pd.isna(rate) or rate <= 1.0):
@@ -598,8 +598,6 @@ def recalculate_entire_ledger(df):
         row_country = temp_df.at[i, 'Country']
         nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
         row_curr = nodes.get(row_country, FIRST_NODE)["currency"] if nodes else "USD"
-
-
         
         active_curr = curr if curr != 'KRW' else row_curr
         rnd_dec = 0 if active_curr in ["VND", "HUF", "KRW"] else 2
