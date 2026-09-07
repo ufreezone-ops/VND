@@ -241,40 +241,46 @@ st.markdown("""
         gap: 0px !important;
     }
 
-    /* 2. 모바일(스마트폰)에서도 컬럼 줄바꿈 무조건 차단 및 가로 1열 고정 */
+    /* 2. 지폐 카운터: 입력창을 라벨 바로 옆으로 끌어당기고 탈출 방지 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
+        justify-content: flex-start !important; /* 왼쪽 라벨 쪽으로 바짝 밀착 */
+        gap: 12px !important;                 /* 라벨과 입력창 사이 간격 12px */
         width: 100% !important;
-        gap: 6px !important;
-        margin-bottom: -16px !important;
+        margin-bottom: -14px !important;
     }
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"] {
-        min-width: 0 !important;
-        width: auto !important;
-    }
+    /* 좌측 라벨: 55px 고정 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
-        flex: 0 0 52px !important;
-        max-width: 52px !important;
-        min-width: 52px !important;
+        flex: 0 0 55px !important;
+        width: 55px !important;
+        min-width: 55px !important;
+        max-width: 55px !important;
     }
+    /* 우측 입력창: 사이드바 밖으로 삐져나가지 않도록 아담한 85px로 고정 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
-        flex: 1 1 auto !important;
-        width: 100% !important;
+        flex: 0 0 85px !important;
+        width: 85px !important;
+        max-width: 85px !important;
+        min-width: 85px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput {
+        width: 85px !important;
         margin-bottom: 0px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
+        width: 85px !important;
         min-height: 28px !important;
         height: 28px !important;
+        border-radius: 6px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input {
         height: 28px !important;
-        font-size: 13px !important;
-        padding: 0 4px !important;
+        font-size: 14px !important;
+        text-align: center !important; /* 숫자가 정중앙에 예쁘게 오도록 */
+        padding: 0px !important;
     }
     
     </style>
@@ -1052,7 +1058,7 @@ with st.sidebar:
                             else:
                                 b_label = f"{bill}"
                                 
-                            c_col1, c_col2 = st.columns([1, 3.2])
+                            c_col1, c_col2 = st.columns([1, 1.5])
                             with c_col1:
                                 st.markdown(f"<div style='font-size:13.5px; font-weight:bold; white-space:nowrap; padding-top:2px;'>{b_label}동</div>", unsafe_allow_html=True)
                             with c_col2:
