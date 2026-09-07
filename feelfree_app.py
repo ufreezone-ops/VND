@@ -889,13 +889,48 @@ with st.sidebar:
         st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
         if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
     else:
-        # 4.01.02 | Multi-Currency Dynamic Wallet Monitor (통화별 카드/현금/외상 실시간 잔고)
+        # ----------------------------------------------------------------------
+        # 4.01.02 | Multi-Currency Dynamic Wallet Monitor & Cash Bill Counter
+        # ----------------------------------------------------------------------
         st.subheader("💰 지갑 잔고")
         b_val, spent_val = calculate_summary_metrics(ledger_df)
         
+        # 1. 여행 진행 중 여부 판별 (한국 입국일 이전/당일이면 True -> 상세배치 자동 열림)
+        korea_arr = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
+        arr_rows = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
+        target_arr_row = korea_arr if not korea_arr.empty else arr_rows
+
+        is_trip_active = True
+        if not target_arr_row.empty:
+            m_arr = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_arr_row.iloc[-1]['Date']))
+            if m_arr:
+                arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
+                today_dt = datetime.now(st.session_state.current_tz).date()
+                is_trip_active = (today_dt <= arr_dt)
+
         active_currs = set([k.split('(')[1].replace(')','') for k in current_inventory_batches.keys() if len(current_inventory_batches[k]) > 0 and sum(b['qty'] for b in current_inventory_batches[k]) > 0])
         trip_currs = set(node['currency'] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())
         display_currs = sorted(list(active_currs | trip_currs))
+
+        # 통화별 권종 매핑
+        CURR_BILLS = {
+            "VND": BILLS,  # [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
+            "USD": [100, 50, 20, 10, 5, 2, 1],
+            "EUR": [100, 50, 20, 10, 5],
+            "TRY": [200, 100, 50, 20, 10, 5],
+            "JPY": [10000, 5000, 2000, 1000],
+            "CNY": [100, 50, 20, 10, 5, 1]
+        }
+
+        # 통화별 ATM 인출 권장 안전선 (이하로 떨어지면 경고)
+        LOW_CASH_THRESHOLD = {
+            "VND": 1000000,  # 100만 동 (약 5.5만 원)
+            "USD": 50,
+            "EUR": 50,
+            "TRY": 1000,
+            "JPY": 5000,
+            "CNY": 300
+        }
         
         ### 📊 [GUI: Chart/Table] 통화별 잔고 표시
         for c in display_currs:
@@ -910,20 +945,25 @@ with st.sidebar:
             if current_debt > 0:
                 st.markdown(f"<div style='color:#FF4B4B; font-size:14px;'>📌 <b>미결제 외상: {fmt.format(current_debt)}</b></div>", unsafe_allow_html=True)
             
-            # [Modified] 트래블로그 -> 트래블카드로 통일
             c_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블카드({c})",[])])
             c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
             
             if c_card > 0 or c_cash > 0 or c in trip_currs:
                 st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
                 st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
-                st.markdown(f"<div style='margin-bottom:18px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
+                st.markdown(f"<div style='margin-bottom:8px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
+
+                # [기능 1] ATM 인출 알림 경고 (현금 잔고가 안전선 이하일 때 발동)
+                threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
+                if is_trip_active and c_cash <= threshold:
+                    st.warning(f"🚨 **현금 부족 경고!**\n\n현금 잔고가 **{fmt.format(c_cash)} {c}**로 안전선({fmt.format(threshold)} {c}) 이하입니다. ATM 인출을 준비하세요!")
                 
                 card_batches = current_inventory_batches.get(f"트래블카드({c})", [])
                 cash_batches = current_inventory_batches.get(f"현금({c})", [])
                 
+                # 진행 중인 여행이면 '상세 배치'가 기본으로 열림
                 if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
-                    with st.expander("🔍 상세 배치", expanded=False):
+                    with st.expander("🔍 상세 배치", expanded=is_trip_active):
                         r_fmt = ".4f" if c in ["VND", "HUF"] else ".2f"
                         
                         if any(b['qty'] > 0 for b in card_batches):
@@ -935,6 +975,46 @@ with st.sidebar:
                             st.caption("[현금]")
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
+
+                # [기능 2] 지폐 권종별 실사 카운터 (장부 오차 및 기록 누락 검증기)
+                bills_to_count = CURR_BILLS.get(c, [])
+                if bills_to_count and (c_cash > 0 or is_trip_active):
+                    with st.expander(f"💵 {c} 지폐 카운터 (실사 검증)", expanded=False):
+                        st.caption("지갑 속 지폐 장수를 세어 입력하세요 (미기록 지출 검증용):")
+                        total_counted = 0
+                        for bill in bills_to_count:
+                            if c == "VND":
+                                b_label = f"{bill // 10000}만동" if bill >= 10000 else f"{bill // 1000}천동"
+                            else:
+                                b_label = f"{bill} {c}"
+                                
+                            c_col1, c_col2 = st.columns([1.3, 1])
+                            with c_col1:
+                                st.markdown(f"<div style='padding-top:8px; font-size:13px;'><b>{b_label}</b></div>", unsafe_allow_html=True)
+                            with c_col2:
+                                cnt = st.number_input(
+                                    label=f"{c}_{bill}",
+                                    min_value=0,
+                                    step=1,
+                                    value=st.session_state.get(f"cnt_{c}_{bill}", 0),
+                                    key=f"cnt_{c}_{bill}",
+                                    label_visibility="collapsed"
+                                )
+                            total_counted += bill * cnt
+                            
+                        st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
+                        st.markdown(f"🧮 **지갑 실물 합계:** `{fmt.format(total_counted)} {c}`")
+                        
+                        # 장부 잔액과 실물 대조 (오차 감사)
+                        diff_val = total_counted - c_cash
+                        if total_counted > 0:
+                            if diff_val == 0:
+                                st.success("✅ 장부 잔고와 실물 현금이 100% 일치합니다!")
+                            elif diff_val < 0:
+                                st.error(f"🚨 **불일치 발견:** 실물이 **{fmt.format(abs(diff_val))} {c}** 부족합니다!\n\n(영수증 누락이나 미기록된 지출이 있는지 확인하세요.)")
+                            else:
+                                st.warning(f"⚠️ **불일치 발견:** 실물이 **+{fmt.format(diff_val)} {c}** 더 많습니다!\n\n(지출 금액 오기입이나 거스름돈 착오를 확인하세요.)")
+                
                 st.divider()
 
         # 4.01.03 | Net Financial Summary KPI Display (총 예산 및 실지출 총액)
