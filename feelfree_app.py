@@ -980,25 +980,45 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 심플 '💵 지폐 카운터' (스마트폰 최적화: 초슬림 세로 간격)
+                # [기능 2] 스마트폰 한 화면 최적화 '💵 지폐 카운터' (모바일 강제 가로 1열 배치)
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
-                        # 스마트폰용 권종 간 세로 간격 압축 CSS
+                        # [핵심] 스마트폰에서도 무조건 가로 한 줄(No Wrap)로 밀착시키는 CSS
                         st.markdown("""
                             <style>
-                            div[data-testid="stSidebar"] div.stNumberInput {
-                                margin-bottom: -16px !important;
+                            /* 1. 모바일에서도 컬럼이 세로로 줄바꿈되지 않도록 강제 가로 정렬 */
+                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
+                                flex-direction: row !important;
+                                flex-wrap: nowrap !important;
+                                align-items: center !important;
+                                gap: 8px !important;
+                                margin-bottom: -14px !important;
+                            }
+                            /* 2. 좌측 라벨 컬럼(50만동 등) 고정 폭 지정 */
+                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
+                                flex: 0 0 58px !important;
+                                min-width: 58px !important;
+                                max-width: 58px !important;
+                            }
+                            /* 3. 우측 카운터 컬럼 유연 폭 지정 */
+                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child {
+                                flex: 1 1 auto !important;
+                                min-width: 0 !important;
+                            }
+                            /* 4. 입력창 세로 높이 슬림화 */
+                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div.stNumberInput {
+                                margin-bottom: 0px !important;
                                 padding-bottom: 0px !important;
                             }
-                            div[data-testid="stSidebar"] div.stNumberInput div[data-baseweb="input"] {
-                                min-height: 28px !important;
-                                height: 28px !important;
+                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
+                                min-height: 30px !important;
+                                height: 30px !important;
                                 border-radius: 6px !important;
                             }
-                            div[data-testid="stSidebar"] div.stNumberInput input {
+                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div.stNumberInput input {
                                 font-size: 13px !important;
-                                padding-left: 8px !important;
+                                height: 30px !important;
                             }
                             </style>
                         """, unsafe_allow_html=True)
@@ -1011,9 +1031,9 @@ with st.sidebar:
                             else:
                                 b_label = f"{bill} {c}"
                                 
-                            c_col1, c_col2 = st.columns([1.3, 1])
+                            c_col1, c_col2 = st.columns([1, 2.5])
                             with c_col1:
-                                st.markdown(f"<div style='padding-top:4px; font-size:13px;'><b>{b_label}</b></div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='font-size:13.5px; font-weight:bold; white-space:nowrap;'>{b_label}</div>", unsafe_allow_html=True)
                             with c_col2:
                                 cnt = st.number_input(
                                     label=f"{c}_{bill}",
@@ -1025,7 +1045,7 @@ with st.sidebar:
                                 )
                             total_counted += bill * cnt
                             
-                        st.markdown("<hr style='margin: 12px 0 8px 0;'>", unsafe_allow_html=True)
+                        st.markdown("<hr style='margin: 10px 0 6px 0;'>", unsafe_allow_html=True)
                         st.markdown(f"🧮 **지갑 실물 합계:** `{fmt.format(total_counted)} {c}`")
                         
                         # 장부 잔액과 실물 대조 (오차 감사)
