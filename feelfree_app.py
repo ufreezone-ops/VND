@@ -970,22 +970,39 @@ def auto_calc_fifo_rate(amount, method, curr=TRAVEL_CURRENCY):
 # ------------------------------------------------------------------------------
 # 3.03.00 | Financial Summary Aggregator (예산 및 실지출 요약 집계)
 # ------------------------------------------------------------------------------
-# 3.03.01 | Net Budget & Spent Metrics Calculator
-# ➔ 🚀 [Modified] 아래와 같이 수정 (모든 일반 지출 환불을 사이드바 지출총액 감액에 반영)
+# 3.03.01 | Net Budget & Spent Metrics Calculator (철벽 숫자 변환 방어탑)
 def calculate_summary_metrics(df):
     if df.empty: return 0.0, 0.0
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True)
-    b_total = temp_df['Cum_Budget_KRW'].iloc[-1] if 'Cum_Budget_KRW' in temp_df.columns else 0
-    gross_spent = temp_df[temp_df['IsExpense'] == 1].apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
     
-    # [Modified] 지불 자산(DOMESTIC/PREPAID/CASH)에 상관없이 모든 일반 지출 환불액을 사이드바 지출총액에서 차감하도록 변경
-    expense_refunds = temp_df[
-        (temp_df['Category'] == '환불') & 
-        (~temp_df['Description'].str.contains("보증금|Deposit|deposit", na=False))
-    ]
-    refund_total = expense_refunds.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
-    return b_total, gross_spent - refund_total
+    # [Fixed] 문자열, 콤마, 결측치 등 어떤 값이 와도 무조건 순수 float로 안전 변환
+    b_total = 0.0
+    if 'Cum_Budget_KRW' in temp_df.columns:
+        raw_b = temp_df['Cum_Budget_KRW'].iloc[-1]
+        try:
+            b_total = float(str(raw_b).replace(',', '').strip())
+        except:
+            b_total = 0.0
+    if pd.isna(b_total): b_total = 0.0
 
+    # 실지출 합산 안전 계산
+    try:
+        exp_sub = temp_df[temp_df['IsExpense'] == 1]
+        gross_spent = exp_sub.apply(lambda r: float(r['Amount']) if str(r['Currency']).strip() == 'KRW' else float(r['Amount']) * float(r['AppliedRate']), axis=1).sum()
+    except:
+        gross_spent = 0.0
+
+    # 환불액 차감 안전 계산
+    try:
+        expense_refunds = temp_df[
+            (temp_df['Category'] == '환불') & 
+            (~temp_df['Description'].str.contains("보증금|Deposit|deposit", na=False))
+        ]
+        refund_total = expense_refunds.apply(lambda r: float(r['Amount']) if str(r['Currency']).strip() == 'KRW' else float(r['Amount']) * float(r['AppliedRate']), axis=1).sum()
+    except:
+        refund_total = 0.0
+
+    return float(b_total), float(gross_spent - refund_total)
 
 # ==============================================================================
 # [Module 4.00.00] Sidebar & Navigation Control Tower (사이드바 및 전역 라우터)
@@ -1171,10 +1188,9 @@ with st.sidebar:
                 st.divider()
 
         # 4.01.03 | Net Financial Summary KPI Display (총 예산 및 실지출 총액)
-        ### 📊 [GUI: Chart/Table] 예산 및 지출 총액 요약
         st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
-        st.metric("🏦 총 예산", f"{b_val:,.0f} 원")
-        st.metric("💸 지출총액", f"{spent_val:,.0f} 원")
+        st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
+        st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
 
         # 4.01.04 | Dual Timezone Controller & Cache Refresh Trigger
         st.divider()
