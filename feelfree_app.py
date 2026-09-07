@@ -215,6 +215,67 @@ st.markdown("""
     div[data-testid="stNumberInput"] [data-baseweb="input"] {
         border-right-width: 1px !important;
     }
+
+    /* ------------------------------------------------------------- */
+    /* [모바일 최적화] 사이드바 상단 여백 회수 및 컬럼 가로 1열 강제 고정 */
+    /* ------------------------------------------------------------- */
+    /* 1. 사이드바 최상단 텅 빈 공간(100px) 완전 회수 */
+    section[data-testid="stSidebar"] > div:first-child {
+        padding-top: 1rem !important;
+    }
+    div[data-testid="stSidebarHeader"] {
+        height: 35px !important;
+        min-height: 35px !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
+        margin-bottom: 0px !important;
+    }
+    div[data-testid="stSidebarContent"] {
+        padding-top: 0px !important;
+    }
+    div[data-testid="stSidebarUserContent"] {
+        padding-top: 0px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        padding-top: 0px !important;
+        gap: 0px !important;
+    }
+
+    /* 2. 모바일(스마트폰)에서도 컬럼 줄바꿈 무조건 차단 및 가로 1열 고정 */
+    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        width: 100% !important;
+        gap: 6px !important;
+        margin-bottom: -16px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        min-width: 0 !important;
+        width: auto !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
+        flex: 0 0 52px !important;
+        max-width: 52px !important;
+        min-width: 52px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
+        flex: 1 1 auto !important;
+        width: 100% !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput {
+        margin-bottom: 0px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
+        min-height: 28px !important;
+        height: 28px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input {
+        height: 28px !important;
+        font-size: 13px !important;
+        padding: 0 4px !important;
+    }
     
     </style>
     """, unsafe_allow_html=True)
@@ -980,60 +1041,20 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 스마트폰 한 화면 최적화 '💵 지폐 카운터' (모바일 강제 가로 1열 배치)
+                # [기능 2] 스마트폰 한 화면 최적화 '💵 지폐 카운터' (가로 밀착형)
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
-                        # [핵심] 스마트폰에서도 무조건 가로 한 줄(No Wrap)로 밀착시키는 CSS
-                        st.markdown("""
-                            <style>
-                            /* 1. 모바일에서도 컬럼이 세로로 줄바꿈되지 않도록 강제 가로 정렬 */
-                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
-                                flex-direction: row !important;
-                                flex-wrap: nowrap !important;
-                                align-items: center !important;
-                                gap: 8px !important;
-                                margin-bottom: -14px !important;
-                            }
-                            /* 2. 좌측 라벨 컬럼(50만동 등) 고정 폭 지정 */
-                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
-                                flex: 0 0 58px !important;
-                                min-width: 58px !important;
-                                max-width: 58px !important;
-                            }
-                            /* 3. 우측 카운터 컬럼 유연 폭 지정 */
-                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child {
-                                flex: 1 1 auto !important;
-                                min-width: 0 !important;
-                            }
-                            /* 4. 입력창 세로 높이 슬림화 */
-                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div.stNumberInput {
-                                margin-bottom: 0px !important;
-                                padding-bottom: 0px !important;
-                            }
-                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
-                                min-height: 30px !important;
-                                height: 30px !important;
-                                border-radius: 6px !important;
-                            }
-                            div[data-testid="stSidebar"] div[data-testid="stExpander"] div.stNumberInput input {
-                                font-size: 13px !important;
-                                height: 30px !important;
-                            }
-                            </style>
-                        """, unsafe_allow_html=True)
-                        
-                        st.caption("지폐 장수 입력 (장부 오차 검증):")
                         total_counted = 0
                         for bill in bills_to_count:
                             if c == "VND":
-                                b_label = f"{bill // 10000}만동" if bill >= 10000 else f"{bill // 1000}천동"
+                                b_label = f"{bill // 10000}만" if bill >= 10000 else f"{bill // 1000}천"
                             else:
-                                b_label = f"{bill} {c}"
+                                b_label = f"{bill}"
                                 
-                            c_col1, c_col2 = st.columns([1, 2.5])
+                            c_col1, c_col2 = st.columns([1, 3.2])
                             with c_col1:
-                                st.markdown(f"<div style='font-size:13.5px; font-weight:bold; white-space:nowrap;'>{b_label}</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='font-size:13.5px; font-weight:bold; white-space:nowrap; padding-top:2px;'>{b_label}동</div>", unsafe_allow_html=True)
                             with c_col2:
                                 cnt = st.number_input(
                                     label=f"{c}_{bill}",
@@ -1046,17 +1067,17 @@ with st.sidebar:
                             total_counted += bill * cnt
                             
                         st.markdown("<hr style='margin: 10px 0 6px 0;'>", unsafe_allow_html=True)
-                        st.markdown(f"🧮 **지갑 실물 합계:** `{fmt.format(total_counted)} {c}`")
+                        st.markdown(f"🧮 **지갑 합계:** `{fmt.format(total_counted)} {c}`")
                         
-                        # 장부 잔액과 실물 대조 (오차 감사)
+                        # 장부 잔액과 실물 대조
                         diff_val = total_counted - c_cash
                         if total_counted > 0:
                             if diff_val == 0:
-                                st.success("✅ 장부 잔고와 실물 현금 일치!")
+                                st.success("✅ 장부 잔고와 실물 일치!")
                             elif diff_val < 0:
-                                st.error(f"🚨 **불일치:** 실물 **{fmt.format(abs(diff_val))} {c}** 부족!\n\n(영수증 누락 확인 필요)")
+                                st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족! (누락 확인)")
                             else:
-                                st.warning(f"⚠️ **불일치:** 실물 **+{fmt.format(diff_val)} {c}** 초과!\n\n(지출 오기입 확인 필요)")
+                                st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과! (오기입 확인)")
                 
                 st.divider()
 
