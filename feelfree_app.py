@@ -1658,7 +1658,7 @@ else:
                     arr_row = pd.DataFrame([{'Date': f_ret_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '입국', 'Description': arr_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
                     new_rows.append(arr_row)
                 
-                if append_new_data(pd.concat([new_rows, ignore_index=True])):
+                if append_new_data(pd.concat(new_rows, ignore_index=True)):
                     st.success("항공권과 일정이 모두 기록되었습니다!"); time.sleep(1); st.rerun()
                     
         # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 특수)
