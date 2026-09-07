@@ -710,3 +710,266 @@ def append_new_data(new_rows_df):
     return save_data(merged_df)
         
 ledger_df = load_data(ACTIVE_SHEET)
+
+# ==============================================================================
+# [Module 3.00.00] URDI Engine (Unified Real-time Deductive Inventory)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 3.01.00 | Real-time Inventory Audit (실시간 인벤토리 차감 및 상태 평가)
+# ------------------------------------------------------------------------------
+# 3.01.01 | Batch-level Multi-Wallet Inventory Evaluator
+### ⚙️[Logic: URDI Engine] 인벤토리 잔고 추적
+# [Modified] Data Engine과 구조적으로 100% 동일하게 동기화하여 차감 무결성 보장
+def get_inventory_status(df):
+    from collections import defaultdict
+    temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True) if not df.empty else df
+    inv_batches = defaultdict(list)
+    
+    # 3.01.02 | Internal Weighted Average Rate Resolver (배치 평가용 WAR)
+    def get_WAR(currency_account):
+        sw_df = df[(df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (df['Currency'].str.strip() == currency_account)]
+        if not sw_df.empty and sw_df['Amount'].sum() > 0: return (sw_df['Amount'] * sw_df['AppliedRate']).sum() / sw_df['Amount'].sum()
+        return get_default_rate(currency_account)
+
+    if temp_df.empty: return dict(inv_batches)
+    
+    clean_expense_cats = [c.strip() for c in EXPENSE_CATS]
+    
+    for _, row in temp_df.iterrows():
+        qty, curr = row['Amount'], row['Currency']
+        cat = str(row['Category']).strip()
+        method = str(row['PaymentMethod']).strip()
+        desc = str(row['Description']).strip()
+        rate = row['AppliedRate']
+        
+        # [Added] 데이터 타입 오류 방지를 위한 동적 평가 로직 (recalculate_entire_ledger와 완전 동일)
+        # [Modified] 개인지출 제외 추가
+        is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출'] else 0
+        is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
+        
+        asset_cls = get_asset_class(method)
+        
+        if cat in ['충전', '환전', '입금', '직접환전', '이월잔액']: # [Modified] 이월잔액 추가
+            if cat == '이월잔액': final_dest_cls = "CASH" # [Added]
+            elif cat == '충전': final_dest_cls = "PREPAID"
+            elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
+            else: final_dest_cls = get_asset_class(desc + method)
+            
+            target = f"트래블카드({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})"
+            if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty, 'initial': qty})
+            
+        elif cat == '환불':
+            if asset_cls != "DOMESTIC":
+                target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty, 'initial': qty})
+                
+        elif cat == 'ATM출금':
+            temp_qty = qty; target_from = f"트래블카드({curr})"; target_to = f"현금({curr})"
+            if target_from in inv_batches:
+                for batch in inv_batches[target_from]:
+                    if temp_qty <= 0: break
+                    if batch['qty'] <= 0: continue
+                    take = min(temp_qty, batch['qty']); batch['qty'] -= take
+                    inv_batches[target_to].append({'rate': batch['rate'], 'qty': take, 'initial': take}); temp_qty -= take
+            if temp_qty > 0:
+                inv_batches[target_to].append({'rate': get_WAR(curr), 'qty': temp_qty, 'initial': temp_qty})
+                
+        elif cat in ['재환전', '개인지출']: # [Modified] 실시간 사이드바 잔량 계산에도 개인지출에 따른 차감 반영
+            if curr != 'KRW':
+                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                temp_qty = qty
+                if target_from in inv_batches:
+                    for batch in inv_batches[target_from]:
+                        if temp_qty <= 0: break
+                        if batch['qty'] <= 0: continue
+                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
+                        
+        elif cat == '이종환전':
+            if curr != 'KRW':
+                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                temp_qty = qty
+                if target_from in inv_batches:
+                    for batch in inv_batches[target_from]:
+                        if temp_qty <= 0: break
+                        if batch['qty'] <= 0: continue
+                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
+                        
+        elif is_deductible == 1:
+            if asset_cls != "DOMESTIC" and asset_cls != "CREDIT" and curr != 'KRW':
+                target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                temp_qty = qty
+                if target in inv_batches:
+                    for batch in inv_batches[target]:
+                        if temp_qty <= 0: break
+                        if batch['qty'] <= 0: continue
+                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
+                        
+    return dict(inv_batches)
+
+current_inventory_batches = get_inventory_status(ledger_df)
+
+sw_df_loc = ledger_df[(ledger_df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (ledger_df['Currency'].str.strip() == TRAVEL_CURRENCY)]
+WAR_LOCAL = (sw_df_loc['Amount'] * sw_df_loc['AppliedRate']).sum() / sw_df_loc['Amount'].sum() if not sw_df_loc.empty and sw_df_loc['Amount'].sum() > 0 else get_default_rate(TRAVEL_CURRENCY)
+
+# ------------------------------------------------------------------------------
+# 3.02.00 | Foreign Exchange Valuation (가중 평균 환율 및 FIFO 환율 계산)
+# ------------------------------------------------------------------------------
+# 3.02.01 | Weighted Average Exchange Rate Engine
+### ⚙️[Logic: URDI Engine] 가중 평균 환율(WAR) 및 FIFO 환율 계산
+def get_WAR(curr):
+    sw_df = ledger_df[(ledger_df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (ledger_df['Currency'].str.strip() == curr)]
+    if not sw_df.empty and sw_df['Amount'].sum() > 0: return (sw_df['Amount'] * sw_df['AppliedRate']).sum() / sw_df['Amount'].sum()
+    return get_default_rate(curr)
+
+# 3.02.02 | Dynamic FIFO Cost Rate Simulator
+def auto_calc_fifo_rate(amount, method, curr=TRAVEL_CURRENCY):
+    asset_cls = get_asset_class(method)
+    if asset_cls == "DOMESTIC": return get_WAR(curr)
+    target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})" # [Modified]
+    temp_inv = get_inventory_status(ledger_df)
+    if target not in temp_inv: return get_WAR(curr)
+    available_batches =[b for b in temp_inv[target] if b['qty'] > 0]
+    if not available_batches: return get_WAR(curr)
+    total_cost_krw, remaining = 0.0, amount
+    for batch in available_batches:
+        if remaining <= 0: break
+        take = min(remaining, batch['qty']); total_cost_krw += take * batch['rate']; remaining -= take
+    if remaining > 0: total_cost_krw += remaining * available_batches[-1]['rate']
+    return total_cost_krw / amount if amount > 0 else 0
+
+# ------------------------------------------------------------------------------
+# 3.03.00 | Financial Summary Aggregator (예산 및 실지출 요약 집계)
+# ------------------------------------------------------------------------------
+# 3.03.01 | Net Budget & Spent Metrics Calculator
+# ➔ 🚀 [Modified] 아래와 같이 수정 (모든 일반 지출 환불을 사이드바 지출총액 감액에 반영)
+def calculate_summary_metrics(df):
+    if df.empty: return 0.0, 0.0
+    temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True)
+    b_total = temp_df['Cum_Budget_KRW'].iloc[-1] if 'Cum_Budget_KRW' in temp_df.columns else 0
+    gross_spent = temp_df[temp_df['IsExpense'] == 1].apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
+    
+    # [Modified] 지불 자산(DOMESTIC/PREPAID/CASH)에 상관없이 모든 일반 지출 환불액을 사이드바 지출총액에서 차감하도록 변경
+    expense_refunds = temp_df[
+        (temp_df['Category'] == '환불') & 
+        (~temp_df['Description'].str.contains("보증금|Deposit|deposit", na=False))
+    ]
+    refund_total = expense_refunds.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
+    return b_total, gross_spent - refund_total
+
+
+# ==============================================================================
+# [Module 4.00.00] Sidebar & Navigation Control Tower (사이드바 및 전역 라우터)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 4.01.00 | Sidebar Dashboard (지갑 잔고, 외상 관리, KPI 모니터링)
+# ------------------------------------------------------------------------------
+### 🎨 [GUI: Layout] 사이드바 영역
+with st.sidebar:
+    # 4.01.01 | SPI Mode Context-Aware Panel
+    # [Added] SPI 비교 모드일 때의 사이드바 UI 분리
+    if st.session_state.get('show_spi', False):
+        st.subheader("🧭 GTL 관제탑 모드")
+        st.info("💡 **글로벌 물가 지표(SPI) 비교 분석 중**\n\n특정 여행의 지출 내역이나 잔고를 보시려면 상단의 '내 여행함'에서 여행지를 선택해 주세요.")
+        st.divider()
+        tz_sel = st.radio("📍 기준 시간 (Timezone)",["🇰🇷 한국 시간", "🌍 현지 시간"], horizontal=True, index=0)
+        st.session_state.current_tz = TZ_KST if "한국" in tz_sel else TRIP_TZ
+        st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
+        if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
+    else:
+        # 4.01.02 | Multi-Currency Dynamic Wallet Monitor (통화별 카드/현금/외상 실시간 잔고)
+        st.subheader("💰 지갑 잔고")
+        b_val, spent_val = calculate_summary_metrics(ledger_df)
+        
+        active_currs = set([k.split('(')[1].replace(')','') for k in current_inventory_batches.keys() if len(current_inventory_batches[k]) > 0 and sum(b['qty'] for b in current_inventory_batches[k]) > 0])
+        trip_currs = set(node['currency'] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())
+        display_currs = sorted(list(active_currs | trip_currs))
+        
+        ### 📊 [GUI: Chart/Table] 통화별 잔고 표시
+        for c in display_currs:
+            if c == "KRW": continue
+
+            fmt = "{:,.2f}" if c not in["VND", "HUF", "PHP"] else "{:,.0f}"
+
+            debt_amt = ledger_df[(ledger_df['Currency']==c) & (ledger_df['PaymentMethod'].str.contains("외상|부채|CREDIT", na=False))]['Amount'].sum()
+            repay_amt = ledger_df[(ledger_df['Currency']==c) & (ledger_df['Category']=="상환")]['Amount'].sum()
+            current_debt = debt_amt - repay_amt
+            
+            if current_debt > 0:
+                st.markdown(f"<div style='color:#FF4B4B; font-size:14px;'>📌 <b>미결제 외상: {fmt.format(current_debt)}</b></div>", unsafe_allow_html=True)
+            
+            # [Modified] 트래블로그 -> 트래블카드로 통일
+            c_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블카드({c})",[])])
+            c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
+            
+            if c_card > 0 or c_cash > 0 or c in trip_currs:
+                st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
+                st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
+                st.markdown(f"<div style='margin-bottom:18px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
+                
+                card_batches = current_inventory_batches.get(f"트래블카드({c})", [])
+                cash_batches = current_inventory_batches.get(f"현금({c})", [])
+                
+                if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
+                    with st.expander("🔍 상세 배치", expanded=False):
+                        r_fmt = ".4f" if c in ["VND", "HUF"] else ".2f"
+                        
+                        if any(b['qty'] > 0 for b in card_batches):
+                            st.caption("[카드]")
+                            for b in card_batches:
+                                if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
+                                    
+                        if any(b['qty'] > 0 for b in cash_batches):
+                            st.caption("[현금]")
+                            for b in cash_batches:
+                                if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
+                st.divider()
+
+        # 4.01.03 | Net Financial Summary KPI Display (총 예산 및 실지출 총액)
+        ### 📊 [GUI: Chart/Table] 예산 및 지출 총액 요약
+        st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
+        st.metric("🏦 총 예산", f"{b_val:,.0f} 원")
+        st.metric("💸 지출총액", f"{spent_val:,.0f} 원")
+
+        # 4.01.04 | Dual Timezone Controller & Cache Refresh Trigger
+        st.divider()
+        ### 🎛️[GUI: Component] 타임존 및 새로고침
+        st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
+        tz_sel = st.radio("📍 기준 시간 (Timezone)",["🇰🇷 한국 시간", "🌍 여행지 현지 시간"], horizontal=True, index=0 if "한국" in str(st.session_state.current_tz) else 1)
+        st.session_state.current_tz = TZ_KST if "한국" in tz_sel else TRIP_TZ
+
+        st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
+        if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
+
+# ------------------------------------------------------------------------------
+# 4.02.00 | Top Navigation Router (여행지 선택 및 관제탑 모드 스위처)
+# ------------------------------------------------------------------------------
+# 4.02.01 | Chronological Trip Sorter
+def sort_trips(trip_names):
+    return sorted(trip_names, key=lambda x: (re.search(r'\((\d{4})\)', x).group(1) if re.search(r'\((\d{4})\)', x) else '0000', x), reverse=True)
+
+sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
+
+# 4.02.02 | Global Flight/SPI View Mode Switcher
+# [Modified] 비교(SPI) 모드를 풀다운 메뉴의 가장 마지막 독립 메뉴로 승격
+SPECIAL_MODE = "📊 모든 여행지 물가비교"
+dropdown_options = sorted_trips + [SPECIAL_MODE]
+
+if 'show_spi' not in st.session_state: st.session_state.show_spi = False
+curr_idx = len(sorted_trips) if st.session_state.show_spi else (sorted_trips.index(st.session_state.current_trip) if st.session_state.current_trip in sorted_trips else 0)
+
+c_trip_top, c_empty = st.columns([2, 2])
+with c_trip_top:
+    sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", dropdown_options, index=curr_idx, label_visibility="collapsed")
+    if sel_trip == SPECIAL_MODE:
+        if not st.session_state.show_spi:
+            st.session_state.show_spi = True
+            st.rerun()
+    else:
+        if st.session_state.show_spi or sel_trip != st.session_state.current_trip:
+            st.session_state.show_spi = False
+            st.session_state.current_trip = sel_trip
+            st.rerun()
+
+st.divider()
