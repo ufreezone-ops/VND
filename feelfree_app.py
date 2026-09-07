@@ -790,6 +790,56 @@ def append_new_data(new_rows_df):
         
 ledger_df = load_data(ACTIVE_SHEET)
 
+# ------------------------------------------------------------------------------
+# 2.05.03 | Cash Inventory Cloud Loader & Saver (지폐 실사 잔고 클라우드 동기화)
+# ------------------------------------------------------------------------------
+CASH_SHEET = "_CASH_INVENTORY_"
+
+def load_cash_inventory():
+    for attempt in range(3):
+        try:
+            df = conn.read(worksheet=CASH_SHEET, ttl="0s")
+            if df is not None and not df.empty:
+                return df
+            break
+        except Exception as e:
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+                time.sleep(1.5)
+                continue
+            break
+    return pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
+
+def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
+    try:
+        df = load_cash_inventory()
+        if df is None or df.empty:
+            df = pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
+            
+        counts_str = ";".join([f"{k}:{v}" for k, v in counts_dict.items()])
+        now_str = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
+        
+        mask = (df['TripName'] == trip_name) & (df['Currency'] == currency)
+        if mask.any():
+            idx = df[mask].index[0]
+            df.at[idx, 'Bill_Counts'] = counts_str
+            df.at[idx, 'Total_Amount'] = total_amt
+            df.at[idx, 'Updated_At'] = now_str
+        else:
+            new_row = pd.DataFrame([{
+                'TripName': trip_name,
+                'Currency': currency,
+                'Bill_Counts': counts_str,
+                'Total_Amount': total_amt,
+                'Updated_At': now_str
+            }])
+            df = pd.concat([df, new_row], ignore_index=True)
+            
+        conn.update(worksheet=CASH_SHEET, data=df)
+        return True
+    except Exception as e:
+        st.error(f"🚨 지폐 실사 동기화 실패 (탭 '{CASH_SHEET}' 존재 여부 확인): {e}")
+        return False
+
 # ==============================================================================
 # [Module 3.00.00] URDI Engine (Unified Real-time Deductive Inventory)
 # ==============================================================================
@@ -1048,10 +1098,28 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 스마트폰 한 화면 최적화 '💵 지폐 카운터' (완벽 대칭 센터형)
+                # [기능 2] 스마트폰/웹 클라우드 동기화 '💵 지폐 카운터'
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
+                        # [클라우드 자동 로드] 첫 접속 시 구글 시트에서 마지막 지폐 수량 자동 복원
+                        init_key = f"init_cash_{st.session_state.current_trip}_{c}"
+                        last_sync_time = ""
+                        if init_key not in st.session_state:
+                            cash_df = load_cash_inventory()
+                            if not cash_df.empty:
+                                m_sync = (cash_df['TripName'] == st.session_state.current_trip) & (cash_df['Currency'] == c)
+                                if m_sync.any():
+                                    row_sync = cash_df[m_sync].iloc[0]
+                                    counts_str = str(row_sync['Bill_Counts'])
+                                    last_sync_time = str(row_sync.get('Updated_At', ''))
+                                    for item in counts_str.split(";"):
+                                        if ":" in item:
+                                            b_val, b_cnt = item.split(":")
+                                            try: st.session_state[f"cnt_{c}_{int(b_val)}"] = int(b_cnt)
+                                            except: pass
+                            st.session_state[init_key] = True
+
                         total_counted = 0
                         for bill in bills_to_count:
                             if c == "VND":
@@ -1073,7 +1141,7 @@ with st.sidebar:
                                 )
                             total_counted += bill * cnt
                             
-                        # 1천동과 겹치지 않도록 마진 확보 및 시원한 합계 카드 박스
+                        # 실물 합계 카드 박스
                         st.markdown(f"""
                             <div style='margin-top: 16px; margin-bottom: 10px; padding: 8px 12px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
                                 <span style='font-size:12px; color:#A0AEC0;'>🧮 지갑 실물 합계</span><br>
@@ -1090,6 +1158,15 @@ with st.sidebar:
                                 st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족! (누락 확인)")
                             else:
                                 st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과! (오기입 확인)")
+
+                        # [클라우드 영구 저장 버튼] 모바일/PC 실시간 동기화 트리거
+                        if st.button(f"💾 {c} 실사 잔고 클라우드 동기화", key=f"btn_sync_cash_{c}", use_container_width=True):
+                            cur_counts = {b: st.session_state.get(f"cnt_{c}_{b}", 0) for b in bills_to_count}
+                            with st.spinner("구글 시트에 실사 잔고 동기화 중..."):
+                                if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
+                                    st.success("🎉 클라우드 동기화 완료! PC에서도 똑같이 표시됩니다.")
+                                    time.sleep(1)
+                                    st.rerun()
                 
                 st.divider()
 
