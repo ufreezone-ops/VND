@@ -2039,8 +2039,79 @@ else:
                     render_df = render_df[mask]
                     
                 st.write(f"🔎 검색 결과: {len(render_df)}건")
+                
+                # --------------------------------------------------------------
+                # 6.02.03-A | 스마트 여정 태그([Day N]) 및 날짜 그룹 교대 음영 엔진
+                # --------------------------------------------------------------
+                # 1. 출국일 및 입국일 파싱
+                dep_row = ledger_df[ledger_df['Category'].str.strip() == '출국']
+                arr_row = ledger_df[ledger_df['Category'].str.strip() == '입국']
+                
+                dep_dt, arr_dt = None, None
+                if not dep_row.empty:
+                    m_dep = re.search(r'(\d{4}-\d{2}-\d{2})', str(dep_row.iloc[0]['Date']))
+                    if m_dep: dep_dt = datetime.strptime(m_dep.group(1), "%Y-%m-%d").date()
+                if not arr_row.empty:
+                    m_arr = re.search(r'(\d{4}-\d{2}-\d{2})', str(arr_row.iloc[-1]['Date']))
+                    if m_arr: arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
+                
+                # 2. Date 컬럼에 여행 일차([Day N] / [사전]) 스마트 뱃지 부착
+                def format_display_date(row):
+                    orig_d = str(row['Date'])
+                    cat = str(row['Category']).strip()
+                    m = re.search(r'(\d{4}-\d{2}-\d{2})', orig_d)
+                    if not m or not dep_dt: return orig_d
                     
-                df_event = st.dataframe(render_df, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
+                    cur_dt = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+                    diff = (cur_dt - dep_dt).days
+                    
+                    if cat == '출국': return f"{orig_d} 🛫[출국일]"
+                    if cat == '입국': return f"{orig_d} 🛬[귀국일]"
+                    
+                    if diff < 0: return f"{orig_d} 🏷️[사전]"
+                    elif diff == 0: return f"{orig_d} 🛫[Day 1]"
+                    else:
+                        if arr_dt and cur_dt == arr_dt: return f"{orig_d} 🛬[Day {diff + 1}]"
+                        elif arr_dt and cur_dt > arr_dt: return f"{orig_d} [귀국후]"
+                        return f"{orig_d} 📍[Day {diff + 1}]"
+
+                styled_render_df = render_df.copy()
+                styled_render_df['Date'] = styled_render_df.apply(format_display_date, axis=1)
+
+                # 3. 여행 단계별 3단 컬러 코딩 및 날짜 그룹별 지브라 음영 스타일러
+                def style_journey_rows(row):
+                    cat = str(row['Category']).strip()
+                    orig_d = str(row['Date'])
+                    m = re.search(r'(\d{4}-\d{2}-\d{2})', orig_d)
+                    
+                    # [1순위] 출국일 행 ➔ 골드 앰버 하이라이트
+                    if cat == '출국' or '🛫[출국일]' in orig_d:
+                        return ['background-color: #3d2b00; color: #FFD700; font-weight: bold;'] * len(row)
+                        
+                    # [2순위] 입국일 행 ➔ 에메랄드 틸 하이라이트
+                    if cat == '입국' or '🛬[귀국일]' in orig_d:
+                        return ['background-color: #0b332b; color: #52F0C5; font-weight: bold;'] * len(row)
+                        
+                    if not m or not dep_dt:
+                        return [''] * len(row)
+                        
+                    cur_dt = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+                    diff = (cur_dt - dep_dt).days
+                    
+                    # [3순위] 출국 전 사전결제 ➔ 톤다운된 차분한 다크 슬레이트
+                    if diff < 0:
+                        return ['background-color: #12141a; color: #94A3B8;'] * len(row)
+                        
+                    # [4순위] 여행 중 ➔ 날짜가 바뀔 때마다 교대되는 지브라 음영 (같은 날짜는 한 덩어리)
+                    if diff % 2 == 0:
+                        return ['background-color: #182030; color: #F1F5F9;'] * len(row)  # 은은한 딥 네이비
+                    else:
+                        return ['background-color: #242c40; color: #FFFFFF;'] * len(row)  # 살짝 밝은 슬레이트 블루
+
+                styled_table = styled_render_df.style.apply(style_journey_rows, axis=1)
+                
+                # 4. 스타일이 입혀진 인터랙티브 표 렌더링
+                df_event = st.dataframe(styled_table, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
                 
                 # 6.02.04 | Detail Voucher Viewer & Smart KRW Currency Translator
                 if df_event.selection.rows:
