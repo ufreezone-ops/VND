@@ -2108,7 +2108,7 @@ else:
                 styled_render_df = render_df.copy()
                 styled_render_df['Date'] = styled_render_df.apply(format_display_date, axis=1)
 
-                # 4. 고대비(High-Contrast) 컬러 코딩 및 지브라 스타일러
+                # 4. 극대화된 On/Off 대비 지브라 스타일러 (있고 / 없고 방식)
                 def style_journey_rows(row):
                     cat = str(row['Category']).strip()
                     orig_d = str(row['Date'])
@@ -2117,28 +2117,28 @@ else:
                     pure_date = m.group(1)
                     cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
                     
-                    # [1순위] 진짜 한국 출국일 행 ➔ 선명한 골드 앰버
+                    # [1순위] 진짜 한국 출국일 행 ➔ 선명한 골드 앰버 (On)
                     if is_real_departure(cat, cur_d):
                         return ['background-color: #453205; color: #FFD700; font-weight: bold;'] * len(row)
                         
-                    # [2순위] 진짜 한국 귀국일 행 ➔ 선명한 딥 에메랄드
+                    # [2순위] 진짜 한국 귀국일 행 ➔ 선명한 딥 에메랄드 (On)
                     if is_real_arrival(cat, cur_d):
                         return ['background-color: #0c3b32; color: #38F8B8; font-weight: bold;'] * len(row)
 
+                    # [3순위] 사전 결제 ➔ 배경 아예 없음(투명), 글자만 톤다운
                     if dep_dt:
                         diff = (cur_d - dep_dt).days
-                        # [3순위] 사전 결제 ➔ 차분한 딥 차콜 (글자 톤다운)
                         if diff < 0:
-                            return ['background-color: #141824; color: #8292A6;'] * len(row)
-                            
-                        # [4순위] 여행 중 ➔ 대비가 확실한 2색 슬레이트 블루 교대 음영
-                        if diff % 2 == 0:
-                            return ['background-color: #1e293b; color: #F8FAFC;'] * len(row)  # 선명한 딥 네이비
-                        else:
-                            return ['background-color: #334155; color: #FFFFFF; font-weight: 500;'] * len(row)  # 확실히 밝은 슬레이트 블루
+                            return ['color: #7E8B9B;'] * len(row)
+
+                    # [4순위] 여행 중 ➔ "있고(선명한 하이라이트)", "없고(기본 투명 바탕)"의 확실한 대비
+                    grp = date_to_group.get(pure_date, 0)
+                    if grp == 1:
+                        # [ON] 배경 확실히 채움 (선명한 슬레이트 블루 + 쨍한 화이트)
+                        return ['background-color: #243246; color: #FFFFFF; font-weight: 500;'] * len(row)
                     else:
-                        grp = date_to_group.get(pure_date, 0)
-                        return ['background-color: #1e293b; color: #F8FAFC;' if grp == 0 else 'background-color: #334155; color: #FFFFFF;'] * len(row)
+                        # [OFF] 배경 아예 뺌 (기본 투명/블랙 바탕)
+                        return ['color: #CBD5E1;'] * len(row)
 
                 # 5. 깔끔한 숫자 포맷터
                 def smart_num_fmt(v):
