@@ -2041,11 +2041,11 @@ else:
                 st.write(f"🔎 검색 결과: {len(render_df)}건")
                 
                 # --------------------------------------------------------------
-                # 6.02.03-A | 스마트 여정 태그([Day N]) 및 날짜 그룹 교대 음영 엔진
+                # 6.02.03-A | 스마트 여정 태그([Day N]) 및 유연한 지브라 음영 엔진 (완전판)
                 # --------------------------------------------------------------
-                # 1. 출국일 및 입국일 파싱
-                dep_row = ledger_df[ledger_df['Category'].str.strip() == '출국']
-                arr_row = ledger_df[ledger_df['Category'].str.strip() == '입국']
+                # 1. 출국일 및 입국일 유연한 탐색 ('출국_한국', '출국' 등 부분 일치 지원)
+                dep_row = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
+                arr_row = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
                 
                 dep_dt, arr_dt = None, None
                 if not dep_row.empty:
@@ -2055,18 +2055,24 @@ else:
                     m_arr = re.search(r'(\d{4}-\d{2}-\d{2})', str(arr_row.iloc[-1]['Date']))
                     if m_arr: arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
                 
+                # 출국일이 없는 여행지도 날짜별 묶음(Zebra)이 가능하도록 고유 날짜 인덱싱
+                unique_dates = sorted(list(set(re.search(r'(\d{4}-\d{2}-\d{2})', str(d)).group(1) for d in render_df['Date'] if re.search(r'(\d{4}-\d{2}-\d{2})', str(d)))))
+                date_to_group = {d: i % 2 for i, d in enumerate(unique_dates)}
+
                 # 2. Date 컬럼에 여행 일차([Day N] / [사전]) 스마트 뱃지 부착
                 def format_display_date(row):
                     orig_d = str(row['Date'])
                     cat = str(row['Category']).strip()
                     m = re.search(r'(\d{4}-\d{2}-\d{2})', orig_d)
-                    if not m or not dep_dt: return orig_d
+                    if not m: return orig_d
+                    
+                    if '출국' in cat: return f"{orig_d} 🛫[출국일]"
+                    if '입국' in cat: return f"{orig_d} 🛬[귀국일]"
+                    
+                    if not dep_dt: return orig_d  # 출국일이 등록 안 된 과거 여행지는 날짜 원본 유지
                     
                     cur_dt = datetime.strptime(m.group(1), "%Y-%m-%d").date()
                     diff = (cur_dt - dep_dt).days
-                    
-                    if cat == '출국': return f"{orig_d} 🛫[출국일]"
-                    if cat == '입국': return f"{orig_d} 🛬[귀국일]"
                     
                     if diff < 0: return f"{orig_d} 🏷️[사전]"
                     elif diff == 0: return f"{orig_d} 🛫[Day 1]"
@@ -2085,32 +2091,48 @@ else:
                     m = re.search(r'(\d{4}-\d{2}-\d{2})', orig_d)
                     
                     # [1순위] 출국일 행 ➔ 골드 앰버 하이라이트
-                    if cat == '출국' or '🛫[출국일]' in orig_d:
+                    if '출국' in cat or '🛫[출국일]' in orig_d:
                         return ['background-color: #3d2b00; color: #FFD700; font-weight: bold;'] * len(row)
                         
                     # [2순위] 입국일 행 ➔ 에메랄드 틸 하이라이트
-                    if cat == '입국' or '🛬[귀국일]' in orig_d:
+                    if '입국' in cat or '🛬[귀국일]' in orig_d:
                         return ['background-color: #0b332b; color: #52F0C5; font-weight: bold;'] * len(row)
                         
-                    if not m or not dep_dt:
-                        return [''] * len(row)
+                    if not m: return [''] * len(row)
+                    pure_date = m.group(1)
+
+                    # 출국일 기준 분류 (출국일이 있을 때)
+                    if dep_dt:
+                        cur_dt = datetime.strptime(pure_date, "%Y-%m-%d").date()
+                        diff = (cur_dt - dep_dt).days
                         
-                    cur_dt = datetime.strptime(m.group(1), "%Y-%m-%d").date()
-                    diff = (cur_dt - dep_dt).days
-                    
-                    # [3순위] 출국 전 사전결제 ➔ 톤다운된 차분한 다크 슬레이트
-                    if diff < 0:
-                        return ['background-color: #12141a; color: #94A3B8;'] * len(row)
-                        
-                    # [4순위] 여행 중 ➔ 날짜가 바뀔 때마다 교대되는 지브라 음영 (같은 날짜는 한 덩어리)
-                    if diff % 2 == 0:
-                        return ['background-color: #182030; color: #F1F5F9;'] * len(row)  # 은은한 딥 네이비
+                        # [3순위] 출국 전 사전결제 ➔ 차분한 다크 슬레이트
+                        if diff < 0:
+                            return ['background-color: #12141a; color: #94A3B8;'] * len(row)
+                            
+                        # [4순위] 여행 중 ➔ 날짜 그룹별 교대 지브라 음영
+                        if diff % 2 == 0:
+                            return ['background-color: #182030; color: #F1F5F9;'] * len(row)
+                        else:
+                            return ['background-color: #242c40; color: #FFFFFF;'] * len(row)
                     else:
-                        return ['background-color: #242c40; color: #FFFFFF;'] * len(row)  # 살짝 밝은 슬레이트 블루
+                        # 출국일이 없는 여행지도 날짜별 교대 지브라 음영 100% 적용
+                        grp = date_to_group.get(pure_date, 0)
+                        return ['background-color: #182030; color: #F1F5F9;' if grp == 0 else 'background-color: #242c40; color: #FFFFFF;'] * len(row)
+
+                # 4. 소수점 폭탄 방지: 숫자 칼럼 깔끔한 포맷터
+                def smart_num_fmt(v):
+                    if pd.isna(v) or not isinstance(v, (int, float)): return v
+                    if v == 0: return "0"
+                    if abs(v) >= 1 and v == int(v): return f"{int(v):,}"
+                    if abs(v) < 1: return f"{v:.4f}".rstrip('0').rstrip('.')
+                    return f"{v:,.2f}"
 
                 styled_table = styled_render_df.style.apply(style_journey_rows, axis=1)
+                num_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
+                styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
                 
-                # 4. 스타일이 입혀진 인터랙티브 표 렌더링
+                # 5. 스타일이 입혀진 인터랙티브 표 렌더링
                 df_event = st.dataframe(styled_table, use_container_width=True, column_config={"Receipt_URL": link_cfg}, selection_mode="single-row", on_select="rerun")
                 
                 # 6.02.04 | Detail Voucher Viewer & Smart KRW Currency Translator
