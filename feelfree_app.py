@@ -953,10 +953,14 @@ with st.sidebar:
                 st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
                 st.markdown(f"<div style='margin-bottom:8px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
 
-                # [기능 1] 한 줄 슬림 현금 부족 경고
+                # [기능 1] 단독 '현금 부족 경고' (중복 잔액 제거 및 상하 여백 확보)
                 threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
                 if is_trip_active and c_cash <= threshold:
-                    st.markdown(f"<div style='color:#FF9800; font-size:12.5px; font-weight:bold; margin-bottom:12px;'>🚨 현금 부족 경고 ({fmt.format(c_cash)} {c})</div>", unsafe_allow_html=True)
+                    st.markdown("""
+                        <div style='color:#FFA500; font-size:13px; font-weight:bold; margin-top:10px; margin-bottom:18px; padding: 6px 12px; background-color: rgba(255, 165, 0, 0.12); border-radius: 8px; border-left: 3px solid #FFA500;'>
+                            🚨 현금 부족 경고
+                        </div>
+                    """, unsafe_allow_html=True)
                 
                 card_batches = current_inventory_batches.get(f"트래블카드({c})", [])
                 cash_batches = current_inventory_batches.get(f"현금({c})", [])
@@ -976,11 +980,30 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 지폐 권종별 실사 카운터 (장부 오차 및 기록 누락 검증기)
+                # [기능 2] 심플 '💵 지폐 카운터' (스마트폰 최적화: 초슬림 세로 간격)
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
-                    with st.expander(f"💵 {c} 지폐 카운터 (실사 검증)", expanded=False):
-                        st.caption("지갑 속 지폐 장수를 세어 입력하세요 (미기록 지출 검증용):")
+                    with st.expander("💵 지폐 카운터", expanded=False):
+                        # 스마트폰용 권종 간 세로 간격 압축 CSS
+                        st.markdown("""
+                            <style>
+                            div[data-testid="stSidebar"] div.stNumberInput {
+                                margin-bottom: -16px !important;
+                                padding-bottom: 0px !important;
+                            }
+                            div[data-testid="stSidebar"] div.stNumberInput div[data-baseweb="input"] {
+                                min-height: 28px !important;
+                                height: 28px !important;
+                                border-radius: 6px !important;
+                            }
+                            div[data-testid="stSidebar"] div.stNumberInput input {
+                                font-size: 13px !important;
+                                padding-left: 8px !important;
+                            }
+                            </style>
+                        """, unsafe_allow_html=True)
+                        
+                        st.caption("지폐 장수 입력 (장부 오차 검증):")
                         total_counted = 0
                         for bill in bills_to_count:
                             if c == "VND":
@@ -990,7 +1013,7 @@ with st.sidebar:
                                 
                             c_col1, c_col2 = st.columns([1.3, 1])
                             with c_col1:
-                                st.markdown(f"<div style='padding-top:8px; font-size:13px;'><b>{b_label}</b></div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='padding-top:4px; font-size:13px;'><b>{b_label}</b></div>", unsafe_allow_html=True)
                             with c_col2:
                                 cnt = st.number_input(
                                     label=f"{c}_{bill}",
@@ -1002,18 +1025,18 @@ with st.sidebar:
                                 )
                             total_counted += bill * cnt
                             
-                        st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
+                        st.markdown("<hr style='margin: 12px 0 8px 0;'>", unsafe_allow_html=True)
                         st.markdown(f"🧮 **지갑 실물 합계:** `{fmt.format(total_counted)} {c}`")
                         
                         # 장부 잔액과 실물 대조 (오차 감사)
                         diff_val = total_counted - c_cash
                         if total_counted > 0:
                             if diff_val == 0:
-                                st.success("✅ 장부 잔고와 실물 현금이 100% 일치합니다!")
+                                st.success("✅ 장부 잔고와 실물 현금 일치!")
                             elif diff_val < 0:
-                                st.error(f"🚨 **불일치 발견:** 실물이 **{fmt.format(abs(diff_val))} {c}** 부족합니다!\n\n(영수증 누락이나 미기록된 지출이 있는지 확인하세요.)")
+                                st.error(f"🚨 **불일치:** 실물 **{fmt.format(abs(diff_val))} {c}** 부족!\n\n(영수증 누락 확인 필요)")
                             else:
-                                st.warning(f"⚠️ **불일치 발견:** 실물이 **+{fmt.format(diff_val)} {c}** 더 많습니다!\n\n(지출 금액 오기입이나 거스름돈 착오를 확인하세요.)")
+                                st.warning(f"⚠️ **불일치:** 실물 **+{fmt.format(diff_val)} {c}** 초과!\n\n(지출 오기입 확인 필요)")
                 
                 st.divider()
 
