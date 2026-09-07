@@ -1802,7 +1802,7 @@ else:
                         desc_fx = f"[{curr_tr} 재환전] 환차익" if fx_diff > 0 else f"[{curr_tr} 재환전] 환차손"
                         fx_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '수수료', 'Description': desc_fx, 'Currency': 'KRW', 'Amount': fx_amt, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': 'Auto-FX Diff', 'Receipt_URL': ''}])
                         new_rows.append(fx_row)
-                    if append_new_data(pd.concat([new_rows, ignore_index=True])): st.rerun()
+                    if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
 
             # [Added] 개인지출 전용 입력기 설계 및 FIFO 계산 루틴 탑재
             elif "개인지출" in ty:
