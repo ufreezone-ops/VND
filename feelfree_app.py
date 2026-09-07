@@ -2108,7 +2108,7 @@ else:
                 styled_render_df = render_df.copy()
                 styled_render_df['Date'] = styled_render_df.apply(format_display_date, axis=1)
 
-                # 4. 극대화된 On/Off 대비 지브라 스타일러 (있고 / 없고 방식)
+                # 4. 선명한 반투명 노란색(Yellow Tint) On/Off 지브라 스타일러
                 def style_journey_rows(row):
                     cat = str(row['Category']).strip()
                     orig_d = str(row['Date'])
@@ -2117,27 +2117,27 @@ else:
                     pure_date = m.group(1)
                     cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
                     
-                    # [1순위] 진짜 한국 출국일 행 ➔ 선명한 골드 앰버 (On)
+                    # [1순위] 진짜 한국 출국일 행 ➔ 진하고 묵직한 풀 골드 앰버 (단독 강조)
                     if is_real_departure(cat, cur_d):
-                        return ['background-color: #453205; color: #FFD700; font-weight: bold;'] * len(row)
+                        return ['background-color: #5c3d00; color: #FFD700; font-weight: bold;'] * len(row)
                         
-                    # [2순위] 진짜 한국 귀국일 행 ➔ 선명한 딥 에메랄드 (On)
+                    # [2순위] 진짜 한국 귀국일 행 ➔ 선명한 딥 에메랄드
                     if is_real_arrival(cat, cur_d):
-                        return ['background-color: #0c3b32; color: #38F8B8; font-weight: bold;'] * len(row)
+                        return ['background-color: #064e3b; color: #34D399; font-weight: bold;'] * len(row)
 
-                    # [3순위] 사전 결제 ➔ 배경 아예 없음(투명), 글자만 톤다운
+                    # [3순위] 사전 결제 ➔ 배경 없이 글자만 차분하게 톤다운
                     if dep_dt:
                         diff = (cur_d - dep_dt).days
                         if diff < 0:
-                            return ['color: #7E8B9B;'] * len(row)
+                            return ['color: #71717A;'] * len(row)
 
-                    # [4순위] 여행 중 ➔ "있고(선명한 하이라이트)", "없고(기본 투명 바탕)"의 확실한 대비
+                    # [4순위] 여행 중 ➔ 반투명 노란색(On) vs 기본 투명(Off)
                     grp = date_to_group.get(pure_date, 0)
                     if grp == 1:
-                        # [ON] 배경 확실히 채움 (선명한 슬레이트 블루 + 쨍한 화이트)
-                        return ['background-color: #243246; color: #FFFFFF; font-weight: 500;'] * len(row)
+                        # [ON] 사용자가 요청한 '반투명 노란색' 하이라이트 (시인성 극대화)
+                        return ['background-color: rgba(255, 215, 0, 0.13); color: #FFFDF0; font-weight: 500;'] * len(row)
                     else:
-                        # [OFF] 배경 아예 뺌 (기본 투명/블랙 바탕)
+                        # [OFF] 기본 투명/블랙 바탕
                         return ['color: #CBD5E1;'] * len(row)
 
                 # 5. 깔끔한 숫자 포맷터
