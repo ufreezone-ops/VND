@@ -2214,7 +2214,26 @@ else:
                 c_mode = st.radio("📊 통화 선택",["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
-                is_fixed_cost = (exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') | (exp_df['Category'].isin(FIXED_COST_CATS))
+                # 6.03.00-A | 출국일 동적 감지 기반 사전결제/현지지출 스마트 판별 엔진
+                dep_rows = ledger_df[ledger_df['Category'].str.strip() == '출국']
+                dep_date_str = ""
+                if not dep_rows.empty:
+                    m_dep = re.search(r'(\d{4}-\d{2}-\d{2})', str(dep_rows.iloc[0]['Date']))
+                    if m_dep: dep_date_str = m_dep.group(1)
+
+                def check_is_fixed_cost(row):
+                    # 1. 출국일이 존재하고 지출일이 출국일 이전이면 무조건 사전결제(국내 지출)
+                    if dep_date_str:
+                        m_row = re.search(r'(\d{4}-\d{2}-\d{2})', str(row['Date']))
+                        if m_row and m_row.group(1) < dep_date_str:
+                            return True
+                    # 2. 기존 폴백 룰: 카테고리가 고정비이거나 결제수단이 '원화계좌(한국)'인 경우
+                    cat = str(row['Category']).strip()
+                    met = str(row['PaymentMethod']).strip()
+                    return (met == '원화계좌(한국)') or (cat in FIXED_COST_CATS)
+
+                exp_df['IsFixedCost'] = exp_df.apply(check_is_fixed_cost, axis=1)
+                is_fixed_cost = exp_df['IsFixedCost']
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국']))]
                 
                 # 6.03.01 | Daily Local Spending Stacked Bar Chart
@@ -2312,7 +2331,8 @@ else:
             total_nights = sum(float(n) for n in nights_match) if nights_match else 7
             if total_nights == 0: total_nights = 7 
 
-            is_fixed_cost_final = (exp_df['PaymentMethod'].str.strip() == '원화계좌(한국)') | (exp_df['Category'].isin(FIXED_COST_CATS))
+            # 6.04.00-A | 스마트 사전결제 판별 플래그 상속
+            is_fixed_cost_final = exp_df['IsFixedCost'] if 'IsFixedCost' in exp_df.columns else exp_df.apply(check_is_fixed_cost, axis=1)
             dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum()
             ovr_total_krw = total_trip_krw - dom_total_krw
             ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
