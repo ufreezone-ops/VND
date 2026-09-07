@@ -1119,29 +1119,38 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 스마트폰/웹 클라우드 동기화 '💵 지폐 카운터'
+                # [기능 2] 기기 간 불일치 자동 감지 & 선택권 충돌 방어탑 '💵 지폐 카운터'
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
-                        # [클라우드 자동 로드] 첫 접속 시 구글 시트에서 마지막 지폐 수량 자동 복원
+                        # 1. 클라우드 최신 데이터 실시간 조회 (ttl="0s")
+                        cash_df = load_cash_inventory()
+                        cloud_total = 0
+                        cloud_time = ""
+                        cloud_counts = {}
+                        
+                        if not cash_df.empty:
+                            m_sync = (cash_df['TripName'] == st.session_state.current_trip) & (cash_df['Currency'] == c)
+                            if m_sync.any():
+                                row_sync = cash_df[m_sync].iloc[0]
+                                cloud_total = float(row_sync.get('Total_Amount', 0))
+                                cloud_time = str(row_sync.get('Updated_At', ''))[5:16]  # MM-DD HH:MM
+                                for item in str(row_sync.get('Bill_Counts', '')).split(";"):
+                                    if ":" in item:
+                                        b_v, b_c = item.split(":")
+                                        try: cloud_counts[int(b_v)] = int(b_c)
+                                        except: pass
+
+                        # 2. 첫 접속 시 클라우드 데이터 세션 자동 주입
                         init_key = f"init_cash_{st.session_state.current_trip}_{c}"
-                        last_sync_time = ""
                         if init_key not in st.session_state:
-                            cash_df = load_cash_inventory()
-                            if not cash_df.empty:
-                                m_sync = (cash_df['TripName'] == st.session_state.current_trip) & (cash_df['Currency'] == c)
-                                if m_sync.any():
-                                    row_sync = cash_df[m_sync].iloc[0]
-                                    counts_str = str(row_sync['Bill_Counts'])
-                                    last_sync_time = str(row_sync.get('Updated_At', ''))
-                                    for item in counts_str.split(";"):
-                                        if ":" in item:
-                                            b_val, b_cnt = item.split(":")
-                                            try: st.session_state[f"cnt_{c}_{int(b_val)}"] = int(b_cnt)
-                                            except: pass
+                            for b in bills_to_count:
+                                st.session_state[f"cnt_{c}_{b}"] = cloud_counts.get(b, 0)
                             st.session_state[init_key] = True
 
+                        # 3. 권종별 입력 UI 및 현재 화면 실시간 집계
                         total_counted = 0
+                        cur_counts = {}
                         for bill in bills_to_count:
                             if c == "VND":
                                 b_label = f"{bill // 10000}만" if bill >= 10000 else f"{bill // 1000}천"
@@ -1160,6 +1169,7 @@ with st.sidebar:
                                     key=f"cnt_{c}_{bill}",
                                     label_visibility="collapsed"
                                 )
+                            cur_counts[bill] = cnt
                             total_counted += bill * cnt
                             
                         # 실물 합계 카드 박스
@@ -1180,14 +1190,52 @@ with st.sidebar:
                             else:
                                 st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과! (오기입 확인)")
 
-                        # [클라우드 영구 저장 버튼] 모바일/PC 실시간 동기화 트리거
-                        if st.button(f"💾 {c} 실사 잔고 클라우드 동기화", key=f"btn_sync_cash_{c}", use_container_width=True):
-                            cur_counts = {b: st.session_state.get(f"cnt_{c}_{b}", 0) for b in bills_to_count}
-                            with st.spinner("구글 시트에 실사 잔고 동기화 중..."):
-                                if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
-                                    st.success("🎉 클라우드 동기화 완료! PC에서도 똑같이 표시됩니다.")
-                                    time.sleep(1)
+                        # ------------------------------------------------------
+                        # 4. 기기 간 충돌(Conflict) 판별 및 양자택일 선택 시스템
+                        # ------------------------------------------------------
+                        has_cloud_record = bool(cloud_counts)
+                        has_conflict = has_cloud_record and (cur_counts != cloud_counts)
+
+                        if has_conflict:
+                            # [충돌 발생 시] 명확한 경고와 양자택일 선택 버튼 노출
+                            st.markdown(f"""
+                                <div style='background-color: rgba(255, 165, 0, 0.12); border-left: 3px solid #FFA500; border-radius: 8px; padding: 10px 12px; margin-top: 14px; margin-bottom: 12px;'>
+                                    <div style='color: #FFA500; font-size: 12.5px; font-weight: bold;'>⚠️ 기기 간 데이터 불일치 감지!</div>
+                                    <div style='font-size: 12px; color: #E2E8F0; margin-top: 6px; line-height: 1.6;'>
+                                        • <b>현재 이 화면:</b> {fmt.format(total_counted)} {c}<br>
+                                        • <b>클라우드 최신본:</b> {fmt.format(cloud_total)} {c} <span style='color:#888;'>({cloud_time})</span>
+                                    </div>
+                                    <div style='font-size: 11.5px; color: #CBD5E1; margin-top: 6px;'>어느 데이터로 맞추시겠습니까?</div>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            
+                            col_sel1, col_sel2 = st.columns(2)
+                            with col_sel1:
+                                if st.button("📥 클라우드 최신본 가져오기", key=f"btn_pull_{c}", use_container_width=True, help="모바일에서 저장한 최신 지폐 내역을 이 화면으로 불러옵니다"):
+                                    for b in bills_to_count:
+                                        st.session_state[f"cnt_{c}_{b}"] = cloud_counts.get(b, 0)
+                                    st.success("클라우드 최신본을 불러왔습니다!")
+                                    time.sleep(0.8)
                                     st.rerun()
+                                    
+                            with col_sel2:
+                                if st.button("⚠️ 현재 화면값으로 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True, help="현재 이 화면에 입력된 수량으로 클라우드를 강제 갱신합니다"):
+                                    with st.spinner("클라우드 강제 갱신 중..."):
+                                        if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
+                                            st.success("현재 화면값으로 클라우드에 덮어썼습니다!")
+                                            time.sleep(0.8)
+                                            st.rerun()
+                        else:
+                            # [일치 상태] 평화로운 일반 모드
+                            if cloud_total > 0:
+                                st.caption(f"☁️ 클라우드 동기화 완료 상태 ({cloud_time})")
+                                
+                            if st.button(f"💾 {c} 실사 잔고 클라우드 저장", key=f"btn_save_normal_{c}", use_container_width=True):
+                                with st.spinner("구글 시트에 실사 잔고 동기화 중..."):
+                                    if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
+                                        st.success("🎉 클라우드 동기화 완료!")
+                                        time.sleep(0.8)
+                                        st.rerun()
                 
                 st.divider()
 
