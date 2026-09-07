@@ -292,9 +292,20 @@ def get_default_rate(curr):
 ### ⚙️ [Logic: API] ImgBB 영수증 업로드
 def upload_image_to_imgbb(image_file):
     try:
-        payload = {"key": IMGBB_API_KEY, "image": base64.b64encode(image_file.read()).decode("utf-8")}
-        res = requests.post("https://api.imgbb.com/1/upload", data=payload)
-        if res.status_code == 200: return res.json()['data']['url']
+        # [Fixed] 다중 업로드 및 재사용 시 파일 포인터를 항상 처음으로 되감기
+        if hasattr(image_file, "seek"):
+            image_file.seek(0)
+            
+        # [Fixed] getvalue() 우선 사용으로 스트림 소모 방지
+        img_bytes = image_file.getvalue() if hasattr(image_file, "getvalue") else image_file.read()
+        if not img_bytes:
+            return ""
+            
+        payload = {"key": IMGBB_API_KEY, "image": base64.b64encode(img_bytes).decode("utf-8")}
+        res = requests.post("https://api.imgbb.com/1/upload", data=payload, timeout=15)
+        if res.status_code == 200: 
+            time.sleep(0.2)  # 연속 업로드 시 API 레이트 리밋 보호
+            return res.json()['data']['url']
     except: pass
     return ""
 
@@ -2117,12 +2128,17 @@ else:
                                 st.session_state[desc_key] = str(row_data['Description'])
                                 st.session_state['current_edit_idx'] = real_idx
                                 
-                            new_receipt = st.file_uploader("📸 새 영수증 사진 업로드", type=['png', 'jpg', 'jpeg'], key="inline_receipt")
-                            if new_receipt:
+                            # [Fixed] 다중 파일 업로드 허용 (accept_multiple_files=True)
+                            new_receipts = st.file_uploader("📸 새 영수증 사진 업로드 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
+                            if new_receipts:
                                 if st.button("🤖 첨부된 사진 AI 스캔 (스마트 번역)", use_container_width=True):
-                                    with st.spinner("AI가 영수증을 분석하고 번역하는 중입니다..."):
-                                        ext_text = extract_text_from_vision_api(new_receipt.getvalue())
-                                        smart_text = summarize_receipt_with_gemini(ext_text)
+                                    with st.spinner(f"AI가 {len(new_receipts)}장의 사진을 분석 중..."):
+                                        all_raw_texts = []
+                                        for f in new_receipts:
+                                            ext_text = extract_text_from_vision_api(f.getvalue())
+                                            all_raw_texts.append(ext_text)
+                                        combined_text = "\n---\n".join(all_raw_texts)
+                                        smart_text = summarize_receipt_with_gemini(combined_text)
                                         if smart_text:
                                             st.session_state[desc_key] = st.session_state.get(desc_key, '') + "\n" + smart_text
                                             st.rerun()
@@ -2131,10 +2147,20 @@ else:
                             
                             if st.button("💾 이 내역 업데이트", use_container_width=True):
                                 display_df.at[real_idx, 'Description'] = new_desc
-                                if new_receipt:
-                                    with st.spinner("클라우드 전송 중..."):
-                                        url = upload_image_to_imgbb(new_receipt)
-                                        if url: display_df.at[real_idx, 'Receipt_URL'] = url
+                                if new_receipts:
+                                    with st.spinner(f"📸 {len(new_receipts)}장의 영수증을 클라우드에 전송 중..."):
+                                        # [Fixed] 다중 업로드 후 기존 영수증 URL과 누적 병합
+                                        new_urls = []
+                                        for f in new_receipts:
+                                            u = upload_image_to_imgbb(f)
+                                            if u: new_urls.append(u)
+                                        
+                                        if new_urls:
+                                            existing_raw = str(row_data['Receipt_URL']).strip()
+                                            existing_urls = [x.strip() for x in existing_raw.split(',') if x.strip().startswith('http')]
+                                            merged_urls = existing_urls + new_urls
+                                            display_df.at[real_idx, 'Receipt_URL'] = ",".join(merged_urls)
+                                            
                                 if save_data(display_df): st.success("업데이트 완료!"); time.sleep(1); st.rerun()
                         st.markdown("---")
 
