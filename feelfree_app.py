@@ -953,10 +953,10 @@ with st.sidebar:
                 st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
                 st.markdown(f"<div style='margin-bottom:8px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
 
-                # [기능 1] ATM 인출 알림 경고 (현금 잔고가 안전선 이하일 때 발동)
+                # [기능 1] 한 줄 슬림 현금 부족 경고
                 threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
                 if is_trip_active and c_cash <= threshold:
-                    st.warning(f"🚨 **현금 부족 경고!**\n\n현금 잔고가 **{fmt.format(c_cash)} {c}**로 안전선({fmt.format(threshold)} {c}) 이하입니다. ATM 인출을 준비하세요!")
+                    st.markdown(f"<div style='color:#FF9800; font-size:12.5px; font-weight:bold; margin-bottom:12px;'>🚨 현금 부족 경고 ({fmt.format(c_cash)} {c})</div>", unsafe_allow_html=True)
                 
                 card_batches = current_inventory_batches.get(f"트래블카드({c})", [])
                 cash_batches = current_inventory_batches.get(f"현금({c})", [])
