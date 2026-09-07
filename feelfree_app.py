@@ -290,9 +290,13 @@ st.markdown("""
 # ------------------------------------------------------------------------------
 # 1.06.00 | Session State Orchestrator (동적 세션 상태 및 컨텍스트 초기화)
 # ------------------------------------------------------------------------------
-# 1.06.01 | Dynamic Session Context & Initializer
-### ⚙️ [Logic: Session State] 동적 세션 데이터 초기화
-if 'current_trip' not in st.session_state: st.session_state.current_trip = list(TRIP_CONFIGS.keys())[0]
+# 1.06.01 | Dynamic Session Context & Initializer (가장 최신 여행 자동 시작)
+def sort_trips(trip_names):
+    return sorted(trip_names, key=lambda x: (re.search(r'\((\d{4})\)', x).group(1) if re.search(r'\((\d{4})\)', x) else '0000', x), reverse=True)
+
+sorted_trips_initial = sort_trips(list(TRIP_CONFIGS.keys()))
+if 'current_trip' not in st.session_state: 
+    st.session_state.current_trip = sorted_trips_initial[0]  # 무조건 가장 최신 여행으로 시작
 
 ACTIVE_SHEET = TRIP_CONFIGS[st.session_state.current_trip]["sheet"]
 FIRST_NODE_NAME = list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())[0]
