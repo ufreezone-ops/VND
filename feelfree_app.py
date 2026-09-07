@@ -241,25 +241,26 @@ st.markdown("""
         gap: 0px !important;
     }
 
-    /* 2. 지폐 카운터: 입력창을 라벨 바로 옆으로 끌어당기고 탈출 방지 */
+    /* 2. 지폐 카운터: 모바일/웹 완벽 대칭 센터링 및 우측 쏠림 방지 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
-        justify-content: flex-start !important; /* 왼쪽 라벨 쪽으로 바짝 밀착 */
-        gap: 12px !important;                 /* 라벨과 입력창 사이 간격 12px */
+        justify-content: center !important; /* 핵심: 양극단으로 찢어지지 않고 완벽한 중앙 정렬 */
         width: 100% !important;
-        margin-bottom: -14px !important;
+        gap: 12px !important;               /* 라벨과 입력창 사이 간격 12px */
+        margin-bottom: -8px !important;     /* 겹치지 않는 적정 세로 압축 */
     }
-    /* 좌측 라벨: 55px 고정 */
+    /* 좌측 라벨: 60px 고정, 우측 정렬로 입력창과 깔끔하게 마주봄 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
-        flex: 0 0 55px !important;
-        width: 55px !important;
-        min-width: 55px !important;
-        max-width: 55px !important;
+        flex: 0 0 60px !important;
+        width: 60px !important;
+        max-width: 60px !important;
+        min-width: 60px !important;
+        text-align: right !important;
     }
-    /* 우측 입력창: 사이드바 밖으로 삐져나가지 않도록 아담한 85px로 고정 */
+    /* 우측 입력창: 85px 고정 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
         flex: 0 0 85px !important;
         width: 85px !important;
@@ -279,7 +280,7 @@ st.markdown("""
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input {
         height: 28px !important;
         font-size: 14px !important;
-        text-align: center !important; /* 숫자가 정중앙에 예쁘게 오도록 */
+        text-align: center !important;
         padding: 0px !important;
     }
     
@@ -1047,7 +1048,7 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 스마트폰 한 화면 최적화 '💵 지폐 카운터' (가로 밀착형)
+                # [기능 2] 스마트폰 한 화면 최적화 '💵 지폐 카운터' (완벽 대칭 센터형)
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
@@ -1058,9 +1059,9 @@ with st.sidebar:
                             else:
                                 b_label = f"{bill}"
                                 
-                            c_col1, c_col2 = st.columns([1, 1.5])
+                            c_col1, c_col2 = st.columns([1, 1.4])
                             with c_col1:
-                                st.markdown(f"<div style='font-size:13.5px; font-weight:bold; white-space:nowrap; padding-top:2px;'>{b_label}동</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='font-size:13.5px; font-weight:bold; white-space:nowrap; text-align:right;'>{b_label}동</div>", unsafe_allow_html=True)
                             with c_col2:
                                 cnt = st.number_input(
                                     label=f"{c}_{bill}",
@@ -1072,10 +1073,15 @@ with st.sidebar:
                                 )
                             total_counted += bill * cnt
                             
-                        st.markdown("<hr style='margin: 10px 0 6px 0;'>", unsafe_allow_html=True)
-                        st.markdown(f"🧮 **지갑 합계:** `{fmt.format(total_counted)} {c}`")
+                        # 1천동과 겹치지 않도록 마진 확보 및 시원한 합계 카드 박스
+                        st.markdown(f"""
+                            <div style='margin-top: 16px; margin-bottom: 10px; padding: 8px 12px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
+                                <span style='font-size:12px; color:#A0AEC0;'>🧮 지갑 실물 합계</span><br>
+                                <span style='font-size:16px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
+                            </div>
+                        """, unsafe_allow_html=True)
                         
-                        # 장부 잔액과 실물 대조
+                        # 장부 잔액과 실물 대조 (오차 감사)
                         diff_val = total_counted - c_cash
                         if total_counted > 0:
                             if diff_val == 0:
