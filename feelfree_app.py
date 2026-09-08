@@ -2700,28 +2700,62 @@ else:
                 c_mode = st.radio("📊 통화 선택",["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
-                # 6.03.00-A | 출국일 동적 감지 기반 사전결제/현지지출 스마트 판별 엔진
-                dep_rows = ledger_df[ledger_df['Category'].str.strip() == '출국']
+                # --------------------------------------------------------------
+                # 6.03.00-A | 출국일 & 귀국일 기반 닫힌 구간(Range) 정밀 판별 엔진
+                # --------------------------------------------------------------
+                dep_rows = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
+                korea_dep = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
+                target_dep_row = korea_dep if not korea_dep.empty else dep_rows
+                
                 dep_date_str = ""
-                if not dep_rows.empty:
-                    m_dep = re.search(r'(\d{4}-\d{2}-\d{2})', str(dep_rows.iloc[0]['Date']))
-                    if m_dep: dep_date_str = m_dep.group(1)
+                dep_dt = None
+                if not target_dep_row.empty:
+                    m_dep = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(target_dep_row.iloc[0]['Date']))
+                    if m_dep: 
+                        dep_date_str = m_dep.group(0)
+                        dep_dt = datetime.strptime(dep_date_str, "%Y-%m-%d").date()
 
+                arr_rows = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
+                korea_arr = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
+                target_arr_row = korea_arr if not korea_arr.empty else arr_rows
+                
+                arr_date_str = ""
+                arr_dt = None
+                if not target_arr_row.empty:
+                    m_arr = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
+                    if m_arr: 
+                        arr_date_str = m_arr.group(0)
+                        arr_dt = datetime.strptime(arr_date_str, "%Y-%m-%d").date()
+
+                # 1. 사전결제 판별: 출국일 이전 날짜는 무조건 사전결제로 분류
                 def check_is_fixed_cost(row):
-                    # 1. 출국일이 존재하고 지출일이 출국일 이전이면 무조건 사전결제(국내 지출)
-                    if dep_date_str:
-                        m_row = re.search(r'(\d{4}-\d{2}-\d{2})', str(row['Date']))
-                        if m_row and m_row.group(1) < dep_date_str:
-                            return True
-                    # 2. 기존 폴백 룰: 카테고리가 고정비이거나 결제수단이 '원화계좌(한국)'인 경우
+                    orig_d = str(row['Date']).strip()
+                    m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
+                    pure_d = m_row.group(0) if m_row else ""
+                    
+                    # 출국일 이전(7/17, 9/22 등)은 무조건 사전결제(True)
+                    if dep_date_str and pure_d and pure_d < dep_date_str:
+                        return True
                     cat = str(row['Category']).strip()
                     met = str(row['PaymentMethod']).strip()
                     return (met == '원화계좌(한국)') or (cat in FIXED_COST_CATS)
 
                 exp_df['IsFixedCost'] = exp_df.apply(check_is_fixed_cost, axis=1)
                 is_fixed_cost = exp_df['IsFixedCost']
-                ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국']))]
-                
+
+                # 2. [핵심] 현지 여행지 지출(ovr_df): 출국일 <= 날짜 <= 귀국일 사이의 지출만 엄격히 한정!
+                def is_in_trip_period(row):
+                    orig_d = str(row['Date']).strip()
+                    m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
+                    if not m_row: return True
+                    pure_d = m_row.group(0)
+                    if dep_date_str and pure_d < dep_date_str: return False  # 출국일 이전 제외
+                    if arr_date_str and pure_d > arr_date_str: return False  # 귀국일 이후 제외
+                    return True
+
+                in_period_mask = exp_df.apply(is_in_trip_period, axis=1) if (dep_date_str or arr_date_str) else True
+                ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국'])) & in_period_mask]
+
                 # --------------------------------------------------------------
                 # 6.03.01 | Daily Local Spending Stacked Bar Chart (터치 확대 방지 & 모바일 스크롤 최적화)
                 # --------------------------------------------------------------
@@ -2766,36 +2800,26 @@ else:
                         legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5)
                     )
                     
-                    # [핵심] X축 및 Y축 범위 고정(fixedrange=True)으로 모바일 한 손가락 스크롤 정상화!
+                    # 모바일 한 손가락 스크롤 정상화 (터치 확대 차단)
                     fig2.update_xaxes(
                         categoryorder='array', 
                         categoryarray=ovr_df['Date_Display'].unique(), 
                         tickangle=0 if len(ovr_df['Date_Clean'].unique()) <= 7 else -30, 
                         tickfont=dict(size=11),
-                        fixedrange=True  # 가로 드래그 시 차트 축 확대 차단
+                        fixedrange=True
                     )
                     fig2.update_yaxes(
-                        fixedrange=True  # 세로 드래그 시 차트 축 확대 차단 -> 브라우저 세로 스크롤로 매끄럽게 연결!
+                        fixedrange=True
                     )
 
                     # [동적 타이틀] 진행 중인 여행은 '3일차', 종료된 여행은 '22일' 표기
-                    korea_arr_c = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
-                    arr_rows_c = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
-                    target_arr_c = korea_arr_c if not korea_arr_c.empty else arr_rows_c
-                    is_active_chart = True
-                    if not target_arr_c.empty:
-                        m_arr_c = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_arr_c.iloc[-1]['Date']))
-                        if m_arr_c:
-                            arr_dt_c = datetime.strptime(m_arr_c.group(1), "%Y-%m-%d").date()
-                            today_dt_c = datetime.now(st.session_state.current_tz).date()
-                            is_active_chart = (today_dt_c <= arr_dt_c)
+                    today_dt_c = datetime.now(st.session_state.current_tz).date()
+                    is_active_chart = (today_dt_c <= arr_dt) if arr_dt else True
 
                     total_days_cnt = len(ovr_df['Date_Clean'].unique())
                     day_label_suffix = f"{total_days_cnt}일차" if is_active_chart else f"{total_days_cnt}일"
                     
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
-                    
-                    # 스크롤 줌 및 모드바 차단 설정 적용
                     st.plotly_chart(
                         fig2, 
                         use_container_width=True, 
