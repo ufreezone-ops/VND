@@ -201,11 +201,10 @@ st.markdown("""
     div[data-testid="stSidebar"] .stSelectbox label { color: #FFA500 !important; font-weight: bold !important; }
     div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
     div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
-    div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0.5rem !important; gap: 0px !important; }
-    [data-testid="stSidebar"] .stExpander div[data-testid="stVerticalBlock"] { gap: 2px !important; padding: 5px !important; }
+    div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
     [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
 
-    # [Modified] 현존하는 모든 브라우저/버전에서 숫자 버튼을 강제로 지우는 CSS
+    /* 숫자 입력창 화살표 버튼 제거 */
     div[data-testid="stNumberInput"] button {
         display: none !important;
     }
@@ -217,7 +216,7 @@ st.markdown("""
     }
 
     /* ------------------------------------------------------------- */
-    /* [모바일 최적화] 사이드바 상단 여백 회수 및 컬럼 가로 1열 강제 고정 */
+    /* [모바일/웹 UI 최적화] 사이드바 상단 여백 회수 및 지폐 카운터 초슬림화 */
     /* ------------------------------------------------------------- */
     /* 1. 사이드바 최상단 텅 빈 공간(100px) 완전 회수 */
     section[data-testid="stSidebar"] > div:first-child {
@@ -241,16 +240,22 @@ st.markdown("""
         gap: 0px !important;
     }
 
-    /* 2. 지폐 카운터: 한 칸 높이 50% 압축 (24px 초슬림 밀착형) */
+    /* 2. 지폐 카운터 익스팬더 내부 상단 휑한 여백 제거 (하단 간격과 1:1 대칭 일치) */
+    [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] {
+        padding-top: 4px !important;
+        padding-bottom: 8px !important;
+    }
+
+    /* 3. 지폐 카운터: 모바일/웹 완벽 대칭 센터링 및 24px 초슬림화 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
-        justify-content: center !important;
+        justify-content: center !important; /* 양 극단으로 찢어지지 않고 완벽한 중앙 정렬 */
         width: 100% !important;
         gap: 10px !important;
-        margin-bottom: -16px !important; /* 행과 행 사이 간격을 반으로 압축 */
+        margin-bottom: -16px !important;    /* 행과 행 사이 간격 50% 압축 밀착 */
         padding: 0px !important;
     }
     /* 좌측 라벨: 55px 우측 정렬 */
@@ -275,7 +280,7 @@ st.markdown("""
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
         width: 85px !important;
-        min-height: 24px !important; /* 높이를 기존 36~40px에서 24px로 축소 */
+        min-height: 24px !important; /* 높이 24px 초슬림화 */
         height: 24px !important;
         border-radius: 5px !important;
         padding: 0px !important;
@@ -287,9 +292,8 @@ st.markdown("""
         padding: 0px !important;
         line-height: 24px !important;
     }
-    
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
 # 1.06.00 | Session State Orchestrator (동적 세션 상태 및 컨텍스트 초기화)
@@ -1065,9 +1069,9 @@ with st.sidebar:
             "CNY": [100, 50, 20, 10, 5, 1]
         }
 
-        # 통화별 ATM 인출 권장 안전선 (이하로 떨어지면 경고)
+        # 통화별 ATM 인출 권장 안전선
         LOW_CASH_THRESHOLD = {
-            "VND": 1000000,  # 100만 동 (약 5.5만 원)
+            "VND": 1000000,  # 100만 동
             "USD": 50,
             "EUR": 50,
             "TRY": 1000,
@@ -1096,7 +1100,7 @@ with st.sidebar:
                 st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
                 st.markdown(f"<div style='margin-bottom:8px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
 
-                # [기능 1] 단독 '현금 부족 경고' (중복 잔액 제거 및 상하 여백 확보)
+                # [기능 1] 단독 '현금 부족 경고' 뱃지
                 threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
                 if is_trip_active and c_cash <= threshold:
                     st.markdown("""
@@ -1108,7 +1112,7 @@ with st.sidebar:
                 card_batches = current_inventory_batches.get(f"트래블카드({c})", [])
                 cash_batches = current_inventory_batches.get(f"현금({c})", [])
                 
-                # 진행 중인 여행이면 '상세 배치'가 기본으로 열림
+                # 진행 중인 여행이면 '상세 배치' 자동 펼침
                 if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
                     with st.expander("🔍 상세 배치", expanded=is_trip_active):
                         r_fmt = ".4f" if c in ["VND", "HUF"] else ".2f"
@@ -1123,7 +1127,7 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 사용자 커스텀 문구 반영 & 백스페이스 없는 스마트 '💵 지폐 카운터'
+                # [기능 2] 완벽 대칭 & 충돌 방어탑 '💵 지폐 카운터'
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
@@ -1138,7 +1142,18 @@ with st.sidebar:
                             if m_sync.any():
                                 row_sync = cash_df[m_sync].iloc[0]
                                 cloud_total = float(row_sync.get('Total_Amount', 0))
-                                cloud_time = str(row_sync.get('Updated_At', ''))[5:16]  # MM-DD HH:MM
+                                
+                                # [수정] 타임스탬프 시/분 2자리 정규화 -> MM-DD HH:MM (예: 09-08 04:41)
+                                raw_t = str(row_sync.get('Updated_At', '')).strip()
+                                m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
+                                if m_t:
+                                    d_part = m_t.group(1)
+                                    h_part = int(m_t.group(2))
+                                    min_part = m_t.group(3)
+                                    cloud_time = f"{d_part} {h_part:02d}:{min_part}"
+                                else:
+                                    cloud_time = raw_t[5:16].rstrip(':')
+                                    
                                 for item in str(row_sync.get('Bill_Counts', '')).split(";"):
                                     if ":" in item:
                                         b_v, b_c = item.split(":")
@@ -1153,7 +1168,7 @@ with st.sidebar:
                                 st.session_state[f"cnt_{c}_{b}"] = int(val_loaded) if val_loaded > 0 else None
                             st.session_state[init_key] = True
 
-                        # 3. 권종별 초슬림 입력 (백스페이스 불필요: 터치 즉시 새 숫자 입력)
+                        # 3. 권종별 초슬림 24px 입력 (터치 즉시 새 숫자 입력)
                         total_counted = 0
                         cur_counts = {}
                         for bill in bills_to_count:
@@ -1166,7 +1181,6 @@ with st.sidebar:
                             with c_col1:
                                 st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; line-height:24px;'>{b_label}동</div>", unsafe_allow_html=True)
                             with c_col2:
-                                # [핵심] value가 없으면 연한 0(placeholder)만 띄워 백스페이스 없이 바로 입력 가능
                                 raw_val = st.session_state.get(f"cnt_{c}_{bill}", None)
                                 cnt = st.number_input(
                                     label=f"{c}_{bill}",
@@ -1181,15 +1195,15 @@ with st.sidebar:
                             cur_counts[bill] = final_cnt
                             total_counted += bill * final_cnt
                             
-                        # 실물 합계 카드 박스
+                        # 상하 대칭 실물 합계 카드 박스
                         st.markdown(f"""
-                            <div style='margin-top: 18px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
+                            <div style='margin-top: 16px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
                                 <span style='font-size:11.5px; color:#A0AEC0;'>🧮 지갑 실물 합계</span><br>
                                 <span style='font-size:15px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # [사용자 지정 미니멀 문구 100% 반영]
+                        # [사용자 지정 미니멀 문구]
                         diff_val = total_counted - c_cash
                         if total_counted > 0:
                             if diff_val == 0:
@@ -1199,7 +1213,7 @@ with st.sidebar:
                             else:
                                 st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
 
-                        # 4. 기기 간 충돌 감지 및 동기화 (사용자 커스텀 버튼명 적용)
+                        # 4. 기기 간 충돌 감지 및 동기화
                         has_cloud_record = bool(cloud_counts)
                         has_conflict = has_cloud_record and (cur_counts != cloud_counts)
 
@@ -1232,9 +1246,9 @@ with st.sidebar:
                                             time.sleep(0.6)
                                             st.rerun()
                         else:
-                            # [사용자 지정 미니멀 캡션 & 버튼명 100% 반영]
+                            # [수정] 콜론 삭제 및 깔끔한 시/분 출력 -> 클라우드 동기완료 (09-08 04:41)
                             if cloud_total > 0:
-                                st.caption(f"클라우드 동기완료 ({cloud_time}:)")
+                                st.caption(f"클라우드 동기완료 ({cloud_time})")
                                 
                             if st.button(f"💾 {c} 클라우드 저장", key=f"btn_save_normal_{c}", use_container_width=True):
                                 with st.spinner("구글 시트 저장 중..."):
