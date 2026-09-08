@@ -2353,7 +2353,7 @@ else:
             if save_data(ledger_df):
                 st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
                 
-        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (아이폰 SE3 맞춤형 초슬림 뷰어)
+        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (아이폰 SE3 맞춤형 슬림 뷰어)
         if not display_df.empty: 
             display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
             display_df = display_df.reindex(columns=FINAL_COLUMNS)
@@ -2406,18 +2406,18 @@ else:
                 def is_real_departure(cat, cur_d):
                     if not dep_dt: return False
                     if '출국_한국' in cat: return True
-                    if '출국' in cat and cur_d == dep_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥']):
+                    if '출국' in cat and cur_d == dep_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥', '칭다오']):
                         return True
                     return False
 
                 def is_real_arrival(cat, cur_d):
                     if not arr_dt: return False
                     if '입국_한국' in cat: return True
-                    if '입국' in cat and cur_d == arr_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥']):
+                    if '입국' in cat and cur_d == arr_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥', '칭다오']):
                         return True
                     return False
 
-                # 2. [요청 2 반영] 연도 생략 및 50% 압축 날짜 포맷터 (예: 08/09(일) 🏷️사전)
+                # 2. 날짜 포맷터 (08/09(일) 🏷️사전 형태 압축)
                 day_kr_map = {'Mon':'월', 'Tue':'화', 'Wed':'수', 'Thu':'목', 'Fri':'금', 'Sat':'토', 'Sun':'일'}
                 def format_display_date_se(row):
                     orig_d = str(row['Date'])
@@ -2450,7 +2450,7 @@ else:
                 styled_render_df = render_df.copy()
                 styled_render_df['Date'] = styled_render_df.apply(format_display_date_se, axis=1)
 
-                # 3. [요청 3 반영] 단일 국가 여행 시 'Country' 열 자동 숨김 (가로 80px 즉시 회수)
+                # 3. 단일 국가 여행 시 'Country' 열 자동 숨김
                 trip_nodes = TRIP_CONFIGS.get(st.session_state.current_trip, {}).get("nodes", {})
                 is_single_country = (len(trip_nodes) <= 1) or (styled_render_df['Country'].dropna().nunique() <= 1)
                 if is_single_country and 'Country' in styled_render_df.columns:
@@ -2493,9 +2493,9 @@ else:
                 num_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
                 styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
                 
-                # 5. [요청 1-A 반영] 네모칸 완전 삭제 (글자 터치 즉시 선택 모드)
+                # 5. [수정 완료] 일련번호 삭제(hide_index=True) & 날짜 최적 너비(width=120) 지정
                 col_cfg = {
-                    "Date": st.column_config.TextColumn("날짜", width="small"),
+                    "Date": st.column_config.TextColumn("날짜", width=120),  # 글자가 잘리지 않는 최적 너비
                     "Category": st.column_config.TextColumn("항목", width="small"),
                     "Receipt_URL": link_cfg
                 }
@@ -2503,7 +2503,8 @@ else:
                     styled_table, 
                     use_container_width=True, 
                     column_config=col_cfg, 
-                    selection_mode="single-cell",  # 네모칸 체크박스 열 완전 삭제!
+                    hide_index=True,              # [수정] 일련번호 열 완전 삭제!
+                    selection_mode="single-cell",  # 네모칸 없이 글자 터치로 선택
                     on_select="rerun"
                 )
 
