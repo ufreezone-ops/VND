@@ -1062,12 +1062,12 @@ with st.sidebar:
         if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
     else:
         # ----------------------------------------------------------------------
-        # 4.01.02 | Multi-Currency Dynamic Wallet Monitor & Cash Bill Counter
+        # 4.01.02 | Multi-Currency Dynamic Wallet Monitor & Physical Cash Counter
         # ----------------------------------------------------------------------
         st.subheader("💰 지갑 잔고")
         b_val, spent_val = calculate_summary_metrics(ledger_df)
         
-        # 1. 여행 진행 중 여부 판별 (한국 입국일 이전/당일이면 True -> 상세배치 자동 열림)
+        # 1. 여행 진행 중 여부 판별
         korea_arr = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
         arr_rows = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
         target_arr_row = korea_arr if not korea_arr.empty else arr_rows
@@ -1084,26 +1084,19 @@ with st.sidebar:
         trip_currs = set(node['currency'] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())
         display_currs = sorted(list(active_currs | trip_currs))
 
-        # 통화별 권종 매핑
+        # [글로벌 실물현금: 지폐 + 동전 통합 권종 매핑]
         CURR_BILLS = {
-            "VND": BILLS,  # [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
-            "USD": [100, 50, 20, 10, 5, 2, 1],
-            "EUR": [100, 50, 20, 10, 5],
-            "TRY": [200, 100, 50, 20, 10, 5],
-            "JPY": [10000, 5000, 2000, 1000],
-            "CNY": [100, 50, 20, 10, 5, 1],
-            "PHP": [1000, 500, 200, 100, 50, 20]
+            "VND": BILLS,  # 베트남은 동전 없음 (50만동 ~ 1천동 지폐)
+            "EUR": [100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1],  # 100~5€ 지폐 + 2€, 1€, 50c, 20c, 10c 동전
+            "USD": [100, 50, 20, 10, 5, 2, 1, 0.25, 0.1],      # 지폐 + 25¢(쿼터), 10¢(다임) 동전
+            "TRY": [200, 100, 50, 20, 10, 5, 1, 0.5],          # 지폐 + 1₺, 50kr 동전
+            "JPY": [10000, 5000, 2000, 1000, 500, 100, 50, 10], # 지폐 + 동전
+            "PHP": [1000, 500, 200, 100, 50, 20, 10, 5, 1],    # 지폐 + 동전
+            "CNY": [100, 50, 20, 10, 5, 1, 0.5, 0.1]
         }
 
-        # 통화별 ATM 인출 권장 안전선
         LOW_CASH_THRESHOLD = {
-            "VND": 1000000,  # 100만 동
-            "USD": 50,
-            "EUR": 50,
-            "TRY": 1000,
-            "JPY": 5000,
-            "CNY": 300,
-            "PHP": 2000
+            "VND": 1000000, "USD": 50, "EUR": 50, "TRY": 1000, "JPY": 5000, "CNY": 300, "PHP": 2000
         }
         
         ### 📊 [GUI: Chart/Table] 통화별 잔고 표시
@@ -1125,11 +1118,8 @@ with st.sidebar:
             if c_card > 0 or c_cash > 0 or c in trip_currs:
                 st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
                 st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
-                
-                # [개선] 경고문 유무와 상관없이 상세배치와의 간격을 항상 14px 확보
                 st.markdown(f"<div style='margin-bottom:14px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
 
-                # 단독 '현금 부족 경고' 뱃지
                 threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
                 if is_trip_active and c_cash <= threshold:
                     st.markdown("""
@@ -1141,7 +1131,6 @@ with st.sidebar:
                 card_batches = current_inventory_batches.get(f"트래블카드({c})", [])
                 cash_batches = current_inventory_batches.get(f"현금({c})", [])
                 
-                # 진행 중인 여행이면 '상세 배치' 자동 펼침
                 if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
                     with st.expander("🔍 상세 배치", expanded=is_trip_active):
                         r_fmt = ".4f" if c in ["VND", "HUF"] else ".2f"
@@ -1156,12 +1145,12 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # 스마트폰/웹 클라우드 동기화 '💵 지폐 카운터'
+                # [개편] 🪙 실물현금 카운터 (지폐 + 동전 완벽 지원)
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
-                    with st.expander("💵 지폐 카운터", expanded=False):
+                    with st.expander("🪙 실물현금 카운터", expanded=False):
                         cash_df = load_cash_inventory()
-                        cloud_total = 0
+                        cloud_total = 0.0
                         cloud_time = ""
                         cloud_counts = {}
                         
@@ -1174,70 +1163,83 @@ with st.sidebar:
                                 raw_t = str(row_sync.get('Updated_At', '')).strip()
                                 m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
                                 if m_t:
-                                    d_part = m_t.group(1)
-                                    h_part = int(m_t.group(2))
-                                    min_part = m_t.group(3)
-                                    cloud_time = f"{d_part} {h_part:02d}:{min_part}"
+                                    cloud_time = f"{m_t.group(1)} {int(m_t.group(2)):02d}:{m_t.group(3)}"
                                 else:
                                     cloud_time = raw_t[5:16].rstrip(':')
                                     
                                 for item in str(row_sync.get('Bill_Counts', '')).split(";"):
                                     if ":" in item:
                                         b_v, b_c = item.split(":")
-                                        try: cloud_counts[int(b_v)] = int(b_c)
+                                        try: cloud_counts[float(b_v)] = int(b_c)
                                         except: pass
 
                         init_key = f"init_cash_{st.session_state.current_trip}_{c}"
                         if init_key not in st.session_state:
                             for b in bills_to_count:
-                                val_loaded = cloud_counts.get(b, 0)
-                                st.session_state[f"cnt_{c}_{b}"] = int(val_loaded) if val_loaded > 0 else None
+                                val_loaded = cloud_counts.get(float(b), 0)
+                                b_key_id = str(b).replace('.', '_')
+                                st.session_state[f"cnt_{c}_{b_key_id}"] = int(val_loaded) if val_loaded > 0 else None
                             st.session_state[init_key] = True
 
-                        total_counted = 0
+                        total_counted = 0.0
                         cur_counts = {}
                         for bill in bills_to_count:
+                            b_flt = float(bill)
+                            b_key_id = str(bill).replace('.', '_')
+                            
+                            # [통화별 지폐 및 동전 라벨 정규화]
                             if c == "VND":
-                                b_label = f"{bill // 10000}만" if bill >= 10000 else f"{bill // 1000}천"
+                                b_label = f"{int(bill // 10000)}만동" if bill >= 10000 else f"{int(bill // 1000)}천동"
+                            elif c == "EUR":
+                                b_label = f"{int(bill)} €" if bill >= 1 else f"{int(round(bill * 100))} c"
+                            elif c == "USD":
+                                b_label = f"{int(bill)} $" if bill >= 1 else f"{int(round(bill * 100))} ¢"
+                            elif c == "TRY":
+                                b_label = f"{int(bill)} ₺" if bill >= 1 else f"{int(round(bill * 100))} kr"
+                            elif c == "JPY":
+                                b_label = f"{int(bill)} ¥"
+                            elif c == "PHP":
+                                b_label = f"{int(bill)} ₱"
                             else:
-                                b_label = f"{bill}"
+                                b_label = f"{bill} {c}"
                                 
                             c_col1, c_col2 = st.columns([1, 1.4])
                             with c_col1:
-                                st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; height:30px; line-height:30px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}동</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; height:30px; line-height:30px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}</div>", unsafe_allow_html=True)
                             with c_col2:
-                                raw_val = st.session_state.get(f"cnt_{c}_{bill}", None)
+                                raw_val = st.session_state.get(f"cnt_{c}_{b_key_id}", None)
                                 cnt = st.number_input(
-                                    label=f"{c}_{bill}",
+                                    label=f"{c}_{b_key_id}",
                                     min_value=0,
                                     step=1,
                                     value=int(raw_val) if raw_val and raw_val > 0 else None,
                                     placeholder="0",
-                                    key=f"cnt_{c}_{bill}",
+                                    key=f"cnt_{c}_{b_key_id}",
                                     label_visibility="collapsed"
                                 )
                             final_cnt = int(cnt) if cnt is not None else 0
-                            cur_counts[bill] = final_cnt
+                            cur_counts[b_flt] = final_cnt
                             total_counted += bill * final_cnt
                             
-                        # 실물 합계 카드 박스
+                        # 센트 단위 부동소수점 오차 방지
+                        total_counted = round(total_counted, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted)
+                        
                         st.markdown(f"""
                             <div style='margin-top: 14px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
-                                <span style='font-size:11.5px; color:#A0AEC0;'>🧮 지갑 실물 합계</span><br>
+                                <span style='font-size:11.5px; color:#A0AEC0;'>🧮 실물현금 합계 (지폐+동전)</span><br>
                                 <span style='font-size:15px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        diff_val = total_counted - c_cash
+                        diff_val = round(total_counted - c_cash, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted - c_cash)
                         if total_counted > 0:
-                            if diff_val == 0:
+                            if abs(diff_val) < 0.001:
                                 st.success("✅ 장부/실물 일치!")
                             elif diff_val < 0:
                                 st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족!")
                             else:
                                 st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
 
-                        # 기기 간 충돌 감지 및 동기화
                         has_cloud_record = bool(cloud_counts)
                         has_conflict = has_cloud_record and (cur_counts != cloud_counts)
 
@@ -1256,8 +1258,9 @@ with st.sidebar:
                             with col_sel1:
                                 if st.button("📥 클라우드 가져오기", key=f"btn_pull_{c}", use_container_width=True):
                                     for b in bills_to_count:
-                                        val_b = cloud_counts.get(b, 0)
-                                        st.session_state[f"cnt_{c}_{b}"] = int(val_b) if val_b > 0 else None
+                                        val_b = cloud_counts.get(float(b), 0)
+                                        b_key_id = str(b).replace('.', '_')
+                                        st.session_state[f"cnt_{c}_{b_key_id}"] = int(val_b) if val_b > 0 else None
                                     st.success("가져오기 완료!")
                                     time.sleep(0.6)
                                     st.rerun()
@@ -1273,7 +1276,7 @@ with st.sidebar:
                             if cloud_total > 0:
                                 st.caption(f"클라우드 동기완료 ({cloud_time})")
                                 
-                            if st.button(f"💾 {c} 클라우드 저장", key=f"btn_save_normal_{c}", use_container_width=True):
+                            if st.button(f"💾 {c} 실물현금 저장", key=f"btn_save_normal_{c}", use_container_width=True):
                                 with st.spinner("구글 시트 저장 중..."):
                                     if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
                                         st.success("🎉 저장 완료!")
@@ -2720,7 +2723,7 @@ else:
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국']))]
                 
                 # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Stacked Bar Chart (빈 괄호 완전 박멸형)
+                # 6.03.01 | Daily Local Spending Stacked Bar Chart (동적 일차 타이틀)
                 # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
@@ -2728,7 +2731,7 @@ else:
                     trip_nodes = TRIP_CONFIGS.get(st.session_state.current_trip, {}).get("nodes", {})
                     is_single_country = (len(trip_nodes) <= 1) or (ovr_df['Country'].dropna().nunique() <= 1)
                     
-                    # 날짜 숫자 자체로 100% 한글 요일 산출
+                    # 100% 한글 요일 자체 연산
                     day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                     def format_chart_x_label(r):
                         orig_d = str(r['Date']).strip()
@@ -2768,7 +2771,23 @@ else:
                         tickangle=0 if len(ovr_df['Date_Clean'].unique()) <= 7 else -30, 
                         tickfont=dict(size=11)
                     )
-                    st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({len(ovr_df['Date_Clean'].unique())}일차)</h4>", unsafe_allow_html=True)
+
+                    # [동적 타이틀] 진행 중인 여행은 '3일차', 종료된 여행은 '22일' 표기
+                    korea_arr_c = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
+                    arr_rows_c = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
+                    target_arr_c = korea_arr_c if not korea_arr_c.empty else arr_rows_c
+                    is_active_chart = True
+                    if not target_arr_c.empty:
+                        m_arr_c = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_arr_c.iloc[-1]['Date']))
+                        if m_arr_c:
+                            arr_dt_c = datetime.strptime(m_arr_c.group(1), "%Y-%m-%d").date()
+                            today_dt_c = datetime.now(st.session_state.current_tz).date()
+                            is_active_chart = (today_dt_c <= arr_dt_c)
+
+                    total_days_cnt = len(ovr_df['Date_Clean'].unique())
+                    day_label_suffix = f"{total_days_cnt}일차" if is_active_chart else f"{total_days_cnt}일"
+                    
+                    st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
                     st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 
                 st.divider()
@@ -2782,7 +2801,6 @@ else:
                 fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
                 
                 if not daily_table.empty:
-                    # 표 날짜 100% 한글 요일 자체 계산
                     def shorten_table_date(d_str):
                         d_str = str(d_str).strip()
                         m = re.search(r'(\d{4})-(\d{2})-(\d{2})', d_str)
