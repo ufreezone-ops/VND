@@ -216,7 +216,7 @@ st.markdown("""
     }
 
     /* ------------------------------------------------------------- */
-    /* [모바일/웹 UI 최적화] 사이드바 상단 여백 회수 및 지폐 카운터 초슬림화 */
+    /* [모바일/웹 UI 최적화] 사이드바 상단 여백 회수 및 지폐 카운터 수평 정렬 */
     /* ------------------------------------------------------------- */
     /* 1. 사이드바 최상단 텅 빈 공간(100px) 완전 회수 */
     section[data-testid="stSidebar"] > div:first-child {
@@ -240,57 +240,73 @@ st.markdown("""
         gap: 0px !important;
     }
 
-    /* 2. 지폐 카운터 익스팬더 내부 상단 휑한 여백 제거 (하단 간격과 1:1 대칭 일치) */
+    /* 2. 지폐 카운터 익스팬더 내부 상단 여백 대칭 축소 */
     [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] {
         padding-top: 4px !important;
         padding-bottom: 8px !important;
     }
 
-    /* 3. 지폐 카운터: 모바일/웹 완벽 대칭 센터링 및 24px 초슬림화 */
+    /* 3. 지폐 카운터: 완벽한 수평 1:1 중심선 일치 & 26px 초슬림화 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        align-items: center !important;
-        justify-content: center !important; /* 양 극단으로 찢어지지 않고 완벽한 중앙 정렬 */
+        align-items: center !important; /* 세로축 정중앙 일치 */
+        justify-content: center !important;
         width: 100% !important;
         gap: 10px !important;
-        margin-bottom: -16px !important;    /* 행과 행 사이 간격 50% 압축 밀착 */
+        margin-bottom: -14px !important;
         padding: 0px !important;
     }
-    /* 좌측 라벨: 55px 우측 정렬 */
+    /* 좌측 라벨: p태그 마진 제거 및 26px 세로 중앙 강제 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
         flex: 0 0 55px !important;
         width: 55px !important;
         max-width: 55px !important;
         min-width: 55px !important;
-        text-align: right !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+        height: 26px !important;
     }
-    /* 우측 입력창: 85px 중앙 정렬 */
+    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
+    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
+        margin: 0px !important;
+        padding: 0px !important;
+        line-height: 26px !important;
+    }
+
+    /* 우측 입력창: 26px 높이 통일 및 상하 중심축 1:1 동기화 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
         flex: 0 0 85px !important;
         width: 85px !important;
         max-width: 85px !important;
         min-width: 85px !important;
+        display: flex !important;
+        align-items: center !important;
+        height: 26px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput {
         width: 85px !important;
         margin: 0px !important;
         padding: 0px !important;
+        height: 26px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
         width: 85px !important;
-        min-height: 24px !important; /* 높이 24px 초슬림화 */
-        height: 24px !important;
+        min-height: 26px !important;
+        height: 26px !important;
         border-radius: 5px !important;
         padding: 0px !important;
+        display: flex !important;
+        align-items: center !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input {
-        height: 24px !important;
+        height: 26px !important;
         font-size: 13.5px !important;
         text-align: center !important;
         padding: 0px !important;
-        line-height: 24px !important;
+        line-height: 26px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -1127,7 +1143,7 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 완벽 대칭 & 충돌 방어탑 '💵 지폐 카운터'
+                # [기능 2] 완벽 수평 1:1 정렬 & 충돌 방어탑 '💵 지폐 카운터'
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
@@ -1143,7 +1159,7 @@ with st.sidebar:
                                 row_sync = cash_df[m_sync].iloc[0]
                                 cloud_total = float(row_sync.get('Total_Amount', 0))
                                 
-                                # [수정] 타임스탬프 시/분 2자리 정규화 -> MM-DD HH:MM (예: 09-08 04:41)
+                                # 타임스탬프 시/분 2자리 정규화 -> MM-DD HH:MM (예: 09-08 04:41)
                                 raw_t = str(row_sync.get('Updated_At', '')).strip()
                                 m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
                                 if m_t:
@@ -1168,7 +1184,7 @@ with st.sidebar:
                                 st.session_state[f"cnt_{c}_{b}"] = int(val_loaded) if val_loaded > 0 else None
                             st.session_state[init_key] = True
 
-                        # 3. 권종별 초슬림 24px 입력 (터치 즉시 새 숫자 입력)
+                        # 3. 권종별 초슬림 26px 완벽 수평 입력
                         total_counted = 0
                         cur_counts = {}
                         for bill in bills_to_count:
@@ -1179,7 +1195,8 @@ with st.sidebar:
                                 
                             c_col1, c_col2 = st.columns([1, 1.4])
                             with c_col1:
-                                st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; line-height:24px;'>{b_label}동</div>", unsafe_allow_html=True)
+                                # [수정] 높이 26px 및 플렉스 세로 중앙 정렬로 우측 입력창과 자로 잰 듯 1:1 수평 유지
+                                st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; height:26px; line-height:26px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}동</div>", unsafe_allow_html=True)
                             with c_col2:
                                 raw_val = st.session_state.get(f"cnt_{c}_{bill}", None)
                                 cnt = st.number_input(
@@ -1246,7 +1263,6 @@ with st.sidebar:
                                             time.sleep(0.6)
                                             st.rerun()
                         else:
-                            # [수정] 콜론 삭제 및 깔끔한 시/분 출력 -> 클라우드 동기완료 (09-08 04:41)
                             if cloud_total > 0:
                                 st.caption(f"클라우드 동기완료 ({cloud_time})")
                                 
