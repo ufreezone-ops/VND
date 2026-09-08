@@ -204,7 +204,7 @@ st.markdown("""
     div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
     [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
 
-    /* 숫자 입력창 화살표 버튼 제거 */
+    /* 숫자 입력창 기본 화살표 버튼 제거 */
     div[data-testid="stNumberInput"] button {
         display: none !important;
     }
@@ -215,10 +215,7 @@ st.markdown("""
         border-right-width: 1px !important;
     }
 
-    /* ------------------------------------------------------------- */
-    /* [모바일/웹 UI 최적화] 사이드바 상단 여백 회수 및 지폐 카운터 수평 정렬 */
-    /* ------------------------------------------------------------- */
-    /* 1. 사이드바 최상단 텅 빈 공간(100px) 완전 회수 */
+    /* 사이드바 최상단 텅 빈 공간 완전 회수 */
     section[data-testid="stSidebar"] > div:first-child {
         padding-top: 1rem !important;
     }
@@ -240,25 +237,33 @@ st.markdown("""
         gap: 0px !important;
     }
 
-    /* 2. 지폐 카운터 익스팬더 내부 상단 여백 대칭 축소 */
+    /* 지폐 카운터 익스팬더 내부 상단 여백 균형 일치 */
     [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] {
-        padding-top: 4px !important;
+        padding-top: 6px !important;
         padding-bottom: 8px !important;
     }
 
-    /* 3. 지폐 카운터: 완벽한 수평 1:1 중심선 일치 & 26px 초슬림화 */
+    /* ------------------------------------------------------------- */
+    /* [지폐 카운터 수동 튜닝 가이드 구역] */
+    /* ------------------------------------------------------------- */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        align-items: center !important; /* 세로축 정중앙 일치 */
+        align-items: center !important;
         justify-content: center !important;
         width: 100% !important;
+        
+        /* 튜닝 1. [50만동]과 [0] 사이 가로 간격 (기본: 10px) */
         gap: 10px !important;
-        margin-bottom: -14px !important;
+        
+        /* 튜닝 2. 줄과 줄 사이 세로 간격 (기본: 3px, 겹침 방지) */
+        margin-bottom: 3px !important;
+        margin-top: 0px !important;
         padding: 0px !important;
     }
-    /* 좌측 라벨: p태그 마진 제거 및 26px 세로 중앙 강제 */
+
+    /* 좌측 라벨 컬럼 (50만동 텍스트 구역) */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
         flex: 0 0 55px !important;
         width: 55px !important;
@@ -267,46 +272,50 @@ st.markdown("""
         display: flex !important;
         align-items: center !important;
         justify-content: flex-end !important;
-        height: 26px !important;
+        
+        /* 튜닝 3. 세로 높이 (입력창 높이와 동일하게 맞춤, 기본: 30px) */
+        height: 30px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
         margin: 0px !important;
         padding: 0px !important;
-        line-height: 26px !important;
+        line-height: 30px !important;
     }
 
-    /* 우측 입력창: 26px 높이 통일 및 상하 중심축 1:1 동기화 */
+    /* 우측 입력창 컬럼 (숫자 입력 박스 구역) */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
+        /* 튜닝 4. 입력창 가로 폭 (기본: 85px) */
         flex: 0 0 85px !important;
         width: 85px !important;
         max-width: 85px !important;
         min-width: 85px !important;
+        
         display: flex !important;
         align-items: center !important;
-        height: 26px !important;
+        height: 30px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput {
-        width: 85px !important;
+        width: 85px !important;       /* 입력창 가로 폭과 동일 */
         margin: 0px !important;
         padding: 0px !important;
-        height: 26px !important;
+        height: 30px !important;      /* 세로 높이 */
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
-        width: 85px !important;
-        min-height: 26px !important;
-        height: 26px !important;
-        border-radius: 5px !important;
+        width: 85px !important;       /* 입력창 가로 폭과 동일 */
+        min-height: 30px !important;  /* 세로 높이 */
+        height: 30px !important;      /* 세로 높이 */
+        border-radius: 6px !important;
         padding: 0px !important;
         display: flex !important;
         align-items: center !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input {
-        height: 26px !important;
-        font-size: 13.5px !important;
+        height: 30px !important;      /* 세로 높이 */
+        font-size: 14px !important;   /* 입력 숫자 글자 크기 */
         text-align: center !important;
         padding: 0px !important;
-        line-height: 26px !important;
+        line-height: 30px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -1213,12 +1222,7 @@ with st.sidebar:
                             total_counted += bill * final_cnt
                             
                         # 상하 대칭 실물 합계 카드 박스
-                        st.markdown(f"""
-                            <div style='margin-top: 16px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
-                                <span style='font-size:11.5px; color:#A0AEC0;'>🧮 지갑 실물 합계</span><br>
-                                <span style='font-size:15px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
-                            </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-size:13.5px; font-weight:bold; white-space:nowrap; text-align:right; height:30px; line-height:30px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}동</div>", unsafe_allow_html=True)
                         
                         # [사용자 지정 미니멀 문구]
                         diff_val = total_counted - c_cash
