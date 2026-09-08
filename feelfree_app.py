@@ -2701,12 +2701,30 @@ else:
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
                 # --------------------------------------------------------------
-                # 6.03.00-A | 출국일 & 귀국일 기반 닫힌 구간(Range) 정밀 판별 엔진
+                # 6.03.00-A | 지중해 37일 & 발칸 22일 완벽 복원형 여정 판별 엔진
                 # --------------------------------------------------------------
-                dep_rows = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
-                korea_dep = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
-                target_dep_row = korea_dep if not korea_dep.empty else dep_rows
-                
+                # 1. 기항지 환승과 한국 출입국 분리 헬퍼
+                def is_korea_port(text):
+                    txt = str(text).replace(" ", "")
+                    return any(k in txt for k in ['한국', '인천', '부산', '김포', '대구', '제주', '청주', '귀국', 'ICN', 'PUS'])
+
+                def is_foreign_transit(cat_str):
+                    # '입국_그리스', '출국_튀니지아' 처럼 언더바 뒤에 외국명이 붙은 환승 스케줄 필터링
+                    cat = str(cat_str).strip()
+                    if "_" in cat:
+                        sub_port = cat.split("_")[-1].strip()
+                        if not is_korea_port(sub_port):
+                            return True
+                    return False
+
+                # 출국일 정밀 탐색
+                dep_candidates = ledger_df[
+                    ledger_df['Category'].str.contains('출국', na=False) & 
+                    ~ledger_df['Category'].apply(is_foreign_transit)
+                ]
+                korea_dep = ledger_df[ledger_df['Category'].apply(is_korea_port)]
+                target_dep_row = korea_dep if not korea_dep.empty else dep_candidates
+
                 dep_date_str = ""
                 dep_dt = None
                 if not target_dep_row.empty:
@@ -2715,10 +2733,14 @@ else:
                         dep_date_str = m_dep.group(0)
                         dep_dt = datetime.strptime(dep_date_str, "%Y-%m-%d").date()
 
-                arr_rows = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
-                korea_arr = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
-                target_arr_row = korea_arr if not korea_arr.empty else arr_rows
-                
+                # 귀국일 정밀 탐색 (중간 기항지 환승 '입국_그리스' 절대 제외)
+                arr_candidates = ledger_df[
+                    ledger_df['Category'].str.contains('입국|귀국', na=False) & 
+                    ~ledger_df['Category'].apply(is_foreign_transit)
+                ]
+                korea_arr = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False) & ledger_df['Category'].apply(is_korea_port)]
+                target_arr_row = korea_arr if not korea_arr.empty else arr_candidates
+
                 arr_date_str = ""
                 arr_dt = None
                 if not target_arr_row.empty:
@@ -2727,13 +2749,20 @@ else:
                         arr_date_str = m_arr.group(0)
                         arr_dt = datetime.strptime(arr_date_str, "%Y-%m-%d").date()
 
-                # 1. 사전결제 판별: 출국일 이전 날짜는 무조건 사전결제로 분류
+                # [Sanity Guard] 귀국일 이후에도 현지 지출이 3일 이상 길게 이어지면 중간 기항지 오판으로 기각
+                if arr_dt:
+                    all_ledger_dates = [re.search(r'\d{4}-\d{2}-\d{2}', str(d)).group(0) for d in ledger_df['Date'] if re.search(r'\d{4}-\d{2}-\d{2}', str(d))]
+                    later_dates = [d for d in set(all_ledger_dates) if d > arr_date_str]
+                    if len(later_dates) >= 3:
+                        # 진짜 마지막 한국 귀국일로 재탐색하거나 마지막 가계부 일자로 안전 보정
+                        arr_date_str = sorted(all_ledger_dates)[-1]
+                        arr_dt = datetime.strptime(arr_date_str, "%Y-%m-%d").date()
+
+                # 사전결제 판별 (출국일 이전 지출은 무조건 사전결제)
                 def check_is_fixed_cost(row):
                     orig_d = str(row['Date']).strip()
                     m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
                     pure_d = m_row.group(0) if m_row else ""
-                    
-                    # 출국일 이전(7/17, 9/22 등)은 무조건 사전결제(True)
                     if dep_date_str and pure_d and pure_d < dep_date_str:
                         return True
                     cat = str(row['Category']).strip()
@@ -2743,81 +2772,103 @@ else:
                 exp_df['IsFixedCost'] = exp_df.apply(check_is_fixed_cost, axis=1)
                 is_fixed_cost = exp_df['IsFixedCost']
 
-                # 2. [핵심] 현지 여행지 지출(ovr_df): 출국일 <= 날짜 <= 귀국일 사이의 지출만 엄격히 한정!
+                # 현지 지출: 출국일 <= 날짜 <= 귀국일 사이의 지출만 완벽 수용 (지중해 37일 전체 수용)
                 def is_in_trip_period(row):
                     orig_d = str(row['Date']).strip()
                     m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
                     if not m_row: return True
                     pure_d = m_row.group(0)
-                    if dep_date_str and pure_d < dep_date_str: return False  # 출국일 이전 제외
-                    if arr_date_str and pure_d > arr_date_str: return False  # 귀국일 이후 제외
+                    if dep_date_str and pure_d < dep_date_str: return False
+                    if arr_date_str and pure_d > arr_date_str: return False
                     return True
 
                 in_period_mask = exp_df.apply(is_in_trip_period, axis=1) if (dep_date_str or arr_date_str) else True
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국'])) & in_period_mask]
 
                 # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Stacked Bar Chart (터치 확대 방지 & 모바일 스크롤 최적화)
+                # 6.03.01 | Daily Local Spending Chart (X축 3단 콤팩트 & 국가 연속 1회 표기)
                 # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
                     
                     trip_nodes = TRIP_CONFIGS.get(st.session_state.current_trip, {}).get("nodes", {})
                     is_single_country = (len(trip_nodes) <= 1) or (ovr_df['Country'].dropna().nunique() <= 1)
-                    
-                    # 100% 한글 요일 자체 연산
-                    day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
-                    def format_chart_x_label(r):
-                        orig_d = str(r['Date']).strip()
-                        c_name = str(r['Country'])
-                        m_full = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
-                        if m_full:
-                            pure_date = m_full.group(0)
-                            mm, dd = m_full.group(2), m_full.group(3)
-                            try:
-                                dt_obj = datetime.strptime(pure_date, "%Y-%m-%d").date()
-                                day_kr = day_kr_names[dt_obj.weekday()]
-                                day_str = f"({day_kr})"
-                            except:
-                                day_str = ""
-                            short_d = f"{mm}/{dd}{day_str}"
-                        else:
-                            short_d = orig_d.split('(')[0]
-                            
-                        if is_single_country:
-                            return short_d
-                        else:
-                            return f"{short_d}<br><span style='font-size:10px;color:#AAAAAA;'>{c_name}</span>"
 
-                    ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
+                    ovr_df['Date_Clean'] = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
                     ovr_df = ovr_df.sort_values(by='Date_Clean')
-                    ovr_df['Date_Display'] = ovr_df.apply(format_chart_x_label, axis=1)
+                    
+                    unique_clean_dates = sorted([d for d in ovr_df['Date_Clean'].dropna().unique()])
+                    
+                    # [핵심] 날짜별 대표 국가 추출 및 국가명 연속 표기 방지 맵 생성
+                    date_country_map = {}
+                    for d in unique_clean_dates:
+                        sub_c = ovr_df[ovr_df['Date_Clean'] == d]['Country'].dropna().unique()
+                        date_country_map[d] = " / ".join(sub_c) if len(sub_c) > 0 else ""
+
+                    prev_c = None
+                    date_label_map = {}
+                    day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
+                    
+                    for d in unique_clean_dates:
+                        m_d = re.search(r'\d{4}-(\d{2})-(\d{2})', d)
+                        mm, dd = int(m_d.group(1)), int(m_d.group(2))
+                        try:
+                            dt_obj = datetime.strptime(d, "%Y-%m-%d").date()
+                            day_kr = day_kr_names[dt_obj.weekday()]
+                        except:
+                            day_kr = ""
+                            
+                        c_val = date_country_map.get(d, "")
+                        # 국가명이 이전 날짜와 다를 때만 1회 표기
+                        if not is_single_country and c_val and c_val != prev_c:
+                            show_c = c_val
+                            prev_c = c_val
+                        else:
+                            show_c = ""
+                            
+                        # 3단 세로 줄바꿈 (월/일 <br> 요일 <br> 국가명)
+                        line1 = f"{mm}/{dd}"
+                        line2 = f"({day_kr})"
+                        if show_c:
+                            date_label_map[d] = f"{line1}<br>{line2}<br><span style='font-size:10px; color:#A5B4FC; font-weight:600;'>{show_c}</span>"
+                        else:
+                            date_label_map[d] = f"{line1}<br>{line2}"
+
+                    ovr_df['Date_Display'] = ovr_df['Date_Clean'].map(date_label_map)
                     
                     fig2 = px.bar(ovr_df, x='Date_Display', y=y_col, color='Category', title=None, color_discrete_map=color_map)
+                    
+                    # [요청 1 반영] Date_Display 및 Category 영문 타이틀 완전 삭제 & 3단 수평 정렬(tickangle=0)
                     fig2.update_layout(
                         barmode='stack', 
-                        margin=dict(l=10, r=10, t=20, b=60),
-                        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5)
+                        margin=dict(l=10, r=10, t=20, b=70),
+                        xaxis_title=None,       # Date_Display 완전 삭제!
+                        yaxis_title=None,
+                        legend_title_text="",   # Category 범례 제목 완전 삭제!
+                        legend=dict(orientation="h", yanchor="top", y=-0.28, xanchor="center", x=0.5)
                     )
                     
-                    # 모바일 한 손가락 스크롤 정상화 (터치 확대 차단)
                     fig2.update_xaxes(
                         categoryorder='array', 
-                        categoryarray=ovr_df['Date_Display'].unique(), 
-                        tickangle=0 if len(ovr_df['Date_Clean'].unique()) <= 7 else -30, 
-                        tickfont=dict(size=11),
+                        categoryarray=[date_label_map[d] for d in unique_clean_dates if d in date_label_map], 
+                        tickangle=0,            # [요청 3 반영] 꺾임 없는 완전 수평 렌더링!
+                        tickfont=dict(size=10.5),
                         fixedrange=True
                     )
                     fig2.update_yaxes(
                         fixedrange=True
                     )
 
-                    # [동적 타이틀] 진행 중인 여행은 '3일차', 종료된 여행은 '22일' 표기
+                    # [요청 반영] 달력상 온전한 총 여행 기간 계산 (발칸 22일, 지중해 37일 완벽 표기)
                     today_dt_c = datetime.now(st.session_state.current_tz).date()
                     is_active_chart = (today_dt_c <= arr_dt) if arr_dt else True
 
-                    total_days_cnt = len(ovr_df['Date_Clean'].unique())
-                    day_label_suffix = f"{total_days_cnt}일차" if is_active_chart else f"{total_days_cnt}일"
+                    if dep_dt and arr_dt:
+                        total_calendar_days = (arr_dt - dep_dt).days + 1
+                    else:
+                        total_calendar_days = len(unique_clean_dates)
+                        
+                    day_label_suffix = f"{total_calendar_days}일차" if is_active_chart else f"{total_calendar_days}일"
                     
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
                     st.plotly_chart(
@@ -2842,13 +2893,13 @@ else:
                         m = re.search(r'(\d{4})-(\d{2})-(\d{2})', d_str)
                         if m:
                             pure_date = m.group(0)
-                            mm, dd = m.group(2), m.group(3)
+                            mm, dd = int(m.group(2)), int(m.group(3))
                             try:
                                 dt_obj = datetime.strptime(pure_date, "%Y-%m-%d").date()
                                 day_kr = day_kr_names[dt_obj.weekday()]
-                                return f"{mm}/{dd}({day_kr})"
+                                return f"{mm:02d}/{dd:02d}({day_kr})"
                             except:
-                                return f"{mm}/{dd}"
+                                return f"{mm:02d}/{dd:02d}"
                         return d_str
 
                     daily_table['Date_Short'] = daily_table['Date'].apply(shorten_table_date)
