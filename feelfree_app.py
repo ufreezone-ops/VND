@@ -2701,7 +2701,7 @@ else:
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
                 # --------------------------------------------------------------
-                # 6.03.00-A | 발칸 22일 복원 & 클린 10일 페이징 차트 엔진
+                # 6.03.00-A | 1일 평균 기준선 & 10일 페이징 차트 엔진
                 # --------------------------------------------------------------
                 import math
 
@@ -2762,7 +2762,7 @@ else:
                 exp_df['IsFixedCost'] = exp_df.apply(check_is_fixed_cost, axis=1)
                 is_fixed_cost = exp_df['IsFixedCost']
 
-                # 출국일 <= 날짜 <= 귀국일 사이의 지출 수용 (지출 0원 이동일도 소중히 보존)
+                # 출국일 <= 날짜 <= 귀국일 사이의 지출 수용
                 def is_in_trip_period(row):
                     orig_d = str(row['Date']).strip()
                     m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
@@ -2776,7 +2776,7 @@ else:
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국'])) & in_period_mask]
 
                 # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Chart (클린 10일 단위 페이징)
+                # 6.03.01 | Daily Local Spending Chart (1일 평균선 & 10일 페이징)
                 # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
@@ -2795,7 +2795,7 @@ else:
                         sub_c = ovr_df[ovr_df['Date_Clean'] == d]['Country'].dropna().unique()
                         date_country_map[d] = " / ".join(sub_c) if len(sub_c) > 0 else ""
 
-                    # 계단식 차선 배분 (HTML <div> 완전 제거 -> 순수 <br>과 <span>만 사용)
+                    # 계단식 2단 차선 배분
                     prev_c = None
                     lane1_free_idx = -1
                     lane2_free_idx = -1
@@ -2832,12 +2832,11 @@ else:
                                 country_html = f"<span style='font-size:10px; color:#A5B4FC; font-weight:600;'>{c_display}</span>"
                                 
                         c_part = f"<br>{country_html}" if country_html else ""
-                        # [핵심] div 태그를 완전히 빼서 코드가 텍스트로 노출되는 현상 100% 차단!
                         date_label_map[d] = f"{mm}/{dd}<br>({day_kr}){c_part}"
 
                     ovr_df['Date_Display'] = ovr_df['Date_Clean'].map(date_label_map)
                     
-                    # [동적 타이틀] 발칸 22일 정확한 달력 기간 산출
+                    # 여행 진행 상태 및 온전한 총 여행 기간 산출
                     today_dt_c = datetime.now(st.session_state.current_tz).date()
                     is_active_chart = (today_dt_c <= arr_dt) if arr_dt else True
 
@@ -2849,7 +2848,22 @@ else:
                     day_label_suffix = f"{total_calendar_days}일차" if is_active_chart else f"{total_calendar_days}일"
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
 
-                    # [핵심] 10일 초과 시 깔끔한 10일 단위 세그먼트 페이징 제공
+                    # [핵심] 1일 평균선 산출 알고리즘
+                    # 진행 중인 여행: 오늘까지의 일차로 나눔 / 종료된 여행: 총 일정(22일/37일)으로 나눔
+                    total_spent_val = ovr_df[y_col].sum()
+                    if is_active_chart and dep_dt and today_dt_c >= dep_dt:
+                        div_days = max(1, (today_dt_c - dep_dt).days + 1)
+                        avg_text_prefix = "현재 1일 평균"
+                    else:
+                        div_days = max(1, total_calendar_days)
+                        avg_text_prefix = "1일 평균"
+                        
+                    avg_daily_val = total_spent_val / div_days if div_days > 0 else 0
+                    y_unit = "원" if "원화" in c_mode else f" {LOCAL_SYM}"
+                    fmt_avg = f"{avg_daily_val:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_val:,.2f}"
+                    avg_benchmark_label = f"{avg_text_prefix} {fmt_avg}{y_unit}"
+
+                    # 10일 초과 시 10일 단위 구간 세그먼트 제공
                     chunk_size = 10
                     if num_total_days > chunk_size:
                         num_chunks = math.ceil(num_total_days / chunk_size)
@@ -2875,10 +2889,22 @@ else:
 
                     fig2 = px.bar(chart_df, x='Date_Display', y=y_col, color='Category', title=None, color_discrete_map=color_map)
                     
-                    # 클린 레이아웃 (슬라이더 완전 제거, 가로 범례 복원)
+                    # [대안 2 장착] 1일 평균 수평 점선 렌더링
+                    if avg_daily_val > 0:
+                        fig2.add_hline(
+                            y=avg_daily_val,
+                            line_dash="dash",
+                            line_color="#FFA500",
+                            line_width=1.5,
+                            annotation_text=avg_benchmark_label,
+                            annotation_position="top right",
+                            annotation_font=dict(size=11, color="#FFA500")
+                        )
+
+                    # 레이아웃 정돈
                     fig2.update_layout(
                         barmode='stack', 
-                        margin=dict(l=10, r=10, t=15, b=60),
+                        margin=dict(l=10, r=10, t=20, b=60),
                         xaxis_title=None,
                         yaxis_title=None,
                         legend_title_text="",
@@ -2890,10 +2916,10 @@ else:
                         categoryarray=[date_label_map[d] for d in view_dates if d in date_label_map], 
                         tickangle=0,
                         tickfont=dict(size=11),
-                        fixedrange=True  # 터치 확대 방지
+                        fixedrange=True
                     )
                     fig2.update_yaxes(
-                        fixedrange=True  # 세로 스크롤 안전성 확보
+                        fixedrange=True
                     )
 
                     st.plotly_chart(
