@@ -1184,7 +1184,7 @@ with st.sidebar:
                         diff_val = total_counted - c_cash
                         if total_counted > 0:
                             if diff_val == 0:
-                                st.success("✅ 장부 잔고와 실물 일치!")
+                                st.success("✅ 장부/실물 일치!")
                             elif diff_val < 0:
                                 st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족! (누락 확인)")
                             else:
