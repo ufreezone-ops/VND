@@ -2825,7 +2825,7 @@ else:
                     total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0].nunique()
 
                 # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Chart ('전체보기' 기본 & 4구간 완벽 분할)
+                # 6.03.01 | Daily Local Spending Chart (취소선 버그 박멸 완전체)
                 # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
@@ -2890,7 +2890,7 @@ else:
                     day_label_suffix = f"{total_calendar_days}일차" if is_active_chart else f"{total_calendar_days}일"
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
 
-                    # 1일 평균선 계산 (31일 전체로 정확히 나눔)
+                    # 1일 평균선 계산
                     total_spent_val = ovr_df[y_col].sum()
                     if is_active_chart and dep_dt and today_dt_c >= dep_dt:
                         div_days = max(1, (today_dt_c - dep_dt).days + 1)
@@ -2905,7 +2905,7 @@ else:
                     avg_benchmark_label = f"{avg_text_prefix} {fmt_avg}{y_unit}"
 
                     # ----------------------------------------------------------
-                    # [핵심] '🗺️ 전체보기' 맨 앞 배치 & 1~4구간 날짜 범위 정밀 생성
+                    # [취소선 박멸] 물결표(~)를 하이픈(-)과 파이프(|)로 안전 치환
                     # ----------------------------------------------------------
                     chunk_size = 10
                     chunk_options = ["🗺️ 전체보기"]
@@ -2923,12 +2923,12 @@ else:
                             s_lbl = f"{int(m1.group(1))}/{int(m1.group(2))}" if m1 else d_start_raw
                             e_lbl = f"{int(m2.group(1))}/{int(m2.group(2))}" if m2 else d_end_raw
                             
+                            # [핵심] 물결표 대신 안전한 대시(-)와 파이프(|) 적용 -> 취소선 100% 방지
                             if start_num == end_num:
-                                chunk_options.append(f"{c_idx+1}구간 ({start_num}일 / {s_lbl})")
+                                chunk_options.append(f"{c_idx+1}구간 ({start_num}일 | {s_lbl})")
                             else:
-                                chunk_options.append(f"{c_idx+1}구간 ({start_num}~{end_num}일 / {s_lbl}~{e_lbl})")
+                                chunk_options.append(f"{c_idx+1}구간 ({start_num}-{end_num}일 | {s_lbl} - {e_lbl})")
                         
-                        # '전체보기'가 index=0으로 기본 선택되어 화면에 먼저 로딩!
                         sel_chunk = st.radio("📅 일정 구간 선택", chunk_options, index=0, horizontal=True, key="daily_chunk_sel", label_visibility="collapsed")
                         
                         if sel_chunk != "🗺️ 전체보기":
