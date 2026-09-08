@@ -1091,7 +1091,8 @@ with st.sidebar:
             "EUR": [100, 50, 20, 10, 5],
             "TRY": [200, 100, 50, 20, 10, 5],
             "JPY": [10000, 5000, 2000, 1000],
-            "CNY": [100, 50, 20, 10, 5, 1]
+            "CNY": [100, 50, 20, 10, 5, 1],
+            "PHP": [1000, 500, 200, 100, 50, 20]
         }
 
         # 통화별 ATM 인출 권장 안전선
@@ -1101,7 +1102,8 @@ with st.sidebar:
             "EUR": 50,
             "TRY": 1000,
             "JPY": 5000,
-            "CNY": 300
+            "CNY": 300,
+            "PHP": 2000
         }
         
         ### 📊 [GUI: Chart/Table] 통화별 잔고 표시
@@ -1123,13 +1125,15 @@ with st.sidebar:
             if c_card > 0 or c_cash > 0 or c in trip_currs:
                 st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
                 st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
-                st.markdown(f"<div style='margin-bottom:8px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
+                
+                # [개선] 경고문 유무와 상관없이 상세배치와의 간격을 항상 14px 확보
+                st.markdown(f"<div style='margin-bottom:14px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
 
-                # [기능 1] 단독 '현금 부족 경고' 뱃지
+                # 단독 '현금 부족 경고' 뱃지
                 threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
                 if is_trip_active and c_cash <= threshold:
                     st.markdown("""
-                        <div style='color:#FFA500; font-size:13px; font-weight:bold; margin-top:10px; margin-bottom:18px; padding: 6px 12px; background-color: rgba(255, 165, 0, 0.12); border-radius: 8px; border-left: 3px solid #FFA500;'>
+                        <div style='color:#FFA500; font-size:13px; font-weight:bold; margin-top:2px; margin-bottom:16px; padding: 6px 12px; background-color: rgba(255, 165, 0, 0.12); border-radius: 8px; border-left: 3px solid #FFA500;'>
                             🚨 현금 부족 경고
                         </div>
                     """, unsafe_allow_html=True)
@@ -1152,11 +1156,10 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 군더더기 없는 클린 '💵 지폐 카운터' (유령 1천동 영구 제거)
+                # 스마트폰/웹 클라우드 동기화 '💵 지폐 카운터'
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
-                        # 1. 클라우드 최신 데이터 실시간 조회
                         cash_df = load_cash_inventory()
                         cloud_total = 0
                         cloud_time = ""
@@ -1168,11 +1171,13 @@ with st.sidebar:
                                 row_sync = cash_df[m_sync].iloc[0]
                                 cloud_total = float(row_sync.get('Total_Amount', 0))
                                 
-                                # 타임스탬프 시/분 정규화 -> MM-DD HH:MM
                                 raw_t = str(row_sync.get('Updated_At', '')).strip()
                                 m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
                                 if m_t:
-                                    cloud_time = f"{m_t.group(1)} {int(m_t.group(2)):02d}:{m_t.group(3)}"
+                                    d_part = m_t.group(1)
+                                    h_part = int(m_t.group(2))
+                                    min_part = m_t.group(3)
+                                    cloud_time = f"{d_part} {h_part:02d}:{min_part}"
                                 else:
                                     cloud_time = raw_t[5:16].rstrip(':')
                                     
@@ -1182,7 +1187,6 @@ with st.sidebar:
                                         try: cloud_counts[int(b_v)] = int(b_c)
                                         except: pass
 
-                        # 2. 첫 접속 시 세션에 주입 (0은 None으로 처리하여 빈칸 placeholder 유도)
                         init_key = f"init_cash_{st.session_state.current_trip}_{c}"
                         if init_key not in st.session_state:
                             for b in bills_to_count:
@@ -1190,7 +1194,6 @@ with st.sidebar:
                                 st.session_state[f"cnt_{c}_{b}"] = int(val_loaded) if val_loaded > 0 else None
                             st.session_state[init_key] = True
 
-                        # 3. 권종별 정확한 9회 루프 렌더링
                         total_counted = 0
                         cur_counts = {}
                         for bill in bills_to_count:
@@ -1217,7 +1220,7 @@ with st.sidebar:
                             cur_counts[bill] = final_cnt
                             total_counted += bill * final_cnt
                             
-                        # 4. 실물 합계 카드 박스 (루프 바깥에서 단 1회 실행)
+                        # 실물 합계 카드 박스
                         st.markdown(f"""
                             <div style='margin-top: 14px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
                                 <span style='font-size:11.5px; color:#A0AEC0;'>🧮 지갑 실물 합계</span><br>
@@ -1225,7 +1228,6 @@ with st.sidebar:
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # [사용자 지정 미니멀 문구]
                         diff_val = total_counted - c_cash
                         if total_counted > 0:
                             if diff_val == 0:
@@ -1235,7 +1237,7 @@ with st.sidebar:
                             else:
                                 st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
 
-                        # 5. 기기 간 충돌 감지 및 동기화
+                        # 기기 간 충돌 감지 및 동기화
                         has_cloud_record = bool(cloud_counts)
                         has_conflict = has_cloud_record and (cur_counts != cloud_counts)
 
@@ -1268,7 +1270,6 @@ with st.sidebar:
                                             time.sleep(0.6)
                                             st.rerun()
                         else:
-                            # [사용자 지정 미니멀 캡션 & 버튼명]
                             if cloud_total > 0:
                                 st.caption(f"클라우드 동기완료 ({cloud_time})")
                                 
@@ -2353,7 +2354,7 @@ else:
             if save_data(ledger_df):
                 st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
                 
-        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (아이폰 SE3 맞춤형 슬림 뷰어)
+        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (완전무결 한글 요일 복원형)
         if not display_df.empty: 
             display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
             display_df = display_df.reindex(columns=FINAL_COLUMNS)
@@ -2382,7 +2383,7 @@ else:
                     
                 st.write(f"🔎 검색 결과: {len(render_df)}건")
 
-                # 1. 출국일(dep_dt) 및 입국일(arr_dt) 정밀 파싱
+                # 1. 출국일 및 입국일 정밀 파싱
                 dep_rows = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
                 korea_dep = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
                 target_dep_row = korea_dep if not korea_dep.empty else dep_rows
@@ -2406,33 +2407,43 @@ else:
                 def is_real_departure(cat, cur_d):
                     if not dep_dt: return False
                     if '출국_한국' in cat: return True
-                    if '출국' in cat and cur_d == dep_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥', '칭다오']):
+                    if '출국' in cat and cur_d == dep_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥', '칭다오', '세부', '필리핀']):
                         return True
                     return False
 
                 def is_real_arrival(cat, cur_d):
                     if not arr_dt: return False
                     if '입국_한국' in cat: return True
-                    if '입국' in cat and cur_d == arr_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥', '칭다오']):
+                    if '입국' in cat and cur_d == arr_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥', '칭다오', '세부', '필리핀']):
                         return True
                     return False
 
-                # 2. 날짜 포맷터 (08/09(일) 🏷️사전 형태 압축)
-                day_kr_map = {'Mon':'월', 'Tue':'화', 'Wed':'수', 'Thu':'목', 'Fri':'금', 'Sat':'토', 'Sun':'일'}
+                # 2. [완전무결 요일 계산 엔진] 영어/한글 혼재 상관없이 100% 한글 요일 자체 연산
+                day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                 def format_display_date_se(row):
-                    orig_d = str(row['Date'])
+                    orig_d = str(row['Date']).strip()
                     cat = str(row['Category']).strip()
-                    m = re.search(r'(?:20)?\d{2}-(\d{2})-(\d{2})(?:\(([A-Za-z]+)\))?', orig_d)
-                    if not m: return orig_d
+                    m_full = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
+                    if m_full:
+                        pure_date = m_full.group(0)
+                        mm, dd = m_full.group(2), m_full.group(3)
+                    else:
+                        m_short = re.search(r'(\d{2})-(\d{2})-(\d{2})', orig_d)
+                        if m_short:
+                            pure_date = f"20{m_short.group(1)}-{m_short.group(2)}-{m_short.group(3)}"
+                            mm, dd = m_short.group(2), m_short.group(3)
+                        else:
+                            return orig_d
                     
-                    mm, dd, day_en = m.group(1), m.group(2), m.group(3)
-                    day_kr = day_kr_map.get(day_en, day_en if day_en else '')
+                    try:
+                        cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
+                        day_kr = day_kr_names[cur_d.weekday()]
+                    except:
+                        cur_d = None
+                        day_kr = ""
+                        
                     day_str = f"({day_kr})" if day_kr else ""
                     short_d = f"{mm}/{dd}{day_str}"
-                    
-                    pure_date = f"{orig_d[:4]}-{mm}-{dd}" if re.match(r'^\d{4}', orig_d) else f"2026-{mm}-{dd}"
-                    try: cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
-                    except: cur_d = None
 
                     if cur_d and is_real_departure(cat, cur_d): return f"{short_d} 🛫출국"
                     if cur_d and is_real_arrival(cat, cur_d): return f"{short_d} 🛬귀국"
@@ -2493,9 +2504,9 @@ else:
                 num_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
                 styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
                 
-                # 5. [수정 완료] 일련번호 삭제(hide_index=True) & 날짜 최적 너비(width=120) 지정
+                # 5. 일련번호 삭제(hide_index=True) & 날짜 최적 너비(width=120) & 네모칸 삭제
                 col_cfg = {
-                    "Date": st.column_config.TextColumn("날짜", width=120),  # 글자가 잘리지 않는 최적 너비
+                    "Date": st.column_config.TextColumn("날짜", width=120),
                     "Category": st.column_config.TextColumn("항목", width="small"),
                     "Receipt_URL": link_cfg
                 }
@@ -2503,8 +2514,8 @@ else:
                     styled_table, 
                     use_container_width=True, 
                     column_config=col_cfg, 
-                    hide_index=True,              # [수정] 일련번호 열 완전 삭제!
-                    selection_mode="single-cell",  # 네모칸 없이 글자 터치로 선택
+                    hide_index=True,
+                    selection_mode="single-cell",
                     on_select="rerun"
                 )
 
@@ -2709,29 +2720,33 @@ else:
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국']))]
                 
                 # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Stacked Bar Chart (모바일 슬림 X축 라벨)
+                # 6.03.01 | Daily Local Spending Stacked Bar Chart (빈 괄호 완전 박멸형)
                 # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
                     
-                    # 단일 국가 여행 여부 자동 판별
                     trip_nodes = TRIP_CONFIGS.get(st.session_state.current_trip, {}).get("nodes", {})
                     is_single_country = (len(trip_nodes) <= 1) or (ovr_df['Country'].dropna().nunique() <= 1)
                     
-                    # 날짜 파싱 및 한글 요일 축약 헬퍼 (예: 2026-04-21(Tue) -> 04/21(화))
-                    day_kr_map = {'Mon':'월', 'Tue':'화', 'Wed':'수', 'Thu':'목', 'Fri':'금', 'Sat':'토', 'Sun':'일'}
+                    # 날짜 숫자 자체로 100% 한글 요일 산출
+                    day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                     def format_chart_x_label(r):
-                        orig_d = str(r['Date'])
+                        orig_d = str(r['Date']).strip()
                         c_name = str(r['Country'])
-                        m = re.search(r'(?:20)?\d{2}-(\d{2})-(\d{2})(?:\(([A-Za-z]+)\))?', orig_d)
-                        if m:
-                            mm, dd, day_en = m.group(1), m.group(2), m.group(3)
-                            day_kr = day_kr_map.get(day_en, day_en if day_en else '')
-                            short_d = f"{mm}/{dd}({day_kr})"
+                        m_full = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
+                        if m_full:
+                            pure_date = m_full.group(0)
+                            mm, dd = m_full.group(2), m_full.group(3)
+                            try:
+                                dt_obj = datetime.strptime(pure_date, "%Y-%m-%d").date()
+                                day_kr = day_kr_names[dt_obj.weekday()]
+                                day_str = f"({day_kr})"
+                            except:
+                                day_str = ""
+                            short_d = f"{mm}/{dd}{day_str}"
                         else:
                             short_d = orig_d.split('(')[0]
                             
-                        # 단일 국가면 날짜만 수평 표기, 다국가면 국가명 작게 병기
                         if is_single_country:
                             return short_d
                         else:
@@ -2744,10 +2759,9 @@ else:
                     fig2 = px.bar(ovr_df, x='Date_Display', y=y_col, color='Category', title=None, color_discrete_map=color_map)
                     fig2.update_layout(
                         barmode='stack', 
-                        margin=dict(l=10, r=10, t=20, b=60),  # 하단 여백을 150px에서 60px로 대폭 축소
+                        margin=dict(l=10, r=10, t=20, b=60),
                         legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5)
                     )
-                    # 수평에 가깝게 시원하게 읽히도록 틱 각도 최적화
                     fig2.update_xaxes(
                         categoryorder='array', 
                         categoryarray=ovr_df['Date_Display'].unique(), 
@@ -2760,7 +2774,7 @@ else:
                 st.divider()
                 
                 # --------------------------------------------------------------
-                # 6.03.02 | Daily Living vs Total Spent Pivot Table (단일국가 국가열 삭제)
+                # 6.03.02 | Daily Living vs Total Spent Pivot Table (100% 요일 복원)
                 # --------------------------------------------------------------
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
@@ -2768,18 +2782,23 @@ else:
                 fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
                 
                 if not daily_table.empty:
-                    # 표 날짜 축약 헬퍼
+                    # 표 날짜 100% 한글 요일 자체 계산
                     def shorten_table_date(d_str):
-                        m = re.search(r'(?:20)?\d{2}-(\d{2})-(\d{2})(?:\(([A-Za-z]+)\))?', str(d_str))
+                        d_str = str(d_str).strip()
+                        m = re.search(r'(\d{4})-(\d{2})-(\d{2})', d_str)
                         if m:
-                            mm, dd, day_en = m.group(1), m.group(2), m.group(3)
-                            day_kr = day_kr_map.get(day_en, day_en if day_en else '')
-                            return f"{mm}/{dd}({day_kr})"
-                        return str(d_str)
+                            pure_date = m.group(0)
+                            mm, dd = m.group(2), m.group(3)
+                            try:
+                                dt_obj = datetime.strptime(pure_date, "%Y-%m-%d").date()
+                                day_kr = day_kr_names[dt_obj.weekday()]
+                                return f"{mm}/{dd}({day_kr})"
+                            except:
+                                return f"{mm}/{dd}"
+                        return d_str
 
                     daily_table['Date_Short'] = daily_table['Date'].apply(shorten_table_date)
 
-                    # [핵심] 단일 국가 여행 시 '국가' 컬럼 완전 배제
                     if is_single_country:
                         display_table = daily_table[['Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(
                             columns={'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'}
