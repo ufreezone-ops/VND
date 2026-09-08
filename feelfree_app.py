@@ -1152,11 +1152,11 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 완벽 수평 1:1 정렬 & 충돌 방어탑 '💵 지폐 카운터'
+                # [기능 2] 군더더기 없는 클린 '💵 지폐 카운터' (유령 1천동 영구 제거)
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
-                        # 1. 클라우드 최신 데이터 실시간 조회 (ttl="0s")
+                        # 1. 클라우드 최신 데이터 실시간 조회
                         cash_df = load_cash_inventory()
                         cloud_total = 0
                         cloud_time = ""
@@ -1168,14 +1168,11 @@ with st.sidebar:
                                 row_sync = cash_df[m_sync].iloc[0]
                                 cloud_total = float(row_sync.get('Total_Amount', 0))
                                 
-                                # 타임스탬프 시/분 2자리 정규화 -> MM-DD HH:MM (예: 09-08 04:41)
+                                # 타임스탬프 시/분 정규화 -> MM-DD HH:MM
                                 raw_t = str(row_sync.get('Updated_At', '')).strip()
                                 m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
                                 if m_t:
-                                    d_part = m_t.group(1)
-                                    h_part = int(m_t.group(2))
-                                    min_part = m_t.group(3)
-                                    cloud_time = f"{d_part} {h_part:02d}:{min_part}"
+                                    cloud_time = f"{m_t.group(1)} {int(m_t.group(2)):02d}:{m_t.group(3)}"
                                 else:
                                     cloud_time = raw_t[5:16].rstrip(':')
                                     
@@ -1193,7 +1190,7 @@ with st.sidebar:
                                 st.session_state[f"cnt_{c}_{b}"] = int(val_loaded) if val_loaded > 0 else None
                             st.session_state[init_key] = True
 
-                        # 3. 권종별 초슬림 26px 완벽 수평 입력
+                        # 3. 권종별 정확한 9회 루프 렌더링
                         total_counted = 0
                         cur_counts = {}
                         for bill in bills_to_count:
@@ -1204,8 +1201,7 @@ with st.sidebar:
                                 
                             c_col1, c_col2 = st.columns([1, 1.4])
                             with c_col1:
-                                # [수정] 높이 26px 및 플렉스 세로 중앙 정렬로 우측 입력창과 자로 잰 듯 1:1 수평 유지
-                                st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; height:26px; line-height:26px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}동</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; height:30px; line-height:30px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}동</div>", unsafe_allow_html=True)
                             with c_col2:
                                 raw_val = st.session_state.get(f"cnt_{c}_{bill}", None)
                                 cnt = st.number_input(
@@ -1221,8 +1217,13 @@ with st.sidebar:
                             cur_counts[bill] = final_cnt
                             total_counted += bill * final_cnt
                             
-                        # 상하 대칭 실물 합계 카드 박스
-                        st.markdown(f"<div style='font-size:13.5px; font-weight:bold; white-space:nowrap; text-align:right; height:30px; line-height:30px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}동</div>", unsafe_allow_html=True)
+                        # 4. 실물 합계 카드 박스 (루프 바깥에서 단 1회 실행)
+                        st.markdown(f"""
+                            <div style='margin-top: 14px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
+                                <span style='font-size:11.5px; color:#A0AEC0;'>🧮 지갑 실물 합계</span><br>
+                                <span style='font-size:15px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
+                            </div>
+                        """, unsafe_allow_html=True)
                         
                         # [사용자 지정 미니멀 문구]
                         diff_val = total_counted - c_cash
@@ -1234,7 +1235,7 @@ with st.sidebar:
                             else:
                                 st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
 
-                        # 4. 기기 간 충돌 감지 및 동기화
+                        # 5. 기기 간 충돌 감지 및 동기화
                         has_cloud_record = bool(cloud_counts)
                         has_conflict = has_cloud_record and (cur_counts != cloud_counts)
 
@@ -1267,6 +1268,7 @@ with st.sidebar:
                                             time.sleep(0.6)
                                             st.rerun()
                         else:
+                            # [사용자 지정 미니멀 캡션 & 버튼명]
                             if cloud_total > 0:
                                 st.caption(f"클라우드 동기완료 ({cloud_time})")
                                 
