@@ -2701,7 +2701,7 @@ else:
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
                 # --------------------------------------------------------------
-                # 6.03.00-A | 발칸 22일 정상화 & 계단식 차선 배분 슬라이더 엔진
+                # 6.03.00-A | 발칸 22일 복원 & 클린 10일 페이징 차트 엔진
                 # --------------------------------------------------------------
                 import math
 
@@ -2733,7 +2733,7 @@ else:
                         dep_date_str = m_dep.group(0)
                         dep_dt = datetime.strptime(dep_date_str, "%Y-%m-%d").date()
 
-                # 귀국일 정밀 탐색 (공식 한국 귀국 행 최우선 채택 -> 133일 버그 원천 차단)
+                # 귀국일 정밀 탐색 (한국 귀국 행 고정 -> 발칸 22일 완벽 보존)
                 korea_arr = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False) & ledger_df['Category'].apply(is_korea_port)]
                 arr_candidates = ledger_df[
                     ledger_df['Category'].str.contains('입국|귀국', na=False) & 
@@ -2776,7 +2776,7 @@ else:
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국'])) & in_period_mask]
 
                 # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Chart (계단식 2단 차선 & 미니 타임라인 슬라이더)
+                # 6.03.01 | Daily Local Spending Chart (클린 10일 단위 페이징)
                 # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
@@ -2795,8 +2795,7 @@ else:
                         sub_c = ovr_df[ovr_df['Date_Clean'] == d]['Country'].dropna().unique()
                         date_country_map[d] = " / ".join(sub_c) if len(sub_c) > 0 else ""
 
-                    # [핵심 알고리즘] 10일 표시 기준 1일 폭 계산 & 계단식(2층) 차선 배분
-                    # 10일 기준 1일 폭 당 약 2.6글자 수용 가능
+                    # 계단식 차선 배분 (HTML <div> 완전 제거 -> 순수 <br>과 <span>만 사용)
                     prev_c = None
                     lane1_free_idx = -1
                     lane2_free_idx = -1
@@ -2818,17 +2817,13 @@ else:
                         country_html = ""
                         if is_new_country:
                             prev_c = c_val
-                            # 복수 국가는 슬래시 줄바꿈 처리
                             c_display = c_val.replace(" / ", "<br>").replace("/", "<br>")
                             clean_len = max(len(s) for s in c_display.split("<br>"))
-                            # 점유할 슬롯(일수) 계산
                             slots_needed = max(1, math.ceil(clean_len / 2.6))
                             
-                            # 1층 차선이 비어있으면 1층에 배치
                             if idx >= lane1_free_idx:
                                 lane1_free_idx = idx + slots_needed
                                 country_html = f"<span style='font-size:10px; color:#A5B4FC; font-weight:600;'>{c_display}</span>"
-                            # 1층이 앞선 글자로 막혀있으면 2층 차선으로 하강
                             elif idx >= lane2_free_idx:
                                 lane2_free_idx = idx + slots_needed
                                 country_html = f"<span style='font-size:9px;'>&nbsp;</span><br><span style='font-size:10px; color:#38BDF8; font-weight:600;'>{c_display}</span>"
@@ -2836,41 +2831,13 @@ else:
                                 lane1_free_idx = idx + slots_needed
                                 country_html = f"<span style='font-size:10px; color:#A5B4FC; font-weight:600;'>{c_display}</span>"
                                 
-                        # 좌측 정렬(text-align: left) 적용 3단 콤팩트 라벨 조립
                         c_part = f"<br>{country_html}" if country_html else ""
-                        date_label_map[d] = f"<div style='text-align:left; line-height:1.25;'>{mm}/{dd}<br>({day_kr}){c_part}</div>"
+                        # [핵심] div 태그를 완전히 빼서 코드가 텍스트로 노출되는 현상 100% 차단!
+                        date_label_map[d] = f"{mm}/{dd}<br>({day_kr}){c_part}"
 
                     ovr_df['Date_Display'] = ovr_df['Date_Clean'].map(date_label_map)
                     
-                    fig2 = px.bar(ovr_df, x='Date_Display', y=y_col, color='Category', title=None, color_discrete_map=color_map)
-                    
-                    # [대안 B 적용] 기본 10일치 큼직하게 줌인 & 하단 미니 타임라인 슬라이더 장착
-                    default_x_range = [-0.5, 9.5] if num_total_days > 10 else None
-                    
-                    fig2.update_layout(
-                        barmode='stack', 
-                        margin=dict(l=10, r=10, t=15, b=60),
-                        xaxis_title=None,
-                        yaxis_title=None,
-                        legend_title_text="",
-                        legend=dict(orientation="h", yanchor="top", y=-0.35, xanchor="center", x=0.5)
-                    )
-                    
-                    fig2.update_xaxes(
-                        categoryorder='array', 
-                        categoryarray=[date_label_map[d] for d in unique_clean_dates if d in date_label_map], 
-                        tickangle=0,
-                        tickfont=dict(size=11),
-                        # [핵심] 미니 타임라인 슬라이더 장착 및 10일치 기본 줌인
-                        rangeslider=dict(visible=True, thickness=0.08),
-                        range=default_x_range,
-                        fixedrange=False
-                    )
-                    fig2.update_yaxes(
-                        fixedrange=True  # 모바일 세로 스크롤 안전 고정
-                    )
-
-                    # 온전한 달력 총 여행 기간 계산 (발칸 22일 완벽 복원)
+                    # [동적 타이틀] 발칸 22일 정확한 달력 기간 산출
                     today_dt_c = datetime.now(st.session_state.current_tz).date()
                     is_active_chart = (today_dt_c <= arr_dt) if arr_dt else True
 
@@ -2880,9 +2847,55 @@ else:
                         total_calendar_days = num_total_days
                         
                     day_label_suffix = f"{total_calendar_days}일차" if is_active_chart else f"{total_calendar_days}일"
-                    
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
-                    st.caption("💡 하단의 미니 타임라인 슬라이더 창을 좌우로 드래그하여 전체 일정을 탐색할 수 있습니다.")
+
+                    # [핵심] 10일 초과 시 깔끔한 10일 단위 세그먼트 페이징 제공
+                    chunk_size = 10
+                    if num_total_days > chunk_size:
+                        num_chunks = math.ceil(num_total_days / chunk_size)
+                        chunk_options = []
+                        for c_idx in range(num_chunks):
+                            start_d = c_idx * chunk_size + 1
+                            end_d = min((c_idx + 1) * chunk_size, num_total_days)
+                            chunk_options.append(f"{c_idx+1}구간 ({start_d}~{end_d}일)")
+                        chunk_options.append("🗺️ 전체보기")
+                        
+                        sel_chunk = st.radio("📅 일정 구간 선택", chunk_options, index=0, horizontal=True, key="daily_chunk_sel", label_visibility="collapsed")
+                        
+                        if sel_chunk != "🗺️ 전체보기":
+                            sel_idx = chunk_options.index(sel_chunk)
+                            view_dates = unique_clean_dates[sel_idx * chunk_size : (sel_idx + 1) * chunk_size]
+                            chart_df = ovr_df[ovr_df['Date_Clean'].isin(view_dates)].copy()
+                        else:
+                            view_dates = unique_clean_dates
+                            chart_df = ovr_df.copy()
+                    else:
+                        view_dates = unique_clean_dates
+                        chart_df = ovr_df.copy()
+
+                    fig2 = px.bar(chart_df, x='Date_Display', y=y_col, color='Category', title=None, color_discrete_map=color_map)
+                    
+                    # 클린 레이아웃 (슬라이더 완전 제거, 가로 범례 복원)
+                    fig2.update_layout(
+                        barmode='stack', 
+                        margin=dict(l=10, r=10, t=15, b=60),
+                        xaxis_title=None,
+                        yaxis_title=None,
+                        legend_title_text="",
+                        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5)
+                    )
+                    
+                    fig2.update_xaxes(
+                        categoryorder='array', 
+                        categoryarray=[date_label_map[d] for d in view_dates if d in date_label_map], 
+                        tickangle=0,
+                        tickfont=dict(size=11),
+                        fixedrange=True  # 터치 확대 방지
+                    )
+                    fig2.update_yaxes(
+                        fixedrange=True  # 세로 스크롤 안전성 확보
+                    )
+
                     st.plotly_chart(
                         fig2, 
                         use_container_width=True, 
