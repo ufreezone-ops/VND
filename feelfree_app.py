@@ -2736,16 +2736,105 @@ else:
                     st.dataframe(display_table.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}), use_container_width=True, hide_index=True)
                 else: st.info("현지 지출 데이터가 없습니다.")
 
-                # 6.03.03 | Pre-Departure Domestic Cost Treemap
+                # --------------------------------------------------------------
+                # 6.03.03 | Pre-Departure Domestic Cost Treemap (스마트 다이내믹 인포그래픽)
+                # --------------------------------------------------------------
                 dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
                 if not dom_df.empty:
                     st.divider()
-                    st.markdown("<h4 style='text-align: center;'>🛫 사전결제(Treemap)</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='text-align: center;'>🛫 사전결제 분석 (스마트 트리맵)</h4>", unsafe_allow_html=True)
+                    
+                    # 1. 스마트 계층 라벨링 전처리 엔진 (중복 제거 & 인라인 금액 병기)
                     dom_chart_df = dom_df.copy()
-                    dom_chart_df['Short_Desc'] = dom_chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
-                    fig1 = px.treemap(dom_chart_df, path=['Macro_Category', 'Category', 'Short_Desc'], values=y_col, color='Macro_Category', color_discrete_map=macro_color_map)
-                    fig1.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원", textposition='middle center', insidetextfont=dict(size=16))
-                    fig1.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=550, uniformtext=dict(minsize=11, mode='hide'))
+                    total_dom_sum = dom_chart_df[y_col].sum()
+                    
+                    smart_macro_list = []
+                    smart_tile_list = []
+                    
+                    for _, r in dom_chart_df.iterrows():
+                        cat = str(r['Category']).strip()
+                        desc = str(r['Description']).strip()
+                        amt = float(r[y_col])
+                        
+                        # (1) 항공권: 여정 분석 스마트 라벨링 (항공권 > 항공권 중복 폐지)
+                        if cat == '항공권':
+                            if any(k in desc for k in ['부산', '인천', '김포', '대구', '제주', '청주', '왕복', '출국', '귀국', 'BX', 'VJ']):
+                                macro_lbl = "🛫 IN/OUT 항공권"
+                            else:
+                                macro_lbl = "✈️ 구간/국내선"
+                            
+                            # 깔끔한 노선명 추출
+                            clean_desc = re.sub(r'\[.*?\]\s*', '', desc)  # 플랫폼 제거
+                            clean_desc = clean_desc.split('|')[0].strip() # 뒷부분 상세 제거
+                            tile_lbl = clean_desc if len(clean_desc) <= 18 else clean_desc[:16] + ".."
+                            
+                        # (2) 숙박: 호텔명 + 투숙 박수 직관 결합 (숙박 > 호텔 중복 폐지)
+                        elif cat in ['호텔', '숙박']:
+                            macro_lbl = "🏨 숙박"
+                            match_gw = re.search(r'\[(.*?)\]\s*(.*)', desc)
+                            h_name = match_gw.group(2) if match_gw else desc
+                            h_parts = re.split(r'[,|]', h_name)
+                            clean_h = h_parts[0].strip()
+                            
+                            m_nights = re.search(r'(\d+)\s*박', desc)
+                            nights_str = f" ({m_nights.group(1)}박)" if m_nights else ""
+                            clean_h = re.sub(r'Hotel|호텔|리조트|Resort', '', clean_h, flags=re.IGNORECASE).strip()
+                            if len(clean_h) > 13: clean_h = clean_h[:12] + ".."
+                            tile_lbl = f"{clean_h}{nights_str}"
+                            
+                        # (3) 소액 지출 (보험, 기차, 기타): 사용자 아이디어 반영 (제목 옆 금액 인라인 병기)
+                        elif cat == '보험':
+                            macro_lbl = "🛡️ 보험"
+                            tile_lbl = f"여행자보험 ({amt:,.0f}원)"
+                        elif cat in ['기차', '교통', '지하철', '택시']:
+                            macro_lbl = "🚗 현지교통(사전)"
+                            clean_desc = desc.split('(')[0].strip()
+                            tile_lbl = f"{clean_desc} ({amt:,.0f}원)"
+                        else:
+                            macro_lbl = "📱 기타/통신"
+                            clean_desc = desc[:10].strip()
+                            tile_lbl = f"{clean_desc} ({amt:,.0f}원)"
+                            
+                        smart_macro_list.append(macro_lbl)
+                        smart_tile_list.append(tile_lbl)
+                        
+                    dom_chart_df['Smart_Macro'] = smart_macro_list
+                    dom_chart_df['Smart_Tile'] = smart_tile_list
+
+                    # 세련된 인포그래픽 컬러 팔레트 매핑
+                    treemap_color_map = {
+                        "🛫 IN/OUT 항공권": "#C62828",
+                        "✈️ 구간/국내선": "#E53935",
+                        "🏨 숙박": "#1565C0",
+                        "🛡️ 보험": "#F9A825",
+                        "🚗 현지교통(사전)": "#00838F",
+                        "📱 기타/통신": "#6A1B9A"
+                    }
+
+                    # 2. 스마트 트리맵 렌더링 (2단계 최적 계층)
+                    fig1 = px.treemap(
+                        dom_chart_df, 
+                        path=['Smart_Macro', 'Smart_Tile'], 
+                        values=y_col, 
+                        color='Smart_Macro', 
+                        color_discrete_map=treemap_color_map
+                    )
+                    
+                    # 3. 텍스트 서식 및 다이내믹 폰트 극대화 (비율 % 자동 표기)
+                    fig1.update_traces(
+                        texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br><span style='font-size:0.85em; opacity:0.85;'>(%{percentRoot:.1%})</span>",
+                        hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>",
+                        textposition='middle center',
+                        insidetextfont=dict(size=19),
+                        tiling=dict(packing='squarify', pad=4)
+                    )
+                    
+                    # 4. 레이아웃 (uniformtext 제한을 완전히 풀어 큰 박스는 큼직한 폰트로 자동 확장)
+                    fig1.update_layout(
+                        margin=dict(l=10, r=10, t=10, b=10), 
+                        height=560
+                    )
+                    
                     st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
 
                 # 6.03.04 | Multi-Node Local Expense Treemap
