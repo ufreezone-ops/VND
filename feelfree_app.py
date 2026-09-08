@@ -1228,7 +1228,7 @@ with st.sidebar:
                         else:
                             # [일치 상태] 평화로운 일반 모드
                             if cloud_total > 0:
-                                st.caption(f"☁️ 클라우드 동기화 완료 상태 ({cloud_time})")
+                                st.caption(f"☁️ 클라우드 동기화 완료 ({cloud_time})")
                                 
                             if st.button(f"💾 {c} 클라우드 저장", key=f"btn_save_normal_{c}", use_container_width=True):
                                 with st.spinner("구글 시트에 실사 잔고 동기화 중..."):
