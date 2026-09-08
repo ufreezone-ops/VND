@@ -2723,7 +2723,7 @@ else:
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국']))]
                 
                 # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Stacked Bar Chart (동적 일차 타이틀)
+                # 6.03.01 | Daily Local Spending Stacked Bar Chart (터치 확대 방지 & 모바일 스크롤 최적화)
                 # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
@@ -2765,11 +2765,17 @@ else:
                         margin=dict(l=10, r=10, t=20, b=60),
                         legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5)
                     )
+                    
+                    # [핵심] X축 및 Y축 범위 고정(fixedrange=True)으로 모바일 한 손가락 스크롤 정상화!
                     fig2.update_xaxes(
                         categoryorder='array', 
                         categoryarray=ovr_df['Date_Display'].unique(), 
                         tickangle=0 if len(ovr_df['Date_Clean'].unique()) <= 7 else -30, 
-                        tickfont=dict(size=11)
+                        tickfont=dict(size=11),
+                        fixedrange=True  # 가로 드래그 시 차트 축 확대 차단
+                    )
+                    fig2.update_yaxes(
+                        fixedrange=True  # 세로 드래그 시 차트 축 확대 차단 -> 브라우저 세로 스크롤로 매끄럽게 연결!
                     )
 
                     # [동적 타이틀] 진행 중인 여행은 '3일차', 종료된 여행은 '22일' 표기
@@ -2788,7 +2794,13 @@ else:
                     day_label_suffix = f"{total_days_cnt}일차" if is_active_chart else f"{total_days_cnt}일"
                     
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
-                    st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
+                    
+                    # 스크롤 줌 및 모드바 차단 설정 적용
+                    st.plotly_chart(
+                        fig2, 
+                        use_container_width=True, 
+                        config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False}
+                    )
 
                 st.divider()
                 
