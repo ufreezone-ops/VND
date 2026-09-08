@@ -241,26 +241,27 @@ st.markdown("""
         gap: 0px !important;
     }
 
-    /* 2. 지폐 카운터: 모바일/웹 완벽 대칭 센터링 및 우측 쏠림 방지 */
+    /* 2. 지폐 카운터: 한 칸 높이 50% 압축 (24px 초슬림 밀착형) */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
-        justify-content: center !important; /* 핵심: 양극단으로 찢어지지 않고 완벽한 중앙 정렬 */
+        justify-content: center !important;
         width: 100% !important;
-        gap: 12px !important;               /* 라벨과 입력창 사이 간격 12px */
-        margin-bottom: -8px !important;     /* 겹치지 않는 적정 세로 압축 */
+        gap: 10px !important;
+        margin-bottom: -16px !important; /* 행과 행 사이 간격을 반으로 압축 */
+        padding: 0px !important;
     }
-    /* 좌측 라벨: 60px 고정, 우측 정렬로 입력창과 깔끔하게 마주봄 */
+    /* 좌측 라벨: 55px 우측 정렬 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
-        flex: 0 0 60px !important;
-        width: 60px !important;
-        max-width: 60px !important;
-        min-width: 60px !important;
+        flex: 0 0 55px !important;
+        width: 55px !important;
+        max-width: 55px !important;
+        min-width: 55px !important;
         text-align: right !important;
     }
-    /* 우측 입력창: 85px 고정 */
+    /* 우측 입력창: 85px 중앙 정렬 */
     [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
         flex: 0 0 85px !important;
         width: 85px !important;
@@ -269,19 +270,22 @@ st.markdown("""
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput {
         width: 85px !important;
-        margin-bottom: 0px !important;
+        margin: 0px !important;
+        padding: 0px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
         width: 85px !important;
-        min-height: 28px !important;
-        height: 28px !important;
-        border-radius: 6px !important;
+        min-height: 24px !important; /* 높이를 기존 36~40px에서 24px로 축소 */
+        height: 24px !important;
+        border-radius: 5px !important;
+        padding: 0px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input {
-        height: 28px !important;
-        font-size: 14px !important;
+        height: 24px !important;
+        font-size: 13.5px !important;
         text-align: center !important;
         padding: 0px !important;
+        line-height: 24px !important;
     }
     
     </style>
@@ -1119,7 +1123,7 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [기능 2] 기기 간 불일치 자동 감지 & 선택권 충돌 방어탑 '💵 지폐 카운터'
+                # [기능 2] 사용자 커스텀 문구 반영 & 백스페이스 없는 스마트 '💵 지폐 카운터'
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("💵 지폐 카운터", expanded=False):
@@ -1141,14 +1145,15 @@ with st.sidebar:
                                         try: cloud_counts[int(b_v)] = int(b_c)
                                         except: pass
 
-                        # 2. 첫 접속 시 클라우드 데이터 세션 자동 주입
+                        # 2. 첫 접속 시 세션에 주입 (0은 None으로 처리하여 빈칸 placeholder 유도)
                         init_key = f"init_cash_{st.session_state.current_trip}_{c}"
                         if init_key not in st.session_state:
                             for b in bills_to_count:
-                                st.session_state[f"cnt_{c}_{b}"] = cloud_counts.get(b, 0)
+                                val_loaded = cloud_counts.get(b, 0)
+                                st.session_state[f"cnt_{c}_{b}"] = int(val_loaded) if val_loaded > 0 else None
                             st.session_state[init_key] = True
 
-                        # 3. 권종별 입력 UI 및 현재 화면 실시간 집계
+                        # 3. 권종별 초슬림 입력 (백스페이스 불필요: 터치 즉시 새 숫자 입력)
                         total_counted = 0
                         cur_counts = {}
                         for bill in bills_to_count:
@@ -1159,82 +1164,83 @@ with st.sidebar:
                                 
                             c_col1, c_col2 = st.columns([1, 1.4])
                             with c_col1:
-                                st.markdown(f"<div style='font-size:13.5px; font-weight:bold; white-space:nowrap; text-align:right;'>{b_label}동</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; line-height:24px;'>{b_label}동</div>", unsafe_allow_html=True)
                             with c_col2:
+                                # [핵심] value가 없으면 연한 0(placeholder)만 띄워 백스페이스 없이 바로 입력 가능
+                                raw_val = st.session_state.get(f"cnt_{c}_{bill}", None)
                                 cnt = st.number_input(
                                     label=f"{c}_{bill}",
                                     min_value=0,
                                     step=1,
-                                    value=st.session_state.get(f"cnt_{c}_{bill}", 0),
+                                    value=int(raw_val) if raw_val and raw_val > 0 else None,
+                                    placeholder="0",
                                     key=f"cnt_{c}_{bill}",
                                     label_visibility="collapsed"
                                 )
-                            cur_counts[bill] = cnt
-                            total_counted += bill * cnt
+                            final_cnt = int(cnt) if cnt is not None else 0
+                            cur_counts[bill] = final_cnt
+                            total_counted += bill * final_cnt
                             
                         # 실물 합계 카드 박스
                         st.markdown(f"""
-                            <div style='margin-top: 16px; margin-bottom: 10px; padding: 8px 12px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
-                                <span style='font-size:12px; color:#A0AEC0;'>🧮 지갑 실물 합계</span><br>
-                                <span style='font-size:16px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
+                            <div style='margin-top: 18px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
+                                <span style='font-size:11.5px; color:#A0AEC0;'>🧮 지갑 실물 합계</span><br>
+                                <span style='font-size:15px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # 장부 잔액과 실물 대조 (오차 감사)
+                        # [사용자 지정 미니멀 문구 100% 반영]
                         diff_val = total_counted - c_cash
                         if total_counted > 0:
                             if diff_val == 0:
                                 st.success("✅ 장부/실물 일치!")
                             elif diff_val < 0:
-                                st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족! (누락 확인)")
+                                st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족!")
                             else:
-                                st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과! (오기입 확인)")
+                                st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
 
-                        # ------------------------------------------------------
-                        # 4. 기기 간 충돌(Conflict) 판별 및 양자택일 선택 시스템
-                        # ------------------------------------------------------
+                        # 4. 기기 간 충돌 감지 및 동기화 (사용자 커스텀 버튼명 적용)
                         has_cloud_record = bool(cloud_counts)
                         has_conflict = has_cloud_record and (cur_counts != cloud_counts)
 
                         if has_conflict:
-                            # [충돌 발생 시] 명확한 경고와 양자택일 선택 버튼 노출
                             st.markdown(f"""
-                                <div style='background-color: rgba(255, 165, 0, 0.12); border-left: 3px solid #FFA500; border-radius: 8px; padding: 10px 12px; margin-top: 14px; margin-bottom: 12px;'>
-                                    <div style='color: #FFA500; font-size: 12.5px; font-weight: bold;'>⚠️ 기기 간 데이터 불일치 감지!</div>
-                                    <div style='font-size: 12px; color: #E2E8F0; margin-top: 6px; line-height: 1.6;'>
-                                        • <b>현재 이 화면:</b> {fmt.format(total_counted)} {c}<br>
-                                        • <b>클라우드 최신본:</b> {fmt.format(cloud_total)} {c} <span style='color:#888;'>({cloud_time})</span>
+                                <div style='background-color: rgba(255, 165, 0, 0.12); border-left: 3px solid #FFA500; border-radius: 6px; padding: 8px 10px; margin-top: 10px; margin-bottom: 10px;'>
+                                    <div style='color: #FFA500; font-size: 12px; font-weight: bold;'>⚠️ 기기 간 데이터 불일치!</div>
+                                    <div style='font-size: 11.5px; color: #E2E8F0; margin-top: 4px; line-height: 1.5;'>
+                                        • 현재 화면: <b>{fmt.format(total_counted)} {c}</b><br>
+                                        • 클라우드: <b>{fmt.format(cloud_total)} {c}</b> <span style='color:#888;'>({cloud_time})</span>
                                     </div>
-                                    <div style='font-size: 11.5px; color: #CBD5E1; margin-top: 6px;'>어느 데이터로 맞추시겠습니까?</div>
                                 </div>
                             """, unsafe_allow_html=True)
                             
                             col_sel1, col_sel2 = st.columns(2)
                             with col_sel1:
-                                if st.button("📥 클라우드 최신본 가져오기", key=f"btn_pull_{c}", use_container_width=True, help="모바일에서 저장한 최신 지폐 내역을 이 화면으로 불러옵니다"):
+                                if st.button("📥 클라우드 가져오기", key=f"btn_pull_{c}", use_container_width=True):
                                     for b in bills_to_count:
-                                        st.session_state[f"cnt_{c}_{b}"] = cloud_counts.get(b, 0)
-                                    st.success("클라우드 최신본을 불러왔습니다!")
-                                    time.sleep(0.8)
+                                        val_b = cloud_counts.get(b, 0)
+                                        st.session_state[f"cnt_{c}_{b}"] = int(val_b) if val_b > 0 else None
+                                    st.success("가져오기 완료!")
+                                    time.sleep(0.6)
                                     st.rerun()
                                     
                             with col_sel2:
-                                if st.button("⚠️ 현재 화면값으로 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True, help="현재 이 화면에 입력된 수량으로 클라우드를 강제 갱신합니다"):
-                                    with st.spinner("클라우드 강제 갱신 중..."):
+                                if st.button("⚠️ 현재값 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True):
+                                    with st.spinner("클라우드 저장 중..."):
                                         if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
-                                            st.success("현재 화면값으로 클라우드에 덮어썼습니다!")
-                                            time.sleep(0.8)
+                                            st.success("덮어쓰기 완료!")
+                                            time.sleep(0.6)
                                             st.rerun()
                         else:
-                            # [일치 상태] 평화로운 일반 모드
+                            # [사용자 지정 미니멀 캡션 & 버튼명 100% 반영]
                             if cloud_total > 0:
-                                st.caption(f"클라우드 동기완료 ({cloud_time})")
+                                st.caption(f"클라우드 동기완료 ({cloud_time}:)")
                                 
                             if st.button(f"💾 {c} 클라우드 저장", key=f"btn_save_normal_{c}", use_container_width=True):
-                                with st.spinner("구글 시트에 실사 잔고 동기화 중..."):
+                                with st.spinner("구글 시트 저장 중..."):
                                     if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
-                                        st.success("🎉 클라우드 동기화 완료!")
-                                        time.sleep(0.8)
+                                        st.success("🎉 저장 완료!")
+                                        time.sleep(0.6)
                                         st.rerun()
                 
                 st.divider()
