@@ -2708,33 +2708,98 @@ else:
                 is_fixed_cost = exp_df['IsFixedCost']
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국']))]
                 
-                # 6.03.01 | Daily Local Spending Stacked Bar Chart
+                # --------------------------------------------------------------
+                # 6.03.01 | Daily Local Spending Stacked Bar Chart (모바일 슬림 X축 라벨)
+                # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
+                    
+                    # 단일 국가 여행 여부 자동 판별
+                    trip_nodes = TRIP_CONFIGS.get(st.session_state.current_trip, {}).get("nodes", {})
+                    is_single_country = (len(trip_nodes) <= 1) or (ovr_df['Country'].dropna().nunique() <= 1)
+                    
+                    # 날짜 파싱 및 한글 요일 축약 헬퍼 (예: 2026-04-21(Tue) -> 04/21(화))
+                    day_kr_map = {'Mon':'월', 'Tue':'화', 'Wed':'수', 'Thu':'목', 'Fri':'금', 'Sat':'토', 'Sun':'일'}
+                    def format_chart_x_label(r):
+                        orig_d = str(r['Date'])
+                        c_name = str(r['Country'])
+                        m = re.search(r'(?:20)?\d{2}-(\d{2})-(\d{2})(?:\(([A-Za-z]+)\))?', orig_d)
+                        if m:
+                            mm, dd, day_en = m.group(1), m.group(2), m.group(3)
+                            day_kr = day_kr_map.get(day_en, day_en if day_en else '')
+                            short_d = f"{mm}/{dd}({day_kr})"
+                        else:
+                            short_d = orig_d.split('(')[0]
+                            
+                        # 단일 국가면 날짜만 수평 표기, 다국가면 국가명 작게 병기
+                        if is_single_country:
+                            return short_d
+                        else:
+                            return f"{short_d}<br><span style='font-size:10px;color:#AAAAAA;'>{c_name}</span>"
+
                     ovr_df['Date_Clean'] = ovr_df['Date'].str.split('(').str[0]
                     ovr_df = ovr_df.sort_values(by='Date_Clean')
-                    ovr_df['Date_Country'] = ovr_df['Date_Clean'] + "<br><span style='font-size:11px;color:#AAAAAA'>" + ovr_df['Country'] + "</span>"
+                    ovr_df['Date_Display'] = ovr_df.apply(format_chart_x_label, axis=1)
                     
-                    fig2 = px.bar(ovr_df, x='Date_Country', y=y_col, color='Category', title=None, color_discrete_map=color_map)
-                    fig2.update_layout(barmode='stack', margin=dict(l=10, r=10, t=30, b=150), legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="center", x=0.5))
-                    fig2.update_xaxes(categoryorder='array', categoryarray=ovr_df['Date_Country'].unique(), tickangle=-90, tickfont=dict(size=10))
+                    fig2 = px.bar(ovr_df, x='Date_Display', y=y_col, color='Category', title=None, color_discrete_map=color_map)
+                    fig2.update_layout(
+                        barmode='stack', 
+                        margin=dict(l=10, r=10, t=20, b=60),  # 하단 여백을 150px에서 60px로 대폭 축소
+                        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5)
+                    )
+                    # 수평에 가깝게 시원하게 읽히도록 틱 각도 최적화
+                    fig2.update_xaxes(
+                        categoryorder='array', 
+                        categoryarray=ovr_df['Date_Display'].unique(), 
+                        tickangle=0 if len(ovr_df['Date_Clean'].unique()) <= 7 else -30, 
+                        tickfont=dict(size=11)
+                    )
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({len(ovr_df['Date_Clean'].unique())}일차)</h4>", unsafe_allow_html=True)
                     st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False})
 
                 st.divider()
                 
-                # 6.03.02 | Daily Living vs Total Spent Pivot Table
+                # --------------------------------------------------------------
+                # 6.03.02 | Daily Living vs Total Spent Pivot Table (단일국가 국가열 삭제)
+                # --------------------------------------------------------------
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
                 daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
                 fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
                 
                 if not daily_table.empty:
-                    display_table = daily_table[['Country', 'Date', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(
-                        columns={'Country':'국가', 'Date':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'}
+                    # 표 날짜 축약 헬퍼
+                    def shorten_table_date(d_str):
+                        m = re.search(r'(?:20)?\d{2}-(\d{2})-(\d{2})(?:\(([A-Za-z]+)\))?', str(d_str))
+                        if m:
+                            mm, dd, day_en = m.group(1), m.group(2), m.group(3)
+                            day_kr = day_kr_map.get(day_en, day_en if day_en else '')
+                            return f"{mm}/{dd}({day_kr})"
+                        return str(d_str)
+
+                    daily_table['Date_Short'] = daily_table['Date'].apply(shorten_table_date)
+
+                    # [핵심] 단일 국가 여행 시 '국가' 컬럼 완전 배제
+                    if is_single_country:
+                        display_table = daily_table[['Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(
+                            columns={'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'}
+                        )
+                    else:
+                        display_table = daily_table[['Country', 'Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(
+                            columns={'Country':'국가', 'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'}
+                        )
+
+                    col_cfg_daily = {
+                        "날짜": st.column_config.TextColumn("날짜", width="small")
+                    }
+                    st.dataframe(
+                        display_table.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}),
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config=col_cfg_daily
                     )
-                    st.dataframe(display_table.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}), use_container_width=True, hide_index=True)
-                else: st.info("현지 지출 데이터가 없습니다.")
+                else: 
+                    st.info("현지 지출 데이터가 없습니다.")
 
                 # --------------------------------------------------------------
                 # 6.03.03 | Pre-Departure Domestic Cost Treemap (절대 금액 비례 폰트 엔진)
