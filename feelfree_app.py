@@ -2398,7 +2398,7 @@ else:
             if save_data(ledger_df):
                 st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
                 
-        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (다크/화이트 듀얼 고대비 지브라)
+        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (다크/라이트 공용 고대비 지브라)
         if not display_df.empty: 
             display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
             display_df = display_df.reindex(columns=FINAL_COLUMNS)
@@ -2427,7 +2427,7 @@ else:
                     
                 st.write(f"🔎 검색 결과: {len(render_df)}건")
 
-                # 1. [수정 완료] 출국일(dep_dt) 및 입국일(arr_dt) 무결점 통짜 파싱 (에러 원천 차단)
+                # 1. 출국일(dep_dt) 및 입국일(arr_dt) 파싱
                 dep_rows = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
                 korea_dep = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
                 target_dep_row = korea_dep if not korea_dep.empty else dep_rows
@@ -2464,7 +2464,7 @@ else:
                         return True
                     return False
 
-                # 2. 날짜 포맷터 (08/09(일) 🏷️사전 형태 압축)
+                # 2. 날짜 포맷터
                 day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                 def format_display_date_se(row):
                     orig_d = str(row['Date']).strip()
@@ -2513,9 +2513,7 @@ else:
                 if is_single_country and 'Country' in styled_render_df.columns:
                     styled_render_df = styled_render_df.drop(columns=['Country'])
 
-                # 4. 다크/화이트 모드 실시간 자동 연동 지브라 스타일러
-                is_dark_theme = (st.session_state.get('app_theme', "🌙 다크") == "🌙 다크")
-                
+                # 4. [고대비 완벽 보정] 다크/라이트 양방향 호환 지브라 스타일러
                 def style_journey_rows_se(row):
                     cat = str(row.get('Category', '')).strip()
                     orig_d = str(render_df.loc[row.name, 'Date'])
@@ -2524,38 +2522,26 @@ else:
                     pure_date = m.group(0)
                     cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
                     
-                    # (1) [출국일] 스타일
+                    # (1) [출국일]: 반투명 골드 앰버 음영 + 볼드
                     if is_real_departure(cat, cur_d):
-                        if is_dark_theme:
-                            return ['background-color: #5c3d00; color: #FFD700; font-weight: bold;'] * len(row)
-                        else:
-                            return ['background-color: #FEF3C7; color: #92400E; font-weight: bold;'] * len(row)
+                        return ['background-color: rgba(245, 158, 11, 0.28); font-weight: bold;'] * len(row)
                             
-                    # (2) [귀국일] 스타일
+                    # (2) [귀국일]: 반투명 에메랄드 음영 + 볼드
                     if is_real_arrival(cat, cur_d):
-                        if is_dark_theme:
-                            return ['background-color: #064e3b; color: #34D399; font-weight: bold;'] * len(row)
-                        else:
-                            return ['background-color: #D1FAE5; color: #065F46; font-weight: bold;'] * len(row)
+                        return ['background-color: rgba(16, 185, 129, 0.28); font-weight: bold;'] * len(row)
 
-                    # (3) [사전결제] 스타일
+                    # (3) [사전결제]: 차분한 음영
                     if dep_dt:
                         diff = (cur_d - dep_dt).days
                         if diff < 0:
-                            return ['color: #71717A;'] * len(row) if is_dark_theme else ['color: #64748B;'] * len(row)
+                            return ['opacity: 0.7; font-style: italic;'] * len(row)
 
-                    # (4) [여행 중 지브라 교대 스타일]
+                    # (4) [지브라 교대행]: 반투명 중립 그레이 (라이트/다크 양쪽 모두 글자색 보존)
                     grp = date_to_group.get(pure_date, 0)
                     if grp == 1:
-                        if is_dark_theme:
-                            return ['background-color: rgba(255, 215, 0, 0.13); color: #FFFDF0; font-weight: 500;'] * len(row)
-                        else:
-                            return ['background-color: #F1F5F9; color: #0F172A; font-weight: 600;'] * len(row)
+                        return ['background-color: rgba(125, 125, 125, 0.15); font-weight: 500;'] * len(row)
                     else:
-                        if is_dark_theme:
-                            return ['color: #CBD5E1;'] * len(row)
-                        else:
-                            return ['background-color: #FFFFFF; color: #334155;'] * len(row)
+                        return ['background-color: transparent;'] * len(row)
 
                 styled_table = styled_render_df.style.apply(style_journey_rows_se, axis=1)
                 
@@ -2570,7 +2556,7 @@ else:
                 num_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
                 styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
                 
-                # 5. 일련번호 삭제 & 날짜 최적 너비 & 글자 터치 즉시 선택
+                # 5. 테이블 렌더링
                 col_cfg = {
                     "Date": st.column_config.TextColumn("날짜", width=120),
                     "Category": st.column_config.TextColumn("항목", width="small"),
@@ -2655,13 +2641,12 @@ else:
                                     trans_item = smart_krw_translator(desc_full, rate_for_calc, curr_for_calc)
                                     st.markdown(f"**📝 내역:** {trans_item}", unsafe_allow_html=True)
                                 
-                            # [핵심] 영수증 사진 표시 및 개별 사진 원클릭 삭제 버튼
+                            # 영수증 사진 표시 및 삭제
                             receipt_data = str(row_data['Receipt_URL']).strip()
                             if receipt_data.startswith("http"):
                                 urls = [u.strip() for u in receipt_data.split(",") if u.strip().startswith("http")]
                                 for idx, url in enumerate(urls):
                                     st.image(url, use_container_width=True, caption=f"영수증 사진 #{idx+1}")
-                                    # 사진 바로 밑에 삭제 버튼 배치
                                     if st.button(f"🗑️ 사진 #{idx+1} 삭제", key=f"btn_del_rcpt_{real_idx}_{idx}", use_container_width=True):
                                         remaining_urls = [u for i, u in enumerate(urls) if i != idx]
                                         display_df.at[real_idx, 'Receipt_URL'] = ",".join(remaining_urls)
@@ -2672,7 +2657,7 @@ else:
                             else:
                                 st.info("첨부된 영수증 사진이 없습니다.")
                                 
-                        # 6.02.05 | 인라인 수정기 (내역 보강 및 추가 업로드)
+                        # 6.02.05 | 인라인 수정기
                         with c_edit:
                             st.subheader("✏️ 내역 보강 및 영수증 첨부")
                             st.caption("세부 내역을 엑셀에서 복사해 붙여넣거나 엔터(줄바꿈)로 여러 개 입력하시면, 왼쪽 뷰어에서 깔끔하게 분리되어 표시됩니다.")
