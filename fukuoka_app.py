@@ -86,26 +86,28 @@ auto_update_log_to_gsheets()
 # ------------------------------------------------------------------------------
 # 1.04.00 | Dynamic Multi-Node Provisioning (관제탑 로드 및 다중 국가 동적 설정)
 # ------------------------------------------------------------------------------
-# 1.04.01 | Control Tower Config Loader & Node Assembler
-# [Modified] 다중 국가 지원(Stay_Mapping 파싱 로직 추가)이 적용된 동적 로더
-@st.cache_data(ttl=600)
+# 1.04.01 | Control Tower Config Loader & Node Assembler (진짜 에러 출력 엔진)
+@st.cache_data(ttl=0)
 def get_trip_configs():
     cfg_df = None
+    last_error_msg = ""
     for attempt in range(3):
         try:
-            cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="10m")
+            cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
             if cfg_df is not None and not cfg_df.empty:
                 break
         except Exception as e:
+            last_error_msg = str(e)
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(2.5)
                 continue
-            st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}') 로드 실패 (API 과부하).**")
-            st.info("💡 단기간에 많은 접속으로 구글 시트 요청 한도에 도달했습니다. 약 10초 후 새로고침 해주세요.")
+            # [수정] 감춰져 있던 진짜 에러 원인을 화면에 적나라하게 출력!
+            st.error(f"🚨 **구글 시트 로드 실패 원인:** `{last_error_msg}`")
+            st.info(f"💡 현재 시트 설정: 탭 이름='{CONFIG_SHEET}', 재시도={attempt+1}회")
             st.stop()
             
     if cfg_df is None or cfg_df.empty:
-        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}')이 비어있습니다.**")
+        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}') 시트가 비어있습니다.**")
         st.stop()
         
     # 1.04.02 | Multi-Country Node Financial Parser (국가명에 따른 현지 통화 자동 추론 헬퍼)
