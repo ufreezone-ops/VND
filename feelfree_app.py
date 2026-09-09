@@ -2398,7 +2398,7 @@ else:
             if save_data(ledger_df):
                 st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
                 
-        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (스카이블루 고대비 지브라)
+        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (보색 대비 웜앰버+블루 지브라)
         if not display_df.empty: 
             display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
             display_df = display_df.reindex(columns=FINAL_COLUMNS)
@@ -2513,7 +2513,7 @@ else:
                 if is_single_country and 'Country' in styled_render_df.columns:
                     styled_render_df = styled_render_df.drop(columns=['Country'])
 
-                # 4. [고대비 지브라] 다크/라이트 양방향 호환 스카이블루 스타일러 (일반 폰트)
+                # 4. [보색 대비 완벽 튜닝] 웜 앰버 배경 + 비비드 블루 글씨 스타일러
                 def style_journey_rows_se(row):
                     cat = str(row.get('Category', '')).strip()
                     orig_d = str(render_df.loc[row.name, 'Date'])
@@ -2536,10 +2536,10 @@ else:
                         if diff < 0:
                             return ['opacity: 0.7; font-style: italic;'] * len(row)
 
-                    # (4) [지브라 교대행]: 소프트 블루 틴트 + 일반 폰트(normal) 스카이블루
+                    # (4) [지브라 교대행]: 청색의 보색(은은한 웜 앰버 틴트) 배경 + 선명한 코발트/스카이블루 글씨
                     grp = date_to_group.get(pure_date, 0)
                     if grp == 1:
-                        return ['background-color: rgba(56, 189, 248, 0.12); color: #38BDF8; font-weight: normal;'] * len(row)
+                        return ['background-color: rgba(249, 115, 22, 0.12); color: #0284C7; font-weight: normal;'] * len(row)
                     else:
                         return ['background-color: transparent;'] * len(row)
 
