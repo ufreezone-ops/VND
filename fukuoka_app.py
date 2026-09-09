@@ -2019,8 +2019,8 @@ else:
                 if append_new_data(pd.concat(new_rows, ignore_index=True)):
                     st.success("항공권과 일정이 모두 기록되었습니다!"); time.sleep(1); st.rerun()
                     
-        # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 특수)
-        # [Modified] 호텔 모드 (결제수단 동적 매핑)
+        # # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 특수)
+        # [Modified] 호텔 모드 (결제수단 동적 매핑 & f-string 문법 에러 해결)
         elif mode == "🏨 호텔(특수)":
             st.subheader("🏨 호텔/숙소 예약 상세 기록")
             c1, c2 = st.columns(2)
@@ -2028,14 +2028,13 @@ else:
                 h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com")
                 h_name = st.text_input("2. 호텔명", placeholder="예: 인터콘티넨털 호치민")
                 h_checkin = st.date_input("3. 체크인", value=sel_date)
-                # [Added] '해외송금(한국계좌)' 옵션 추가
                 h_asset = st.selectbox("4. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
             with c2:
                 h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1)
                 h_checkout = h_checkin + timedelta(days=h_nights)
                 st.caption(f"📅 체크아웃 예정: {h_checkout.strftime('%Y-%m-%d')}")
                 h_detail = st.text_area("6. 내용 (룸타입/특징)", placeholder="예: 디럭스 더블, 수영장뷰, 30m2", height=68)
-                h_curr = st.selectbox("7. 결제 통화", ["KRW", "VND", "USD", "PHP", "EUR", "CNY", "TRY"], key="h_curr")
+                h_curr = st.selectbox("7. 결제 통화", ["KRW", "JPY", "VND", "USD", "EUR", "PHP", "CNY", "TRY"], key="h_curr")
 
             c3, c4, c5 = st.columns(3)
             with c3: h_amt = st.number_input(f"8. 결제 금액({h_curr})", min_value=0.0, step=1.0)
@@ -2049,7 +2048,10 @@ else:
                 if "트래블카드" in h_asset:
                     clean_asset = f"트래블카드({h_curr})"
                     
-                full_desc = f"[{h_gw}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
+                # [Fixed] f-string 내부 백슬래시(\) 문법 에러 완전 박멸
+                clean_detail = h_detail.replace("\n", " ")
+                full_desc = f"[{h_gw}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout.strftime('%m/%d')}) | {clean_detail}"
+                
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else ""}])
                 if append_new_data(new_row): st.rerun()
                     
