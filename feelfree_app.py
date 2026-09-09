@@ -178,147 +178,132 @@ def get_trip_configs():
 TRIP_CONFIGS = get_trip_configs()
 
 # ------------------------------------------------------------------------------
-# 1.05.00 | GUI Design System (커스텀 다크 테마 및 컴포넌트 CSS 주입)
+# 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (동적 테마 스위칭 완전체)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
-st.markdown("""
-    <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
-    <style>
-    .main { background-color: #0e1117; }
-    .kpi-box { background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 8px solid #FF8C00; margin-bottom: 20px; min-height: 130px; box-shadow: 4px 6px 15px rgba(0,0,0,0.5); }
-    .kpi-title { font-size: 15px; color: #cccccc; margin-bottom: 10px; font-weight: 600; }
-    .kpi-value-krw { font-size: 26px; font-weight: bold; color: #ffffff; line-height: 1.1; }
-    .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
-    div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
+if 'app_theme' not in st.session_state:
+    st.session_state.app_theme = "🌙 다크"
 
-    .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #161a25; border-radius: 12px; border: 2px solid #FFA500; box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); }
-    .stTabs[data-baseweb="tab"] { height: 40px; background-color: #262b3b; border-radius: 8px !important; padding: 0px 10px !important; color: #CCCCCC !important; border: 1px solid #333; font-size: 14px !important; transition: all 0.3s ease; }
-    .stTabs[data-baseweb="tab"]:hover { background-color: #3d4455; color: #ffffff !important; }
-    .stTabs [aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: 800 !important; box-shadow: 0px 4px 12px rgba(255, 165, 0, 0.4) !important; border: 1px solid #FFA500 !important; }
+current_theme = st.session_state.app_theme
 
-    div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
-    div[data-testid="stSidebar"] .stSelectbox label { color: #FFA500 !important; font-weight: bold !important; }
-    div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
-    div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
-    div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
-    [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
+if current_theme == "🌙 다크":
+    # ------------------ [🌙 프리미엄 다크 테마] ------------------
+    st.markdown("""
+        <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
+        <style>
+        .main { background-color: #0e1117; color: #ffffff; }
+        .kpi-box { background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 8px solid #FF8C00; margin-bottom: 20px; min-height: 130px; box-shadow: 4px 6px 15px rgba(0,0,0,0.5); }
+        .kpi-title { font-size: 15px; color: #cccccc; margin-bottom: 10px; font-weight: 600; }
+        .kpi-value-krw { font-size: 26px; font-weight: bold; color: #ffffff; line-height: 1.1; }
+        .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
+        div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-    /* 숫자 입력창 기본 화살표 버튼 제거 */
-    div[data-testid="stNumberInput"] button {
-        display: none !important;
-    }
-    div[data-testid="stNumberInput"] input {
-        padding-right: 10px !important;
-    }
-    div[data-testid="stNumberInput"] [data-baseweb="input"] {
-        border-right-width: 1px !important;
-    }
+        .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #161a25; border-radius: 12px; border: 2px solid #FFA500; box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); }
+        .stTabs[data-baseweb="tab"] { height: 40px; background-color: #262b3b; border-radius: 8px !important; padding: 0px 10px !important; color: #CCCCCC !important; border: 1px solid #333; font-size: 14px !important; transition: all 0.3s ease; }
+        .stTabs[data-baseweb="tab"]:hover { background-color: #3d4455; color: #ffffff !important; }
+        .stTabs [aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: 800 !important; box-shadow: 0px 4px 12px rgba(255, 165, 0, 0.4) !important; border: 1px solid #FFA500 !important; }
 
-    /* 사이드바 최상단 텅 빈 공간 완전 회수 */
-    section[data-testid="stSidebar"] > div:first-child {
-        padding-top: 1rem !important;
-    }
-    div[data-testid="stSidebarHeader"] {
-        height: 35px !important;
-        min-height: 35px !important;
-        padding-top: 0px !important;
-        padding-bottom: 0px !important;
-        margin-bottom: 0px !important;
-    }
-    div[data-testid="stSidebarContent"] {
-        padding-top: 0px !important;
-    }
-    div[data-testid="stSidebarUserContent"] {
-        padding-top: 0px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        padding-top: 0px !important;
-        gap: 0px !important;
-    }
+        div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
+        div[data-testid="stSidebar"] .stSelectbox label { color: #FFA500 !important; font-weight: bold !important; }
+        div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
+        div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
+        div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
+        [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
 
-    /* 지폐 카운터 익스팬더 내부 상단 여백 균형 일치 */
-    [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] {
-        padding-top: 6px !important;
-        padding-bottom: 8px !important;
-    }
+        /* 다크모드 검색창 & 입력창 고대비 흰색 글씨 고정 */
+        div[data-baseweb="input"] { background-color: #1e2130 !important; border: 1px solid #4B5563 !important; border-radius: 8px !important; }
+        div[data-baseweb="input"] input { color: #FFFFFF !important; font-size: 14px !important; }
 
-    /* ------------------------------------------------------------- */
-    /* [지폐 카운터 수동 튜닝 가이드 구역] */
-    /* ------------------------------------------------------------- */
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 100% !important;
-        
-        /* 튜닝 1. [50만동]과 [0] 사이 가로 간격 (기본: 10px) */
-        gap: 10px !important;
-        
-        /* 튜닝 2. 줄과 줄 사이 세로 간격 (기본: 3px, 겹침 방지) */
-        margin-bottom: 3px !important;
-        margin-top: 0px !important;
-        padding: 0px !important;
-    }
+        div[data-testid="stNumberInput"] button { display: none !important; }
+        div[data-testid="stNumberInput"] input { padding-right: 10px !important; }
+        div[data-testid="stNumberInput"] [data-baseweb="input"] { border-right-width: 1px !important; }
 
-    /* 좌측 라벨 컬럼 (50만동 텍스트 구역) */
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
-        flex: 0 0 55px !important;
-        width: 55px !important;
-        max-width: 55px !important;
-        min-width: 55px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: flex-end !important;
-        
-        /* 튜닝 3. 세로 높이 (입력창 높이와 동일하게 맞춤, 기본: 30px) */
-        height: 30px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
-        margin: 0px !important;
-        padding: 0px !important;
-        line-height: 30px !important;
-    }
+        /* 사이드바 상단 여백 회수 */
+        section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem !important; }
+        div[data-testid="stSidebarHeader"] { height: 35px !important; min-height: 35px !important; padding-top: 0px !important; padding-bottom: 0px !important; margin-bottom: 0px !important; }
+        div[data-testid="stSidebarContent"] { padding-top: 0px !important; }
+        div[data-testid="stSidebarUserContent"] { padding-top: 0px !important; }
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0px !important; gap: 0px !important; }
+        [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] { padding-top: 6px !important; padding-bottom: 8px !important; }
 
-    /* 우측 입력창 컬럼 (숫자 입력 박스 구역) */
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
-        /* 튜닝 4. 입력창 가로 폭 (기본: 85px) */
-        flex: 0 0 85px !important;
-        width: 85px !important;
-        max-width: 85px !important;
-        min-width: 85px !important;
-        
-        display: flex !important;
-        align-items: center !important;
-        height: 30px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput {
-        width: 85px !important;       /* 입력창 가로 폭과 동일 */
-        margin: 0px !important;
-        padding: 0px !important;
-        height: 30px !important;      /* 세로 높이 */
-    }
-    [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
-        width: 85px !important;       /* 입력창 가로 폭과 동일 */
-        min-height: 30px !important;  /* 세로 높이 */
-        height: 30px !important;      /* 세로 높이 */
-        border-radius: 6px !important;
-        padding: 0px !important;
-        display: flex !important;
-        align-items: center !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input {
-        height: 30px !important;      /* 세로 높이 */
-        font-size: 14px !important;   /* 입력 숫자 글자 크기 */
-        text-align: center !important;
-        padding: 0px !important;
-        line-height: 30px !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+        /* 실물현금 카운터 튜닝 스타일 */
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
+            display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: center !important; width: 100% !important; gap: 10px !important; margin-bottom: 3px !important; margin-top: 0px !important; padding: 0px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
+            flex: 0 0 55px !important; width: 55px !important; max-width: 55px !important; min-width: 55px !important; display: flex !important; align-items: center !important; justify-content: flex-end !important; height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
+            margin: 0px !important; padding: 0px !important; line-height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
+            flex: 0 0 85px !important; width: 85px !important; max-width: 85px !important; min-width: 85px !important; display: flex !important; align-items: center !important; height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput { width: 85px !important; margin: 0px !important; padding: 0px !important; height: 30px !important; }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] { width: 85px !important; min-height: 30px !important; height: 30px !important; border-radius: 6px !important; padding: 0px !important; display: flex !important; align-items: center !important; }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input { height: 30px !important; font-size: 14px !important; text-align: center !important; padding: 0px !important; line-height: 30px !important; }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    # ------------------ [☀️ 고대비 화이트 모드] ------------------
+    st.markdown("""
+        <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
+        <style>
+        .main { background-color: #F8FAFC; color: #0F172A; }
+        .kpi-box { background-color: #FFFFFF; padding: 20px; border-radius: 15px; border-left: 8px solid #F59E0B; margin-bottom: 20px; min-height: 130px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; }
+        .kpi-title { font-size: 15px; color: #64748B; margin-bottom: 10px; font-weight: 600; }
+        .kpi-value-krw { font-size: 26px; font-weight: bold; color: #0F172A; line-height: 1.1; }
+        .kpi-value-vnd { font-size: 18px; color: #D97706; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 600; }
+        div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
+
+        .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #F1F5F9; border-radius: 12px; border: 2px solid #F59E0B; box-shadow: 0px 2px 8px rgba(245, 158, 11, 0.15); }
+        .stTabs[data-baseweb="tab"] { height: 40px; background-color: #FFFFFF; border-radius: 8px !important; padding: 0px 10px !important; color: #475569 !important; border: 1px solid #CBD5E1; font-size: 14px !important; transition: all 0.3s ease; }
+        .stTabs[data-baseweb="tab"]:hover { background-color: #E2E8F0; color: #0F172A !important; }
+        .stTabs [aria-selected="true"] { background-color: #F59E0B !important; color: #FFFFFF !important; font-weight: 800 !important; box-shadow: 0px 4px 10px rgba(245, 158, 11, 0.3) !important; border: 1px solid #F59E0B !important; }
+
+        div[data-testid="stSidebar"] { background-color: #F1F5F9 !important; border-right: 1px solid #E2E8F0; }
+        div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #F59E0B !important; background-color: #FFFFFF !important; border-radius: 10px !important; color: #0F172A !important; }
+        div[data-testid="stSidebar"] .stSelectbox label { color: #D97706 !important; font-weight: bold !important; }
+        div[data-testid="stSidebar"] .stSelectbox label p { color: #B45309 !important; font-weight: bold !important; }
+        [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; border-color: #CBD5E1 !important; }
+
+        /* [핵심] 화이트모드 검색창 & 입력창 고대비 흑요석 블랙 글씨 강제 고정 */
+        div[data-baseweb="input"] { background-color: #FFFFFF !important; border: 1.5px solid #94A3B8 !important; border-radius: 8px !important; }
+        div[data-baseweb="input"] input { color: #0F172A !important; font-size: 14px !important; font-weight: 500 !important; }
+        div[data-baseweb="input"] input::placeholder { color: #94A3B8 !important; }
+
+        div[data-testid="stNumberInput"] button { display: none !important; }
+        div[data-testid="stNumberInput"] input { padding-right: 10px !important; }
+        div[data-testid="stNumberInput"] [data-baseweb="input"] { border-right-width: 1px !important; }
+
+        section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem !important; }
+        div[data-testid="stSidebarHeader"] { height: 35px !important; min-height: 35px !important; padding: 0px !important; margin-bottom: 0px !important; }
+        div[data-testid="stSidebarContent"] { padding-top: 0px !important; }
+        div[data-testid="stSidebarUserContent"] { padding-top: 0px !important; }
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0px !important; gap: 0px !important; }
+        [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] { padding-top: 6px !important; padding-bottom: 8px !important; background-color: #FFFFFF !important; border-radius: 8px; border: 1px solid #E2E8F0; }
+
+        /* 실물현금 카운터 화이트모드 스타일 */
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
+            display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: center !important; width: 100% !important; gap: 10px !important; margin-bottom: 3px !important; margin-top: 0px !important; padding: 0px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
+            flex: 0 0 55px !important; width: 55px !important; max-width: 55px !important; min-width: 55px !important; display: flex !important; align-items: center !important; justify-content: flex-end !important; height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
+            margin: 0px !important; padding: 0px !important; line-height: 30px !important; color: #1E293B !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
+            flex: 0 0 85px !important; width: 85px !important; max-width: 85px !important; min-width: 85px !important; display: flex !important; align-items: center !important; height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput { width: 85px !important; margin: 0px !important; padding: 0px !important; height: 30px !important; }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] { width: 85px !important; min-height: 30px !important; height: 30px !important; border-radius: 6px !important; padding: 0px !important; display: flex !important; align-items: center !important; background-color: #FFFFFF !important; border: 1.5px solid #CBD5E1 !important; }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input { height: 30px !important; font-size: 14px !important; text-align: center !important; padding: 0px !important; line-height: 30px !important; color: #0F172A !important; }
+        </style>
+    """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
 # 1.06.00 | Session State Orchestrator (동적 세션 상태 및 컨텍스트 초기화)
@@ -1309,7 +1294,7 @@ def sort_trips(trip_names):
 
 sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
 
-# 4.02.02 | Global Flight/SPI View Mode Switcher
+# 4.02.02 | Global Flight/SPI View Mode Switcher & Theme Switcher (우상단 테마 스위처 장착)
 # [Modified] 비교(SPI) 모드를 풀다운 메뉴의 가장 마지막 독립 메뉴로 승격
 SPECIAL_MODE = "📊 모든 여행지 물가비교"
 dropdown_options = sorted_trips + [SPECIAL_MODE]
@@ -1317,7 +1302,8 @@ dropdown_options = sorted_trips + [SPECIAL_MODE]
 if 'show_spi' not in st.session_state: st.session_state.show_spi = False
 curr_idx = len(sorted_trips) if st.session_state.show_spi else (sorted_trips.index(st.session_state.current_trip) if st.session_state.current_trip in sorted_trips else 0)
 
-c_trip_top, c_empty = st.columns([2, 2])
+# [핵심] 상단 2분할 배치: 좌측 '내 여행함' & 우측 '테마 스위처'
+c_trip_top, c_theme_top = st.columns([2.5, 1.5])
 with c_trip_top:
     sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", dropdown_options, index=curr_idx, label_visibility="collapsed")
     if sel_trip == SPECIAL_MODE:
@@ -1329,6 +1315,20 @@ with c_trip_top:
             st.session_state.show_spi = False
             st.session_state.current_trip = sel_trip
             st.rerun()
+
+with c_theme_top:
+    theme_idx = 0 if st.session_state.get('app_theme', "🌙 다크") == "🌙 다크" else 1
+    selected_theme = st.radio(
+        "테마 선택", 
+        ["🌙 다크", "☀️ 화이트"], 
+        index=theme_idx, 
+        horizontal=True, 
+        key="top_theme_radio", 
+        label_visibility="collapsed"
+    )
+    if selected_theme != st.session_state.get('app_theme'):
+        st.session_state.app_theme = selected_theme
+        st.rerun()
 
 st.divider()
 
