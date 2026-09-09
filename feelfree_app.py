@@ -3311,14 +3311,78 @@ else:
                 )
                 st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
             
-            # 6.04.03 | Donut Category Distribution Chart
+            # ------------------------------------------------------------------
+            # 6.04.03 | Donut Category Distribution Chart (중앙 미니멀 & 슬라이스 확대)
+            # ------------------------------------------------------------------
             st.subheader("🍕 지출비중")
             cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
-            fig_donut = px.pie(cat_pie, values='KRW_val', names='Macro_Category', hole=0.5, color_discrete_sequence=px.colors.qualitative.Set3)
-            fig_donut.update_traces(textposition='inside', textinfo='label+value+percent', texttemplate='%{label}<br>%{value:,.0f}원<br>%{percent:.1%}')
-            until_day = exp_df['Date'].max().split('(')[0]
-            fig_donut.add_annotation(text=f"<b>순지출(Net)</b><br>{total_trip_krw:,.0f} 원<br><span style='font-size:10px'>Until {until_day}</span>", showarrow=False, font=dict(size=16))
-            fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
+            
+            # [수정] 도넛 구멍 축소: 0.5 -> 0.35 (파이 조각 두께 40% 확장으로 글씨 확대 공간 확보)
+            fig_donut = px.pie(
+                cat_pie, 
+                values='KRW_val', 
+                names='Macro_Category', 
+                hole=0.35, 
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            
+            # 파이 조각 내부 글자 13.5px 볼드로 시원시원하게 확대
+            fig_donut.update_traces(
+                textposition='inside', 
+                textinfo='label+value+percent', 
+                texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>(%{percent:.1%})",
+                insidetextfont=dict(size=13.5)
+            )
+
+            # 여행 상태 연동 중앙 텍스트 산출 (출발전/진행중/종료 연동)
+            korea_dep_rows = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
+            dep_rows_all = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
+            t_dep = korea_dep_rows if not korea_dep_rows.empty else (dep_rows_all[~dep_rows_all['Category'].str.contains('_', na=False)] if not dep_rows_all.empty else dep_rows_all)
+            
+            dep_dt_f = None
+            if not t_dep.empty:
+                m_df = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_dep.iloc[0]['Date']))
+                if m_df: dep_dt_f = datetime.strptime(m_df.group(0), "%Y-%m-%d").date()
+
+            korea_arr_rows = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
+            arr_rows_all = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False)]
+            t_arr = korea_arr_rows if not korea_arr_rows.empty else (arr_rows_all[~arr_rows_all['Category'].str.contains('_', na=False)] if not arr_rows_all.empty else arr_rows_all)
+            
+            arr_dt_f = None
+            if not t_arr.empty:
+                m_af = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_arr.iloc[-1]['Date']))
+                if m_af: arr_dt_f = datetime.strptime(m_af.group(0), "%Y-%m-%d").date()
+
+            today_f = datetime.now(st.session_state.current_tz).date()
+
+            # [사용자 정의 공식 연동]
+            if dep_dt_f and arr_dt_f:
+                cal_days_f = (arr_dt_f - dep_dt_f).days + 1
+                if today_f < dep_dt_f:
+                    center_sub_text = f"({cal_days_f}일예정)"
+                elif dep_dt_f <= today_f <= arr_dt_f:
+                    curr_k = (today_f - dep_dt_f).days + 1
+                    center_sub_text = f"({curr_k}일차)"
+                else:
+                    center_sub_text = f"({cal_days_f}일간)"
+            else:
+                center_sub_text = f"({total_nights}일간)"
+
+            # [핵심] '순지출(Net)' 삭제, 금액 선명한 볼드 유지, 아래에 상태 표기 결합
+            center_annotation_html = f"<b>{total_trip_krw:,.0f}원</b><br><span style='font-size:12px; color:#A0AEC0;'>{center_sub_text}</span>"
+            
+            fig_donut.add_annotation(
+                text=center_annotation_html, 
+                showarrow=False, 
+                align="center",
+                font=dict(size=16)
+            )
+            
+            fig_donut.update_layout(
+                height=600, 
+                margin=dict(l=10, r=10, t=30, b=80), 
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+            )
             st.plotly_chart(fig_donut, use_container_width=True)
 
 # 6.04.04 | Build Version & Sync Timestamp Footer
