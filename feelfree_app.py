@@ -3179,14 +3179,38 @@ else:
                     
                     st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
 
-                # 6.03.04 | Multi-Node Local Expense Treemap
+                # --------------------------------------------------------------
+                # 6.03.04 | Multi-Node Local Expense Treemap (결측치 & 0원 완전 방어형)
+                # --------------------------------------------------------------
                 if len(TRIP_CONFIGS[st.session_state.current_trip]["nodes"]) > 1 and not ovr_df.empty:
-                    st.divider()
-                    fig_country = px.treemap(ovr_df, path=['Country', 'Macro_Category', 'Category'], values=y_col, color='Country', color_discrete_sequence=px.colors.qualitative.Pastel)
-                    fig_country.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
-                    fig_country.update_layout(margin=dict(l=10, r=10, t=30, b=30), height=500, uniformtext=dict(minsize=10, mode='hide'))
-                    st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지지출(Treemap)</h4>", unsafe_allow_html=True)
-                    st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
+                    # [핵심] 실제 지출(y_col > 0)만 추출하고 결측치를 완벽히 메워 ValueError 원천 차단
+                    country_chart_df = ovr_df[ovr_df[y_col] > 0].copy()
+                    
+                    if not country_chart_df.empty:
+                        st.divider()
+                        st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지지출(Treemap)</h4>", unsafe_allow_html=True)
+                        
+                        country_chart_df['Macro_Category'] = country_chart_df['Category'].map(MACRO_MAP).fillna("기타")
+                        country_chart_df['Country'] = country_chart_df['Country'].fillna("기타")
+                        country_chart_df['Category'] = country_chart_df['Category'].fillna("기타")
+                        
+                        fig_country = px.treemap(
+                            country_chart_df, 
+                            path=['Country', 'Macro_Category', 'Category'], 
+                            values=y_col, 
+                            color='Country', 
+                            color_discrete_sequence=px.colors.qualitative.Pastel
+                        )
+                        fig_country.update_traces(
+                            texttemplate="<b>%{label}</b><br>%{value:,.0f}", 
+                            hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}<extra></extra>",
+                            textposition='middle center'
+                        )
+                        fig_country.update_layout(
+                            margin=dict(l=10, r=10, t=10, b=20), 
+                            height=520
+                        )
+                        st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
 
                 # 6.03.05 | Net Settlement & Refund Breakdown Card
                 st.divider()
@@ -3257,14 +3281,35 @@ else:
             with k3: st.markdown(kpi_box("현지 지출 총액", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
             with k4: st.markdown(kpi_box(f"현지 일상/생존 1일 평균", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
             
-            # 6.04.02 | Comprehensive Expense Treemap Matrix
+            # ------------------------------------------------------------------
+            # 6.04.02 | Comprehensive Expense Treemap Matrix (우측 세로 컬러바 완전 삭제)
+            # ------------------------------------------------------------------
             st.subheader("🌳 지출분석 (Treemap)")
-            chart_df = exp_df.copy()
-            chart_df['Short_Desc'] = chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
-            fig_tree = px.treemap(chart_df, path=['Macro_Category', 'Category', 'Short_Desc'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
-            fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}", textposition='middle center', insidetextfont=dict(size=16))
-            fig_tree.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=650, uniformtext=dict(minsize=11, mode='hide'))
-            st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
+            chart_df = exp_df[exp_df['KRW_val'] > 0].copy()
+            if not chart_df.empty:
+                chart_df['Short_Desc'] = chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
+                chart_df['Macro_Category'] = chart_df['Category'].map(MACRO_MAP).fillna("기타")
+                
+                fig_tree = px.treemap(
+                    chart_df, 
+                    path=['Macro_Category', 'Category', 'Short_Desc'], 
+                    values='KRW_val', 
+                    color='KRW_val', 
+                    color_continuous_scale='Greens'
+                )
+                fig_tree.update_traces(
+                    texttemplate="<b>%{label}</b><br>%{value:,.0f}원", 
+                    hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", 
+                    textposition='middle center', 
+                    insidetextfont=dict(size=16)
+                )
+                # [핵심] coloraxis_showscale=False 로 우측 세로 막대 완전 삭제 & 가로 100% 전폭 확장!
+                fig_tree.update_layout(
+                    margin=dict(l=0, r=0, t=20, b=10), 
+                    height=650,
+                    coloraxis_showscale=False
+                )
+                st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
             
             # 6.04.03 | Donut Category Distribution Chart
             st.subheader("🍕 지출비중")
