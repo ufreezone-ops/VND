@@ -86,28 +86,26 @@ auto_update_log_to_gsheets()
 # ------------------------------------------------------------------------------
 # 1.04.00 | Dynamic Multi-Node Provisioning (관제탑 로드 및 다중 국가 동적 설정)
 # ------------------------------------------------------------------------------
-# 1.04.01 | Control Tower Config Loader & Node Assembler (진짜 에러 출력 엔진)
-@st.cache_data(ttl=0)
+# 1.04.01 | Control Tower Config Loader & Node Assembler
+# [Modified] 다중 국가 지원(Stay_Mapping 파싱 로직 추가)이 적용된 동적 로더
+@st.cache_data(ttl=600)
 def get_trip_configs():
     cfg_df = None
-    last_error_msg = ""
     for attempt in range(3):
         try:
-            cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+            cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="10m")
             if cfg_df is not None and not cfg_df.empty:
                 break
         except Exception as e:
-            last_error_msg = str(e)
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(2.5)
                 continue
-            # [수정] 감춰져 있던 진짜 에러 원인을 화면에 적나라하게 출력!
-            st.error(f"🚨 **구글 시트 로드 실패 원인:** `{last_error_msg}`")
-            st.info(f"💡 현재 시트 설정: 탭 이름='{CONFIG_SHEET}', 재시도={attempt+1}회")
+            st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}') 로드 실패 (API 과부하).**")
+            st.info("💡 단기간에 많은 접속으로 구글 시트 요청 한도에 도달했습니다. 약 10초 후 새로고침 해주세요.")
             st.stop()
             
     if cfg_df is None or cfg_df.empty:
-        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}') 시트가 비어있습니다.**")
+        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}')이 비어있습니다.**")
         st.stop()
         
     # 1.04.02 | Multi-Country Node Financial Parser (국가명에 따른 현지 통화 자동 추론 헬퍼)
@@ -180,147 +178,186 @@ def get_trip_configs():
 TRIP_CONFIGS = get_trip_configs()
 
 # ------------------------------------------------------------------------------
-# 1.05.00 | GUI Design System (커스텀 다크 테마 및 컴포넌트 CSS 주입)
+# 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (헤더 가림 방지 및 황금비율 여백)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
-st.markdown("""
-    <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
-    <style>
-    .main { background-color: #0e1117; }
-    .kpi-box { background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 8px solid #FF8C00; margin-bottom: 20px; min-height: 130px; box-shadow: 4px 6px 15px rgba(0,0,0,0.5); }
-    .kpi-title { font-size: 15px; color: #cccccc; margin-bottom: 10px; font-weight: 600; }
-    .kpi-value-krw { font-size: 26px; font-weight: bold; color: #ffffff; line-height: 1.1; }
-    .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
-    div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
+if 'app_theme' not in st.session_state:
+    st.session_state.app_theme = "🌙 다크"
 
-    .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #161a25; border-radius: 12px; border: 2px solid #FFA500; box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); }
-    .stTabs[data-baseweb="tab"] { height: 40px; background-color: #262b3b; border-radius: 8px !important; padding: 0px 10px !important; color: #CCCCCC !important; border: 1px solid #333; font-size: 14px !important; transition: all 0.3s ease; }
-    .stTabs[data-baseweb="tab"]:hover { background-color: #3d4455; color: #ffffff !important; }
-    .stTabs [aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: 800 !important; box-shadow: 0px 4px 12px rgba(255, 165, 0, 0.4) !important; border: 1px solid #FFA500 !important; }
+current_theme = st.session_state.app_theme
 
-    div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
-    div[data-testid="stSidebar"] .stSelectbox label { color: #FFA500 !important; font-weight: bold !important; }
-    div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
-    div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
-    div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
-    [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
+if current_theme == "🌙 다크":
+    # ------------------ [🌙 프리미엄 다크 테마] ------------------
+    st.markdown("""
+        <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
+        <style>
+        /* 📱 [상단 헤더 가림 완벽 방어 + 최적 여백] */
+        .block-container {
+            padding-top: 3.5rem !important;  /* 상단 헤더 높이만큼 안전하게 확보 */
+            padding-bottom: 2rem !important;
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+        }
 
-    /* 숫자 입력창 기본 화살표 버튼 제거 */
-    div[data-testid="stNumberInput"] button {
-        display: none !important;
-    }
-    div[data-testid="stNumberInput"] input {
-        padding-right: 10px !important;
-    }
-    div[data-testid="stNumberInput"] [data-baseweb="input"] {
-        border-right-width: 1px !important;
-    }
+        /* 여행 선택 드롭다운 여백 정규화 */
+        div[data-testid="stSelectbox"] {
+            margin-top: 0px !important;
+            margin-bottom: 0px !important;
+        }
 
-    /* 사이드바 최상단 텅 빈 공간 완전 회수 */
-    section[data-testid="stSidebar"] > div:first-child {
-        padding-top: 1rem !important;
-    }
-    div[data-testid="stSidebarHeader"] {
-        height: 35px !important;
-        min-height: 35px !important;
-        padding-top: 0px !important;
-        padding-bottom: 0px !important;
-        margin-bottom: 0px !important;
-    }
-    div[data-testid="stSidebarContent"] {
-        padding-top: 0px !important;
-    }
-    div[data-testid="stSidebarUserContent"] {
-        padding-top: 0px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        padding-top: 0px !important;
-        gap: 0px !important;
-    }
+        /* 구분선(st.divider) 간격 슬림화 */
+        hr {
+            margin: 0.4rem 0 0.6rem 0 !important;
+        }
 
-    /* 지폐 카운터 익스팬더 내부 상단 여백 균형 일치 */
-    [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] {
-        padding-top: 6px !important;
-        padding-bottom: 8px !important;
-    }
+        /* 메인 타이틀(후에 2026 등) 상단 여백 제거 */
+        h1 {
+            padding-top: 0rem !important;
+            margin-top: 0rem !important;
+            padding-bottom: 0.2rem !important;
+            margin-bottom: 0.4rem !important;
+        }
 
-    /* ------------------------------------------------------------- */
-    /* [지폐 카운터 수동 튜닝 가이드 구역] */
-    /* ------------------------------------------------------------- */
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 100% !important;
-        
-        /* 튜닝 1. [50만동]과 [0] 사이 가로 간격 (기본: 10px) */
-        gap: 10px !important;
-        
-        /* 튜닝 2. 줄과 줄 사이 세로 간격 (기본: 3px, 겹침 방지) */
-        margin-bottom: 3px !important;
-        margin-top: 0px !important;
-        padding: 0px !important;
-    }
+        .main { background-color: #0e1117; color: #ffffff; }
+        .kpi-box { background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 8px solid #FF8C00; margin-bottom: 20px; min-height: 130px; box-shadow: 4px 6px 15px rgba(0,0,0,0.5); }
+        .kpi-title { font-size: 15px; color: #cccccc; margin-bottom: 10px; font-weight: 600; }
+        .kpi-value-krw { font-size: 26px; font-weight: bold; color: #ffffff; line-height: 1.1; }
+        .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
+        div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-    /* 좌측 라벨 컬럼 (50만동 텍스트 구역) */
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
-        flex: 0 0 55px !important;
-        width: 55px !important;
-        max-width: 55px !important;
-        min-width: 55px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: flex-end !important;
-        
-        /* 튜닝 3. 세로 높이 (입력창 높이와 동일하게 맞춤, 기본: 30px) */
-        height: 30px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
-        margin: 0px !important;
-        padding: 0px !important;
-        line-height: 30px !important;
-    }
+        .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #161a25; border-radius: 12px; border: 2px solid #FFA500; box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); }
+        .stTabs[data-baseweb="tab"] { height: 40px; background-color: #262b3b; border-radius: 8px !important; padding: 0px 10px !important; color: #CCCCCC !important; border: 1px solid #333; font-size: 14px !important; transition: all 0.3s ease; }
+        .stTabs[data-baseweb="tab"]:hover { background-color: #3d4455; color: #ffffff !important; }
+        .stTabs [aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: 800 !important; box-shadow: 0px 4px 12px rgba(255, 165, 0, 0.4) !important; border: 1px solid #FFA500 !important; }
 
-    /* 우측 입력창 컬럼 (숫자 입력 박스 구역) */
-    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
-        /* 튜닝 4. 입력창 가로 폭 (기본: 85px) */
-        flex: 0 0 85px !important;
-        width: 85px !important;
-        max-width: 85px !important;
-        min-width: 85px !important;
-        
-        display: flex !important;
-        align-items: center !important;
-        height: 30px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput {
-        width: 85px !important;       /* 입력창 가로 폭과 동일 */
-        margin: 0px !important;
-        padding: 0px !important;
-        height: 30px !important;      /* 세로 높이 */
-    }
-    [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] {
-        width: 85px !important;       /* 입력창 가로 폭과 동일 */
-        min-height: 30px !important;  /* 세로 높이 */
-        height: 30px !important;      /* 세로 높이 */
-        border-radius: 6px !important;
-        padding: 0px !important;
-        display: flex !important;
-        align-items: center !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input {
-        height: 30px !important;      /* 세로 높이 */
-        font-size: 14px !important;   /* 입력 숫자 글자 크기 */
-        text-align: center !important;
-        padding: 0px !important;
-        line-height: 30px !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+        div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
+        div[data-testid="stSidebar"] .stSelectbox label { color: #FFA500 !important; font-weight: bold !important; }
+        div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
+        div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
+        div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
+        [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
+
+        /* 다크모드 검색창 & 입력창 고대비 흰색 글씨 고정 */
+        div[data-baseweb="input"] { background-color: #1e2130 !important; border: 1px solid #4B5563 !important; border-radius: 8px !important; }
+        div[data-baseweb="input"] input { color: #FFFFFF !important; font-size: 14px !important; }
+
+        div[data-testid="stNumberInput"] button { display: none !important; }
+        div[data-testid="stNumberInput"] input { padding-right: 10px !important; }
+        div[data-testid="stNumberInput"] [data-baseweb="input"] { border-right-width: 1px !important; }
+
+        /* 사이드바 상단 여백 회수 */
+        section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem !important; }
+        div[data-testid="stSidebarHeader"] { height: 35px !important; min-height: 35px !important; padding-top: 0px !important; padding-bottom: 0px !important; margin-bottom: 0px !important; }
+        div[data-testid="stSidebarContent"] { padding-top: 0px !important; }
+        div[data-testid="stSidebarUserContent"] { padding-top: 0px !important; }
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0px !important; gap: 0px !important; }
+        [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] { padding-top: 6px !important; padding-bottom: 8px !important; }
+
+        /* 실물현금 카운터 튜닝 스타일 */
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
+            display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: center !important; width: 100% !important; gap: 10px !important; margin-bottom: 3px !important; margin-top: 0px !important; padding: 0px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
+            flex: 0 0 55px !important; width: 55px !important; max-width: 55px !important; min-width: 55px !important; display: flex !important; align-items: center !important; justify-content: flex-end !important; height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
+            margin: 0px !important; padding: 0px !important; line-height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
+            flex: 0 0 85px !important; width: 85px !important; max-width: 85px !important; min-width: 85px !important; display: flex !important; align-items: center !important; height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput { width: 85px !important; margin: 0px !important; padding: 0px !important; height: 30px !important; }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] { width: 85px !important; min-height: 30px !important; height: 30px !important; border-radius: 6px !important; padding: 0px !important; display: flex !important; align-items: center !important; }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input { height: 30px !important; font-size: 14px !important; text-align: center !important; padding: 0px !important; line-height: 30px !important; }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    # ------------------ [☀️ 고대비 화이트 모드] ------------------
+    st.markdown("""
+        <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
+        <style>
+        /* 📱 [상단 헤더 가림 완벽 방어 + 최적 여백] */
+        .block-container {
+            padding-top: 3.5rem !important;  /* 상단 헤더 높이만큼 안전하게 확보 */
+            padding-bottom: 2rem !important;
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+        }
+
+        /* 여행 선택 드롭다운 여백 정규화 */
+        div[data-testid="stSelectbox"] {
+            margin-top: 0px !important;
+            margin-bottom: 0px !important;
+        }
+
+        /* 구분선(st.divider) 간격 슬림화 */
+        hr {
+            margin: 0.4rem 0 0.6rem 0 !important;
+        }
+
+        /* 메인 타이틀(후에 2026 등) 상단 여백 제거 */
+        h1 {
+            padding-top: 0rem !important;
+            margin-top: 0rem !important;
+            padding-bottom: 0.2rem !important;
+            margin-bottom: 0.4rem !important;
+        }
+
+        .main { background-color: #F8FAFC; color: #0F172A; }
+        .kpi-box { background-color: #FFFFFF; padding: 20px; border-radius: 15px; border-left: 8px solid #F59E0B; margin-bottom: 20px; min-height: 130px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; }
+        .kpi-title { font-size: 15px; color: #64748B; margin-bottom: 10px; font-weight: 600; }
+        .kpi-value-krw { font-size: 26px; font-weight: bold; color: #0F172A; line-height: 1.1; }
+        .kpi-value-vnd { font-size: 18px; color: #D97706; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 600; }
+        div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
+
+        .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #F1F5F9; border-radius: 12px; border: 2px solid #F59E0B; box-shadow: 0px 2px 8px rgba(245, 158, 11, 0.15); }
+        .stTabs[data-baseweb="tab"] { height: 40px; background-color: #FFFFFF; border-radius: 8px !important; padding: 0px 10px !important; color: #475569 !important; border: 1px solid #CBD5E1; font-size: 14px !important; transition: all 0.3s ease; }
+        .stTabs[data-baseweb="tab"]:hover { background-color: #E2E8F0; color: #0F172A !important; }
+        .stTabs [aria-selected="true"] { background-color: #F59E0B !important; color: #FFFFFF !important; font-weight: 800 !important; box-shadow: 0px 4px 10px rgba(245, 158, 11, 0.3) !important; border: 1px solid #F59E0B !important; }
+
+        div[data-testid="stSidebar"] { background-color: #F1F5F9 !important; border-right: 1px solid #E2E8F0; }
+        div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #F59E0B !important; background-color: #FFFFFF !important; border-radius: 10px !important; color: #0F172A !important; }
+        div[data-testid="stSidebar"] .stSelectbox label { color: #D97706 !important; font-weight: bold !important; }
+        div[data-testid="stSidebar"] .stSelectbox label p { color: #B45309 !important; font-weight: bold !important; }
+        [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; border-color: #CBD5E1 !important; }
+
+        /* [핵심] 화이트모드 검색창 & 입력창 고대비 흑요석 블랙 글씨 강제 고정 */
+        div[data-baseweb="input"] { background-color: #FFFFFF !important; border: 1.5px solid #94A3B8 !important; border-radius: 8px !important; }
+        div[data-baseweb="input"] input { color: #0F172A !important; font-size: 14px !important; font-weight: 500 !important; }
+        div[data-baseweb="input"] input::placeholder { color: #94A3B8 !important; }
+
+        div[data-testid="stNumberInput"] button { display: none !important; }
+        div[data-testid="stNumberInput"] input { padding-right: 10px !important; }
+        div[data-testid="stNumberInput"] [data-baseweb="input"] { border-right-width: 1px !important; }
+
+        section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem !important; }
+        div[data-testid="stSidebarHeader"] { height: 35px !important; min-height: 35px !important; padding: 0px !important; margin-bottom: 0px !important; }
+        div[data-testid="stSidebarContent"] { padding-top: 0px !important; }
+        div[data-testid="stSidebarUserContent"] { padding-top: 0px !important; }
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0px !important; gap: 0px !important; }
+        [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] { padding-top: 6px !important; padding-bottom: 8px !important; background-color: #FFFFFF !important; border-radius: 8px; border: 1px solid #E2E8F0; }
+
+        /* 실물현금 카운터 화이트모드 스타일 */
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
+            display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: center !important; width: 100% !important; gap: 10px !important; margin-bottom: 3px !important; margin-top: 0px !important; padding: 0px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
+            flex: 0 0 55px !important; width: 55px !important; max-width: 55px !important; min-width: 55px !important; display: flex !important; align-items: center !important; justify-content: flex-end !important; height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
+            margin: 0px !important; padding: 0px !important; line-height: 30px !important; color: #1E293B !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
+            flex: 0 0 85px !important; width: 85px !important; max-width: 85px !important; min-width: 85px !important; display: flex !important; align-items: center !important; height: 30px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput { width: 85px !important; margin: 0px !important; padding: 0px !important; height: 30px !important; }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] { width: 85px !important; min-height: 30px !important; height: 30px !important; border-radius: 6px !important; padding: 0px !important; display: flex !important; align-items: center !important; background-color: #FFFFFF !important; border: 1.5px solid #CBD5E1 !important; }
+        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input { height: 30px !important; font-size: 14px !important; text-align: center !important; padding: 0px !important; line-height: 30px !important; color: #0F172A !important; }
+        </style>
+    """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
 # 1.06.00 | Session State Orchestrator (동적 세션 상태 및 컨텍스트 초기화)
@@ -1316,21 +1353,23 @@ sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
 SPECIAL_MODE = "📊 모든 여행지 물가비교"
 dropdown_options = sorted_trips + [SPECIAL_MODE]
 
-if 'show_spi' not in st.session_state: st.session_state.show_spi = False
+if 'show_spi' not in st.session_state: 
+    st.session_state.show_spi = False
+
 curr_idx = len(sorted_trips) if st.session_state.show_spi else (sorted_trips.index(st.session_state.current_trip) if st.session_state.current_trip in sorted_trips else 0)
 
-c_trip_top, c_empty = st.columns([2, 2])
-with c_trip_top:
-    sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", dropdown_options, index=curr_idx, label_visibility="collapsed")
-    if sel_trip == SPECIAL_MODE:
-        if not st.session_state.show_spi:
-            st.session_state.show_spi = True
-            st.rerun()
-    else:
-        if st.session_state.show_spi or sel_trip != st.session_state.current_trip:
-            st.session_state.show_spi = False
-            st.session_state.current_trip = sel_trip
-            st.rerun()
+# [수정] 2분할 컬럼 및 우측 라디오 테마 버튼 삭제 -> 단독 풀다운 배치
+sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", dropdown_options, index=curr_idx, label_visibility="collapsed")
+
+if sel_trip == SPECIAL_MODE:
+    if not st.session_state.show_spi:
+        st.session_state.show_spi = True
+        st.rerun()
+else:
+    if st.session_state.show_spi or sel_trip != st.session_state.current_trip:
+        st.session_state.show_spi = False
+        st.session_state.current_trip = sel_trip
+        st.rerun()
 
 st.divider()
 
@@ -2021,8 +2060,8 @@ else:
                 if append_new_data(pd.concat(new_rows, ignore_index=True)):
                     st.success("항공권과 일정이 모두 기록되었습니다!"); time.sleep(1); st.rerun()
                     
-        # # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 특수)
-        # [Modified] 호텔 모드 (결제수단 동적 매핑 & f-string 문법 에러 해결)
+        # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 특수)
+        # [Modified] 호텔 모드 (결제수단 동적 매핑)
         elif mode == "🏨 호텔(특수)":
             st.subheader("🏨 호텔/숙소 예약 상세 기록")
             c1, c2 = st.columns(2)
@@ -2030,13 +2069,14 @@ else:
                 h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com")
                 h_name = st.text_input("2. 호텔명", placeholder="예: 인터콘티넨털 호치민")
                 h_checkin = st.date_input("3. 체크인", value=sel_date)
+                # [Added] '해외송금(한국계좌)' 옵션 추가
                 h_asset = st.selectbox("4. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
             with c2:
                 h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1)
                 h_checkout = h_checkin + timedelta(days=h_nights)
                 st.caption(f"📅 체크아웃 예정: {h_checkout.strftime('%Y-%m-%d')}")
                 h_detail = st.text_area("6. 내용 (룸타입/특징)", placeholder="예: 디럭스 더블, 수영장뷰, 30m2", height=68)
-                h_curr = st.selectbox("7. 결제 통화", ["KRW", "JPY", "VND", "USD", "EUR", "PHP", "CNY", "TRY"], key="h_curr")
+                h_curr = st.selectbox("7. 결제 통화", ["KRW", "VND", "USD", "PHP", "EUR", "CNY", "TRY"], key="h_curr")
 
             c3, c4, c5 = st.columns(3)
             with c3: h_amt = st.number_input(f"8. 결제 금액({h_curr})", min_value=0.0, step=1.0)
@@ -2050,10 +2090,7 @@ else:
                 if "트래블카드" in h_asset:
                     clean_asset = f"트래블카드({h_curr})"
                     
-                # [Fixed] f-string 내부 백슬래시(\) 문법 에러 완전 박멸
-                clean_detail = h_detail.replace("\n", " ")
-                full_desc = f"[{h_gw}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout.strftime('%m/%d')}) | {clean_detail}"
-                
+                full_desc = f"[{h_gw}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else ""}])
                 if append_new_data(new_row): st.rerun()
                     
@@ -2361,7 +2398,7 @@ else:
             if save_data(ledger_df):
                 st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
                 
-        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (완전무결 한글 요일 복원형)
+        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (다크/화이트 듀얼 고대비 지브라)
         if not display_df.empty: 
             display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
             display_df = display_df.reindex(columns=FINAL_COLUMNS)
@@ -2390,7 +2427,7 @@ else:
                     
                 st.write(f"🔎 검색 결과: {len(render_df)}건")
 
-                # 1. 출국일 및 입국일 정밀 파싱
+                # 1. [수정 완료] 출국일(dep_dt) 및 입국일(arr_dt) 무결점 통짜 파싱 (에러 원천 차단)
                 dep_rows = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
                 korea_dep = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
                 target_dep_row = korea_dep if not korea_dep.empty else dep_rows
@@ -2398,7 +2435,8 @@ else:
                 dep_dt, arr_dt = None, None
                 if not target_dep_row.empty:
                     m_dep = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_dep_row.iloc[0]['Date']))
-                    if m_dep: dep_dt = datetime.strptime(m_dep.group(1), "%Y-%m-%d").date()
+                    if m_dep: 
+                        dep_dt = datetime.strptime(m_dep.group(1), "%Y-%m-%d").date()
 
                 arr_rows = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
                 korea_arr = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
@@ -2406,9 +2444,10 @@ else:
                 
                 if not target_arr_row.empty:
                     m_arr = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_arr_row.iloc[-1]['Date']))
-                    if m_arr: arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
+                    if m_arr: 
+                        arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
 
-                unique_dates = sorted(list(set(re.search(r'(\d{4}-\d{2}-\d{2})', str(d)).group(1) for d in render_df['Date'] if re.search(r'(\d{4}-\d{2}-\d{2})', str(d)))))
+                unique_dates = sorted(list(set(re.search(r'(\d{4}-\d{2})-(\d{2})', str(d)).group(0) for d in render_df['Date'] if re.search(r'(\d{4}-\d{2})-(\d{2})', str(d)))))
                 date_to_group = {d: i % 2 for i, d in enumerate(unique_dates)}
 
                 def is_real_departure(cat, cur_d):
@@ -2425,7 +2464,7 @@ else:
                         return True
                     return False
 
-                # 2. [완전무결 요일 계산 엔진] 영어/한글 혼재 상관없이 100% 한글 요일 자체 연산
+                # 2. 날짜 포맷터 (08/09(일) 🏷️사전 형태 압축)
                 day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                 def format_display_date_se(row):
                     orig_d = str(row['Date']).strip()
@@ -2474,29 +2513,49 @@ else:
                 if is_single_country and 'Country' in styled_render_df.columns:
                     styled_render_df = styled_render_df.drop(columns=['Country'])
 
-                # 4. 반투명 노란색 지브라 스타일러
+                # 4. 다크/화이트 모드 실시간 자동 연동 지브라 스타일러
+                is_dark_theme = (st.session_state.get('app_theme', "🌙 다크") == "🌙 다크")
+                
                 def style_journey_rows_se(row):
                     cat = str(row.get('Category', '')).strip()
                     orig_d = str(render_df.loc[row.name, 'Date'])
-                    m = re.search(r'(\d{4}-\d{2}-\d{2})', orig_d)
+                    m = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
                     if not m: return [''] * len(row)
-                    pure_date = m.group(1)
+                    pure_date = m.group(0)
                     cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
                     
+                    # (1) [출국일] 스타일
                     if is_real_departure(cat, cur_d):
-                        return ['background-color: #5c3d00; color: #FFD700; font-weight: bold;'] * len(row)
+                        if is_dark_theme:
+                            return ['background-color: #5c3d00; color: #FFD700; font-weight: bold;'] * len(row)
+                        else:
+                            return ['background-color: #FEF3C7; color: #92400E; font-weight: bold;'] * len(row)
+                            
+                    # (2) [귀국일] 스타일
                     if is_real_arrival(cat, cur_d):
-                        return ['background-color: #064e3b; color: #34D399; font-weight: bold;'] * len(row)
+                        if is_dark_theme:
+                            return ['background-color: #064e3b; color: #34D399; font-weight: bold;'] * len(row)
+                        else:
+                            return ['background-color: #D1FAE5; color: #065F46; font-weight: bold;'] * len(row)
 
+                    # (3) [사전결제] 스타일
                     if dep_dt:
                         diff = (cur_d - dep_dt).days
-                        if diff < 0: return ['color: #71717A;'] * len(row)
+                        if diff < 0:
+                            return ['color: #71717A;'] * len(row) if is_dark_theme else ['color: #64748B;'] * len(row)
 
+                    # (4) [여행 중 지브라 교대 스타일]
                     grp = date_to_group.get(pure_date, 0)
                     if grp == 1:
-                        return ['background-color: rgba(255, 215, 0, 0.13); color: #FFFDF0; font-weight: 500;'] * len(row)
+                        if is_dark_theme:
+                            return ['background-color: rgba(255, 215, 0, 0.13); color: #FFFDF0; font-weight: 500;'] * len(row)
+                        else:
+                            return ['background-color: #F1F5F9; color: #0F172A; font-weight: 600;'] * len(row)
                     else:
-                        return ['color: #CBD5E1;'] * len(row)
+                        if is_dark_theme:
+                            return ['color: #CBD5E1;'] * len(row)
+                        else:
+                            return ['background-color: #FFFFFF; color: #334155;'] * len(row)
 
                 styled_table = styled_render_df.style.apply(style_journey_rows_se, axis=1)
                 
@@ -2511,7 +2570,7 @@ else:
                 num_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
                 styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
                 
-                # 5. 일련번호 삭제(hide_index=True) & 날짜 최적 너비(width=120) & 네모칸 삭제
+                # 5. 일련번호 삭제 & 날짜 최적 너비 & 글자 터치 즉시 선택
                 col_cfg = {
                     "Date": st.column_config.TextColumn("날짜", width=120),
                     "Category": st.column_config.TextColumn("항목", width="small"),
@@ -2533,9 +2592,7 @@ else:
                 elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
                     selected_idx = df_event.selection.rows[0]
 
-                # --------------------------------------------------------------
-                # 6.02.04 & 6.02.05 | Detail Voucher Viewer & Inline Editor (개별 영수증 삭제 탑재)
-                # --------------------------------------------------------------
+                # 6.02.04 | Detail Voucher Viewer & Smart KRW Currency Translator
                 if selected_idx is not None:
                     real_idx = render_df.index[selected_idx] 
                     row_data = display_df.loc[real_idx]
@@ -2716,7 +2773,7 @@ else:
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
                 # --------------------------------------------------------------
-                # 6.03.00-A | 달력 기반 31일 무결점 날짜 시퀀스 & 1일 평균 엔진
+                # 6.03.00-A | 여행 라이프사이클(예정->X일차->N일간) 정밀 판별 엔진
                 # --------------------------------------------------------------
                 import math
 
@@ -2764,7 +2821,6 @@ else:
                         arr_date_str = m_arr.group(0)
                         arr_dt = datetime.strptime(arr_date_str, "%Y-%m-%d").date()
 
-                # 사전결제 판별: 출국일 이전 지출은 사전결제로 격리
                 def check_is_fixed_cost(row):
                     orig_d = str(row['Date']).strip()
                     m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
@@ -2791,9 +2847,7 @@ else:
                 in_period_mask = exp_df.apply(is_in_trip_period, axis=1) if (dep_date_str or arr_date_str) else True
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국'])) & in_period_mask].copy()
 
-                # --------------------------------------------------------------
-                # [핵심] 출국일부터 귀국일까지 31일 달력 날짜 100% 완전 생성 (이동일 0원 복원)
-                # --------------------------------------------------------------
+                # [달력 기반 전체 여정 100% 보존] 출국일부터 귀국일까지 모든 날짜 생성 (이동일 0원 대기)
                 day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                 if dep_dt and arr_dt and dep_dt <= arr_dt:
                     total_calendar_days = (arr_dt - dep_dt).days + 1
@@ -2808,7 +2862,6 @@ else:
                     if missing_dates:
                         dummy_rows = []
                         for md in missing_dates:
-                            # 이전 날짜의 국가 계승
                             prev_part = ovr_df[ovr_df['Date_Clean'] < md]
                             last_country = prev_part.iloc[-1]['Country'] if not prev_part.empty else (list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())[0])
                             
@@ -2840,7 +2893,7 @@ else:
                     total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0].nunique()
 
                 # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Chart (취소선 버그 박멸 완전체)
+                # 6.03.01 | Daily Local Spending Chart (4단계 라이프사이클 타이틀 적용)
                 # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
@@ -2899,29 +2952,45 @@ else:
 
                     ovr_df['Date_Display'] = ovr_df['Date_Clean'].map(date_label_map)
                     
-                    # 동적 타이틀
+                    # [사용자 정의 4단계 라이프사이클 타이틀 공식]
                     today_dt_c = datetime.now(st.session_state.current_tz).date()
-                    is_active_chart = (today_dt_c <= arr_dt) if arr_dt else True
-                    day_label_suffix = f"{total_calendar_days}일차" if is_active_chart else f"{total_calendar_days}일"
+                    
+                    if dep_dt and arr_dt:
+                        if today_dt_c < dep_dt:
+                            # 1. 출발 전: 'N일예정'
+                            day_label_suffix = f"{total_calendar_days}일예정"
+                            is_active_chart = False
+                            div_days = max(1, total_calendar_days)
+                            avg_text_prefix = "1일 평균"
+                        elif dep_dt <= today_dt_c <= arr_dt:
+                            # 2. 여행 중: 출국 당일(1일차) ~ 귀국 당일(N일차)
+                            curr_day = (today_dt_c - dep_dt).days + 1
+                            day_label_suffix = f"{curr_day}일차"
+                            is_active_chart = True
+                            div_days = max(1, curr_day)
+                            avg_text_prefix = "현재 1일 평균"
+                        else:
+                            # 3. 귀국일 이후: 'N일간'
+                            day_label_suffix = f"{total_calendar_days}일간"
+                            is_active_chart = False
+                            div_days = max(1, total_calendar_days)
+                            avg_text_prefix = "1일 평균"
+                    else:
+                        day_label_suffix = f"{total_calendar_days}일간"
+                        is_active_chart = False
+                        div_days = max(1, total_calendar_days)
+                        avg_text_prefix = "1일 평균"
+
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
 
                     # 1일 평균선 계산
                     total_spent_val = ovr_df[y_col].sum()
-                    if is_active_chart and dep_dt and today_dt_c >= dep_dt:
-                        div_days = max(1, (today_dt_c - dep_dt).days + 1)
-                        avg_text_prefix = "현재 1일 평균"
-                    else:
-                        div_days = max(1, total_calendar_days)
-                        avg_text_prefix = "1일 평균"
-                        
                     avg_daily_val = total_spent_val / div_days if div_days > 0 else 0
                     y_unit = "원" if "원화" in c_mode else f" {LOCAL_SYM}"
                     fmt_avg = f"{avg_daily_val:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_val:,.2f}"
                     avg_benchmark_label = f"{avg_text_prefix} {fmt_avg}{y_unit}"
 
-                    # ----------------------------------------------------------
-                    # [취소선 박멸] 물결표(~)를 하이픈(-)과 파이프(|)로 안전 치환
-                    # ----------------------------------------------------------
+                    # '전체보기' 맨 앞 배치 & 10일 구간 생성 (취소선 버그 없는 안전 기호 사용)
                     chunk_size = 10
                     chunk_options = ["🗺️ 전체보기"]
                     if num_total_days > chunk_size:
@@ -2938,7 +3007,6 @@ else:
                             s_lbl = f"{int(m1.group(1))}/{int(m1.group(2))}" if m1 else d_start_raw
                             e_lbl = f"{int(m2.group(1))}/{int(m2.group(2))}" if m2 else d_end_raw
                             
-                            # [핵심] 물결표 대신 안전한 대시(-)와 파이프(|) 적용 -> 취소선 100% 방지
                             if start_num == end_num:
                                 chunk_options.append(f"{c_idx+1}구간 ({start_num}일 | {s_lbl})")
                             else:
@@ -2999,7 +3067,7 @@ else:
                 st.divider()
                 
                 # --------------------------------------------------------------
-                # 6.03.02 | Daily Living vs Total Spent Pivot Table (31일 전체 100% 보존)
+                # 6.03.02 | Daily Living vs Total Spent Pivot Table (전체 여정 완벽 보존)
                 # --------------------------------------------------------------
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
@@ -3023,7 +3091,6 @@ else:
 
                     daily_table['Date_Short'] = daily_table['Date'].apply(shorten_table_date)
                     
-                    # 날짜 순서 정렬
                     daily_table['Sort_Key'] = daily_table['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
                     daily_table = daily_table.sort_values(by='Sort_Key').drop(columns=['Sort_Key'])
 
@@ -3173,14 +3240,38 @@ else:
                     
                     st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
 
-                # 6.03.04 | Multi-Node Local Expense Treemap
+                # --------------------------------------------------------------
+                # 6.03.04 | Multi-Node Local Expense Treemap (결측치 & 0원 완전 방어형)
+                # --------------------------------------------------------------
                 if len(TRIP_CONFIGS[st.session_state.current_trip]["nodes"]) > 1 and not ovr_df.empty:
-                    st.divider()
-                    fig_country = px.treemap(ovr_df, path=['Country', 'Macro_Category', 'Category'], values=y_col, color='Country', color_discrete_sequence=px.colors.qualitative.Pastel)
-                    fig_country.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}")
-                    fig_country.update_layout(margin=dict(l=10, r=10, t=30, b=30), height=500, uniformtext=dict(minsize=10, mode='hide'))
-                    st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지지출(Treemap)</h4>", unsafe_allow_html=True)
-                    st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
+                    # [핵심] 실제 지출(y_col > 0)만 추출하고 결측치를 완벽히 메워 ValueError 원천 차단
+                    country_chart_df = ovr_df[ovr_df[y_col] > 0].copy()
+                    
+                    if not country_chart_df.empty:
+                        st.divider()
+                        st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지지출(Treemap)</h4>", unsafe_allow_html=True)
+                        
+                        country_chart_df['Macro_Category'] = country_chart_df['Category'].map(MACRO_MAP).fillna("기타")
+                        country_chart_df['Country'] = country_chart_df['Country'].fillna("기타")
+                        country_chart_df['Category'] = country_chart_df['Category'].fillna("기타")
+                        
+                        fig_country = px.treemap(
+                            country_chart_df, 
+                            path=['Country', 'Macro_Category', 'Category'], 
+                            values=y_col, 
+                            color='Country', 
+                            color_discrete_sequence=px.colors.qualitative.Pastel
+                        )
+                        fig_country.update_traces(
+                            texttemplate="<b>%{label}</b><br>%{value:,.0f}", 
+                            hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}<extra></extra>",
+                            textposition='middle center'
+                        )
+                        fig_country.update_layout(
+                            margin=dict(l=10, r=10, t=10, b=20), 
+                            height=520
+                        )
+                        st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
 
                 # 6.03.05 | Net Settlement & Refund Breakdown Card
                 st.divider()
@@ -3251,23 +3342,108 @@ else:
             with k3: st.markdown(kpi_box("현지 지출 총액", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
             with k4: st.markdown(kpi_box(f"현지 일상/생존 1일 평균", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
             
-            # 6.04.02 | Comprehensive Expense Treemap Matrix
+            # ------------------------------------------------------------------
+            # 6.04.02 | Comprehensive Expense Treemap Matrix (우측 세로 컬러바 완전 삭제)
+            # ------------------------------------------------------------------
             st.subheader("🌳 지출분석 (Treemap)")
-            chart_df = exp_df.copy()
-            chart_df['Short_Desc'] = chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
-            fig_tree = px.treemap(chart_df, path=['Macro_Category', 'Category', 'Short_Desc'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
-            fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}", textposition='middle center', insidetextfont=dict(size=16))
-            fig_tree.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=650, uniformtext=dict(minsize=11, mode='hide'))
-            st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
+            chart_df = exp_df[exp_df['KRW_val'] > 0].copy()
+            if not chart_df.empty:
+                chart_df['Short_Desc'] = chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
+                chart_df['Macro_Category'] = chart_df['Category'].map(MACRO_MAP).fillna("기타")
+                
+                fig_tree = px.treemap(
+                    chart_df, 
+                    path=['Macro_Category', 'Category', 'Short_Desc'], 
+                    values='KRW_val', 
+                    color='KRW_val', 
+                    color_continuous_scale='Greens'
+                )
+                fig_tree.update_traces(
+                    texttemplate="<b>%{label}</b><br>%{value:,.0f}원", 
+                    hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", 
+                    textposition='middle center', 
+                    insidetextfont=dict(size=16)
+                )
+                # [핵심] coloraxis_showscale=False 로 우측 세로 막대 완전 삭제 & 가로 100% 전폭 확장!
+                fig_tree.update_layout(
+                    margin=dict(l=0, r=0, t=20, b=10), 
+                    height=650,
+                    coloraxis_showscale=False
+                )
+                st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
             
-            # 6.04.03 | Donut Category Distribution Chart
+            # ------------------------------------------------------------------
+            # 6.04.03 | Donut Category Distribution Chart (중앙 미니멀 & 슬라이스 확대)
+            # ------------------------------------------------------------------
             st.subheader("🍕 지출비중")
             cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
-            fig_donut = px.pie(cat_pie, values='KRW_val', names='Macro_Category', hole=0.5, color_discrete_sequence=px.colors.qualitative.Set3)
-            fig_donut.update_traces(textposition='inside', textinfo='label+value+percent', texttemplate='%{label}<br>%{value:,.0f}원<br>%{percent:.1%}')
-            until_day = exp_df['Date'].max().split('(')[0]
-            fig_donut.add_annotation(text=f"<b>순지출(Net)</b><br>{total_trip_krw:,.0f} 원<br><span style='font-size:10px'>Until {until_day}</span>", showarrow=False, font=dict(size=16))
-            fig_donut.update_layout(height=600, margin=dict(l=10, r=10, t=50, b=100), legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), uniformtext_minsize=11, uniformtext_mode='hide')
+            
+            # [수정] 도넛 구멍 축소: 0.5 -> 0.35 (파이 조각 두께 40% 확장으로 글씨 확대 공간 확보)
+            fig_donut = px.pie(
+                cat_pie, 
+                values='KRW_val', 
+                names='Macro_Category', 
+                hole=0.35, 
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            
+            # 파이 조각 내부 글자 13.5px 볼드로 시원시원하게 확대
+            fig_donut.update_traces(
+                textposition='inside', 
+                textinfo='label+value+percent', 
+                texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>(%{percent:.1%})",
+                insidetextfont=dict(size=13.5)
+            )
+
+            # 여행 상태 연동 중앙 텍스트 산출 (출발전/진행중/종료 연동)
+            korea_dep_rows = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
+            dep_rows_all = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
+            t_dep = korea_dep_rows if not korea_dep_rows.empty else (dep_rows_all[~dep_rows_all['Category'].str.contains('_', na=False)] if not dep_rows_all.empty else dep_rows_all)
+            
+            dep_dt_f = None
+            if not t_dep.empty:
+                m_df = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_dep.iloc[0]['Date']))
+                if m_df: dep_dt_f = datetime.strptime(m_df.group(0), "%Y-%m-%d").date()
+
+            korea_arr_rows = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
+            arr_rows_all = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False)]
+            t_arr = korea_arr_rows if not korea_arr_rows.empty else (arr_rows_all[~arr_rows_all['Category'].str.contains('_', na=False)] if not arr_rows_all.empty else arr_rows_all)
+            
+            arr_dt_f = None
+            if not t_arr.empty:
+                m_af = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_arr.iloc[-1]['Date']))
+                if m_af: arr_dt_f = datetime.strptime(m_af.group(0), "%Y-%m-%d").date()
+
+            today_f = datetime.now(st.session_state.current_tz).date()
+
+            # [사용자 정의 공식 연동]
+            if dep_dt_f and arr_dt_f:
+                cal_days_f = (arr_dt_f - dep_dt_f).days + 1
+                if today_f < dep_dt_f:
+                    center_sub_text = f"({cal_days_f}일예정)"
+                elif dep_dt_f <= today_f <= arr_dt_f:
+                    curr_k = (today_f - dep_dt_f).days + 1
+                    center_sub_text = f"({curr_k}일차)"
+                else:
+                    center_sub_text = f"({cal_days_f}일간)"
+            else:
+                center_sub_text = f"({total_nights}일간)"
+
+            # [핵심] '순지출(Net)' 삭제, 금액 선명한 볼드 유지, 아래에 상태 표기 결합
+            center_annotation_html = f"<b>{total_trip_krw:,.0f}원</b><br><span style='font-size:12px; color:#A0AEC0;'>{center_sub_text}</span>"
+            
+            fig_donut.add_annotation(
+                text=center_annotation_html, 
+                showarrow=False, 
+                align="center",
+                font=dict(size=16)
+            )
+            
+            fig_donut.update_layout(
+                height=600, 
+                margin=dict(l=10, r=10, t=30, b=80), 
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+            )
             st.plotly_chart(fig_donut, use_container_width=True)
 
 # 6.04.04 | Build Version & Sync Timestamp Footer
