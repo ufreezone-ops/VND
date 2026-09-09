@@ -2386,23 +2386,25 @@ else:
                     
                 st.write(f"🔎 검색 결과: {len(render_df)}건")
 
-                # 1. 출국일(dep_dt) 및 입국일(arr_dt) 정밀 파싱
+                # 1. [수정 완료] 출국일(dep_dt) 및 입국일(arr_dt) 무결점 통짜 파싱 (에러 원천 차단)
                 dep_rows = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
                 korea_dep = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
                 target_dep_row = korea_dep if not korea_dep.empty else dep_rows
                 
                 dep_dt, arr_dt = None, None
                 if not target_dep_row.empty:
-                    m_dep = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(target_dep_row.iloc[0]['Date']))
-                    if m_dep: dep_dt = datetime.strptime(m_dep.group(1), "%Y-%m-%d").date()
+                    m_dep = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_dep_row.iloc[0]['Date']))
+                    if m_dep: 
+                        dep_dt = datetime.strptime(m_dep.group(1), "%Y-%m-%d").date()
 
                 arr_rows = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
                 korea_arr = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
                 target_arr_row = korea_arr if not korea_arr.empty else arr_rows
                 
                 if not target_arr_row.empty:
-                    m_arr = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
-                    if m_arr: arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
+                    m_arr = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_arr_row.iloc[-1]['Date']))
+                    if m_arr: 
+                        arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
 
                 unique_dates = sorted(list(set(re.search(r'(\d{4}-\d{2})-(\d{2})', str(d)).group(0) for d in render_df['Date'] if re.search(r'(\d{4}-\d{2})-(\d{2})', str(d)))))
                 date_to_group = {d: i % 2 for i, d in enumerate(unique_dates)}
@@ -2470,7 +2472,7 @@ else:
                 if is_single_country and 'Country' in styled_render_df.columns:
                     styled_render_df = styled_render_df.drop(columns=['Country'])
 
-                # 4. [핵심] 다크/화이트 모드 실시간 자동 연동 지브라 스타일러
+                # 4. 다크/화이트 모드 실시간 자동 연동 지브라 스타일러
                 is_dark_theme = (st.session_state.get('app_theme', "🌙 다크") == "🌙 다크")
                 
                 def style_journey_rows_se(row):
@@ -2504,14 +2506,11 @@ else:
                     # (4) [여행 중 지브라 교대 스타일]
                     grp = date_to_group.get(pure_date, 0)
                     if grp == 1:
-                        # [ON] 패턴 걸린 날
                         if is_dark_theme:
                             return ['background-color: rgba(255, 215, 0, 0.13); color: #FFFDF0; font-weight: 500;'] * len(row)
                         else:
-                            # 화이트모드: 소프트 슬레이트 배경 + 쨍한 흑요석 블랙 글씨!
                             return ['background-color: #F1F5F9; color: #0F172A; font-weight: 600;'] * len(row)
                     else:
-                        # [OFF] 패턴 없는 날
                         if is_dark_theme:
                             return ['color: #CBD5E1;'] * len(row)
                         else:
@@ -2553,13 +2552,6 @@ else:
                     selected_idx = df_event.selection.rows[0]
 
                 # 6.02.04 | Detail Voucher Viewer & Smart KRW Currency Translator
-                if selected_idx is not None:
-                    real_idx = render_df.index[selected_idx] 
-                    row_data = display_df.loc[real_idx]
-
-                # --------------------------------------------------------------
-                # 6.02.04 & 6.02.05 | Detail Voucher Viewer & Inline Editor (개별 영수증 삭제 탑재)
-                # --------------------------------------------------------------
                 if selected_idx is not None:
                     real_idx = render_df.index[selected_idx] 
                     row_data = display_df.loc[real_idx]
