@@ -2398,7 +2398,7 @@ else:
             if save_data(ledger_df):
                 st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
                 
-        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (다크/라이트 공용 고대비 지브라)
+        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (스카이블루 고대비 지브라)
         if not display_df.empty: 
             display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
             display_df = display_df.reindex(columns=FINAL_COLUMNS)
@@ -2513,7 +2513,7 @@ else:
                 if is_single_country and 'Country' in styled_render_df.columns:
                     styled_render_df = styled_render_df.drop(columns=['Country'])
 
-                # 4. [고대비 완벽 보정] 다크/라이트 양방향 호환 지브라 스타일러
+                # 4. [고대비 지브라] 다크/라이트 양방향 호환 스카이블루 스타일러
                 def style_journey_rows_se(row):
                     cat = str(row.get('Category', '')).strip()
                     orig_d = str(render_df.loc[row.name, 'Date'])
@@ -2522,13 +2522,13 @@ else:
                     pure_date = m.group(0)
                     cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
                     
-                    # (1) [출국일]: 반투명 골드 앰버 음영 + 볼드
+                    # (1) [출국일]: 앰버 골드 음영 + 볼드
                     if is_real_departure(cat, cur_d):
-                        return ['background-color: rgba(245, 158, 11, 0.28); font-weight: bold;'] * len(row)
+                        return ['background-color: rgba(245, 158, 11, 0.28); font-weight: bold; color: #F59E0B;'] * len(row)
                             
-                    # (2) [귀국일]: 반투명 에메랄드 음영 + 볼드
+                    # (2) [귀국일]: 에메랄드 그린 음영 + 볼드
                     if is_real_arrival(cat, cur_d):
-                        return ['background-color: rgba(16, 185, 129, 0.28); font-weight: bold;'] * len(row)
+                        return ['background-color: rgba(16, 185, 129, 0.28); font-weight: bold; color: #10B981;'] * len(row)
 
                     # (3) [사전결제]: 차분한 음영
                     if dep_dt:
@@ -2536,10 +2536,10 @@ else:
                         if diff < 0:
                             return ['opacity: 0.7; font-style: italic;'] * len(row)
 
-                    # (4) [지브라 교대행]: 반투명 중립 그레이 (라이트/다크 양쪽 모두 글자색 보존)
+                    # (4) [지브라 교대행]: 소프트 블루 틴트 배경 + 밝고 선명한 스카이블루 글씨
                     grp = date_to_group.get(pure_date, 0)
                     if grp == 1:
-                        return ['background-color: rgba(125, 125, 125, 0.15); font-weight: 500;'] * len(row)
+                        return ['background-color: rgba(56, 189, 248, 0.12); color: #38BDF8; font-weight: 600;'] * len(row)
                     else:
                         return ['background-color: transparent;'] * len(row)
 
