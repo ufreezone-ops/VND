@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (상단 여백 압축 최적화 탑재)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (헤더 가림 방지 및 황금비율 여백)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -192,26 +192,26 @@ if current_theme == "🌙 다크":
     st.markdown("""
         <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
         <style>
-        /* 📱 [모바일 최적화] 본문 최상단 여백 대폭 축소 */
+        /* 📱 [상단 헤더 가림 완벽 방어 + 최적 여백] */
         .block-container {
-            padding-top: 1.2rem !important;
+            padding-top: 3.5rem !important;  /* 상단 헤더 높이만큼 안전하게 확보 */
             padding-bottom: 2rem !important;
             padding-left: 0.8rem !important;
             padding-right: 0.8rem !important;
         }
 
-        /* 📱 여행 선택 드롭다운 상하 여백 압축 */
+        /* 여행 선택 드롭다운 여백 정규화 */
         div[data-testid="stSelectbox"] {
-            margin-top: -10px !important;
-            margin-bottom: -5px !important;
+            margin-top: 0px !important;
+            margin-bottom: 0px !important;
         }
 
-        /* 📱 구분선(st.divider) 간격 슬림화 */
+        /* 구분선(st.divider) 간격 슬림화 */
         hr {
-            margin: 0.5rem 0 !important;
+            margin: 0.4rem 0 0.6rem 0 !important;
         }
 
-        /* 📱 메인 타이틀(후에 2026 등) 상단 여백 제거 */
+        /* 메인 타이틀(후에 2026 등) 상단 여백 제거 */
         h1 {
             padding-top: 0rem !important;
             margin-top: 0rem !important;
@@ -278,26 +278,26 @@ else:
     st.markdown("""
         <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
         <style>
-        /* 📱 [모바일 최적화] 본문 최상단 여백 대폭 축소 */
+        /* 📱 [상단 헤더 가림 완벽 방어 + 최적 여백] */
         .block-container {
-            padding-top: 1.2rem !important;
+            padding-top: 3.5rem !important;  /* 상단 헤더 높이만큼 안전하게 확보 */
             padding-bottom: 2rem !important;
             padding-left: 0.8rem !important;
             padding-right: 0.8rem !important;
         }
 
-        /* 📱 여행 선택 드롭다운 상하 여백 압축 */
+        /* 여행 선택 드롭다운 여백 정규화 */
         div[data-testid="stSelectbox"] {
-            margin-top: -10px !important;
-            margin-bottom: -5px !important;
+            margin-top: 0px !important;
+            margin-bottom: 0px !important;
         }
 
-        /* 📱 구분선(st.divider) 간격 슬림화 */
+        /* 구분선(st.divider) 간격 슬림화 */
         hr {
-            margin: 0.5rem 0 !important;
+            margin: 0.4rem 0 0.6rem 0 !important;
         }
 
-        /* 📱 메인 타이틀(후에 2026 등) 상단 여백 제거 */
+        /* 메인 타이틀(후에 2026 등) 상단 여백 제거 */
         h1 {
             padding-top: 0rem !important;
             margin-top: 0rem !important;
