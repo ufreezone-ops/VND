@@ -2529,7 +2529,9 @@ else:
                 elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
                     selected_idx = df_event.selection.rows[0]
 
-                # 6.02.04 | Detail Voucher Viewer & Smart KRW Currency Translator
+                # --------------------------------------------------------------
+                # 6.02.04 & 6.02.05 | Detail Voucher Viewer & Inline Editor (개별 영수증 삭제 탑재)
+                # --------------------------------------------------------------
                 if selected_idx is not None:
                     real_idx = render_df.index[selected_idx] 
                     row_data = display_df.loc[real_idx]
@@ -2538,6 +2540,7 @@ else:
                         st.markdown("---")
                         c_info, c_edit = st.columns([1, 1])
                         
+                        # 6.02.04 | 상세 내역 및 영수증 뷰어 (개별 사진 삭제 버튼 탑재)
                         with c_info:
                             st.subheader("🧾 상세 내역 및 영수증 뷰어")
                             amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
@@ -2591,14 +2594,24 @@ else:
                                     trans_item = smart_krw_translator(desc_full, rate_for_calc, curr_for_calc)
                                     st.markdown(f"**📝 내역:** {trans_item}", unsafe_allow_html=True)
                                 
-                            receipt_data = str(row_data['Receipt_URL'])
-                            if receipt_data.strip().startswith("http"):
-                                urls = receipt_data.split(",")
+                            # [핵심] 영수증 사진 표시 및 개별 사진 원클릭 삭제 버튼
+                            receipt_data = str(row_data['Receipt_URL']).strip()
+                            if receipt_data.startswith("http"):
+                                urls = [u.strip() for u in receipt_data.split(",") if u.strip().startswith("http")]
                                 for idx, url in enumerate(urls):
-                                    if url.strip(): st.image(url.strip(), use_container_width=True, caption=f"영수증 사진 #{idx+1}")
-                            else: st.info("첨부된 영수증 사진이 없습니다.")
+                                    st.image(url, use_container_width=True, caption=f"영수증 사진 #{idx+1}")
+                                    # 사진 바로 밑에 삭제 버튼 배치
+                                    if st.button(f"🗑️ 사진 #{idx+1} 삭제", key=f"btn_del_rcpt_{real_idx}_{idx}", use_container_width=True):
+                                        remaining_urls = [u for i, u in enumerate(urls) if i != idx]
+                                        display_df.at[real_idx, 'Receipt_URL'] = ",".join(remaining_urls)
+                                        if save_data(display_df):
+                                            st.success(f"사진 #{idx+1}이 성공적으로 삭제되었습니다!")
+                                            time.sleep(0.6)
+                                            st.rerun()
+                            else:
+                                st.info("첨부된 영수증 사진이 없습니다.")
                                 
-                        # 6.02.05 | Inline Description Editor & Single/Multi Image Uploader
+                        # 6.02.05 | 인라인 수정기 (내역 보강 및 추가 업로드)
                         with c_edit:
                             st.subheader("✏️ 내역 보강 및 영수증 첨부")
                             st.caption("세부 내역을 엑셀에서 복사해 붙여넣거나 엔터(줄바꿈)로 여러 개 입력하시면, 왼쪽 뷰어에서 깔끔하게 분리되어 표시됩니다.")
@@ -2614,7 +2627,6 @@ else:
                                 st.session_state[desc_key] = str(row_data['Description'])
                                 st.session_state['current_edit_idx'] = real_idx
                                 
-                            # [Fixed] 다중 파일 업로드 허용 (accept_multiple_files=True)
                             new_receipts = st.file_uploader("📸 새 영수증 사진 업로드 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
                             if new_receipts:
                                 if st.button("🤖 첨부된 사진 AI 스캔 (스마트 번역)", use_container_width=True):
@@ -2635,7 +2647,6 @@ else:
                                 display_df.at[real_idx, 'Description'] = new_desc
                                 if new_receipts:
                                     with st.spinner(f"📸 {len(new_receipts)}장의 영수증을 클라우드에 전송 중..."):
-                                        # [Fixed] 다중 업로드 후 기존 영수증 URL과 누적 병합
                                         new_urls = []
                                         for f in new_receipts:
                                             u = upload_image_to_imgbb(f)
