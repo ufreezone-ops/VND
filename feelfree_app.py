@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (동적 테마 스위칭 완전체)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (상단 여백 압축 최적화 탑재)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -192,6 +192,33 @@ if current_theme == "🌙 다크":
     st.markdown("""
         <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
         <style>
+        /* 📱 [모바일 최적화] 본문 최상단 여백 대폭 축소 */
+        .block-container {
+            padding-top: 1.2rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+        }
+
+        /* 📱 여행 선택 드롭다운 상하 여백 압축 */
+        div[data-testid="stSelectbox"] {
+            margin-top: -10px !important;
+            margin-bottom: -5px !important;
+        }
+
+        /* 📱 구분선(st.divider) 간격 슬림화 */
+        hr {
+            margin: 0.5rem 0 !important;
+        }
+
+        /* 📱 메인 타이틀(후에 2026 등) 상단 여백 제거 */
+        h1 {
+            padding-top: 0rem !important;
+            margin-top: 0rem !important;
+            padding-bottom: 0.2rem !important;
+            margin-bottom: 0.4rem !important;
+        }
+
         .main { background-color: #0e1117; color: #ffffff; }
         .kpi-box { background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 8px solid #FF8C00; margin-bottom: 20px; min-height: 130px; box-shadow: 4px 6px 15px rgba(0,0,0,0.5); }
         .kpi-title { font-size: 15px; color: #cccccc; margin-bottom: 10px; font-weight: 600; }
@@ -251,6 +278,33 @@ else:
     st.markdown("""
         <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
         <style>
+        /* 📱 [모바일 최적화] 본문 최상단 여백 대폭 축소 */
+        .block-container {
+            padding-top: 1.2rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+        }
+
+        /* 📱 여행 선택 드롭다운 상하 여백 압축 */
+        div[data-testid="stSelectbox"] {
+            margin-top: -10px !important;
+            margin-bottom: -5px !important;
+        }
+
+        /* 📱 구분선(st.divider) 간격 슬림화 */
+        hr {
+            margin: 0.5rem 0 !important;
+        }
+
+        /* 📱 메인 타이틀(후에 2026 등) 상단 여백 제거 */
+        h1 {
+            padding-top: 0rem !important;
+            margin-top: 0rem !important;
+            padding-bottom: 0.2rem !important;
+            margin-bottom: 0.4rem !important;
+        }
+
         .main { background-color: #F8FAFC; color: #0F172A; }
         .kpi-box { background-color: #FFFFFF; padding: 20px; border-radius: 15px; border-left: 8px solid #F59E0B; margin-bottom: 20px; min-height: 130px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; }
         .kpi-title { font-size: 15px; color: #64748B; margin-bottom: 10px; font-weight: 600; }
