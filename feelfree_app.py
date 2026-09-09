@@ -1294,40 +1294,27 @@ def sort_trips(trip_names):
 
 sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
 
-# 4.02.02 | Global Flight/SPI View Mode Switcher & Theme Switcher (우상단 테마 스위처 장착)
+# 4.02.02 | Global Flight/SPI View Mode Switcher
 # [Modified] 비교(SPI) 모드를 풀다운 메뉴의 가장 마지막 독립 메뉴로 승격
 SPECIAL_MODE = "📊 모든 여행지 물가비교"
 dropdown_options = sorted_trips + [SPECIAL_MODE]
 
-if 'show_spi' not in st.session_state: st.session_state.show_spi = False
+if 'show_spi' not in st.session_state: 
+    st.session_state.show_spi = False
+
 curr_idx = len(sorted_trips) if st.session_state.show_spi else (sorted_trips.index(st.session_state.current_trip) if st.session_state.current_trip in sorted_trips else 0)
 
-# [핵심] 상단 2분할 배치: 좌측 '내 여행함' & 우측 '테마 스위처'
-c_trip_top, c_theme_top = st.columns([2.5, 1.5])
-with c_trip_top:
-    sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", dropdown_options, index=curr_idx, label_visibility="collapsed")
-    if sel_trip == SPECIAL_MODE:
-        if not st.session_state.show_spi:
-            st.session_state.show_spi = True
-            st.rerun()
-    else:
-        if st.session_state.show_spi or sel_trip != st.session_state.current_trip:
-            st.session_state.show_spi = False
-            st.session_state.current_trip = sel_trip
-            st.rerun()
+# [수정] 2분할 컬럼 및 우측 라디오 테마 버튼 삭제 -> 단독 풀다운 배치
+sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", dropdown_options, index=curr_idx, label_visibility="collapsed")
 
-with c_theme_top:
-    theme_idx = 0 if st.session_state.get('app_theme', "🌙 다크") == "🌙 다크" else 1
-    selected_theme = st.radio(
-        "테마 선택", 
-        ["🌙 다크", "☀️ 화이트"], 
-        index=theme_idx, 
-        horizontal=True, 
-        key="top_theme_radio", 
-        label_visibility="collapsed"
-    )
-    if selected_theme != st.session_state.get('app_theme'):
-        st.session_state.app_theme = selected_theme
+if sel_trip == SPECIAL_MODE:
+    if not st.session_state.show_spi:
+        st.session_state.show_spi = True
+        st.rerun()
+else:
+    if st.session_state.show_spi or sel_trip != st.session_state.current_trip:
+        st.session_state.show_spi = False
+        st.session_state.current_trip = sel_trip
         st.rerun()
 
 st.divider()
