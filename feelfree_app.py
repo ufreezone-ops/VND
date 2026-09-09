@@ -2513,7 +2513,7 @@ else:
                 if is_single_country and 'Country' in styled_render_df.columns:
                     styled_render_df = styled_render_df.drop(columns=['Country'])
 
-                # 4. [고대비 지브라] 다크/라이트 양방향 호환 스카이블루 스타일러
+                # 4. [고대비 지브라] 다크/라이트 양방향 호환 스카이블루 스타일러 (일반 폰트)
                 def style_journey_rows_se(row):
                     cat = str(row.get('Category', '')).strip()
                     orig_d = str(render_df.loc[row.name, 'Date'])
@@ -2536,10 +2536,10 @@ else:
                         if diff < 0:
                             return ['opacity: 0.7; font-style: italic;'] * len(row)
 
-                    # (4) [지브라 교대행]: 소프트 블루 틴트 배경 + 밝고 선명한 스카이블루 글씨
+                    # (4) [지브라 교대행]: 소프트 블루 틴트 + 일반 폰트(normal) 스카이블루
                     grp = date_to_group.get(pure_date, 0)
                     if grp == 1:
-                        return ['background-color: rgba(56, 189, 248, 0.12); color: #38BDF8; font-weight: 600;'] * len(row)
+                        return ['background-color: rgba(56, 189, 248, 0.12); color: #38BDF8; font-weight: normal;'] * len(row)
                     else:
                         return ['background-color: transparent;'] * len(row)
 
