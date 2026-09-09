@@ -2712,7 +2712,7 @@ else:
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
                 # --------------------------------------------------------------
-                # 6.03.00-A | 달력 기반 31일 무결점 날짜 시퀀스 & 1일 평균 엔진
+                # 6.03.00-A | 여행 라이프사이클(예정->X일차->N일간) 정밀 판별 엔진
                 # --------------------------------------------------------------
                 import math
 
@@ -2760,7 +2760,6 @@ else:
                         arr_date_str = m_arr.group(0)
                         arr_dt = datetime.strptime(arr_date_str, "%Y-%m-%d").date()
 
-                # 사전결제 판별: 출국일 이전 지출은 사전결제로 격리
                 def check_is_fixed_cost(row):
                     orig_d = str(row['Date']).strip()
                     m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
@@ -2787,9 +2786,7 @@ else:
                 in_period_mask = exp_df.apply(is_in_trip_period, axis=1) if (dep_date_str or arr_date_str) else True
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국'])) & in_period_mask].copy()
 
-                # --------------------------------------------------------------
-                # [핵심] 출국일부터 귀국일까지 31일 달력 날짜 100% 완전 생성 (이동일 0원 복원)
-                # --------------------------------------------------------------
+                # [달력 기반 전체 여정 100% 보존] 출국일부터 귀국일까지 모든 날짜 생성 (이동일 0원 대기)
                 day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                 if dep_dt and arr_dt and dep_dt <= arr_dt:
                     total_calendar_days = (arr_dt - dep_dt).days + 1
@@ -2804,7 +2801,6 @@ else:
                     if missing_dates:
                         dummy_rows = []
                         for md in missing_dates:
-                            # 이전 날짜의 국가 계승
                             prev_part = ovr_df[ovr_df['Date_Clean'] < md]
                             last_country = prev_part.iloc[-1]['Country'] if not prev_part.empty else (list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())[0])
                             
@@ -2836,7 +2832,7 @@ else:
                     total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0].nunique()
 
                 # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Chart (취소선 버그 박멸 완전체)
+                # 6.03.01 | Daily Local Spending Chart (4단계 라이프사이클 타이틀 적용)
                 # --------------------------------------------------------------
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
@@ -2895,29 +2891,45 @@ else:
 
                     ovr_df['Date_Display'] = ovr_df['Date_Clean'].map(date_label_map)
                     
-                    # 동적 타이틀
+                    # [사용자 정의 4단계 라이프사이클 타이틀 공식]
                     today_dt_c = datetime.now(st.session_state.current_tz).date()
-                    is_active_chart = (today_dt_c <= arr_dt) if arr_dt else True
-                    day_label_suffix = f"{total_calendar_days}일차" if is_active_chart else f"{total_calendar_days}일"
+                    
+                    if dep_dt and arr_dt:
+                        if today_dt_c < dep_dt:
+                            # 1. 출발 전: 'N일예정'
+                            day_label_suffix = f"{total_calendar_days}일예정"
+                            is_active_chart = False
+                            div_days = max(1, total_calendar_days)
+                            avg_text_prefix = "1일 평균"
+                        elif dep_dt <= today_dt_c <= arr_dt:
+                            # 2. 여행 중: 출국 당일(1일차) ~ 귀국 당일(N일차)
+                            curr_day = (today_dt_c - dep_dt).days + 1
+                            day_label_suffix = f"{curr_day}일차"
+                            is_active_chart = True
+                            div_days = max(1, curr_day)
+                            avg_text_prefix = "현재 1일 평균"
+                        else:
+                            # 3. 귀국일 이후: 'N일간'
+                            day_label_suffix = f"{total_calendar_days}일간"
+                            is_active_chart = False
+                            div_days = max(1, total_calendar_days)
+                            avg_text_prefix = "1일 평균"
+                    else:
+                        day_label_suffix = f"{total_calendar_days}일간"
+                        is_active_chart = False
+                        div_days = max(1, total_calendar_days)
+                        avg_text_prefix = "1일 평균"
+
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
 
                     # 1일 평균선 계산
                     total_spent_val = ovr_df[y_col].sum()
-                    if is_active_chart and dep_dt and today_dt_c >= dep_dt:
-                        div_days = max(1, (today_dt_c - dep_dt).days + 1)
-                        avg_text_prefix = "현재 1일 평균"
-                    else:
-                        div_days = max(1, total_calendar_days)
-                        avg_text_prefix = "1일 평균"
-                        
                     avg_daily_val = total_spent_val / div_days if div_days > 0 else 0
                     y_unit = "원" if "원화" in c_mode else f" {LOCAL_SYM}"
                     fmt_avg = f"{avg_daily_val:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_val:,.2f}"
                     avg_benchmark_label = f"{avg_text_prefix} {fmt_avg}{y_unit}"
 
-                    # ----------------------------------------------------------
-                    # [취소선 박멸] 물결표(~)를 하이픈(-)과 파이프(|)로 안전 치환
-                    # ----------------------------------------------------------
+                    # '전체보기' 맨 앞 배치 & 10일 구간 생성 (취소선 버그 없는 안전 기호 사용)
                     chunk_size = 10
                     chunk_options = ["🗺️ 전체보기"]
                     if num_total_days > chunk_size:
@@ -2934,7 +2946,6 @@ else:
                             s_lbl = f"{int(m1.group(1))}/{int(m1.group(2))}" if m1 else d_start_raw
                             e_lbl = f"{int(m2.group(1))}/{int(m2.group(2))}" if m2 else d_end_raw
                             
-                            # [핵심] 물결표 대신 안전한 대시(-)와 파이프(|) 적용 -> 취소선 100% 방지
                             if start_num == end_num:
                                 chunk_options.append(f"{c_idx+1}구간 ({start_num}일 | {s_lbl})")
                             else:
@@ -2995,7 +3006,7 @@ else:
                 st.divider()
                 
                 # --------------------------------------------------------------
-                # 6.03.02 | Daily Living vs Total Spent Pivot Table (31일 전체 100% 보존)
+                # 6.03.02 | Daily Living vs Total Spent Pivot Table (전체 여정 완벽 보존)
                 # --------------------------------------------------------------
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
@@ -3019,7 +3030,6 @@ else:
 
                     daily_table['Date_Short'] = daily_table['Date'].apply(shorten_table_date)
                     
-                    # 날짜 순서 정렬
                     daily_table['Sort_Key'] = daily_table['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
                     daily_table = daily_table.sort_values(by='Sort_Key').drop(columns=['Sort_Key'])
 
