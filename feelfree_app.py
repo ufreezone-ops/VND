@@ -2357,7 +2357,7 @@ else:
             if save_data(ledger_df):
                 st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
                 
-        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (완전무결 한글 요일 복원형)
+        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (다크/화이트 듀얼 고대비 지브라)
         if not display_df.empty: 
             display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
             display_df = display_df.reindex(columns=FINAL_COLUMNS)
@@ -2386,14 +2386,14 @@ else:
                     
                 st.write(f"🔎 검색 결과: {len(render_df)}건")
 
-                # 1. 출국일 및 입국일 정밀 파싱
+                # 1. 출국일(dep_dt) 및 입국일(arr_dt) 정밀 파싱
                 dep_rows = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
                 korea_dep = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
                 target_dep_row = korea_dep if not korea_dep.empty else dep_rows
                 
                 dep_dt, arr_dt = None, None
                 if not target_dep_row.empty:
-                    m_dep = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_dep_row.iloc[0]['Date']))
+                    m_dep = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(target_dep_row.iloc[0]['Date']))
                     if m_dep: dep_dt = datetime.strptime(m_dep.group(1), "%Y-%m-%d").date()
 
                 arr_rows = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
@@ -2401,10 +2401,10 @@ else:
                 target_arr_row = korea_arr if not korea_arr.empty else arr_rows
                 
                 if not target_arr_row.empty:
-                    m_arr = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_arr_row.iloc[-1]['Date']))
+                    m_arr = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
                     if m_arr: arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
 
-                unique_dates = sorted(list(set(re.search(r'(\d{4}-\d{2}-\d{2})', str(d)).group(1) for d in render_df['Date'] if re.search(r'(\d{4}-\d{2}-\d{2})', str(d)))))
+                unique_dates = sorted(list(set(re.search(r'(\d{4}-\d{2})-(\d{2})', str(d)).group(0) for d in render_df['Date'] if re.search(r'(\d{4}-\d{2})-(\d{2})', str(d)))))
                 date_to_group = {d: i % 2 for i, d in enumerate(unique_dates)}
 
                 def is_real_departure(cat, cur_d):
@@ -2421,7 +2421,7 @@ else:
                         return True
                     return False
 
-                # 2. [완전무결 요일 계산 엔진] 영어/한글 혼재 상관없이 100% 한글 요일 자체 연산
+                # 2. 날짜 포맷터 (08/09(일) 🏷️사전 형태 압축)
                 day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                 def format_display_date_se(row):
                     orig_d = str(row['Date']).strip()
@@ -2470,29 +2470,52 @@ else:
                 if is_single_country and 'Country' in styled_render_df.columns:
                     styled_render_df = styled_render_df.drop(columns=['Country'])
 
-                # 4. 반투명 노란색 지브라 스타일러
+                # 4. [핵심] 다크/화이트 모드 실시간 자동 연동 지브라 스타일러
+                is_dark_theme = (st.session_state.get('app_theme', "🌙 다크") == "🌙 다크")
+                
                 def style_journey_rows_se(row):
                     cat = str(row.get('Category', '')).strip()
                     orig_d = str(render_df.loc[row.name, 'Date'])
-                    m = re.search(r'(\d{4}-\d{2}-\d{2})', orig_d)
+                    m = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
                     if not m: return [''] * len(row)
-                    pure_date = m.group(1)
+                    pure_date = m.group(0)
                     cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
                     
+                    # (1) [출국일] 스타일
                     if is_real_departure(cat, cur_d):
-                        return ['background-color: #5c3d00; color: #FFD700; font-weight: bold;'] * len(row)
+                        if is_dark_theme:
+                            return ['background-color: #5c3d00; color: #FFD700; font-weight: bold;'] * len(row)
+                        else:
+                            return ['background-color: #FEF3C7; color: #92400E; font-weight: bold;'] * len(row)
+                            
+                    # (2) [귀국일] 스타일
                     if is_real_arrival(cat, cur_d):
-                        return ['background-color: #064e3b; color: #34D399; font-weight: bold;'] * len(row)
+                        if is_dark_theme:
+                            return ['background-color: #064e3b; color: #34D399; font-weight: bold;'] * len(row)
+                        else:
+                            return ['background-color: #D1FAE5; color: #065F46; font-weight: bold;'] * len(row)
 
+                    # (3) [사전결제] 스타일
                     if dep_dt:
                         diff = (cur_d - dep_dt).days
-                        if diff < 0: return ['color: #71717A;'] * len(row)
+                        if diff < 0:
+                            return ['color: #71717A;'] * len(row) if is_dark_theme else ['color: #64748B;'] * len(row)
 
+                    # (4) [여행 중 지브라 교대 스타일]
                     grp = date_to_group.get(pure_date, 0)
                     if grp == 1:
-                        return ['background-color: rgba(255, 215, 0, 0.13); color: #FFFDF0; font-weight: 500;'] * len(row)
+                        # [ON] 패턴 걸린 날
+                        if is_dark_theme:
+                            return ['background-color: rgba(255, 215, 0, 0.13); color: #FFFDF0; font-weight: 500;'] * len(row)
+                        else:
+                            # 화이트모드: 소프트 슬레이트 배경 + 쨍한 흑요석 블랙 글씨!
+                            return ['background-color: #F1F5F9; color: #0F172A; font-weight: 600;'] * len(row)
                     else:
-                        return ['color: #CBD5E1;'] * len(row)
+                        # [OFF] 패턴 없는 날
+                        if is_dark_theme:
+                            return ['color: #CBD5E1;'] * len(row)
+                        else:
+                            return ['background-color: #FFFFFF; color: #334155;'] * len(row)
 
                 styled_table = styled_render_df.style.apply(style_journey_rows_se, axis=1)
                 
@@ -2507,7 +2530,7 @@ else:
                 num_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
                 styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
                 
-                # 5. 일련번호 삭제(hide_index=True) & 날짜 최적 너비(width=120) & 네모칸 삭제
+                # 5. 일련번호 삭제 & 날짜 최적 너비 & 글자 터치 즉시 선택
                 col_cfg = {
                     "Date": st.column_config.TextColumn("날짜", width=120),
                     "Category": st.column_config.TextColumn("항목", width="small"),
@@ -2528,6 +2551,11 @@ else:
                     selected_idx = df_event.selection.cells[0][0]
                 elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
                     selected_idx = df_event.selection.rows[0]
+
+                # 6.02.04 | Detail Voucher Viewer & Smart KRW Currency Translator
+                if selected_idx is not None:
+                    real_idx = render_df.index[selected_idx] 
+                    row_data = display_df.loc[real_idx]
 
                 # --------------------------------------------------------------
                 # 6.02.04 & 6.02.05 | Detail Voucher Viewer & Inline Editor (개별 영수증 삭제 탑재)
