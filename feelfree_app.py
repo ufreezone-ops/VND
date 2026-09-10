@@ -180,317 +180,82 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (정통 웹브라우저 탭 복구)
-### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
+
+# 1.05.01 | Base Layout & Slim KPI Box CSS
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
 
 current_theme = st.session_state.app_theme
+is_dark = (current_theme == "🌙 다크")
 
-if current_theme == "🌙 다크":
-    # ------------------ [🌙 프리미엄 다크 테마] ------------------
-    st.markdown("""
-        <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
-        <style>
-        /* 📱 [상단 헤더 가림 완벽 방어 + 최적 여백] */
-        .block-container {
-            padding-top: 3.5rem !important;
-            padding-bottom: 2rem !important;
-            padding-left: 0.8rem !important;
-            padding-right: 0.8rem !important;
-        }
+bg_main = "#0e1117" if is_dark else "#F8FAFC"
+color_main = "#ffffff" if is_dark else "#0F172A"
+kpi_bg = "#1e2130" if is_dark else "#FFFFFF"
+kpi_border = "#FF8C00" if is_dark else "#F59E0B"
+kpi_title_c = "#cccccc" if is_dark else "#64748B"
+kpi_val_c = "#ffffff" if is_dark else "#0F172A"
+kpi_vnd_c = "#FFA500" if is_dark else "#D97706"
 
-        div[data-testid="stSelectbox"] {
-            margin-top: 0px !important;
-            margin-bottom: 0px !important;
-        }
+st.markdown(f"""
+    <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
+    <style>
+    /* 본문 상단 여백 & 메인 배경 */
+    .block-container {{ padding-top: 3.5rem !important; padding-bottom: 2rem !important; padding-left: 0.8rem !important; padding-right: 0.8rem !important; }}
+    div[data-testid="stSelectbox"] {{ margin-top: 0px !important; margin-bottom: 0px !important; }}
+    hr {{ margin: 0.4rem 0 0.6rem 0 !important; }}
+    h1 {{ padding-top: 0rem !important; margin-top: 0rem !important; padding-bottom: 0.2rem !important; margin-bottom: 0.8rem !important; }}
+    .main {{ background-color: {bg_main}; color: {color_main}; }}
 
-        hr {
-            margin: 0.4rem 0 0.6rem 0 !important;
-        }
+    /* 슬림 KPI 카드 (2/3 높이 압축) */
+    .kpi-box {{ background-color: {kpi_bg}; padding: 12px 14px; border-radius: 12px; border-left: 6px solid {kpi_border}; margin-bottom: 10px; min-height: 78px; box-shadow: 2px 4px 10px rgba(0,0,0,0.2); }}
+    .kpi-title {{ font-size: 13px; color: {kpi_title_c}; margin-bottom: 3px; font-weight: 600; }}
+    .kpi-value-krw {{ font-size: 20px; font-weight: bold; color: {kpi_val_c}; line-height: 1.15; }}
+    .kpi-value-vnd {{ font-size: 14px; color: {kpi_vnd_c}; margin-top: 3px; font-family: 'Courier New', monospace; font-weight: 500; }}
+    div[data-testid="stTable"] {{ border: 1px solid #444; border-radius: 10px; overflow: hidden; }}
+    </style>
+""", unsafe_allow_html=True)
 
-        /* 메인 타이틀 하단 여백 */
-        h1 {
-            padding-top: 0rem !important;
-            margin-top: 0rem !important;
-            padding-bottom: 0.2rem !important;
-            margin-bottom: 0.8rem !important;
-        }
 
-        .main { background-color: #0e1117; color: #ffffff; }
+# 1.05.02 | Sidebar & Form Controls CSS
+sb_bg = "#1e2130" if is_dark else "#F1F5F9"
+inp_bg = "#1e2130" if is_dark else "#FFFFFF"
+inp_color = "#FFFFFF" if is_dark else "#0F172A"
 
-        /* 📱 [슬림 KPI 카드: 높이 2/3 압축] */
-        .kpi-box { 
-            background-color: #1e2130; 
-            padding: 12px 14px; 
-            border-radius: 12px; 
-            border-left: 6px solid #FF8C00; 
-            margin-bottom: 10px; 
-            min-height: 78px; 
-            box-shadow: 2px 4px 10px rgba(0,0,0,0.4); 
-        }
-        .kpi-title { font-size: 13px; color: #cccccc; margin-bottom: 3px; font-weight: 600; }
-        .kpi-value-krw { font-size: 20px; font-weight: bold; color: #ffffff; line-height: 1.15; }
-        .kpi-value-vnd { font-size: 14px; color: #FFA500; margin-top: 3px; font-family: 'Courier New', monospace; font-weight: 500; }
-        
-        div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
+st.markdown(f"""
+    <style>
+    div[data-testid="stSidebar"] div[data-baseweb="select"] > div {{ border: 2px solid #FFA500 !important; background-color: {sb_bg} !important; border-radius: 10px !important; }}
+    div[data-testid="stSidebar"] .stSelectbox label {{ color: #FFA500 !important; font-weight: bold !important; }}
+    div[data-baseweb="input"] {{ background-color: {inp_bg} !important; border: 1px solid #4B5563 !important; border-radius: 8px !important; }}
+    div[data-baseweb="input"] input {{ color: {inp_color} !important; font-size: 14px !important; }}
+    div[data-testid="stNumberInput"] button {{ display: none !important; }}
+    div[data-testid="stNumberInput"] input {{ padding-right: 10px !important; }}
+    section[data-testid="stSidebar"] > div:first-child {{ padding-top: 1rem !important; }}
+    div[data-testid="stSidebarHeader"] {{ height: 35px !important; min-height: 35px !important; padding-top: 0px !important; }}
+    </style>
+""", unsafe_allow_html=True)
 
-        /* 🌐 [정통 웹브라우저 탭 스타일 100% 직관적 강제 적용 - 다크모드] 🌐 */
-        /* 1. 빨간색 하이라이트 밑줄 완전 제거 */
-        .stTabs [data-baseweb="tab-highlight"],
-        .stTabs [data-baseweb="tab-border"] {
-            display: none !important;
-            height: 0px !important;
-            opacity: 0 !important;
-            visibility: hidden !important;
-        }
 
-        /* 2. 전체 가로를 관통하는 오렌지 베이스라인 */
-        .stTabs [data-baseweb="tab-list"] {
-            display: flex !important;
-            width: 100% !important;
-            gap: 6px !important;
-            padding: 8px 0px 0px 0px !important;
-            margin: 0px 0px 18px 0px !important;
-            background: transparent !important;
-            border: none !important;
-            border-bottom: 2.5px solid #FFA500 !important; /* 👈 가로 전체 오렌지 레일 */
-        }
+# 1.05.03 | Tab Navigation CSS (독립 서브모듈 - 앞으로 탭 수정 시 여기만 교체!)
+tab_bg_unselected = "#18202E" if is_dark else "#E2E8F0"
+tab_text_unselected = "#38BDF8" if is_dark else "#0284C7"
 
-        /* 3. 닫힌 탭 (화면 1/4씩 꽉 채우는 2배 넓은 탭 + 밝은 청색 글씨) */
-        .stTabs [data-baseweb="tab"] {
-            flex: 1 1 0px !important;
-            width: 25% !important;
-            height: 44px !important;
-            background-color: #1a2232 !important;
-            border: 1.5px solid #334155 !important;
-            border-bottom: none !important;
-            border-radius: 10px 10px 0px 0px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            padding: 0px !important;
-            margin: 0px !important;
-        }
-
-        /* 닫힌 탭 글씨: 밝은 청색(#38BDF8) 강제 */
-        .stTabs [data-baseweb="tab"] p,
-        .stTabs [data-baseweb="tab"] * {
-            color: #38BDF8 !important;
-            font-size: 16px !important;
-            font-weight: 600 !important;
-        }
-
-        /* 4. 선택된 탭 (∩ 오렌지 지붕 테두리 + 바닥선 뚫림 + 오렌지 글씨) */
-        .stTabs [aria-selected="true"] {
-            background-color: #0e1117 !important; /* 👈 본문 배경과 동일하여 바닥선을 지움 */
-            border: 2.5px solid #FFA500 !important;
-            border-bottom: 4px solid #0e1117 !important; /* 👈 바닥선을 덮어서 뚫림 처리 */
-            border-radius: 10px 10px 0px 0px !important;
-            margin-bottom: -2.5px !important;
-            z-index: 10 !important;
-            position: relative !important;
-        }
-
-        /* 선택된 탭 글씨: 오렌지 강제 */
-        .stTabs [aria-selected="true"] p,
-        .stTabs [aria-selected="true"] * {
-            color: #FFA500 !important;
-            font-size: 16.5px !important;
-            font-weight: 800 !important;
-        }
-
-        div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
-        div[data-testid="stSidebar"] .stSelectbox label { color: #FFA500 !important; font-weight: bold !important; }
-        div[data-baseweb="popover"] li[aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: bold !important; }
-        div[data-baseweb="popover"] li:hover { background-color: #FFD700 !important; color: #000000 !important; }
-        div[data-testid="stSidebar"] .stSelectbox label p { color: #FFD700 !important; }
-        [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
-
-        /* 다크모드 검색창 & 입력창 고대비 흰색 글씨 고정 */
-        div[data-baseweb="input"] { background-color: #1e2130 !important; border: 1px solid #4B5563 !important; border-radius: 8px !important; }
-        div[data-baseweb="input"] input { color: #FFFFFF !important; font-size: 14px !important; }
-
-        div[data-testid="stNumberInput"] button { display: none !important; }
-        div[data-testid="stNumberInput"] input { padding-right: 10px !important; }
-        div[data-testid="stNumberInput"] [data-baseweb="input"] { border-right-width: 1px !important; }
-
-        /* 사이드바 상단 여백 회수 */
-        section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem !important; }
-        div[data-testid="stSidebarHeader"] { height: 35px !important; min-height: 35px !important; padding-top: 0px !important; padding-bottom: 0px !important; margin-bottom: 0px !important; }
-        div[data-testid="stSidebarContent"] { padding-top: 0px !important; }
-        div[data-testid="stSidebarUserContent"] { padding-top: 0px !important; }
-        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0px !important; gap: 0px !important; }
-        [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] { padding-top: 6px !important; padding-bottom: 8px !important; }
-
-        /* 실물현금 카운터 튜닝 스타일 */
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
-            display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: center !important; width: 100% !important; gap: 10px !important; margin-bottom: 3px !important; margin-top: 0px !important; padding: 0px !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
-            flex: 0 0 55px !important; width: 55px !important; max-width: 55px !important; min-width: 55px !important; display: flex !important; align-items: center !important; justify-content: flex-end !important; height: 30px !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
-            margin: 0px !important; padding: 0px !important; line-height: 30px !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
-            flex: 0 0 85px !important; width: 85px !important; max-width: 85px !important; min-width: 85px !important; display: flex !important; align-items: center !important; height: 30px !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput { width: 85px !important; margin: 0px !important; padding: 0px !important; height: 30px !important; }
-        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] { width: 85px !important; min-height: 30px !important; height: 30px !important; border-radius: 6px !important; padding: 0px !important; display: flex !important; align-items: center !important; }
-        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input { height: 30px !important; font-size: 14px !important; text-align: center !important; padding: 0px !important; line-height: 30px !important; }
-        </style>
-    """, unsafe_allow_html=True)
-else:
-    # ------------------ [☀️ 고대비 화이트 모드] ------------------
-    st.markdown("""
-        <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
-        <style>
-        .block-container {
-            padding-top: 3.5rem !important;
-            padding-bottom: 2rem !important;
-            padding-left: 0.8rem !important;
-            padding-right: 0.8rem !important;
-        }
-
-        div[data-testid="stSelectbox"] {
-            margin-top: 0px !important;
-            margin-bottom: 0px !important;
-        }
-
-        hr {
-            margin: 0.4rem 0 0.6rem 0 !important;
-        }
-
-        h1 {
-            padding-top: 0rem !important;
-            margin-top: 0rem !important;
-            padding-bottom: 0.2rem !important;
-            margin-bottom: 0.8rem !important;
-        }
-
-        .main { background-color: #F8FAFC; color: #0F172A; }
-
-        /* 📱 [슬림 KPI 카드: 화이트모드] */
-        .kpi-box { 
-            background-color: #FFFFFF; 
-            padding: 12px 14px; 
-            border-radius: 12px; 
-            border-left: 6px solid #F59E0B; 
-            margin-bottom: 10px; 
-            min-height: 78px; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.06); 
-            border-top: 1px solid #E2E8F0; 
-            border-right: 1px solid #E2E8F0; 
-            border-bottom: 1px solid #E2E8F0; 
-        }
-        .kpi-title { font-size: 13px; color: #64748B; margin-bottom: 3px; font-weight: 600; }
-        .kpi-value-krw { font-size: 20px; font-weight: bold; color: #0F172A; line-height: 1.15; }
-        .kpi-value-vnd { font-size: 14px; color: #D97706; margin-top: 3px; font-family: 'Courier New', monospace; font-weight: 600; }
-        
-        div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
-
-        /* 🌐 [정통 웹브라우저 탭 스타일 - 화이트모드] 🌐 */
-        .stTabs [data-baseweb="tab-highlight"],
-        .stTabs [data-baseweb="tab-border"] {
-            display: none !important;
-            height: 0px !important;
-            opacity: 0 !important;
-            visibility: hidden !important;
-        }
-
-        .stTabs [data-baseweb="tab-list"] {
-            display: flex !important;
-            width: 100% !important;
-            gap: 6px !important;
-            padding: 8px 0px 0px 0px !important;
-            margin: 0px 0px 18px 0px !important;
-            background: transparent !important;
-            border: none !important;
-            border-bottom: 2.5px solid #F59E0B !important;
-        }
-        
-        .stTabs [data-baseweb="tab"] {
-            flex: 1 1 0px !important;
-            width: 25% !important;
-            height: 44px !important;
-            background-color: #E2E8F0 !important;
-            border: 1.5px solid #CBD5E1 !important;
-            border-bottom: none !important;
-            border-radius: 10px 10px 0px 0px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            padding: 0px !important;
-            margin: 0px !important;
-        }
-        
-        .stTabs [data-baseweb="tab"] p,
-        .stTabs [data-baseweb="tab"] * {
-            color: #0284C7 !important; /* 👈 화이트모드 선명한 딥 블루 */
-            font-size: 16px !important;
-            font-weight: 700 !important;
-        }
-        
-        .stTabs [aria-selected="true"] {
-            background-color: #F8FAFC !important; /* 👈 화이트 본문 배경 */
-            border: 2.5px solid #F59E0B !important;
-            border-bottom: 4px solid #F8FAFC !important; /* 👈 하단선 뚫림 */
-            border-radius: 10px 10px 0px 0px !important;
-            margin-bottom: -2.5px !important;
-            z-index: 10 !important;
-            position: relative !important;
-        }
-
-        .stTabs [aria-selected="true"] p,
-        .stTabs [aria-selected="true"] * {
-            color: #D97706 !important;
-            font-size: 16.5px !important;
-            font-weight: 800 !important;
-        }
-
-        div[data-testid="stSidebar"] { background-color: #F1F5F9 !important; border-right: 1px solid #E2E8F0; }
-        div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #F59E0B !important; background-color: #FFFFFF !important; border-radius: 10px !important; color: #0F172A !important; }
-        div[data-testid="stSidebar"] .stSelectbox label { color: #D97706 !important; font-weight: bold !important; }
-        div[data-testid="stSidebar"] .stSelectbox label p { color: #B45309 !important; font-weight: bold !important; }
-        [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; border-color: #CBD5E1 !important; }
-
-        /* 화이트모드 검색창 & 입력창 고대비 흑요석 블랙 글씨 강제 고정 */
-        div[data-baseweb="input"] { background-color: #FFFFFF !important; border: 1.5px solid #94A3B8 !important; border-radius: 8px !important; }
-        div[data-baseweb="input"] input { color: #0F172A !important; font-size: 14px !important; font-weight: 500 !important; }
-        div[data-baseweb="input"] input::placeholder { color: #94A3B8 !important; }
-
-        div[data-testid="stNumberInput"] button { display: none !important; }
-        div[data-testid="stNumberInput"] input { padding-right: 10px !important; }
-        div[data-testid="stNumberInput"] [data-baseweb="input"] { border-right-width: 1px !important; }
-
-        section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem !important; }
-        div[data-testid="stSidebarHeader"] { height: 35px !important; min-height: 35px !important; padding-top: 0px !important; padding-bottom: 0px !important; margin-bottom: 0px !important; }
-        div[data-testid="stSidebarContent"] { padding-top: 0px !important; }
-        div[data-testid="stSidebarUserContent"] { padding-top: 0px !important; }
-        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0px !important; gap: 0px !important; }
-        [data-testid="stSidebar"] div[data-testid="stExpanderDetails"] { padding-top: 6px !important; padding-bottom: 8px !important; }
-
-        /* 실물현금 카운터 화이트모드 스타일 */
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
-            display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: center !important; width: 100% !important; gap: 10px !important; margin-bottom: 3px !important; margin-top: 0px !important; padding: 0px !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
-            flex: 0 0 55px !important; width: 55px !important; max-width: 55px !important; min-width: 55px !important; display: flex !important; align-items: center !important; justify-content: flex-end !important; height: 30px !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child p,
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child div {
-            margin: 0px !important; padding: 0px !important; line-height: 30px !important; color: #1E293B !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
-            flex: 0 0 85px !important; width: 85px !important; max-width: 85px !important; min-width: 85px !important; display: flex !important; align-items: center !important; height: 30px !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput { width: 85px !important; margin: 0px !important; padding: 0px !important; height: 30px !important; }
-        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput div[data-baseweb="input"] { width: 85px !important; min-height: 30px !important; height: 30px !important; border-radius: 6px !important; padding: 0px !important; display: flex !important; align-items: center !important; background-color: #FFFFFF !important; border: 1.5px solid #CBD5E1 !important; }
-        [data-testid="stSidebar"] [data-testid="stExpander"] div.stNumberInput input { height: 30px !important; font-size: 14px !important; text-align: center !important; padding: 0px !important; line-height: 30px !important; color: #0F172A !important; }
-        </style>
-    """, unsafe_allow_html=True)
+st.markdown(f"""
+    <style>
+    /* 탭 리스트 가로 4등분 균등 배치 */
+    .stTabs [data-baseweb="tab-list"] {{ display: flex !important; width: 100% !important; gap: 6px !important; padding: 4px !important; background: transparent !important; margin-bottom: 16px !important; }}
+    
+    /* 비선택 탭: 깔끔한 라운드 박스 + 선명한 스카이블루 글씨 */
+    .stTabs [data-baseweb="tab"] {{ flex: 1 1 0% !important; height: 42px !important; background-color: {tab_bg_unselected} !important; border-radius: 10px !important; border: 1px solid #334155 !important; display: flex !important; align-items: center !important; justify-content: center !important; }}
+    .stTabs [data-baseweb="tab"] p {{ font-size: 15.5px !important; font-weight: 600 !important; color: {tab_text_unselected} !important; margin: 0px !important; }}
+    
+    /* 선택 탭: 오렌지 하이라이트 뱃지 */
+    .stTabs [aria-selected="true"] {{ background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; border: 1px solid #FFA500 !important; }}
+    .stTabs [aria-selected="true"] p {{ color: #FFFFFF !important; font-size: 16px !important; font-weight: 800 !important; }}
+    
+    /* 하단 빨간줄 숨김 */
+    .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{ display: none !important; }}
+    </style>
+""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
 # 1.06.00 | Session State Orchestrator (동적 세션 상태 및 컨텍스트 초기화)
