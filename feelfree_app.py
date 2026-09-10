@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (헤더 가림 방지 및 황금비율 여백)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (슬림 KPI 카드 & 최적 여백)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -194,7 +194,7 @@ if current_theme == "🌙 다크":
         <style>
         /* 📱 [상단 헤더 가림 완벽 방어 + 최적 여백] */
         .block-container {
-            padding-top: 3.5rem !important;  /* 상단 헤더 높이만큼 안전하게 확보 */
+            padding-top: 3.5rem !important;
             padding-bottom: 2rem !important;
             padding-left: 0.8rem !important;
             padding-right: 0.8rem !important;
@@ -220,10 +220,21 @@ if current_theme == "🌙 다크":
         }
 
         .main { background-color: #0e1117; color: #ffffff; }
-        .kpi-box { background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 8px solid #FF8C00; margin-bottom: 20px; min-height: 130px; box-shadow: 4px 6px 15px rgba(0,0,0,0.5); }
-        .kpi-title { font-size: 15px; color: #cccccc; margin-bottom: 10px; font-weight: 600; }
-        .kpi-value-krw { font-size: 26px; font-weight: bold; color: #ffffff; line-height: 1.1; }
-        .kpi-value-vnd { font-size: 18px; color: #FFA500; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 500; }
+
+        /* 📱 [슬림 KPI 카드: 높이 2/3 압축 최적화] */
+        .kpi-box { 
+            background-color: #1e2130; 
+            padding: 12px 14px; 
+            border-radius: 12px; 
+            border-left: 6px solid #FF8C00; 
+            margin-bottom: 10px; 
+            min-height: 78px; 
+            box-shadow: 2px 4px 10px rgba(0,0,0,0.4); 
+        }
+        .kpi-title { font-size: 13px; color: #cccccc; margin-bottom: 3px; font-weight: 600; }
+        .kpi-value-krw { font-size: 20px; font-weight: bold; color: #ffffff; line-height: 1.15; }
+        .kpi-value-vnd { font-size: 14px; color: #FFA500; margin-top: 3px; font-family: 'Courier New', monospace; font-weight: 500; }
+        
         div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
         .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #161a25; border-radius: 12px; border: 2px solid #FFA500; box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); }
@@ -278,26 +289,22 @@ else:
     st.markdown("""
         <script>var link=document.createElement('link'); link.rel='apple-touch-icon'; link.href='https://img.icons8.com/color/512/globe--v1.png'; document.getElementsByTagName('head')[0].appendChild(link);</script>
         <style>
-        /* 📱 [상단 헤더 가림 완벽 방어 + 최적 여백] */
         .block-container {
-            padding-top: 3.5rem !important;  /* 상단 헤더 높이만큼 안전하게 확보 */
+            padding-top: 3.5rem !important;
             padding-bottom: 2rem !important;
             padding-left: 0.8rem !important;
             padding-right: 0.8rem !important;
         }
 
-        /* 여행 선택 드롭다운 여백 정규화 */
         div[data-testid="stSelectbox"] {
             margin-top: 0px !important;
             margin-bottom: 0px !important;
         }
 
-        /* 구분선(st.divider) 간격 슬림화 */
         hr {
             margin: 0.4rem 0 0.6rem 0 !important;
         }
 
-        /* 메인 타이틀(후에 2026 등) 상단 여백 제거 */
         h1 {
             padding-top: 0rem !important;
             margin-top: 0rem !important;
@@ -306,10 +313,24 @@ else:
         }
 
         .main { background-color: #F8FAFC; color: #0F172A; }
-        .kpi-box { background-color: #FFFFFF; padding: 20px; border-radius: 15px; border-left: 8px solid #F59E0B; margin-bottom: 20px; min-height: 130px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; }
-        .kpi-title { font-size: 15px; color: #64748B; margin-bottom: 10px; font-weight: 600; }
-        .kpi-value-krw { font-size: 26px; font-weight: bold; color: #0F172A; line-height: 1.1; }
-        .kpi-value-vnd { font-size: 18px; color: #D97706; margin-top: 8px; font-family: 'Courier New', monospace; font-weight: 600; }
+
+        /* 📱 [슬림 KPI 카드: 화이트모드 높이 2/3 압축 최적화] */
+        .kpi-box { 
+            background-color: #FFFFFF; 
+            padding: 12px 14px; 
+            border-radius: 12px; 
+            border-left: 6px solid #F59E0B; 
+            margin-bottom: 10px; 
+            min-height: 78px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.06); 
+            border-top: 1px solid #E2E8F0; 
+            border-right: 1px solid #E2E8F0; 
+            border-bottom: 1px solid #E2E8F0; 
+        }
+        .kpi-title { font-size: 13px; color: #64748B; margin-bottom: 3px; font-weight: 600; }
+        .kpi-value-krw { font-size: 20px; font-weight: bold; color: #0F172A; line-height: 1.15; }
+        .kpi-value-vnd { font-size: 14px; color: #D97706; margin-top: 3px; font-family: 'Courier New', monospace; font-weight: 600; }
+        
         div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
 
         .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #F1F5F9; border-radius: 12px; border: 2px solid #F59E0B; box-shadow: 0px 2px 8px rgba(245, 158, 11, 0.15); }
@@ -323,7 +344,7 @@ else:
         div[data-testid="stSidebar"] .stSelectbox label p { color: #B45309 !important; font-weight: bold !important; }
         [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; border-color: #CBD5E1 !important; }
 
-        /* [핵심] 화이트모드 검색창 & 입력창 고대비 흑요석 블랙 글씨 강제 고정 */
+        /* 화이트모드 검색창 & 입력창 고대비 흑요석 블랙 글씨 강제 고정 */
         div[data-baseweb="input"] { background-color: #FFFFFF !important; border: 1.5px solid #94A3B8 !important; border-radius: 8px !important; }
         div[data-baseweb="input"] input { color: #0F172A !important; font-size: 14px !important; font-weight: 500 !important; }
         div[data-baseweb="input"] input::placeholder { color: #94A3B8 !important; }
@@ -3291,7 +3312,7 @@ else:
     # --------------------------------------------------------------------------
     with tab_final:
         if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
-            # 6.04.01 | Executive Macro KPI Summary Cards
+            # 6.04.01 | Executive Macro KPI Summary Cards (간결한 명칭 적용)
             total_trip_krw = exp_df['KRW_val'].sum()
             total_trip_loc = exp_df['Local_val'].sum()
             
@@ -3318,17 +3339,18 @@ else:
                 loc_str = f"<div class='kpi-value-vnd'>({fmt_local.format(loc)} {LOCAL_SYM})</div>" if loc is not None else ""
                 return f"<div class='kpi-box'><div class='kpi-title'>{title}</div><div class='kpi-value-krw'>{krw:,.0f} 원</div>{loc_str}</div>"
                 
-            st.header("🏁 여행요약")
+            st.markdown("<h3 style='margin-top: 0px; margin-bottom: 8px;'>🏁 여행요약</h3>", unsafe_allow_html=True)
             k1, k2, k3, k4 = st.columns(4)
-            with k1: st.markdown(kpi_box("여행 최종 순지출", total_trip_krw, total_trip_loc), unsafe_allow_html=True)
-            with k2: st.markdown(kpi_box("국내 지출 순액", dom_total_krw), unsafe_allow_html=True)
-            with k3: st.markdown(kpi_box("현지 지출 총액", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
-            with k4: st.markdown(kpi_box(f"현지 일상/생존 1일 평균", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
+            # [수정] 요청하신 간결한 문구 4종 적용
+            with k1: st.markdown(kpi_box("최종 지출", total_trip_krw, total_trip_loc), unsafe_allow_html=True)
+            with k2: st.markdown(kpi_box("국내 지출", dom_total_krw), unsafe_allow_html=True)
+            with k3: st.markdown(kpi_box("현지 지출", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
+            with k4: st.markdown(kpi_box("여행중 1일 평균지출", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
             
             # ------------------------------------------------------------------
-            # 6.04.02 | Comprehensive Expense Treemap Matrix (우측 세로 컬러바 완전 삭제)
+            # 6.04.02 | Comprehensive Expense Treemap Matrix
             # ------------------------------------------------------------------
-            st.subheader("🌳 지출분석 (Treemap)")
+            st.markdown("<h4 style='margin-top: 15px; margin-bottom: 5px;'>🌳 지출분석 (Treemap)</h4>", unsafe_allow_html=True)
             chart_df = exp_df[exp_df['KRW_val'] > 0].copy()
             if not chart_df.empty:
                 chart_df['Short_Desc'] = chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
@@ -3347,21 +3369,19 @@ else:
                     textposition='middle center', 
                     insidetextfont=dict(size=16)
                 )
-                # [핵심] coloraxis_showscale=False 로 우측 세로 막대 완전 삭제 & 가로 100% 전폭 확장!
                 fig_tree.update_layout(
-                    margin=dict(l=0, r=0, t=20, b=10), 
-                    height=650,
+                    margin=dict(l=0, r=0, t=10, b=10), 
+                    height=580,
                     coloraxis_showscale=False
                 )
                 st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
             
             # ------------------------------------------------------------------
-            # 6.04.03 | Donut Category Distribution Chart (중앙 미니멀 & 슬라이스 확대)
+            # 6.04.03 | Donut Category Distribution Chart (상하 여백 대폭 압축 밀착형)
             # ------------------------------------------------------------------
-            st.subheader("🍕 지출비중")
+            st.markdown("<h4 style='margin-top: 12px; margin-bottom: 0px;'>🍕 지출비중</h4>", unsafe_allow_html=True)
             cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
             
-            # [수정] 도넛 구멍 축소: 0.5 -> 0.35 (파이 조각 두께 40% 확장으로 글씨 확대 공간 확보)
             fig_donut = px.pie(
                 cat_pie, 
                 values='KRW_val', 
@@ -3370,7 +3390,6 @@ else:
                 color_discrete_sequence=px.colors.qualitative.Set3
             )
             
-            # 파이 조각 내부 글자 13.5px 볼드로 시원시원하게 확대
             fig_donut.update_traces(
                 textposition='inside', 
                 textinfo='label+value+percent', 
@@ -3378,7 +3397,7 @@ else:
                 insidetextfont=dict(size=13.5)
             )
 
-            # 여행 상태 연동 중앙 텍스트 산출 (출발전/진행중/종료 연동)
+            # 여행 상태 연동 중앙 텍스트 산출
             korea_dep_rows = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
             dep_rows_all = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
             t_dep = korea_dep_rows if not korea_dep_rows.empty else (dep_rows_all[~dep_rows_all['Category'].str.contains('_', na=False)] if not dep_rows_all.empty else dep_rows_all)
@@ -3399,7 +3418,6 @@ else:
 
             today_f = datetime.now(st.session_state.current_tz).date()
 
-            # [사용자 정의 공식 연동]
             if dep_dt_f and arr_dt_f:
                 cal_days_f = (arr_dt_f - dep_dt_f).days + 1
                 if today_f < dep_dt_f:
@@ -3412,7 +3430,6 @@ else:
             else:
                 center_sub_text = f"({total_nights}일간)"
 
-            # [핵심] '순지출(Net)' 삭제, 금액 선명한 볼드 유지, 아래에 상태 표기 결합
             center_annotation_html = f"<b>{total_trip_krw:,.0f}원</b><br><span style='font-size:12px; color:#A0AEC0;'>{center_sub_text}</span>"
             
             fig_donut.add_annotation(
@@ -3422,10 +3439,11 @@ else:
                 font=dict(size=16)
             )
             
+            # [핵심] 상단 마진(t=5), 하단 마진(b=20), 높이(height=440), 범례(y=-0.05) 대폭 밀착
             fig_donut.update_layout(
-                height=600, 
-                margin=dict(l=10, r=10, t=30, b=80), 
-                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+                height=440, 
+                margin=dict(l=10, r=10, t=5, b=20), 
+                legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5)
             )
             st.plotly_chart(fig_donut, use_container_width=True)
 
