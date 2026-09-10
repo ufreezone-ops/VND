@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (프리미엄 캡슐 탭 & 슬림 KPI)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (바인더 수첩/브라우저 탭 스타일)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -234,51 +234,65 @@ if current_theme == "🌙 다크":
         
         div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-        /* 🌟 [예술적 프리미엄 캡슐 탭 바 - 다크모드] 🌟 */
+        /* 📑 [진짜 바인더 수첩 / 웹브라우저 인덱스 탭 - 다크모드] 📑 */
         div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] { display: none !important; }
         
+        /* 탭 바닥 기준선 */
         .stTabs[data-baseweb="tab-list"] { 
             display: flex !important;
-            justify-content: space-between !important;
-            gap: 6px !important; 
-            padding: 5px !important; 
-            background: rgba(22, 26, 37, 0.95) !important; 
-            border-radius: 14px !important; 
-            border: 1px solid rgba(255, 165, 0, 0.35) !important; 
-            box-shadow: 0px 4px 16px rgba(0, 0, 0, 0.4) !important;
-            margin-bottom: 12px !important;
+            justify-content: flex-start !important;
+            gap: 4px !important; 
+            padding: 0px 2px !important; 
+            background: transparent !important; 
+            border: none !important;
+            border-bottom: 2px solid #2D3748 !important; /* 바인더 수첩 기준선 */
+            border-radius: 0px !important;
+            box-shadow: none !important;
+            margin-bottom: 14px !important;
         }
         
+        /* 닫힌 책갈피 탭 (비선택) */
         .stTabs[data-baseweb="tab"] { 
             flex: 1 1 0px !important;
-            height: 38px !important; 
-            background: rgba(38, 43, 59, 0.65) !important; 
-            border-radius: 10px !important; 
+            height: 36px !important; 
+            background: #181E29 !important; 
+            border-radius: 10px 10px 0px 0px !important; /* 윗쪽만 둥글게! */
             padding: 0px 4px !important; 
-            color: #94A3B8 !important; 
-            border: 1px solid rgba(255, 255, 255, 0.06) !important; 
+            color: #718096 !important; 
+            border: 1px solid #2D3748 !important; 
+            border-bottom: none !important; /* 아래는 뚫림 */
             font-size: 13.5px !important; 
             font-weight: 500 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important; 
+            transform: translateY(3px) !important; /* 살짝 뒤로 가라앉음 */
+            opacity: 0.75 !important;
+            transition: all 0.2s ease !important; 
         }
         
         .stTabs[data-baseweb="tab"]:hover { 
-            background: rgba(55, 62, 85, 0.9) !important; 
-            color: #F8FAFC !important; 
-            transform: translateY(-1px) !important;
+            background: #222B3C !important; 
+            color: #CBD5E0 !important; 
+            transform: translateY(1px) !important;
+            opacity: 1 !important;
         }
         
+        /* 열린 책갈피 탭 (선택: 앞으로 쑥 솟아오르며 본문과 연결) */
         .stTabs [aria-selected="true"] { 
-            background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; 
-            color: #FFFFFF !important; 
-            font-weight: 700 !important; 
-            box-shadow: 0px 4px 14px rgba(234, 88, 12, 0.45), inset 0px 1px 1px rgba(255, 255, 255, 0.35) !important; 
-            border: 1px solid rgba(255, 215, 0, 0.5) !important; 
-            transform: translateY(-1px) !important;
-            text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.3) !important;
+            background: #242D3D !important; 
+            color: #FFA500 !important; 
+            font-weight: 800 !important; 
+            border-top: 3.5px solid #FFA500 !important; /* 바인더 상단 인덱스 라인 */
+            border-left: 1.5px solid #FFA500 !important;
+            border-right: 1.5px solid #FFA500 !important;
+            border-bottom: 2.5px solid #242D3D !important; /* 기준선을 덮어서 내용과 통짜 연결! */
+            border-radius: 10px 10px 0px 0px !important;
+            transform: translateY(0px) !important; /* 앞으로 솟아오름 */
+            opacity: 1 !important;
+            margin-bottom: -2px !important; 
+            box-shadow: 0px -3px 8px rgba(0, 0, 0, 0.3) !important;
+            text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.4) !important;
         }
 
         div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
@@ -372,49 +386,61 @@ else:
         
         div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
 
-        /* 🌟 [예술적 프리미엄 캡슐 탭 바 - 화이트모드] 🌟 */
+        /* 📑 [진짜 바인더 수첩 / 웹브라우저 인덱스 탭 - 화이트모드] 📑 */
         div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] { display: none !important; }
 
         .stTabs[data-baseweb="tab-list"] { 
             display: flex !important;
-            justify-content: space-between !important;
-            gap: 6px !important; 
-            padding: 5px !important; 
-            background: #E2E8F0 !important; 
-            border-radius: 14px !important; 
-            border: 1px solid #CBD5E1 !important; 
-            box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.05) !important; 
-            margin-bottom: 12px !important;
+            justify-content: flex-start !important;
+            gap: 4px !important; 
+            padding: 0px 2px !important; 
+            background: transparent !important; 
+            border: none !important;
+            border-bottom: 2px solid #CBD5E1 !important;
+            border-radius: 0px !important;
+            box-shadow: none !important;
+            margin-bottom: 14px !important;
         }
         
         .stTabs[data-baseweb="tab"] { 
             flex: 1 1 0px !important;
-            height: 38px !important; 
-            background: #FFFFFF !important; 
-            border-radius: 10px !important; 
+            height: 36px !important; 
+            background: #E2E8F0 !important; 
+            border-radius: 10px 10px 0px 0px !important;
             padding: 0px 4px !important; 
-            color: #475569 !important; 
-            border: 1px solid #E2E8F0 !important; 
+            color: #64748B !important; 
+            border: 1px solid #CBD5E1 !important; 
+            border-bottom: none !important; 
             font-size: 13.5px !important; 
             font-weight: 500 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transition: all 0.25s ease !important; 
+            transform: translateY(3px) !important;
+            opacity: 0.8 !important;
+            transition: all 0.2s ease !important; 
         }
         
         .stTabs[data-baseweb="tab"]:hover { 
             background: #F1F5F9 !important; 
             color: #0F172A !important; 
+            transform: translateY(1px) !important;
+            opacity: 1 !important;
         }
         
         .stTabs [aria-selected="true"] { 
-            background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important; 
-            color: #FFFFFF !important; 
-            font-weight: 700 !important; 
-            box-shadow: 0px 4px 12px rgba(245, 158, 11, 0.35) !important; 
-            border: 1px solid #F59E0B !important; 
-            text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.2) !important;
+            background: #FFFFFF !important; 
+            color: #D97706 !important; 
+            font-weight: 800 !important; 
+            border-top: 3.5px solid #F59E0B !important; 
+            border-left: 1.5px solid #CBD5E1 !important;
+            border-right: 1.5px solid #CBD5E1 !important;
+            border-bottom: 2.5px solid #FFFFFF !important; 
+            border-radius: 10px 10px 0px 0px !important;
+            transform: translateY(0px) !important; 
+            opacity: 1 !important;
+            margin-bottom: -2px !important; 
+            box-shadow: 0px -3px 8px rgba(0, 0, 0, 0.06) !important;
         }
 
         div[data-testid="stSidebar"] { background-color: #F1F5F9 !important; border-right: 1px solid #E2E8F0; }
