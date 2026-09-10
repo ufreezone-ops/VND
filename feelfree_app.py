@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (정통 웹브라우저 탭 수평 정렬 완성)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (빨간줄 완전박멸 & 브라우저 탭)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -235,28 +235,29 @@ if current_theme == "🌙 다크":
         
         div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-        /* 🌐 [정통 웹브라우저 탭 스타일 100% 구현 - 다크모드] 🌐 */
-        /* 1. 빨간색 하이라이트 바/가상요소 완전 제거 */
-        div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
-        div[data-testid="stTabs"] [data-baseweb="tab-border"],
-        div[data-baseweb="tab-highlight"],
-        div[data-baseweb="tab-border"],
+        /* 🌐 [정통 웹브라우저 탭 스타일 100% 강제 적용 - 다크모드] 🌐 */
+        /* 1. 빨간색 하이라이트 인디케이터 영구 박멸 */
+        [data-baseweb="tab-highlight"],
+        [data-baseweb="tab-border"],
         .stTabs [data-baseweb="tab-highlight"],
-        .stTabs [data-baseweb="tab-border"] {
+        .stTabs [data-baseweb="tab-border"],
+        [data-testid="stTabs"] [data-baseweb="tab-highlight"],
+        [data-testid="stTabs"] [data-baseweb="tab-border"],
+        div[data-baseweb="tab-highlight"],
+        div[data-baseweb="tab-border"] {
             display: none !important;
-            opacity: 0 !important;
+            visibility: hidden !important;
             height: 0px !important;
             max-height: 0px !important;
-            width: 0px !important;
-            visibility: hidden !important;
+            opacity: 0 !important;
             background: transparent !important;
+            background-color: transparent !important;
             border: none !important;
         }
 
-        /* 2. 전체 가로를 꽉 채우는 오렌지 베이스라인 레일 */
+        /* 2. 전체 가로를 꽉 채우는 오렌지 베이스라인 */
         .stTabs [data-baseweb="tab-list"],
         [data-testid="stTabs"] [data-baseweb="tab-list"],
-        div[data-baseweb="tab-list"],
         div[role="tablist"] {
             display: flex !important;
             flex-direction: row !important;
@@ -268,13 +269,13 @@ if current_theme == "🌙 다크":
             border: none !important;
             border-bottom: 2.5px solid #FFA500 !important; /* 👈 가로 전체 오렌지 레일 */
             overflow: visible !important;
+            position: relative !important;
         }
 
-        /* 3. 닫힌 탭 (비선택) - 처짐 없이 수평 일치 정렬 */
-        .stTabs [data-baseweb="tab"],
-        [data-testid="stTabs"] button[role="tab"],
-        button[data-baseweb="tab"],
-        div[role="tab"] {
+        /* 3. 닫힌 탭 (비선택: 수평 완벽 일치) */
+        .stTabs button[role="tab"][aria-selected="false"],
+        .stTabs [data-baseweb="tab"][aria-selected="false"],
+        [data-testid="stTabs"] button[role="tab"][aria-selected="false"] {
             flex: 1 1 0% !important;
             width: 25% !important;
             min-width: 0px !important;
@@ -290,58 +291,48 @@ if current_theme == "🌙 다크":
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transform: none !important; /* 👈 아래 처짐 효과 완전 제거 */
+            transform: none !important;
             opacity: 1 !important;
-            box-shadow: none !important;
             outline: none !important;
-            transition: all 0.15s ease-in-out !important;
+            box-shadow: none !important;
         }
 
-        /* 닫힌 탭 글씨: 선명한 밝은 청색(스카이블루) 적용 */
-        .stTabs [data-baseweb="tab"]:not([aria-selected="true"]) p,
-        [data-testid="stTabs"] button[role="tab"]:not([aria-selected="true"]) p,
-        .stTabs [data-baseweb="tab"]:not([aria-selected="true"]) span,
-        .stTabs [data-baseweb="tab"]:not([aria-selected="true"]) div {
+        /* 닫힌 탭 내부 모든 글씨: 밝은 청색(#38BDF8) 100% 강제 고정 */
+        .stTabs button[role="tab"][aria-selected="false"] *,
+        .stTabs [data-baseweb="tab"][aria-selected="false"] *,
+        [data-testid="stTabs"] button[role="tab"][aria-selected="false"] * {
+            color: #38BDF8 !important; /* 👈 선명한 스카이블루 */
             font-size: 16px !important;
             font-weight: 600 !important;
-            color: #0ea5e9 !important; /* 👈 선명하고 밝은 청색 */
-            margin: 0px !important;
-            padding: 0px !important;
         }
 
-        .stTabs [data-baseweb="tab"]:hover {
-            background-color: #242E42 !important;
-        }
-        .stTabs [data-baseweb="tab"]:hover p {
-            color: #38BDF8 !important;
-        }
-
-        /* 4. 활성화된 탭 (∩ 오렌지 지붕 테두리 + 바닥선 뚫림 + 수평 완벽 일치) */
-        .stTabs [data-baseweb="tab"][aria-selected="true"],
+        /* 4. 활성화된 탭 (∩ 오렌지 지붕 테두리 + 바닥선 뚫림 + 빨간줄 제로) */
         .stTabs button[role="tab"][aria-selected="true"],
-        [data-testid="stTabs"] [aria-selected="true"],
-        button[data-baseweb="tab"][aria-selected="true"] {
+        .stTabs [data-baseweb="tab"][aria-selected="true"],
+        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            flex: 1 1 0% !important;
+            width: 25% !important;
+            min-width: 0px !important;
+            height: 44px !important;
             background-color: #0e1117 !important; /* 👈 본문 배경과 일치 */
-            border-top: 2.5px solid #FFA500 !important;   /* 👈 윗선 */
-            border-left: 2.5px solid #FFA500 !important;  /* 👈 좌측선 */
-            border-right: 2.5px solid #FFA500 !important; /* 👈 우측선 */
-            border-bottom: 4px solid #0e1117 !important;  /* 👈 바닥 오렌지선 뚫어서 본문과 통짜 연결 */
+            border-top: 2.5px solid #FFA500 !important;
+            border-left: 2.5px solid #FFA500 !important;
+            border-right: 2.5px solid #FFA500 !important;
+            border-bottom: 4px solid #0e1117 !important; /* 👈 바닥 오렌지선 지움 */
             border-radius: 12px 12px 0px 0px !important;
             margin-bottom: -2.5px !important;
             transform: none !important;
             opacity: 1 !important;
             z-index: 10 !important;
             position: relative !important;
-            box-shadow: none !important;
             outline: none !important;
+            box-shadow: none !important;
         }
 
-        /* 선택된 탭 텍스트 오렌지 고정 */
-        .stTabs [aria-selected="true"] p,
-        [data-testid="stTabs"] [aria-selected="true"] p,
-        .stTabs [aria-selected="true"] span,
-        .stTabs [aria-selected="true"] div,
-        .stTabs [aria-selected="true"] * {
+        /* 선택된 탭 내부 모든 글씨: 오렌지 100% 강제 고정 */
+        .stTabs button[role="tab"][aria-selected="true"] *,
+        .stTabs [data-baseweb="tab"][aria-selected="true"] *,
+        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] * {
             color: #FFA500 !important;
             font-size: 16.5px !important;
             font-weight: 800 !important;
@@ -440,12 +431,14 @@ else:
         div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
 
         /* 🌐 [정통 웹브라우저 탭 스타일 - 화이트모드] 🌐 */
-        div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
-        div[data-testid="stTabs"] [data-baseweb="tab-border"],
-        div[data-baseweb="tab-highlight"],
-        div[data-baseweb="tab-border"],
+        [data-baseweb="tab-highlight"],
+        [data-baseweb="tab-border"],
         .stTabs [data-baseweb="tab-highlight"],
-        .stTabs [data-baseweb="tab-border"] {
+        .stTabs [data-baseweb="tab-border"],
+        [data-testid="stTabs"] [data-baseweb="tab-highlight"],
+        [data-testid="stTabs"] [data-baseweb="tab-border"],
+        div[data-baseweb="tab-highlight"],
+        div[data-baseweb="tab-border"] {
             display: none !important;
             opacity: 0 !important;
             height: 0px !important;
@@ -458,7 +451,6 @@ else:
 
         .stTabs [data-baseweb="tab-list"],
         [data-testid="stTabs"] [data-baseweb="tab-list"],
-        div[data-baseweb="tab-list"],
         div[role="tablist"] {
             display: flex !important;
             flex-direction: row !important;
@@ -470,12 +462,12 @@ else:
             border: none !important;
             border-bottom: 2.5px solid #F59E0B !important;
             overflow: visible !important;
+            position: relative !important;
         }
         
-        .stTabs [data-baseweb="tab"],
-        [data-testid="stTabs"] button[role="tab"],
-        button[data-baseweb="tab"],
-        div[role="tab"] {
+        .stTabs button[role="tab"][aria-selected="false"],
+        .stTabs [data-baseweb="tab"][aria-selected="false"],
+        [data-testid="stTabs"] button[role="tab"][aria-selected="false"] {
             flex: 1 1 0% !important;
             width: 25% !important;
             min-width: 0px !important;
@@ -493,32 +485,26 @@ else:
             justify-content: center !important;
             transform: none !important;
             opacity: 1 !important;
-            box-shadow: none !important;
             outline: none !important;
-            transition: all 0.15s ease-in-out !important;
+            box-shadow: none !important;
         }
         
-        /* 화이트모드 비선택 탭 글씨: 선명한 청색 적용 */
-        .stTabs [data-baseweb="tab"]:not([aria-selected="true"]) p,
-        [data-testid="stTabs"] button[role="tab"]:not([aria-selected="true"]) p,
-        .stTabs [data-baseweb="tab"]:not([aria-selected="true"]) span,
-        .stTabs [data-baseweb="tab"]:not([aria-selected="true"]) div {
+        .stTabs button[role="tab"][aria-selected="false"] *,
+        .stTabs [data-baseweb="tab"][aria-selected="false"] *,
+        [data-testid="stTabs"] button[role="tab"][aria-selected="false"] * {
+            color: #0284C7 !important; /* 👈 화이트모드 선명한 딥 블루 */
             font-size: 16px !important;
             font-weight: 700 !important;
-            color: #0284C7 !important; /* 👈 화이트모드에서도 또렷한 딥 스카이블루 */
-            margin: 0px !important;
-            padding: 0px !important;
         }
 
-        .stTabs [data-baseweb="tab"]:hover {
-            background-color: #CBD5E1 !important;
-        }
-        
-        .stTabs [data-baseweb="tab"][aria-selected="true"],
         .stTabs button[role="tab"][aria-selected="true"],
-        [data-testid="stTabs"] [aria-selected="true"],
-        button[data-baseweb="tab"][aria-selected="true"] {
-            background-color: #F8FAFC !important; /* 👈 화이트 본문 배경 */
+        .stTabs [data-baseweb="tab"][aria-selected="true"],
+        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            flex: 1 1 0% !important;
+            width: 25% !important;
+            min-width: 0px !important;
+            height: 44px !important;
+            background-color: #F8FAFC !important; /* 👈 본문 화이트 배경 */
             border-top: 2.5px solid #F59E0B !important;
             border-left: 2.5px solid #F59E0B !important;
             border-right: 2.5px solid #F59E0B !important;
@@ -529,15 +515,13 @@ else:
             opacity: 1 !important;
             z-index: 10 !important;
             position: relative !important;
-            box-shadow: none !important;
             outline: none !important;
+            box-shadow: none !important;
         }
 
-        .stTabs [aria-selected="true"] p,
-        [data-testid="stTabs"] [aria-selected="true"] p,
-        .stTabs [aria-selected="true"] span,
-        .stTabs [aria-selected="true"] div,
-        .stTabs [aria-selected="true"] * {
+        .stTabs button[role="tab"][aria-selected="true"] *,
+        .stTabs [data-baseweb="tab"][aria-selected="true"] *,
+        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] * {
             color: #D97706 !important;
             font-size: 16.5px !important;
             font-weight: 800 !important;
