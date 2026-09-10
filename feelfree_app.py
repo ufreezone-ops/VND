@@ -1896,21 +1896,33 @@ else:
     tab_in, tab_his, tab_stats, tab_final = st.tabs(["Data입력", "Data조회", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
-    # 6.01.00 | Console Tab 1: Input Engine (입력 콘솔)
+    # 6.01.00 | Console Tab 1: Input Engine (단일국가 시 국가선택 자동 숨김)
     # --------------------------------------------------------------------------
     with tab_in:
-        c_node, c_mode = st.columns([1, 2])
-        with c_node:
-            sel_node = st.selectbox("🌍 국가 선택", list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys()), key="in_country")
-            IN_CFG = TRIP_CONFIGS[st.session_state.current_trip]["nodes"][sel_node]
+        trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
+        node_keys = list(trip_nodes.keys())
+        is_single_country = len(node_keys) <= 1
+
+        # [스마트 분기] 단일 국가 여행 시 '국가 선택' 숨김 처리
+        if is_single_country:
+            sel_node = node_keys[0] if node_keys else FIRST_NODE_NAME
+            IN_CFG = trip_nodes.get(sel_node, FIRST_NODE)
             IN_CURR = IN_CFG["currency"]
             IN_MULTI = IN_CFG["multiplier"]
-        with c_mode:
-            mode = st.radio("기록 모드 선택",["일반 지출", "🛫 항공권(특수)", "🏨 호텔(특수)", "자산 이동", "환불(취소)"], horizontal=True, key="mode_radio", label_visibility="collapsed")
+            mode = st.radio("기록 모드 선택", ["일반 지출", "🛫 항공권(특수)", "🏨 호텔(특수)", "자산 이동", "환불(취소)"], horizontal=True, key="mode_radio", label_visibility="collapsed")
+        else:
+            c_node, c_mode = st.columns([1, 2])
+            with c_node:
+                sel_node = st.selectbox("🌍 국가 선택", node_keys, key="in_country")
+                IN_CFG = trip_nodes[sel_node]
+                IN_CURR = IN_CFG["currency"]
+                IN_MULTI = IN_CFG["multiplier"]
+            with c_mode:
+                mode = st.radio("기록 모드 선택", ["일반 지출", "🛫 항공권(특수)", "🏨 호텔(특수)", "자산 이동", "환불(취소)"], horizontal=True, key="mode_radio", label_visibility="collapsed")
         
         dynamic_tz = timezone(timedelta(hours=IN_CFG["timezone"])) if "한국" not in str(st.session_state.current_tz) else TZ_KST
         sel_date = st.date_input("날짜 선택", value=datetime.now(dynamic_tz).date(), key="shared_date_input")
-        available_currs = sorted(list(set(node["currency"] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())))
+        available_currs = sorted(list(set(node["currency"] for node in trip_nodes.values())))
 
         # 6.01.01 | Sub-Form: General Expense
         if mode == "일반 지출":        
