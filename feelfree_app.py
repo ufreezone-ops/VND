@@ -1032,11 +1032,13 @@ def calculate_summary_metrics(df):
 # ------------------------------------------------------------------------------
 ### 🎨 [GUI: Layout] 사이드바 영역
 with st.sidebar:
-    # 4.01.01 | SPI Mode Context-Aware Panel
-    # [Added] SPI 비교 모드일 때의 사이드바 UI 분리
-    if st.session_state.get('show_spi', False):
+    # 4.01.01 | SPI / Provisioning Mode Context-Aware Panel
+    if st.session_state.get('show_spi', False) or st.session_state.get('show_new_trip', False):
         st.subheader("🧭 GTL 관제탑 모드")
-        st.info("💡 **글로벌 물가 지표(SPI) 비교 분석 중**\n\n특정 여행의 지출 내역이나 잔고를 보시려면 상단의 '내 여행함'에서 여행지를 선택해 주세요.")
+        if st.session_state.get('show_spi', False):
+            st.info("💡 **글로벌 물가 지표(SPI) 비교 분석 중**\n\n특정 여행의 지출 내역이나 잔고를 보시려면 상단의 '내 여행함'에서 여행지를 선택해 주세요.")
+        else:
+            st.info("➕ **새로운 여행지 개설 모드**\n\n새 여행지를 등록하거나 기존 여행지를 보시려면 상단 '내 여행함'에서 여행지를 선택해 주세요.")
         st.divider()
         tz_sel = st.radio("📍 기준 시간 (Timezone)",["🇰🇷 한국 시간", "🌍 현지 시간"], horizontal=True, index=0)
         st.session_state.current_tz = TZ_KST if "한국" in tz_sel else TRIP_TZ
@@ -1291,30 +1293,42 @@ def sort_trips(trip_names):
 
 sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
 
-# 4.02.02 | Global Flight/SPI View Mode Switcher (현재 가계부 상태 100% 고정)
-SPECIAL_MODE = "📊 모든 여행지 물가비교"
-dropdown_options = sorted_trips + [SPECIAL_MODE]
+# 4.02.02 | Global Flight/SPI View Mode & Provisioning Switcher
+SPECIAL_MODE_SPI = "📊 모든 여행지 물가비교"
+SPECIAL_MODE_NEW = "➕ 새로운 여행지 개설"
+dropdown_options = sorted_trips + [SPECIAL_MODE_SPI, SPECIAL_MODE_NEW]
 
 if 'show_spi' not in st.session_state: 
     st.session_state.show_spi = False
+if 'show_new_trip' not in st.session_state:
+    st.session_state.show_new_trip = False
 
 # 현재 선택된 여행지가 목록에 없을 때만 최초 1회 첫 번째 여행지로 안전 설정
 if 'current_trip' not in st.session_state or st.session_state.current_trip not in sorted_trips:
     st.session_state.current_trip = sorted_trips[0]
 
-# 현재 보고 있는 여행지의 정확한 인덱스 계산
-curr_idx = len(sorted_trips) if st.session_state.show_spi else sorted_trips.index(st.session_state.current_trip)
+# 현재 보고 있는 인덱스 계산
+if st.session_state.show_spi:
+    curr_idx = len(sorted_trips)
+elif st.session_state.show_new_trip:
+    curr_idx = len(sorted_trips) + 1
+else:
+    curr_idx = sorted_trips.index(st.session_state.current_trip)
 
-# [핵심] 여행지 변경 이벤트 콜백 (Cloud Refresh 시에도 현재 가계부 완벽 유지)
+# [핵심] 여행지/특수모드 변경 이벤트 콜백
 def on_trip_change():
     chosen = st.session_state.top_nav_trip_selector
-    if chosen == SPECIAL_MODE:
+    if chosen == SPECIAL_MODE_SPI:
         st.session_state.show_spi = True
+        st.session_state.show_new_trip = False
+    elif chosen == SPECIAL_MODE_NEW:
+        st.session_state.show_spi = False
+        st.session_state.show_new_trip = True
     else:
         st.session_state.show_spi = False
+        st.session_state.show_new_trip = False
         st.session_state.current_trip = chosen
 
-# 고유 key와 on_change를 적용하여 새로고침 시 상태 초기화 현상 원천 차단
 st.selectbox(
     "✈️ 내 여행함 (Trip Selector)", 
     dropdown_options, 
@@ -1820,6 +1834,57 @@ if st.session_state.show_spi:
             else:
                 st.info("비교할 항공권 내역이 없습니다.")
 
+        # ----------------------------------------------------------------------
+        # 5.04.00 | Global Provisioning View (새로운 여행지 개설 단독 화면)
+        # ----------------------------------------------------------------------
+elif st.session_state.get('show_new_trip', False):
+    st.title("➕ 새로운 여행지 개설")
+    st.info("💡 새로운 여행지를 개설하면 관제탑(`_GTL_CONFIG_`)에 자동 등록되고 전용 데이터베이스 시트가 생성됩니다.")
+    
+    with st.container():
+        new_t_name = st.text_input("1. 여행 이름", placeholder="예: 🇨🇿 프라하 (2027)")
+        new_s_name = st.text_input("2. 시트 이름 (영문/숫자/언더바만)", placeholder="예: PRG_2027")
+        
+        c_p1, c_p2, c_p3 = st.columns(3)
+        with c_p1:
+            new_curr = st.text_input("통화 코드", value="USD", key="prov_curr_final")
+            new_sym = st.text_input("통화 기호", value="$", key="prov_sym_final")
+        with c_p2:
+            new_mult = st.selectbox("환율 배율", [1, 100], index=0, key="prov_mult_final")
+            new_tz = st.number_input("현지 시차 (KST=9)", value=9, key="prov_tz_final")
+        with c_p3:
+            new_country = st.text_input("대표 국가명", value="미국", key="prov_country_final")
+
+        default_cats = "식사,간식,마트,택시,지하철,트램,투어,입장료,마사지,팁,수수료,통신,보증금,항공권,호텔,보험,상환"
+        new_cats_str = st.text_area("3. 카테고리 구성 (쉼표 구분)", value=default_cats, key="prov_cats_final")
+
+        if st.button("🚀 서버에 새 여행지 즉시 개설", use_container_width=True, type="primary"):
+            if new_t_name and new_s_name:
+                cfg_df_p = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
+                new_entry = pd.DataFrame([{
+                    "TripName": new_t_name, "SheetName": new_s_name,
+                    "MainCountry": new_country, "Currency": new_curr,
+                    "Symbol": new_sym, "Timezone": new_tz,
+                    "Multiplier": new_mult, "Categories": new_cats_str
+                }])
+                conn.update(worksheet=CONFIG_SHEET, data=pd.concat([cfg_df_p, new_entry], ignore_index=True))
+                
+                new_sheet_df = pd.DataFrame(columns=FINAL_COLUMNS)
+                try:
+                    conn.update(worksheet=new_s_name, data=new_sheet_df)
+                    st.success(f"🎉 '{new_t_name}' 여행지가 성공적으로 개설되었습니다!")
+                    st.cache_data.clear()
+                    st.session_state.show_new_trip = False
+                    st.session_state.current_trip = new_t_name
+                    time.sleep(1)
+                    st.rerun()
+                except:
+                    st.warning(f"탭 '{new_s_name}'을 수동으로 생성해 주세요.")
+                    st.cache_data.clear()
+                    st.session_state.show_new_trip = False
+                    st.session_state.current_trip = new_t_name
+                    time.sleep(2)
+                    st.rerun()
 
 # ==============================================================================
 # [Module 6.00.00] Individual Trip Manager Views (개별 여행 전용 모듈)
@@ -1847,7 +1912,7 @@ else:
         sel_date = st.date_input("날짜 선택", value=datetime.now(dynamic_tz).date(), key="shared_date_input")
         available_currs = sorted(list(set(node["currency"] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())))
 
-        # 6.01.01 | Sub-Form: General Expense (일반 지출 및 영수증 다중 AI 스캔)
+        # 6.01.01 | Sub-Form: General Expense
         if mode == "일반 지출":        
             def_index = EXPENSE_CATS.index(st.session_state.last_cat_name) if st.session_state.last_cat_name in EXPENSE_CATS else 0
             cat = st.radio("항목 선택", EXPENSE_CATS, index=def_index, horizontal=True, key="exp_cat")
@@ -1882,7 +1947,6 @@ else:
                 curr_opts =[IN_CURR, "KRW", "USD"] +[c for c in available_currs if c not in[IN_CURR, "KRW", "USD"]]
                 curr = st.selectbox("통화", curr_opts, key="exp_curr")
             with col_m2:
-                # [Added] '해외송금(한국계좌)' 옵션 추가
                 if curr != "KRW": met_options = [f"현금({curr})", f"트래블카드({curr})", f"호텔외상({curr})", "원화계좌(한국)", "해외송금(한국계좌)", "원화계좌(현지)"]
                 else: met_options = ["원화계좌(한국)", "원화계좌(현지)"]
                 met = st.selectbox("결제 자산(Asset)", met_options, index=0, key="exp_met")
@@ -1892,8 +1956,8 @@ else:
                 if not ledger_df.empty:
                     extracted = ledger_df['Description'].str.extractall(r'\[(.*?)\]')
                     if not extracted.empty: harvested_tags = set(extracted[0].dropna().unique())
-                default_gateways =["알리페이", "위챗페이", "네이버페이", "카카오페이", "Apple Pay", "토스페이", "Trip.com", "Agoda", "Booking.com", "Uber", "Bolt", "Revolut"]
-                combined_gateways =["선택안함 (기본)"] + sorted(list(set(default_gateways) | harvested_tags)) +["➕ 직접 입력하기"]
+                default_gateways =["선택안함 (기본)", "알리페이", "위챗페이", "네이버페이", "카카오페이", "Apple Pay", "토스페이", "Trip.com", "Agoda", "Booking.com", "Uber", "Bolt", "Revolut"]
+                combined_gateways = sorted(list(set(default_gateways) | harvested_tags)) +["➕ 직접 입력하기"]
                 gateway_sel = st.selectbox("결제 플랫폼 (Gateway)", combined_gateways, key="exp_gw")
                 
                 final_gateway = ""
@@ -1940,10 +2004,8 @@ else:
                     st.rerun()
 
         # 6.01.02 | Sub-Form: Flight Integrated Scheduler (항공권 특수)
-        # [Modified] 항공권 모드 고도화 (편도/왕복 및 메모 추가)
         elif mode == "🛫 항공권(특수)":
             st.subheader("✈️ 항공권 및 스케줄 통합 기록")
-            
             f_trip_type = st.radio("여정 구분", ["왕복", "편도"], horizontal=True)
             
             c1, c2, c3 = st.columns(3)
@@ -1962,13 +2024,12 @@ else:
                     f_ret_info = st.text_input("6. 귀국편 정보", placeholder="예: VJ968, 23:10 - 06:40 (+1)")
                     f_ret_date = st.date_input("7. 귀국 날짜", value=sel_date + timedelta(days=7))
                 else:
-                    st.empty() # 자리 맞춤
+                    st.empty()
                     f_ret_info, f_ret_date = "", None
 
             c6, c7, c8 = st.columns([1, 1, 1])
             with c6: f_baggage = st.selectbox("8. 위탁수화물", ["포함", "미포함", "일부포함"])
             with c7: f_bag_memo = st.text_input("9. 수화물 상세", placeholder="예: 귀국편 20kg 추가")
-            # [Added] '해외송금(한국계좌)' 옵션 추가
             with c8: f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
                 
             f_memo = st.text_input("📝 비고/메모 (결제 후 변경 이력 등 기록)", placeholder="예: 3/10 결제 후, 3/12에 항공사 스케줄 1회 변경됨")
@@ -1989,7 +2050,7 @@ else:
                 
                 clean_asset = f_asset.split('(')[0].strip()
                 if "트래블카드" in f_asset:
-                    clean_asset = f"트래블카드({f_curr})" # 통화에 맞춰 트래블카드 동적 셋팅
+                    clean_asset = f"트래블카드({f_curr})"
 
                 route_str = f" | 출국:{f_dep_info}" if f_dep_info else ""
                 ret_str = f" | 귀국:{f_ret_info}" if f_trip_type == "왕복" and f_ret_info else ""
@@ -2014,7 +2075,6 @@ else:
                     st.success("항공권과 일정이 모두 기록되었습니다!"); time.sleep(1); st.rerun()
                     
         # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 특수)
-        # [Modified] 호텔 모드 (결제수단 동적 매핑)
         elif mode == "🏨 호텔(특수)":
             st.subheader("🏨 호텔/숙소 예약 상세 기록")
             c1, c2 = st.columns(2)
@@ -2022,7 +2082,6 @@ else:
                 h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com")
                 h_name = st.text_input("2. 호텔명", placeholder="예: 인터콘티넨털 호치민")
                 h_checkin = st.date_input("3. 체크인", value=sel_date)
-                # [Added] '해외송금(한국계좌)' 옵션 추가
                 h_asset = st.selectbox("4. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
             with c2:
                 h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1)
@@ -2047,28 +2106,24 @@ else:
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else ""}])
                 if append_new_data(new_row): st.rerun()
                     
-        # 6.01.04 | Sub-Form: Asset Transfer & Dual FX Swap (자산 이동/재환전/개인지출)
-        # [Modified] 자산 이동 (결제수단 트래블카드로 통일)
-        # ➔ 🚀 [Modified] 및 [Added] 아래와 같이 수정/추가
+        # 6.01.04 | Sub-Form: Asset Transfer & Dual FX Swap
         elif mode == "자산 이동":
             st.subheader("🔁 자산 이동 및 환전")
             ty = st.selectbox("유형",[
-                "이월잔액 (지난여행 -> 현금잔액)", # [Added] 이월잔액 항목 추가
+                "이월잔액 (지난여행 -> 현금잔액)", 
                 "직접환전 (원화계좌 -> 로컬현금)", 
                 "이종환전 (외화 -> 타국 외화)",
                 "충전 (원화계좌 -> 트래블카드)", 
                 "ATM출금 (카드 -> 로컬현금)", 
                 "재환전 (외화 -> 원화계좌)",
-                "개인지출 (외화잔액 -> 여행외 소비)" # [Added] 개인지출 유형 추가
+                "개인지출 (외화잔액 -> 여행외 소비)"
             ], key="tr_type")
             c1, c2 = st.columns(2)
             
-            # [Added] 이종환전 전용 처리 로직 (듀얼 트랜잭션 고도화: 카드-카드, 카드-현금 완벽 지원)
             if "이종환전" in ty:
                 with c1:
                     curr_opts_tr = [c for c in available_currs if c not in ["KRW"]]
                     curr_tr = st.selectbox("얻게 되는 통화 (Target)", curr_opts_tr, key="tr_target_curr")
-                    # [Added] 얻은 통화를 보관할 지갑 형태 지정 (카테고리 자동 유추에 사용)
                     tr_target_met = st.selectbox("얻은 통화 보관 자산", [f"트래블카드({curr_tr})", f"현금({curr_tr})"], key="tr_target_met")
                     
                     if curr_tr == IN_CURR and IN_MULTI == 100: 
@@ -2090,27 +2145,22 @@ else:
                         
                 if st.button("🔄 이종환전 실행 (차감 및 충전 동시기록)", use_container_width=True, type="primary"):
                     if s_amt <= 0 or t_amt <= 0:
-                        st.warning("금액을 정확히 입력해 주세요.")
-                        st.stop()
+                        st.warning("금액을 정확히 입력해 주세요."); st.stop()
                     
                     fifo_rate = auto_calc_fifo_rate(s_amt, src_met, curr_src)
                     target_rate = (s_amt * fifo_rate) / t_amt if t_amt > 0 else 0
                     
-                    # 1. 지불 외화 차감 기록 (이종환전 카테고리)
                     desc_src = f"이종환전 지불 (-> {curr_tr} {t_amt})"
                     row_src = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '이종환전', 'Description': desc_src, 'Currency': curr_src, 'Amount': s_amt, 'PaymentMethod': src_met, 'IsExpense': 0, 'AppliedRate': fifo_rate, 'Note': '', 'Receipt_URL': ''}])
                     
-                    # 2. 획득 외화 충전 기록 (보관자산 형태에 따라 '충전' 또는 '직접환전'으로 동적 매핑하여 카드/현금 인벤토리 완벽 분류)
                     tgt_cat = "충전" if "트래블카드" in tr_target_met else "직접환전"
                     desc_tgt = f"이종환전 획득 (<- {curr_src} {s_amt})"
                     row_tgt = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': tgt_cat, 'Description': desc_tgt, 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': src_met, 'IsExpense': 0, 'AppliedRate': target_rate, 'Note': '', 'Receipt_URL': ''}])
                     
                     if append_new_data(pd.concat([row_src, row_tgt], ignore_index=True)): 
                         st.success("이종 자산 환전 기록이 성공적으로 완료되었습니다!")
-                        time.sleep(1)
-                        st.rerun()
+                        time.sleep(1); st.rerun()
 
-            # [Added] 이월잔액 전용 입력기 설계 및 FIFO 계산 루틴 탑재
             elif "이월잔액" in ty:
                 with c1:
                     curr_opts_tr = [IN_CURR, "USD"] + [c for c in available_currs if c not in [IN_CURR, "USD", "KRW"]]
@@ -2156,7 +2206,6 @@ else:
                         new_rows.append(fx_row)
                     if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
 
-            # [Added] 개인지출 전용 입력기 설계 및 FIFO 계산 루틴 탑재
             elif "개인지출" in ty:
                 with c1:
                     curr_opts_tr = [c for c in available_currs if c not in ["KRW"]]
@@ -2173,8 +2222,7 @@ else:
                         
                 if st.button("🚀 개인지출 기록하기 (여행비용 제외 및 잔고 차감)", use_container_width=True):
                     if s_amt <= 0 or not s_desc:
-                        st.warning("금액과 상세 용도를 정확히 입력해 주세요.")
-                        st.stop()
+                        st.warning("금액과 상세 용도를 정확히 입력해 주세요."); st.stop()
                     
                     fifo_rate = auto_calc_fifo_rate(s_amt, source_met, curr_tr)
                     new_row = pd.DataFrame([{
@@ -2185,15 +2233,14 @@ else:
                         'Currency': curr_tr,
                         'Amount': s_amt,
                         'PaymentMethod': source_met,
-                        'IsExpense': 0, # IsExpense = 0 으로 지출 집계에서 무조건 제외
+                        'IsExpense': 0,
                         'AppliedRate': fifo_rate,
                         'Note': 'Exclude from Travel',
                         'Receipt_URL': ''
                     }])
                     if append_new_data(new_row):
-                        st.success("개인지출 기록 완료 (여행 비용 및 지출 통계에서 완벽 배제되었습니다!)")
-                        time.sleep(1)
-                        st.rerun()
+                        st.success("개인지출 기록 완료!")
+                        time.sleep(1); st.rerun()
             
             else:
                 with c1:
@@ -2215,7 +2262,6 @@ else:
                     else: fee_amt = st.number_input(f"ATM 수수료 ({curr_tr})", min_value=0.0, step=1.0, format="%.2f", key="tr_fee_flt")
                         
                 if st.button("🔄 이동 실행", use_container_width=True):
-                    # [Modified] 타겟과 소스 지갑을 안전하게 지정하도록 로직 강화
                     dest = f"트래블카드({curr_tr})" if "충전" in ty else f"현금({curr_tr})"
                     source = "원화계좌(한국)" if "원화계좌" in ty else f"트래블카드({curr_tr})"
                     
@@ -2229,7 +2275,6 @@ else:
                     if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
                         
         # 6.01.05 | Sub-Form: Refund Inventory Rollback (환불 취소)
-        # [Modified] 환불 취소 (트래블카드로 통일)
         elif mode == "환불(취소)":
             st.subheader("🔙 결제 취소 및 환불 (Rollback)")
             col_r1, col_r2 = st.columns(2)
@@ -2256,47 +2301,6 @@ else:
             if st.button("🚀 일정 기록 완료", use_container_width=True):
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': io_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
                 if append_new_data(new_row): st.rerun()
-
-        # 6.01.07 | Sub-Form: GTL Provisioning Wizard (새 여행지 개설)
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.divider()
-        with st.expander("➕ 새로운 여행지 개설 (GTL Provisioning)", expanded=False):
-            st.subheader("🌍 새로운 여행지 설계")
-            new_t_name = st.text_input("1. 여행 이름", placeholder="예: 🇨🇿 프라하 2027")
-            new_s_name = st.text_input("2. 시트 이름 (영문/숫자만)", placeholder="예: PRG_2027")
-            
-            c_p1, c_p2, c_p3 = st.columns(3)
-            with c_p1:
-                new_curr = st.text_input("통화 코드", value="USD", key="prov_curr_final")
-                new_sym = st.text_input("통화 기호", value="$", key="prov_sym_final")
-            with c_p2:
-                new_mult = st.selectbox("환율 배율", [1, 100], index=0, key="prov_mult_final")
-                new_tz = st.number_input("현지 시차", value=9, key="prov_tz_final")
-            with c_p3:
-                new_country = st.text_input("대표 국가명", value="미국", key="prov_country_final")
-
-            default_cats = "식사,간식,마트,택시,지하철,트램,투어,입장료,마사지,팁,수수료,통신,보증금,항공권,호텔,보험,상환"
-            new_cats_str = st.text_area("3. 카테고리 구성 (쉼표 구분)", value=default_cats, key="prov_cats_final")
-
-            if st.button("🚀 서버에 새 여행지 즉시 개설", use_container_width=True, type="primary"):
-                if new_t_name and new_s_name:
-                    cfg_df_p = conn.read(worksheet=CONFIG_SHEET, ttl="0s")
-                    new_entry = pd.DataFrame([{
-                        "TripName": new_t_name, "SheetName": new_s_name,
-                        "MainCountry": new_country, "Currency": new_curr,
-                        "Symbol": new_sym, "Timezone": new_tz,
-                        "Multiplier": new_mult, "Categories": new_cats_str
-                    }])
-                    conn.update(worksheet=CONFIG_SHEET, data=pd.concat([cfg_df_p, new_entry], ignore_index=True))
-                    
-                    new_sheet_df = pd.DataFrame(columns=FINAL_COLUMNS)
-                    try:
-                        conn.update(worksheet=new_s_name, data=new_sheet_df)
-                        st.success(f"🎉 '{new_t_name}' 여행지가 개설되었습니다!")
-                        st.cache_data.clear(); time.sleep(1); st.rerun()
-                    except:
-                        st.warning(f"탭 '{new_s_name}'을 수동으로 생성해 주세요.")
-                        st.cache_data.clear(); time.sleep(2); st.rerun()
 
     # --------------------------------------------------------------------------
     # 6.02.00 | Console Tab 2: Audit History & Viewer (조회 및 내역 수정)
