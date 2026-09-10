@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (바인더 수첩/브라우저 탭 스타일)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (볼륨 탭 & 주황 베이스라인 개방형)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -234,39 +234,39 @@ if current_theme == "🌙 다크":
         
         div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-        /* 📑 [진짜 바인더 수첩 / 웹브라우저 인덱스 탭 - 다크모드] 📑 */
+        /* 📑 [진짜 바인더 폴더 탭: 가로 주황색 베이스라인 + 선택탭 하단 개방 연결 - 다크] 📑 */
         div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] { display: none !important; }
         
-        /* 탭 바닥 기준선 */
+        /* 1. 전체 가로를 관통하는 주황색 기준선 */
         .stTabs[data-baseweb="tab-list"] { 
             display: flex !important;
             justify-content: flex-start !important;
-            gap: 4px !important; 
+            gap: 6px !important; 
             padding: 0px 2px !important; 
             background: transparent !important; 
             border: none !important;
-            border-bottom: 2px solid #2D3748 !important; /* 바인더 수첩 기준선 */
+            border-bottom: 2.5px solid #FFA500 !important; /* 👈 전체 가로 주황색 라인 */
             border-radius: 0px !important;
             box-shadow: none !important;
-            margin-bottom: 14px !important;
+            margin-bottom: 16px !important;
         }
         
-        /* 닫힌 책갈피 탭 (비선택) */
+        /* 2. 닫힌 탭 (비선택) - 높이/폭 1.4배 시원하게 확장 */
         .stTabs[data-baseweb="tab"] { 
             flex: 1 1 0px !important;
-            height: 36px !important; 
+            height: 44px !important; /* 👈 높이 1.4배 확대 */
             background: #181E29 !important; 
-            border-radius: 10px 10px 0px 0px !important; /* 윗쪽만 둥글게! */
-            padding: 0px 4px !important; 
-            color: #718096 !important; 
-            border: 1px solid #2D3748 !important; 
-            border-bottom: none !important; /* 아래는 뚫림 */
-            font-size: 13.5px !important; 
-            font-weight: 500 !important;
+            border-radius: 10px 10px 0px 0px !important; 
+            padding: 0px 10px !important; 
+            color: #94A3B8 !important; 
+            border: 1.5px solid #2D3748 !important; 
+            border-bottom: none !important; 
+            font-size: 16px !important; /* 👈 폰트 큼직하게 확대 */
+            font-weight: 600 !important; 
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transform: translateY(3px) !important; /* 살짝 뒤로 가라앉음 */
+            transform: translateY(4px) !important; 
             opacity: 0.75 !important;
             transition: all 0.2s ease !important; 
         }
@@ -278,21 +278,22 @@ if current_theme == "🌙 다크":
             opacity: 1 !important;
         }
         
-        /* 열린 책갈피 탭 (선택: 앞으로 쑥 솟아오르며 본문과 연결) */
+        /* 3. 열린 탭 (선택: 본문 배경색으로 바닥 주황선을 지워 통짜로 본문 연결!) */
         .stTabs [aria-selected="true"] { 
-            background: #242D3D !important; 
+            background: #0e1117 !important; /* 👈 본문 배경색과 완벽 일치 */
             color: #FFA500 !important; 
+            font-size: 16.5px !important;
             font-weight: 800 !important; 
-            border-top: 3.5px solid #FFA500 !important; /* 바인더 상단 인덱스 라인 */
-            border-left: 1.5px solid #FFA500 !important;
-            border-right: 1.5px solid #FFA500 !important;
-            border-bottom: 2.5px solid #242D3D !important; /* 기준선을 덮어서 내용과 통짜 연결! */
+            border-top: 2.5px solid #FFA500 !important; 
+            border-left: 2.5px solid #FFA500 !important;
+            border-right: 2.5px solid #FFA500 !important;
+            border-bottom: 3.5px solid #0e1117 !important; /* 👈 하단 주황선을 지워서 본문과 일체화! */
             border-radius: 10px 10px 0px 0px !important;
-            transform: translateY(0px) !important; /* 앞으로 솟아오름 */
+            transform: translateY(0px) !important; 
             opacity: 1 !important;
-            margin-bottom: -2px !important; 
-            box-shadow: 0px -3px 8px rgba(0, 0, 0, 0.3) !important;
-            text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.4) !important;
+            margin-bottom: -2.5px !important; 
+            box-shadow: 0px -4px 10px rgba(0, 0, 0, 0.4) !important;
+            text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.5) !important;
         }
 
         div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
@@ -386,37 +387,37 @@ else:
         
         div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
 
-        /* 📑 [진짜 바인더 수첩 / 웹브라우저 인덱스 탭 - 화이트모드] 📑 */
+        /* 📑 [진짜 바인더 폴더 탭: 가로 주황색 베이스라인 + 선택탭 하단 개방 연결 - 화이트] 📑 */
         div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] { display: none !important; }
 
         .stTabs[data-baseweb="tab-list"] { 
             display: flex !important;
             justify-content: flex-start !important;
-            gap: 4px !important; 
+            gap: 6px !important; 
             padding: 0px 2px !important; 
             background: transparent !important; 
             border: none !important;
-            border-bottom: 2px solid #CBD5E1 !important;
+            border-bottom: 2.5px solid #F59E0B !important; 
             border-radius: 0px !important;
             box-shadow: none !important;
-            margin-bottom: 14px !important;
+            margin-bottom: 16px !important;
         }
         
         .stTabs[data-baseweb="tab"] { 
             flex: 1 1 0px !important;
-            height: 36px !important; 
+            height: 44px !important; 
             background: #E2E8F0 !important; 
             border-radius: 10px 10px 0px 0px !important;
-            padding: 0px 4px !important; 
+            padding: 0px 10px !important; 
             color: #64748B !important; 
-            border: 1px solid #CBD5E1 !important; 
+            border: 1.5px solid #CBD5E1 !important; 
             border-bottom: none !important; 
-            font-size: 13.5px !important; 
-            font-weight: 500 !important;
+            font-size: 16px !important; 
+            font-weight: 600 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transform: translateY(3px) !important;
+            transform: translateY(4px) !important;
             opacity: 0.8 !important;
             transition: all 0.2s ease !important; 
         }
@@ -429,17 +430,18 @@ else:
         }
         
         .stTabs [aria-selected="true"] { 
-            background: #FFFFFF !important; 
+            background: #F8FAFC !important; /* 👈 화이트모드 본문 배경 */
             color: #D97706 !important; 
+            font-size: 16.5px !important;
             font-weight: 800 !important; 
-            border-top: 3.5px solid #F59E0B !important; 
-            border-left: 1.5px solid #CBD5E1 !important;
-            border-right: 1.5px solid #CBD5E1 !important;
-            border-bottom: 2.5px solid #FFFFFF !important; 
+            border-top: 2.5px solid #F59E0B !important; 
+            border-left: 2.5px solid #F59E0B !important; 
+            border-right: 2.5px solid #F59E0B !important; 
+            border-bottom: 3.5px solid #F8FAFC !important; /* 👈 하단 주황선 뚫림 처리 */
             border-radius: 10px 10px 0px 0px !important;
             transform: translateY(0px) !important; 
             opacity: 1 !important;
-            margin-bottom: -2px !important; 
+            margin-bottom: -2.5px !important; 
             box-shadow: 0px -3px 8px rgba(0, 0, 0, 0.06) !important;
         }
 
@@ -2010,8 +2012,8 @@ if st.session_state.show_spi:
 else:
     st.title(f"{st.session_state.current_trip}")
     
-    # [Modified] 5개 탭에서 무거웠던 '비교' 탭을 완전히 제거
-    tab_in, tab_his, tab_stats, tab_final = st.tabs(["📝 입력", "🔍 조회", "📊 일일", "🏁 요약"])
+    # [수정] 이모지 삭제 -> 텍스트 전용 깔끔한 4개 탭 생성
+    tab_in, tab_his, tab_stats, tab_final = st.tabs(["입력", "조회", "일일", "요약"])
 
     # --------------------------------------------------------------------------
     # 6.01.00 | Console Tab 1: Input Engine (입력 콘솔)
