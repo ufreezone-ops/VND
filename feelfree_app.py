@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (슬림 KPI 카드 & 최적 여백)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (프리미엄 캡슐 탭 & 슬림 KPI)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -200,18 +200,15 @@ if current_theme == "🌙 다크":
             padding-right: 0.8rem !important;
         }
 
-        /* 여행 선택 드롭다운 여백 정규화 */
         div[data-testid="stSelectbox"] {
             margin-top: 0px !important;
             margin-bottom: 0px !important;
         }
 
-        /* 구분선(st.divider) 간격 슬림화 */
         hr {
             margin: 0.4rem 0 0.6rem 0 !important;
         }
 
-        /* 메인 타이틀(후에 2026 등) 상단 여백 제거 */
         h1 {
             padding-top: 0rem !important;
             margin-top: 0rem !important;
@@ -221,7 +218,7 @@ if current_theme == "🌙 다크":
 
         .main { background-color: #0e1117; color: #ffffff; }
 
-        /* 📱 [슬림 KPI 카드: 높이 2/3 압축 최적화] */
+        /* 📱 [슬림 KPI 카드: 높이 2/3 압축] */
         .kpi-box { 
             background-color: #1e2130; 
             padding: 12px 14px; 
@@ -237,10 +234,52 @@ if current_theme == "🌙 다크":
         
         div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-        .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #161a25; border-radius: 12px; border: 2px solid #FFA500; box-shadow: 0px 0px 10px rgba(255, 165, 0, 0.2); }
-        .stTabs[data-baseweb="tab"] { height: 40px; background-color: #262b3b; border-radius: 8px !important; padding: 0px 10px !important; color: #CCCCCC !important; border: 1px solid #333; font-size: 14px !important; transition: all 0.3s ease; }
-        .stTabs[data-baseweb="tab"]:hover { background-color: #3d4455; color: #ffffff !important; }
-        .stTabs [aria-selected="true"] { background-color: #FFA500 !important; color: #000000 !important; font-weight: 800 !important; box-shadow: 0px 4px 12px rgba(255, 165, 0, 0.4) !important; border: 1px solid #FFA500 !important; }
+        /* 🌟 [예술적 프리미엄 캡슐 탭 바 - 다크모드] 🌟 */
+        div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] { display: none !important; }
+        
+        .stTabs[data-baseweb="tab-list"] { 
+            display: flex !important;
+            justify-content: space-between !important;
+            gap: 6px !important; 
+            padding: 5px !important; 
+            background: rgba(22, 26, 37, 0.95) !important; 
+            border-radius: 14px !important; 
+            border: 1px solid rgba(255, 165, 0, 0.35) !important; 
+            box-shadow: 0px 4px 16px rgba(0, 0, 0, 0.4) !important;
+            margin-bottom: 12px !important;
+        }
+        
+        .stTabs[data-baseweb="tab"] { 
+            flex: 1 1 0px !important;
+            height: 38px !important; 
+            background: rgba(38, 43, 59, 0.65) !important; 
+            border-radius: 10px !important; 
+            padding: 0px 4px !important; 
+            color: #94A3B8 !important; 
+            border: 1px solid rgba(255, 255, 255, 0.06) !important; 
+            font-size: 13.5px !important; 
+            font-weight: 500 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important; 
+        }
+        
+        .stTabs[data-baseweb="tab"]:hover { 
+            background: rgba(55, 62, 85, 0.9) !important; 
+            color: #F8FAFC !important; 
+            transform: translateY(-1px) !important;
+        }
+        
+        .stTabs [aria-selected="true"] { 
+            background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; 
+            color: #FFFFFF !important; 
+            font-weight: 700 !important; 
+            box-shadow: 0px 4px 14px rgba(234, 88, 12, 0.45), inset 0px 1px 1px rgba(255, 255, 255, 0.35) !important; 
+            border: 1px solid rgba(255, 215, 0, 0.5) !important; 
+            transform: translateY(-1px) !important;
+            text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }
 
         div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #FFA500 !important; background-color: #1e2130 !important; border-radius: 10px !important; }
         div[data-testid="stSidebar"] .stSelectbox label { color: #FFA500 !important; font-weight: bold !important; }
@@ -314,7 +353,7 @@ else:
 
         .main { background-color: #F8FAFC; color: #0F172A; }
 
-        /* 📱 [슬림 KPI 카드: 화이트모드 높이 2/3 압축 최적화] */
+        /* 📱 [슬림 KPI 카드: 화이트모드] */
         .kpi-box { 
             background-color: #FFFFFF; 
             padding: 12px 14px; 
@@ -333,10 +372,50 @@ else:
         
         div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
 
-        .stTabs[data-baseweb="tab-list"] { gap: 5px; padding: 5px 5px; background-color: #F1F5F9; border-radius: 12px; border: 2px solid #F59E0B; box-shadow: 0px 2px 8px rgba(245, 158, 11, 0.15); }
-        .stTabs[data-baseweb="tab"] { height: 40px; background-color: #FFFFFF; border-radius: 8px !important; padding: 0px 10px !important; color: #475569 !important; border: 1px solid #CBD5E1; font-size: 14px !important; transition: all 0.3s ease; }
-        .stTabs[data-baseweb="tab"]:hover { background-color: #E2E8F0; color: #0F172A !important; }
-        .stTabs [aria-selected="true"] { background-color: #F59E0B !important; color: #FFFFFF !important; font-weight: 800 !important; box-shadow: 0px 4px 10px rgba(245, 158, 11, 0.3) !important; border: 1px solid #F59E0B !important; }
+        /* 🌟 [예술적 프리미엄 캡슐 탭 바 - 화이트모드] 🌟 */
+        div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] { display: none !important; }
+
+        .stTabs[data-baseweb="tab-list"] { 
+            display: flex !important;
+            justify-content: space-between !important;
+            gap: 6px !important; 
+            padding: 5px !important; 
+            background: #E2E8F0 !important; 
+            border-radius: 14px !important; 
+            border: 1px solid #CBD5E1 !important; 
+            box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.05) !important; 
+            margin-bottom: 12px !important;
+        }
+        
+        .stTabs[data-baseweb="tab"] { 
+            flex: 1 1 0px !important;
+            height: 38px !important; 
+            background: #FFFFFF !important; 
+            border-radius: 10px !important; 
+            padding: 0px 4px !important; 
+            color: #475569 !important; 
+            border: 1px solid #E2E8F0 !important; 
+            font-size: 13.5px !important; 
+            font-weight: 500 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: all 0.25s ease !important; 
+        }
+        
+        .stTabs[data-baseweb="tab"]:hover { 
+            background: #F1F5F9 !important; 
+            color: #0F172A !important; 
+        }
+        
+        .stTabs [aria-selected="true"] { 
+            background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important; 
+            color: #FFFFFF !important; 
+            font-weight: 700 !important; 
+            box-shadow: 0px 4px 12px rgba(245, 158, 11, 0.35) !important; 
+            border: 1px solid #F59E0B !important; 
+            text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.2) !important;
+        }
 
         div[data-testid="stSidebar"] { background-color: #F1F5F9 !important; border-right: 1px solid #E2E8F0; }
         div[data-testid="stSidebar"] div[data-baseweb="select"] > div { border: 2px solid #F59E0B !important; background-color: #FFFFFF !important; border-radius: 10px !important; color: #0F172A !important; }
