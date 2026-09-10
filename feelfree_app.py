@@ -1369,28 +1369,38 @@ def sort_trips(trip_names):
 
 sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
 
-# 4.02.02 | Global Flight/SPI View Mode Switcher
-# [Modified] 비교(SPI) 모드를 풀다운 메뉴의 가장 마지막 독립 메뉴로 승격
+# 4.02.02 | Global Flight/SPI View Mode Switcher (현재 가계부 상태 100% 고정)
 SPECIAL_MODE = "📊 모든 여행지 물가비교"
 dropdown_options = sorted_trips + [SPECIAL_MODE]
 
 if 'show_spi' not in st.session_state: 
     st.session_state.show_spi = False
 
-curr_idx = len(sorted_trips) if st.session_state.show_spi else (sorted_trips.index(st.session_state.current_trip) if st.session_state.current_trip in sorted_trips else 0)
+# 현재 선택된 여행지가 목록에 없을 때만 최초 1회 첫 번째 여행지로 안전 설정
+if 'current_trip' not in st.session_state or st.session_state.current_trip not in sorted_trips:
+    st.session_state.current_trip = sorted_trips[0]
 
-# [수정] 2분할 컬럼 및 우측 라디오 테마 버튼 삭제 -> 단독 풀다운 배치
-sel_trip = st.selectbox("✈️ 내 여행함 (Trip Selector)", dropdown_options, index=curr_idx, label_visibility="collapsed")
+# 현재 보고 있는 여행지의 정확한 인덱스 계산
+curr_idx = len(sorted_trips) if st.session_state.show_spi else sorted_trips.index(st.session_state.current_trip)
 
-if sel_trip == SPECIAL_MODE:
-    if not st.session_state.show_spi:
+# [핵심] 여행지 변경 이벤트 콜백 (Cloud Refresh 시에도 현재 가계부 완벽 유지)
+def on_trip_change():
+    chosen = st.session_state.top_nav_trip_selector
+    if chosen == SPECIAL_MODE:
         st.session_state.show_spi = True
-        st.rerun()
-else:
-    if st.session_state.show_spi or sel_trip != st.session_state.current_trip:
+    else:
         st.session_state.show_spi = False
-        st.session_state.current_trip = sel_trip
-        st.rerun()
+        st.session_state.current_trip = chosen
+
+# 고유 key와 on_change를 적용하여 새로고침 시 상태 초기화 현상 원천 차단
+st.selectbox(
+    "✈️ 내 여행함 (Trip Selector)", 
+    dropdown_options, 
+    index=curr_idx, 
+    key="top_nav_trip_selector", 
+    on_change=on_trip_change,
+    label_visibility="collapsed"
+)
 
 st.divider()
 
