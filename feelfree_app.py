@@ -235,25 +235,70 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# 1.05.03 | Tab Navigation CSS (독립 서브모듈 - 앞으로 탭 수정 시 여기만 교체!)
-tab_bg_unselected = "#18202E" if is_dark else "#E2E8F0"
-tab_text_unselected = "#38BDF8" if is_dark else "#0284C7"
+# 1.05.03 | Tab Navigation CSS (직관적인 3D 입체 앱 버튼 스타일)
+tab_bg_unselected = "#1E2433" if is_dark else "#E2E8F0"
+tab_border_unselected = "#3E4C66" if is_dark else "#CBD5E1"
+tab_text_unselected = "#38BDF8" if is_dark else "#0369A1"
 
 st.markdown(f"""
     <style>
-    /* 탭 리스트 가로 4등분 균등 배치 */
-    .stTabs [data-baseweb="tab-list"] {{ display: flex !important; width: 100% !important; gap: 6px !important; padding: 4px !important; background: transparent !important; margin-bottom: 16px !important; }}
-    
-    /* 비선택 탭: 깔끔한 라운드 박스 + 선명한 스카이블루 글씨 */
-    .stTabs [data-baseweb="tab"] {{ flex: 1 1 0% !important; height: 42px !important; background-color: {tab_bg_unselected} !important; border-radius: 10px !important; border: 1px solid #334155 !important; display: flex !important; align-items: center !important; justify-content: center !important; }}
-    .stTabs [data-baseweb="tab"] p {{ font-size: 15.5px !important; font-weight: 600 !important; color: {tab_text_unselected} !important; margin: 0px !important; }}
-    
-    /* 선택 탭: 오렌지 하이라이트 뱃지 */
-    .stTabs [aria-selected="true"] {{ background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; border: 1px solid #FFA500 !important; }}
-    .stTabs [aria-selected="true"] p {{ color: #FFFFFF !important; font-size: 16px !important; font-weight: 800 !important; }}
-    
-    /* 하단 빨간줄 숨김 */
+    /* 빨간 밑줄 제거 */
     .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{ display: none !important; }}
+    
+    /* 탭 전체 컨테이너를 앱 Dock 버튼 바 형태로 구성 */
+    .stTabs [data-baseweb="tab-list"] {{
+        display: flex !important;
+        width: 100% !important;
+        gap: 8px !important;
+        padding: 6px !important;
+        background: {'rgba(22, 27, 38, 0.8)' if is_dark else '#F1F5F9'} !important;
+        border-radius: 14px !important;
+        border: 1.5px solid {'#2D3748' if is_dark else '#CBD5E1'} !important;
+        margin-bottom: 16px !important;
+    }}
+    
+    /* 🔘 비선택 탭: 테두리와 볼륨감이 있는 직관적인 '누를 수 있는 버튼' */
+    .stTabs [data-baseweb="tab"] {{
+        flex: 1 1 0% !important;
+        height: 44px !important;
+        background-color: {tab_bg_unselected} !important;
+        border-radius: 10px !important;
+        border: 1.5px solid {tab_border_unselected} !important;
+        box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.15) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        transition: all 0.15s ease !important;
+    }}
+    
+    /* 비선택 탭 텍스트: 선명한 블루 */
+    .stTabs [data-baseweb="tab"] p, .stTabs [data-baseweb="tab"] * {{
+        font-size: 16px !important;
+        font-weight: 700 !important;
+        color: {tab_text_unselected} !important;
+        margin: 0px !important;
+    }}
+    
+    /* 마우스 호버 / 터치 시 피드백 */
+    .stTabs [data-baseweb="tab"]:hover {{
+        filter: brightness(1.15) !important;
+        transform: translateY(-1px) !important;
+    }}
+    
+    /* 🌟 선택된 탭: 확실하게 눌려 활성화된 '오렌지 골드 버튼' */
+    .stTabs [aria-selected="true"] {{
+        background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important;
+        border: 1.5px solid #FFA500 !important;
+        box-shadow: 0px 3px 10px rgba(234, 88, 12, 0.4) !important;
+    }}
+    
+    .stTabs [aria-selected="true"] p, .stTabs [aria-selected="true"] * {{
+        color: #FFFFFF !important;
+        font-size: 16.5px !important;
+        font-weight: 800 !important;
+        text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.3) !important;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
