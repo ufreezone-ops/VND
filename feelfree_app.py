@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (정통 웹브라우저 탭 완성체)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (정통 웹브라우저 탭 디테일 완성)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -209,11 +209,12 @@ if current_theme == "🌙 다크":
             margin: 0.4rem 0 0.6rem 0 !important;
         }
 
+        /* 1. 메인 타이틀(후에 2026 등) 하단 간격 확보로 탭 지붕 잘림 방지 */
         h1 {
             padding-top: 0rem !important;
             margin-top: 0rem !important;
             padding-bottom: 0.2rem !important;
-            margin-bottom: 0.4rem !important;
+            margin-bottom: 0.9rem !important; /* 👈 탭과의 간격 시원하게 확보 */
         }
 
         .main { background-color: #0e1117; color: #ffffff; }
@@ -234,14 +235,16 @@ if current_theme == "🌙 다크":
         
         div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-        /* 🌐 [정통 웹브라우저 탭 스타일 100% 강제 주입 - 다크모드] 🌐 */
-        /* 1. 스트림릿 기본 빨간색 밑줄/하이라이트 원천 박멸 */
+        /* 🌐 [정통 웹브라우저 탭 스타일 - 다크모드] 🌐 */
+        /* 3. 빨간색 하이라이트 밑줄 & 가상요소 완벽 제거 */
         .stTabs [data-baseweb="tab-highlight"],
         [data-testid="stTabs"] [data-baseweb="tab-highlight"],
         div[data-baseweb="tab-highlight"],
         .stTabs [data-baseweb="tab-border"],
         [data-testid="stTabs"] [data-baseweb="tab-border"],
-        div[data-baseweb="tab-border"] {
+        div[data-baseweb="tab-border"],
+        button[data-baseweb="tab"]::after,
+        button[data-baseweb="tab"]::before {
             display: none !important;
             opacity: 0 !important;
             height: 0px !important;
@@ -249,9 +252,10 @@ if current_theme == "🌙 다크":
             visibility: hidden !important;
             background: transparent !important;
             border: none !important;
+            box-shadow: none !important;
         }
 
-        /* 2. 전체 가로를 꽉 채우는 오렌지 베이스라인 레일 */
+        /* 전체 가로를 관통하는 오렌지 베이스라인 */
         .stTabs [data-baseweb="tab-list"],
         [data-testid="stTabs"] [data-baseweb="tab-list"],
         div[data-baseweb="tab-list"],
@@ -261,13 +265,13 @@ if current_theme == "🌙 다크":
             width: 100% !important;
             gap: 6px !important;
             padding: 0px !important;
-            margin: 0px 0px 18px 0px !important;
+            margin: 6px 0px 18px 0px !important; /* 👈 위아래 마진 균형 */
             background: transparent !important;
             border: none !important;
-            border-bottom: 2.5px solid #FFA500 !important; /* 👈 가로 전체 오렌지 레일 */
+            border-bottom: 2.5px solid #FFA500 !important;
         }
 
-        /* 3. 닫힌 탭 (비선택) - 4분할 화면 꽉 채우는 2배 넓은 와이드 탭 (|   입력   |) */
+        /* 닫힌 탭 (비선택) */
         .stTabs [data-baseweb="tab"],
         [data-testid="stTabs"] button[role="tab"],
         button[data-baseweb="tab"],
@@ -276,12 +280,12 @@ if current_theme == "🌙 다크":
             width: 25% !important;
             min-width: 0px !important;
             height: 44px !important;
-            background-color: #18202E !important; /* 👈 비활성 탭 짙은 배경 */
+            background-color: #18202E !important;
             border-top: 1.5px solid #2D3748 !important;
             border-left: 1.5px solid #2D3748 !important;
             border-right: 1.5px solid #2D3748 !important;
             border-bottom: none !important;
-            border-radius: 12px 12px 0px 0px !important; /* 👈 상단 둥근 귀 */
+            border-radius: 12px 12px 0px 0px !important;
             padding: 0px 8px !important;
             margin: 0px !important;
             display: flex !important;
@@ -289,10 +293,11 @@ if current_theme == "🌙 다크":
             justify-content: center !important;
             transform: translateY(4px) !important;
             opacity: 0.75 !important;
+            box-shadow: none !important;
+            outline: none !important;
             transition: all 0.15s ease-in-out !important;
         }
 
-        /* 비선택 탭 글씨 스타일 */
         .stTabs [data-baseweb="tab"] p,
         [data-testid="stTabs"] button[role="tab"] p,
         .stTabs [data-baseweb="tab"] span,
@@ -312,25 +317,26 @@ if current_theme == "🌙 다크":
             color: #FFFFFF !important;
         }
 
-        /* 4. 활성화된 탭 (선택: ∩ 지붕형 오렌지 테두리 + 바닥선 뚫려서 본문과 통짜 연결) */
+        /* 활성화된 탭 (∩ 오렌지 지붕 테두리 + 바닥선 뚫림 + 빨간줄 제로) */
         .stTabs [data-baseweb="tab"][aria-selected="true"],
         .stTabs button[role="tab"][aria-selected="true"],
         [data-testid="stTabs"] [aria-selected="true"],
         button[data-baseweb="tab"][aria-selected="true"] {
-            background-color: #0e1117 !important; /* 👈 본문 배경과 100% 일치 */
-            border-top: 2.5px solid #FFA500 !important;   /* 👈 지붕 윗선 */
-            border-left: 2.5px solid #FFA500 !important;  /* 👈 지붕 좌측선 */
-            border-right: 2.5px solid #FFA500 !important; /* 👈 지붕 우측선 */
-            border-bottom: 4px solid #0e1117 !important;  /* 👈 오렌지 레일을 덮어 지워서 뚫림 효과! */
+            background-color: #0e1117 !important;
+            border-top: 2.5px solid #FFA500 !important;
+            border-left: 2.5px solid #FFA500 !important;
+            border-right: 2.5px solid #FFA500 !important;
+            border-bottom: 4px solid #0e1117 !important; /* 👈 오렌지 레일을 지워서 통짜 연결 */
             border-radius: 12px 12px 0px 0px !important;
-            margin-bottom: -2.5px !important;             /* 👈 레일선과 완벽하게 겹침 */
+            margin-bottom: -2.5px !important;
             transform: translateY(0px) !important;
             opacity: 1 !important;
             z-index: 10 !important;
             position: relative !important;
+            box-shadow: none !important;
+            outline: none !important;
         }
 
-        /* 선택된 탭 오렌지 글씨 강제 고정 (빨간 글씨 완전 제거) */
         .stTabs [aria-selected="true"] p,
         [data-testid="stTabs"] [aria-selected="true"] p,
         .stTabs [aria-selected="true"] span,
@@ -405,11 +411,12 @@ else:
             margin: 0.4rem 0 0.6rem 0 !important;
         }
 
+        /* 1. 타이틀과 탭 사이 간격 확보 */
         h1 {
             padding-top: 0rem !important;
             margin-top: 0rem !important;
             padding-bottom: 0.2rem !important;
-            margin-bottom: 0.4rem !important;
+            margin-bottom: 0.9rem !important;
         }
 
         .main { background-color: #F8FAFC; color: #0F172A; }
@@ -434,12 +441,15 @@ else:
         div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
 
         /* 🌐 [정통 웹브라우저 탭 스타일 - 화이트모드] 🌐 */
+        /* 빨간색 라인 제거 */
         .stTabs [data-baseweb="tab-highlight"],
         [data-testid="stTabs"] [data-baseweb="tab-highlight"],
         div[data-baseweb="tab-highlight"],
         .stTabs [data-baseweb="tab-border"],
         [data-testid="stTabs"] [data-baseweb="tab-border"],
-        div[data-baseweb="tab-border"] {
+        div[data-baseweb="tab-border"],
+        button[data-baseweb="tab"]::after,
+        button[data-baseweb="tab"]::before {
             display: none !important;
             opacity: 0 !important;
             height: 0px !important;
@@ -447,6 +457,7 @@ else:
             visibility: hidden !important;
             background: transparent !important;
             border: none !important;
+            box-shadow: none !important;
         }
 
         .stTabs [data-baseweb="tab-list"],
@@ -458,12 +469,13 @@ else:
             width: 100% !important;
             gap: 6px !important;
             padding: 0px !important;
-            margin: 0px 0px 18px 0px !important;
+            margin: 6px 0px 18px 0px !important;
             background: transparent !important;
             border: none !important;
             border-bottom: 2.5px solid #F59E0B !important;
         }
         
+        /* 2. [핵심] 라이트모드 닫힌 탭 글씨 초고대비 흑요석 차콜(#1E293B) 적용 */
         .stTabs [data-baseweb="tab"],
         [data-testid="stTabs"] button[role="tab"],
         button[data-baseweb="tab"],
@@ -472,7 +484,7 @@ else:
             width: 25% !important;
             min-width: 0px !important;
             height: 44px !important;
-            background-color: #E2E8F0 !important;
+            background-color: #E2E8F0 !important; /* 👈 차분한 소프트 그레이 */
             border-top: 1.5px solid #CBD5E1 !important;
             border-left: 1.5px solid #CBD5E1 !important;
             border-right: 1.5px solid #CBD5E1 !important;
@@ -484,7 +496,9 @@ else:
             align-items: center !important;
             justify-content: center !important;
             transform: translateY(4px) !important;
-            opacity: 0.8 !important;
+            opacity: 1 !important;
+            box-shadow: none !important;
+            outline: none !important;
             transition: all 0.15s ease-in-out !important;
         }
         
@@ -493,20 +507,17 @@ else:
         .stTabs [data-baseweb="tab"] span,
         .stTabs [data-baseweb="tab"] div {
             font-size: 16px !important;
-            font-weight: 600 !important;
-            color: #64748B !important;
+            font-weight: 700 !important;
+            color: #1E293B !important; /* 👈 선명한 짙은 차콜 블랙 글씨! */
             margin: 0px !important;
             padding: 0px !important;
         }
 
         .stTabs [data-baseweb="tab"]:hover {
-            background-color: #F1F5F9 !important;
-            opacity: 1 !important;
-        }
-        .stTabs [data-baseweb="tab"]:hover p {
-            color: #0F172A !important;
+            background-color: #CBD5E1 !important;
         }
         
+        /* 활성화된 탭 */
         .stTabs [data-baseweb="tab"][aria-selected="true"],
         .stTabs button[role="tab"][aria-selected="true"],
         [data-testid="stTabs"] [aria-selected="true"],
@@ -522,6 +533,8 @@ else:
             opacity: 1 !important;
             z-index: 10 !important;
             position: relative !important;
+            box-shadow: none !important;
+            outline: none !important;
         }
 
         .stTabs [aria-selected="true"] p,
