@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (빨간줄 완전박멸 & 브라우저 탭)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (정통 웹브라우저 탭 복구)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -235,32 +235,19 @@ if current_theme == "🌙 다크":
         
         div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-        /* 🌐 [정통 웹브라우저 탭 스타일 100% 강제 적용 - 다크모드] 🌐 */
-        /* 1. 빨간색 하이라이트 인디케이터 영구 박멸 */
-        [data-baseweb="tab-highlight"],
-        [data-baseweb="tab-border"],
+        /* 🌐 [정통 웹브라우저 탭 스타일 100% 직관적 강제 적용 - 다크모드] 🌐 */
+        /* 1. 빨간색 하이라이트 밑줄 완전 제거 */
         .stTabs [data-baseweb="tab-highlight"],
-        .stTabs [data-baseweb="tab-border"],
-        [data-testid="stTabs"] [data-baseweb="tab-highlight"],
-        [data-testid="stTabs"] [data-baseweb="tab-border"],
-        div[data-baseweb="tab-highlight"],
-        div[data-baseweb="tab-border"] {
+        .stTabs [data-baseweb="tab-border"] {
             display: none !important;
-            visibility: hidden !important;
             height: 0px !important;
-            max-height: 0px !important;
             opacity: 0 !important;
-            background: transparent !important;
-            background-color: transparent !important;
-            border: none !important;
+            visibility: hidden !important;
         }
 
-        /* 2. 전체 가로를 꽉 채우는 오렌지 베이스라인 */
-        .stTabs [data-baseweb="tab-list"],
-        [data-testid="stTabs"] [data-baseweb="tab-list"],
-        div[role="tablist"] {
+        /* 2. 전체 가로를 관통하는 오렌지 베이스라인 */
+        .stTabs [data-baseweb="tab-list"] {
             display: flex !important;
-            flex-direction: row !important;
             width: 100% !important;
             gap: 6px !important;
             padding: 8px 0px 0px 0px !important;
@@ -268,71 +255,46 @@ if current_theme == "🌙 다크":
             background: transparent !important;
             border: none !important;
             border-bottom: 2.5px solid #FFA500 !important; /* 👈 가로 전체 오렌지 레일 */
-            overflow: visible !important;
-            position: relative !important;
         }
 
-        /* 3. 닫힌 탭 (비선택: 수평 완벽 일치) */
-        .stTabs button[role="tab"][aria-selected="false"],
-        .stTabs [data-baseweb="tab"][aria-selected="false"],
-        [data-testid="stTabs"] button[role="tab"][aria-selected="false"] {
-            flex: 1 1 0% !important;
+        /* 3. 닫힌 탭 (화면 1/4씩 꽉 채우는 2배 넓은 탭 + 밝은 청색 글씨) */
+        .stTabs [data-baseweb="tab"] {
+            flex: 1 1 0px !important;
             width: 25% !important;
-            min-width: 0px !important;
             height: 44px !important;
-            background-color: #18202E !important;
-            border-top: 1.5px solid #2D3748 !important;
-            border-left: 1.5px solid #2D3748 !important;
-            border-right: 1.5px solid #2D3748 !important;
+            background-color: #1a2232 !important;
+            border: 1.5px solid #334155 !important;
             border-bottom: none !important;
-            border-radius: 12px 12px 0px 0px !important;
-            padding: 0px 8px !important;
-            margin: 0px !important;
+            border-radius: 10px 10px 0px 0px !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transform: none !important;
-            opacity: 1 !important;
-            outline: none !important;
-            box-shadow: none !important;
+            padding: 0px !important;
+            margin: 0px !important;
         }
 
-        /* 닫힌 탭 내부 모든 글씨: 밝은 청색(#38BDF8) 100% 강제 고정 */
-        .stTabs button[role="tab"][aria-selected="false"] *,
-        .stTabs [data-baseweb="tab"][aria-selected="false"] *,
-        [data-testid="stTabs"] button[role="tab"][aria-selected="false"] * {
-            color: #38BDF8 !important; /* 👈 선명한 스카이블루 */
+        /* 닫힌 탭 글씨: 밝은 청색(#38BDF8) 강제 */
+        .stTabs [data-baseweb="tab"] p,
+        .stTabs [data-baseweb="tab"] * {
+            color: #38BDF8 !important;
             font-size: 16px !important;
             font-weight: 600 !important;
         }
 
-        /* 4. 활성화된 탭 (∩ 오렌지 지붕 테두리 + 바닥선 뚫림 + 빨간줄 제로) */
-        .stTabs button[role="tab"][aria-selected="true"],
-        .stTabs [data-baseweb="tab"][aria-selected="true"],
-        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-            flex: 1 1 0% !important;
-            width: 25% !important;
-            min-width: 0px !important;
-            height: 44px !important;
-            background-color: #0e1117 !important; /* 👈 본문 배경과 일치 */
-            border-top: 2.5px solid #FFA500 !important;
-            border-left: 2.5px solid #FFA500 !important;
-            border-right: 2.5px solid #FFA500 !important;
-            border-bottom: 4px solid #0e1117 !important; /* 👈 바닥 오렌지선 지움 */
-            border-radius: 12px 12px 0px 0px !important;
+        /* 4. 선택된 탭 (∩ 오렌지 지붕 테두리 + 바닥선 뚫림 + 오렌지 글씨) */
+        .stTabs [aria-selected="true"] {
+            background-color: #0e1117 !important; /* 👈 본문 배경과 동일하여 바닥선을 지움 */
+            border: 2.5px solid #FFA500 !important;
+            border-bottom: 4px solid #0e1117 !important; /* 👈 바닥선을 덮어서 뚫림 처리 */
+            border-radius: 10px 10px 0px 0px !important;
             margin-bottom: -2.5px !important;
-            transform: none !important;
-            opacity: 1 !important;
             z-index: 10 !important;
             position: relative !important;
-            outline: none !important;
-            box-shadow: none !important;
         }
 
-        /* 선택된 탭 내부 모든 글씨: 오렌지 100% 강제 고정 */
-        .stTabs button[role="tab"][aria-selected="true"] *,
-        .stTabs [data-baseweb="tab"][aria-selected="true"] *,
-        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] * {
+        /* 선택된 탭 글씨: 오렌지 강제 */
+        .stTabs [aria-selected="true"] p,
+        .stTabs [aria-selected="true"] * {
             color: #FFA500 !important;
             font-size: 16.5px !important;
             font-weight: 800 !important;
@@ -401,7 +363,6 @@ else:
             margin: 0.4rem 0 0.6rem 0 !important;
         }
 
-        /* 1. 타이틀과 탭 사이 간격 */
         h1 {
             padding-top: 0rem !important;
             margin-top: 0rem !important;
@@ -431,29 +392,16 @@ else:
         div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
 
         /* 🌐 [정통 웹브라우저 탭 스타일 - 화이트모드] 🌐 */
-        [data-baseweb="tab-highlight"],
-        [data-baseweb="tab-border"],
         .stTabs [data-baseweb="tab-highlight"],
-        .stTabs [data-baseweb="tab-border"],
-        [data-testid="stTabs"] [data-baseweb="tab-highlight"],
-        [data-testid="stTabs"] [data-baseweb="tab-border"],
-        div[data-baseweb="tab-highlight"],
-        div[data-baseweb="tab-border"] {
+        .stTabs [data-baseweb="tab-border"] {
             display: none !important;
-            opacity: 0 !important;
             height: 0px !important;
-            max-height: 0px !important;
-            width: 0px !important;
+            opacity: 0 !important;
             visibility: hidden !important;
-            background: transparent !important;
-            border: none !important;
         }
 
-        .stTabs [data-baseweb="tab-list"],
-        [data-testid="stTabs"] [data-baseweb="tab-list"],
-        div[role="tablist"] {
+        .stTabs [data-baseweb="tab-list"] {
             display: flex !important;
-            flex-direction: row !important;
             width: 100% !important;
             gap: 6px !important;
             padding: 8px 0px 0px 0px !important;
@@ -461,67 +409,42 @@ else:
             background: transparent !important;
             border: none !important;
             border-bottom: 2.5px solid #F59E0B !important;
-            overflow: visible !important;
-            position: relative !important;
         }
         
-        .stTabs button[role="tab"][aria-selected="false"],
-        .stTabs [data-baseweb="tab"][aria-selected="false"],
-        [data-testid="stTabs"] button[role="tab"][aria-selected="false"] {
-            flex: 1 1 0% !important;
+        .stTabs [data-baseweb="tab"] {
+            flex: 1 1 0px !important;
             width: 25% !important;
-            min-width: 0px !important;
             height: 44px !important;
             background-color: #E2E8F0 !important;
-            border-top: 1.5px solid #CBD5E1 !important;
-            border-left: 1.5px solid #CBD5E1 !important;
-            border-right: 1.5px solid #CBD5E1 !important;
+            border: 1.5px solid #CBD5E1 !important;
             border-bottom: none !important;
-            border-radius: 12px 12px 0px 0px !important;
-            padding: 0px 8px !important;
-            margin: 0px !important;
+            border-radius: 10px 10px 0px 0px !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transform: none !important;
-            opacity: 1 !important;
-            outline: none !important;
-            box-shadow: none !important;
+            padding: 0px !important;
+            margin: 0px !important;
         }
         
-        .stTabs button[role="tab"][aria-selected="false"] *,
-        .stTabs [data-baseweb="tab"][aria-selected="false"] *,
-        [data-testid="stTabs"] button[role="tab"][aria-selected="false"] * {
+        .stTabs [data-baseweb="tab"] p,
+        .stTabs [data-baseweb="tab"] * {
             color: #0284C7 !important; /* 👈 화이트모드 선명한 딥 블루 */
             font-size: 16px !important;
             font-weight: 700 !important;
         }
-
-        .stTabs button[role="tab"][aria-selected="true"],
-        .stTabs [data-baseweb="tab"][aria-selected="true"],
-        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-            flex: 1 1 0% !important;
-            width: 25% !important;
-            min-width: 0px !important;
-            height: 44px !important;
-            background-color: #F8FAFC !important; /* 👈 본문 화이트 배경 */
-            border-top: 2.5px solid #F59E0B !important;
-            border-left: 2.5px solid #F59E0B !important;
-            border-right: 2.5px solid #F59E0B !important;
+        
+        .stTabs [aria-selected="true"] {
+            background-color: #F8FAFC !important; /* 👈 화이트 본문 배경 */
+            border: 2.5px solid #F59E0B !important;
             border-bottom: 4px solid #F8FAFC !important; /* 👈 하단선 뚫림 */
-            border-radius: 12px 12px 0px 0px !important;
+            border-radius: 10px 10px 0px 0px !important;
             margin-bottom: -2.5px !important;
-            transform: none !important;
-            opacity: 1 !important;
             z-index: 10 !important;
             position: relative !important;
-            outline: none !important;
-            box-shadow: none !important;
         }
 
-        .stTabs button[role="tab"][aria-selected="true"] *,
-        .stTabs [data-baseweb="tab"][aria-selected="true"] *,
-        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] * {
+        .stTabs [aria-selected="true"] p,
+        .stTabs [aria-selected="true"] * {
             color: #D97706 !important;
             font-size: 16.5px !important;
             font-weight: 800 !important;
