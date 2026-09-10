@@ -180,7 +180,7 @@ TRIP_CONFIGS = get_trip_configs()
 # ------------------------------------------------------------------------------
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
-# 1.05.01 | Custom Dark Theme & Component CSS Injector (바인더 수첩 일체형 탭 완성)
+# 1.05.01 | Custom Dark Theme & Component CSS Injector (지붕형 바인더 탭 & 슬림 KPI)
 ### 🎨 [GUI: Layout] Custom CSS (화면 전반의 디자인 및 컴포넌트 스타일링)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
@@ -234,71 +234,71 @@ if current_theme == "🌙 다크":
         
         div[data-testid="stTable"] { border: 1px solid #444; border-radius: 10px; overflow: hidden; }
 
-        /* 📑 [완벽한 일체형 바인더 탭 디자인 - 첨부2 스케치 100% 구현] 📑 */
-        /* 1. 기본 빨간색 하이라이트 밑줄 완전 박멸 */
-        div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] { 
-            display: none !important; 
-            height: 0px !important; 
-            width: 0px !important; 
-            visibility: hidden !important; 
+        /* 📑 [스케치 100% 일치: 지붕형(∩) 오렌지 바인더 탭 - 다크모드] 📑 */
+        /* 1. 기본 붉은색 밑줄 바 완전 제거 */
+        div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+        div[data-testid="stTabs"] [data-baseweb="tab-border"] {
+            display: none !important;
+            height: 0px !important;
+            width: 0px !important;
+            visibility: hidden !important;
         }
-        
-        /* 2. 가로 전체를 꽉 채우는 주황색 기준선 */
-        div[data-baseweb="tab-list"] { 
+
+        /* 2. 전체 가로를 관통하는 선명한 주황색 베이스라인 */
+        div[data-testid="stTabs"] [data-baseweb="tab-list"] {
             display: flex !important;
             width: 100% !important;
-            gap: 8px !important; 
-            padding: 0px 4px !important; 
-            background: transparent !important; 
+            gap: 8px !important;
+            padding: 0px 4px !important;
+            background: transparent !important;
             border: none !important;
-            border-bottom: 2.5px solid #FFA500 !important; /* 👈 전체 가로 주황색 라인 */
-            border-radius: 0px !important;
-            box-shadow: none !important;
+            border-bottom: 2.5px solid #FFA500 !important; /* 👈 가로 전체 주황선 */
             margin-bottom: 18px !important;
         }
-        
-        /* 3. 닫힌 탭 (비선택) - 4분할 화면 꽉 채우는 넉넉한 폭 */
-        button[data-baseweb="tab"], div[data-baseweb="tab"] { 
-            flex: 1 1 0px !important;
-            height: 42px !important; 
-            background: #181E29 !important; 
-            border-radius: 12px 12px 0px 0px !important; 
-            padding: 0px 14px !important; 
-            color: #8A99AD !important; 
-            border: 1.5px solid #2D3748 !important; 
-            border-bottom: none !important; 
-            font-size: 16px !important; 
-            font-weight: 600 !important; 
-            display: flex !important;
+
+        /* 3. 닫힌 탭 (비선택) - 가로 2배 여유 공간 (|   입력   |) */
+        div[data-testid="stTabs"] [data-baseweb="tab"] {
+            flex: 1 1 0px !important; /* 👈 화면 4등분 꽉 채우는 넓은 폭 */
+            min-width: 70px !important;
+            height: 42px !important;
+            background-color: #181E29 !important;
+            color: #8A99AD !important;
+            border: 1.5px solid #2D3748 !important;
+            border-bottom: none !important;
+            border-radius: 12px 12px 0px 0px !important; /* 👈 위쪽만 둥근 지붕 */
+            padding: 0px 16px !important; /* 👈 좌우 여백 넉넉하게 */
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transform: translateY(4px) !important; 
+            transform: translateY(4px) !important;
             opacity: 0.7 !important;
-            transition: all 0.2s ease !important; 
+            transition: all 0.2s ease !important;
         }
-        
-        button[data-baseweb="tab"]:hover { 
-            background: #222B3C !important; 
-            color: #CBD5E0 !important; 
-            transform: translateY(1px) !important;
+
+        div[data-testid="stTabs"] [data-baseweb="tab"]:hover {
+            background-color: #222B3C !important;
+            color: #FFFFFF !important;
             opacity: 1 !important;
         }
-        
-        /* 4. 열린 탭 (선택: 주황색 테두리 + 하단선 뚫어서 본문(#0e1117)과 같은 땅으로 일체화!) */
-        button[data-baseweb="tab"][aria-selected="true"], div[data-baseweb="tab"][aria-selected="true"] { 
-            background: #0e1117 !important; /* 👈 본문 배경과 동일한 색 */
-            color: #FFA500 !important; 
+
+        /* 4. 선택된 탭 (지붕형 ∩ 오렌지 테두리 + 바닥선 뚫림 + 가로 2배 넉넉함) */
+        div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
+        div[data-testid="stTabs"] [aria-selected="true"] {
+            background-color: #0e1117 !important; /* 👈 본문 배경과 동일하여 바닥선을 지워버림 */
+            color: #FFA500 !important;
             font-size: 16.5px !important;
-            font-weight: 800 !important; 
-            border-top: 2.5px solid #FFA500 !important; 
-            border-left: 2.5px solid #FFA500 !important;
-            border-right: 2.5px solid #FFA500 !important;
-            border-bottom: 4px solid #0e1117 !important; /* 👈 주황색 기준선을 덮어 지워서 본문과 통짜 연결! */
-            border-radius: 12px 12px 0px 0px !important;
-            transform: translateY(0px) !important; 
+            font-weight: 800 !important;
+            border-top: 2.5px solid #FFA500 !important;    /* 👈 지붕 윗선 */
+            border-left: 2.5px solid #FFA500 !important;   /* 👈 지붕 좌측선 */
+            border-right: 2.5px solid #FFA500 !important;  /* 👈 지붕 우측선 */
+            border-bottom: 4px solid #0e1117 !important;   /* 👈 하단선을 뚫어서 본문과 통짜 연결! */
+            border-radius: 12px 12px 0px 0px !important;   /* 👈 둥근 지붕 */
+            margin-bottom: -2.5px !important;              /* 👈 바닥 주황선 위에 정확히 안착 */
+            transform: translateY(0px) !important;
             opacity: 1 !important;
-            margin-bottom: -2.5px !important; 
-            z-index: 5 !important;
+            z-index: 10 !important;
             position: relative !important;
             text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.5) !important;
         }
@@ -394,67 +394,67 @@ else:
         
         div[data-testid="stTable"] { border: 1px solid #CBD5E1; border-radius: 10px; overflow: hidden; background-color: #FFFFFF; }
 
-        /* 📑 [완벽한 일체형 바인더 탭 디자인 - 화이트] 📑 */
-        div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] { 
-            display: none !important; 
-            height: 0px !important; 
-            width: 0px !important; 
-            visibility: hidden !important; 
+        /* 📑 [지붕형 오렌지 바인더 탭 - 화이트모드] 📑 */
+        div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+        div[data-testid="stTabs"] [data-baseweb="tab-border"] {
+            display: none !important;
+            height: 0px !important;
+            width: 0px !important;
+            visibility: hidden !important;
         }
 
-        div[data-baseweb="tab-list"] { 
+        div[data-testid="stTabs"] [data-baseweb="tab-list"] {
             display: flex !important;
             width: 100% !important;
-            gap: 8px !important; 
-            padding: 0px 4px !important; 
-            background: transparent !important; 
+            gap: 8px !important;
+            padding: 0px 4px !important;
+            background: transparent !important;
             border: none !important;
-            border-bottom: 2.5px solid #F59E0B !important; 
-            border-radius: 0px !important;
-            box-shadow: none !important;
+            border-bottom: 2.5px solid #F59E0B !important;
             margin-bottom: 18px !important;
         }
         
-        button[data-baseweb="tab"], div[data-baseweb="tab"] { 
+        div[data-testid="stTabs"] [data-baseweb="tab"] {
             flex: 1 1 0px !important;
-            height: 42px !important; 
-            background: #E2E8F0 !important; 
-            border-radius: 12px 12px 0px 0px !important; 
-            padding: 0px 14px !important; 
-            color: #64748B !important; 
-            border: 1.5px solid #CBD5E1 !important; 
-            border-bottom: none !important; 
-            font-size: 16px !important; 
-            font-weight: 600 !important; 
-            display: flex !important;
+            min-width: 70px !important;
+            height: 42px !important;
+            background-color: #E2E8F0 !important;
+            color: #64748B !important;
+            border: 1.5px solid #CBD5E1 !important;
+            border-bottom: none !important;
+            border-radius: 12px 12px 0px 0px !important;
+            padding: 0px 16px !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transform: translateY(4px) !important; 
+            transform: translateY(4px) !important;
             opacity: 0.8 !important;
-            transition: all 0.2s ease !important; 
+            transition: all 0.2s ease !important;
         }
         
-        button[data-baseweb="tab"]:hover { 
-            background: #F1F5F9 !important; 
-            color: #0F172A !important; 
-            transform: translateY(1px) !important;
+        div[data-testid="stTabs"] [data-baseweb="tab"]:hover {
+            background-color: #F1F5F9 !important;
+            color: #0F172A !important;
             opacity: 1 !important;
         }
         
-        button[data-baseweb="tab"][aria-selected="true"], div[data-baseweb="tab"][aria-selected="true"] { 
-            background: #F8FAFC !important; /* 👈 화이트모드 본문 배경 */
-            color: #D97706 !important; 
+        div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
+        div[data-testid="stTabs"] [aria-selected="true"] {
+            background-color: #F8FAFC !important; /* 👈 화이트모드 본문 배경 */
+            color: #D97706 !important;
             font-size: 16.5px !important;
-            font-weight: 800 !important; 
-            border-top: 2.5px solid #F59E0B !important; 
-            border-left: 2.5px solid #F59E0B !important; 
-            border-right: 2.5px solid #F59E0B !important; 
-            border-bottom: 4px solid #F8FAFC !important; /* 👈 하단선 뚫림 처리 */
+            font-weight: 800 !important;
+            border-top: 2.5px solid #F59E0B !important;
+            border-left: 2.5px solid #F59E0B !important;
+            border-right: 2.5px solid #F59E0B !important;
+            border-bottom: 4px solid #F8FAFC !important; /* 👈 하단선 뚫림 */
             border-radius: 12px 12px 0px 0px !important;
-            transform: translateY(0px) !important; 
+            margin-bottom: -2.5px !important;
+            transform: translateY(0px) !important;
             opacity: 1 !important;
-            margin-bottom: -2.5px !important; 
-            z-index: 5 !important;
+            z-index: 10 !important;
             position: relative !important;
         }
 
