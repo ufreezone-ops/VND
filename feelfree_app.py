@@ -1828,7 +1828,7 @@ else:
     st.title(f"{st.session_state.current_trip}")
     
     # [수정] 이모지 삭제 -> 텍스트 전용 깔끔한 4개 탭 생성
-    tab_in, tab_his, tab_stats, tab_final = st.tabs(["입력", "조회", "일일", "요약"])
+    tab_in, tab_his, tab_stats, tab_final = st.tabs(["Data입력", "Data조회", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
     # 6.01.00 | Console Tab 1: Input Engine (입력 콘솔)
