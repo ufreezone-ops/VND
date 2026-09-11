@@ -1486,7 +1486,7 @@ if st.session_state.show_spi:
             raw_hotel_rows = []
             refund_rows = []
             
-            # 1. 1차 수집 (지출액이 존재하는 호텔/수수료 내역만 텍스트 차단 없이 우선 긁어모음)
+            # 1. 1차 수집
             for _, row in df_all.iterrows():
                 cat = str(row['Category']).strip()
                 desc = str(row['Description']).strip()
@@ -1500,10 +1500,9 @@ if st.session_state.show_spi:
                         refund_rows.append(row)
                         continue
                 
-                # 1-2. 실제 지출이 발생한 호텔 카테고리 수집 (IsExpense == 1, Amount > 0)
+                # 1-2. 실제 지출이 발생한 호텔 카테고리 수집
                 if cat in ['호텔', '숙박'] and is_exp == 1 and amt > 0:
                     h_name = clean_hotel_name(desc)
-                    # 텍스트 내 박수 정보 사전 추출
                     match_nights = re.search(r'(\d+)\s*박', desc)
                     nights = int(match_nights.group(1)) if match_nights else 0
                     
@@ -1521,7 +1520,7 @@ if st.session_state.show_spi:
                         'Type': 'HOTEL_ROW'
                     })
                     
-                # 1-3. 카테고리는 호텔이 아니지만, 별도의 도시세 수수료로 기록된 행 수집
+                # 1-3. 도시세/수수료 행 수집
                 elif cat in ['수수료', '기타'] and is_exp == 1 and amt > 0:
                     desc_lower = desc.lower()
                     if any(k in desc_lower for k in ["도시세", "시티택스", "시티 택스", "citytax", "city tax", "tourist tax"]):
@@ -1551,29 +1550,22 @@ if st.session_state.show_spi:
             for key, rows in grouped_hotels.items():
                 trip_name, country, clean_name = key
                 
-                # [Magnitude Priority Sorting] 원화 요금 기준 크기순 내림차순 정렬!
                 rows_sorted = sorted(rows, key=lambda x: x['Cost_KRW'], reverse=True)
-                
-                # 가장 금액이 큰 행을 '기본 숙박비' 핵심 지표로 채택하고 투숙일수 상속
                 primary_stay = rows_sorted[0]
                 base_cost = primary_stay['Cost_KRW']
                 nights = primary_stay['Nights']
                 
-                # 만약 가장 금액이 큰 행에 "X박" 정보가 없고 서브 행에 있다면 서브 행에서 일수를 백업 상속
                 if nights == 0:
                     for r in rows_sorted[1:]:
                         if r['Nights'] > 0:
                             nights = r['Nights']
                             break
                 
-                # 박수가 명시되지 않은 호텔은 비교 차트 및 정규 산정에서 엄격하게 자동 배제
                 if nights == 0:
                     continue
                 
-                # 그 외 크기가 작은 결제 건들은 일수 증가 없는 '기타 추가비용'으로 자동 분류 및 누적합산
                 extra_fees = sum(r['Cost_KRW'] for r in rows_sorted[1:])
                 
-                # 환불 내역 매칭 연산
                 total_refund = 0.0
                 total_refund_foreign = 0.0
                 total_fx_loss = 0.0
@@ -1597,7 +1589,7 @@ if st.session_state.show_spi:
                     'Clean_Name': clean_name,
                     'Nights': nights,
                     'Cost_KRW': base_cost,
-                    'Upgrade_Cost_KRW': extra_fees, # 이종 결제나 도시세, 업그레이드 등 모든 추가 결제는 여기에 병합!
+                    'Upgrade_Cost_KRW': extra_fees,
                     'Refund_KRW': total_refund,
                     'Cancellation_Rate': cancellation_rate,
                     'FX_GainLoss': total_fx_loss
@@ -1609,7 +1601,6 @@ if st.session_state.show_spi:
                 chart_data = []
                 
                 for h in consolidated_hotels:
-                    # 기본 숙박비 + 업그레이드 비용 + 도시세 - 환불액 = 실지불 순액
                     net_cost = h['Cost_KRW'] + h['Upgrade_Cost_KRW'] - h['Refund_KRW']
                     nights = h['Nights']
                     avg_rate = net_cost / nights if nights > 0 and h['Cancellation_Rate'] < 100.0 else 0.0
@@ -1621,7 +1612,6 @@ if st.session_state.show_spi:
                     fx_diff = h['FX_GainLoss']
                     fx_loss_str = f"{fx_diff:+,.0f}원" if fx_diff != 0 else "-"
                     
-                    # 업그레이드 금액이 있을 경우 기본 숙박비에 합산 표시
                     base_price = h['Cost_KRW'] + h['Upgrade_Cost_KRW']
                     
                     display_hotel_rows.append({
@@ -1645,11 +1635,38 @@ if st.session_state.show_spi:
                 
                 st.dataframe(pd.DataFrame(display_hotel_rows), use_container_width=True, hide_index=True)
                 
-                # 5.02.04 | Hotel Cost Comparison Bar Chart
+                # 📊 [5.02.04 | 수평 가로 막대 호텔 랭킹 차트]
                 if chart_data:
                     chart_df = pd.DataFrame(chart_data).sort_values(by='1박당 요금(원)', ascending=True)
-                    fig_hotel = px.bar(chart_df, x='Hotel_Label', y='1박당 요금(원)', color='1박당 요금(원)', color_continuous_scale='Blues', title="🏨 숙소별 1박 실질 투숙 비용 비교 (도시세/업그레이드 포함/취소 제외)")
-                    fig_hotel.update_layout(xaxis_title=None, yaxis_title="1박 평균 요금 (원)", margin=dict(l=10, r=10, t=30, b=100))
+                    
+                    fig_hotel = px.bar(
+                        chart_df, 
+                        x='1박당 요금(원)', 
+                        y='Hotel_Label', 
+                        orientation='h',
+                        color='1박당 요금(원)', 
+                        color_continuous_scale='Blues', 
+                        title="🏨 숙소별 1박 실질 투숙 비용 비교 (도시세/업그레이드 포함 / 취소 제외)"
+                    )
+                    
+                    # 막대 끝에 1박 요금 직접 표기
+                    fig_hotel.update_traces(
+                        texttemplate=" %{x:,.0f}원",
+                        textposition="outside",
+                        cliponaxis=False
+                    )
+                    
+                    # 등록된 숙소 수에 비례한 동적 세로 높이 계산
+                    dynamic_hotel_height = max(450, len(chart_df) * 32 + 100)
+                    
+                    fig_hotel.update_layout(
+                        xaxis_title=None, 
+                        yaxis_title=None, 
+                        margin=dict(l=10, r=80, t=40, b=30),
+                        height=dynamic_hotel_height,
+                        coloraxis_showscale=False, # 👈 우측 색상표 제거
+                        yaxis=dict(autorange="reversed") # 저렴한 알뜰 숙소부터 위에서 아래로 순위별 정렬
+                    )
                     st.plotly_chart(fig_hotel, use_container_width=True, config={'displaylogo': False})
             else:
                 st.info("비교할 호텔 숙박 내역이 없습니다. (카테고리가 '호텔', '숙박'이며 내용에 'X박'이 명시되어야 합니다.)")
