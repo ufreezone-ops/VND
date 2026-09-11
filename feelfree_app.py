@@ -1655,7 +1655,7 @@ if st.session_state.show_spi:
                 st.info("비교할 호텔 숙박 내역이 없습니다. (카테고리가 '호텔', '숙박'이며 내용에 'X박'이 명시되어야 합니다.)")
                 
         # ----------------------------------------------------------------------
-        # 5.03.00 | Channel 3: Flight Pricing Matrix (정밀 1:1 환불 매칭 엔진 탑재)
+        # 5.03.00 | Channel 3: Flight Pricing Matrix (수평 가로 막대 랭킹 차트)
         # ----------------------------------------------------------------------
         with sub_tab_flight:
             st.subheader("✈️ 항공권 요금 비교")
@@ -1739,12 +1739,11 @@ if st.session_state.show_spi:
                 f_route = f['Route']
                 f_trip = f['TripName']
                 
-                # 동일 여행지 수화물/추가비용 합산
                 for s in flight_surcharges:
                     if s['TripName'] == f_trip:
                         f['Surcharge_Sum_KRW'] += s['Ticket_KRW']
                 
-                # [핵심] 출발지-도착지 동시 일치 엄격 검증 & 중복 매칭 차단 (1:1 매칭)
+                # 정밀 1:1 노선 매칭
                 if f_route and '-' in f_route:
                     dep_city, arr_city = f_route.split('-', 1)
                     dep_city, arr_city = dep_city.strip().lower(), arr_city.strip().lower()
@@ -1758,7 +1757,6 @@ if st.session_state.show_spi:
                         r_desc = str(r['Description']).lower()
                         r_route = extract_airport_route(r['Description'])
                         
-                        # 조건: 노선이 일치하거나, 환불 설명란에 출발도시와 도착도시가 '동시에' 모두 들어있는 경우만 매칭!
                         is_exact_route = bool(r_route and r_route == f_route)
                         is_both_cities_in_desc = (dep_city in r_desc and arr_city in r_desc)
                         
@@ -1766,7 +1764,7 @@ if st.session_state.show_spi:
                             r_cost_krw = r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate']
                             f['Refund_KRW'] += r_cost_krw
                             f['Refund_Foreign'] += r['Amount']
-                            matched_refund_indices.add(r_idx) # 다른 항공권에 중복 적용 차단
+                            matched_refund_indices.add(r_idx)
                 
                 num_travelers = travelers_map.get(f['TripName'], 2)
                 total_initial = f['Ticket_KRW'] + f['Extra_Fee_KRW'] + f['Surcharge_Sum_KRW']
@@ -1785,7 +1783,7 @@ if st.session_state.show_spi:
                 else:
                     f['RT_Equivalent_Per_Person_KRW'] = f['Per_Person_Net_KRW']
 
-            # 5.03.04 | Flight Price Benchmark Bar Chart & Display Table
+            # 5.03.04 | Horizontal Flight Price Benchmark Bar Chart & Display Table
             if primary_flights:
                 display_flight_rows = []
                 chart_flight_data = []
@@ -1816,7 +1814,7 @@ if st.session_state.show_spi:
                         '상태': status_str
                     })
                     
-                    # 100% 정상 탑승 항공권만 비교 차트에 포함 (환불/취소 노선 제외)
+                    # 100% 정상 탑승 항공권만 비교 차트에 포함
                     if f['Refund_Rate'] == 0.0 and f['Refund_KRW'] <= 0 and f['RT_Equivalent_Per_Person_KRW'] > 0:
                         chart_flight_data.append({
                             'Flight_Label': f"{f['Route']} ({f['TripName']})",
@@ -1825,21 +1823,37 @@ if st.session_state.show_spi:
                 
                 st.dataframe(pd.DataFrame(display_flight_rows), use_container_width=True, hide_index=True)
                 
+                # 📊 [가로 막대 랭킹 차트 렌더링]
                 if chart_flight_data:
                     chart_flight_df = pd.DataFrame(chart_flight_data).sort_values(by='1인당 왕복 환산 요금(원)', ascending=True)
+                    
                     fig_flight = px.bar(
                         chart_flight_df, 
-                        x='Flight_Label', 
-                        y='1인당 왕복 환산 요금(원)', 
+                        x='1인당 왕복 환산 요금(원)', 
+                        y='Flight_Label', 
+                        orientation='h',
                         color='1인당 왕복 환산 요금(원)', 
                         color_continuous_scale='Reds', 
                         title="✈️ 1인당 왕복 기준 항공요금 공평 비교 (편도 노선 2배 환산 적용 / 취소·환불 노선 제외)"
                     )
+                    
+                    # 막대 끝에 금액 표기
+                    fig_flight.update_traces(
+                        texttemplate=" %{x:,.0f}원",
+                        textposition="outside",
+                        cliponaxis=False
+                    )
+                    
+                    # 노선 수에 비례한 동적 세로 높이 계산
+                    dynamic_chart_height = max(450, len(chart_flight_df) * 36 + 100)
+                    
                     fig_flight.update_layout(
                         xaxis_title=None, 
-                        yaxis_title="1인당 왕복 환산 요금 (원)", 
-                        margin=dict(l=10, r=10, t=30, b=100),
-                        coloraxis_showscale=False
+                        yaxis_title=None, 
+                        margin=dict(l=10, r=80, t=40, b=30),
+                        height=dynamic_chart_height,
+                        coloraxis_showscale=False,
+                        yaxis=dict(autorange="reversed") # 저렴한 최저가 노선이 위에서부터 순위별로 정렬
                     )
                     st.plotly_chart(fig_flight, use_container_width=True, config={'displaylogo': False})
             else:
