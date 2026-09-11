@@ -1661,7 +1661,7 @@ if st.session_state.show_spi:
             st.subheader("✈️ 항공권 요금 비교")
             st.caption("💡 각 항공권의 왕복/편도 여정을 구분하여 '1인당 왕복 환산 요금'으로 공평하게 비교합니다. 노선(Route)이 기재되지 않은 수화물/수수료 행은 해당 여행지의 메인 항공권에 자동으로 합산되며, 여행지별 설정된 인원수(Travelers)로 나누어 실질적인 '1인당 비용'을 산출합니다.")
             
-            # 5.03.01 | Flight Route Extraction & Journey Classifier (노선 추출용 헬퍼)
+            # 5.03.01 | Flight Route Extraction & Journey Classifier
             def extract_airport_route(text):
                 match = re.search(r'([가-힣a-zA-Z\s]+)-([가-힣a-zA-Z\s]+)', str(text))
                 if match:
@@ -1686,9 +1686,6 @@ if st.session_state.show_spi:
                     route = extract_airport_route(desc)
                     desc_lower = desc.lower()
                     
-                    # [Modified] 여정 유형 자동 감별 규칙 고도화
-                    # Description에 '귀국' 혹은 '왕복'이 들어가야 왕복으로 인정하며, 그 외는 '편도'로 기본 설정하여 기항지 간 편도 항공권 완벽 수용
-                    # ➔ 🚀 [Modified] Dan의 명시적 키워드('다구간', '왕복', '편도') 우선 감별 룰 수립
                     if "다구간" in desc_lower:
                         f_type = "다구간"
                     elif "왕복" in desc_lower:
@@ -1696,7 +1693,6 @@ if st.session_state.show_spi:
                     elif "편도" in desc_lower:
                         f_type = "편도"
                     else:
-                        # 폴백 조건: 키워드가 모두 없는 과거 데이터 구제
                         if any(k in desc_lower for k in ["귀국", "rt", "round"]):
                             f_type = "왕복"
                         else:
@@ -1729,12 +1725,11 @@ if st.session_state.show_spi:
                     if route:
                         primary_flights.append(flight_data)
                     else:
-                        # 노선이 적혀있지 않은 자잘한 수화물/수수료 행은 surcharge로 분류
                         flight_surcharges.append(flight_data)
                         
                 elif cat == '환불':
                     desc_lower = desc.lower()
-                    if any(k in desc_lower for k in ["항공", "비행기", "페가수스", "세르비아", "항공사", "flight", "airline"]):
+                    if any(k in desc_lower for k in ["항공", "비행기", "페가수스", "세르비아", "항공사", "flight", "airline", "귁첸", "소피아", "베오그라드", "부다페스트"]):
                         flight_refund_rows.append(row)
 
             # 5.03.02 | Surcharge/Baggage Allocation & Penalty Calculator
@@ -1749,30 +1744,25 @@ if st.session_state.show_spi:
                 # 동일 여행지 내 노선별 환불 매칭 및 위약금 연산
                 for r in flight_refund_rows:
                     if r['TripName'] == f['TripName']:
+                        r_desc = str(r['Description']).lower()
                         r_route = extract_airport_route(r['Description'])
-                        if f_route and r_route and f_route == r_route:
+                        if (f_route and r_route and f_route == r_route) or (f_route and any(k in r_desc for k in f_route.split('-'))):
                             r_cost_krw = r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate']
                             f['Refund_KRW'] += r_cost_krw
                             f['Refund_Foreign'] += r['Amount']
                 
-                # 1인당 계산 및 왕복 환산 요금 연산
                 num_travelers = travelers_map.get(f['TripName'], 2)
-                
-                # 총 비용 = 기본 티켓값 + 수수료 + 수화물 추가금
                 total_initial = f['Ticket_KRW'] + f['Extra_Fee_KRW'] + f['Surcharge_Sum_KRW']
                 f['Net_Cost_KRW'] = total_initial - f['Refund_KRW']
                 f['Refund_Rate'] = min(100.0, (f['Refund_Foreign'] / f['Amount']) * 100.0) if f['Amount'] > 0 else 0.0
                 f['Loss_KRW'] = f['Ticket_KRW'] - f['Refund_KRW'] if f['Refund_KRW'] > 0 else 0.0
                 
-                # 1인당 비용으로 전환
                 f['Per_Person_Initial_KRW'] = total_initial / num_travelers
                 f['Per_Person_Net_KRW'] = f['Net_Cost_KRW'] / num_travelers
                 f['Per_Person_Loss_KRW'] = f['Loss_KRW'] / num_travelers
                 f['Per_Person_Refund_KRW'] = f['Refund_KRW'] / num_travelers
                 
                 # 5.03.03 | Per-Person Roundtrip Equivalent Normalizer
-                # [Modified] 왕복 요금으로 환산 공식 적용
-                # 편도 항공권일 경우 1인당 Net 요금에 2를 곱하여 왕복 환산 요금 산출
                 if f['Type'] == "편도":
                     f['RT_Equivalent_Per_Person_KRW'] = f['Per_Person_Net_KRW'] * 2
                 else:
@@ -1790,7 +1780,6 @@ if st.session_state.show_spi:
                     
                     num_travelers = int(travelers_map.get(f['TripName'], 2))
                     
-                    # 왕복 환산 요금 칼럼 포맷 지정 (편도일 경우 '왕복요금으로 환산' 명시)
                     if f['Type'] == "편도":
                         rt_eq_str = f"{f['RT_Equivalent_Per_Person_KRW']:,.0f}원 (왕복요금으로 환산)"
                     else:
@@ -1800,17 +1789,18 @@ if st.session_state.show_spi:
                         '여행명': f['TripName'],
                         '노선(공항)': f['Route'],
                         '인원수': f"{num_travelers}인",
-                        '구분': f['Type'], # [Modified] 편도/왕복 정확히 표기
+                        '구분': f['Type'],
                         '1인당 구매요금': f"{f['Per_Person_Initial_KRW']:,.0f}원",
                         '1인당 환불액': f"{f['Per_Person_Refund_KRW']:,.0f}원" if f['Per_Person_Refund_KRW'] > 0 else "-",
                         '환불율': f"{f['Refund_Rate']:.1f}%" if f['Refund_Rate'] > 0 else "-",
                         '1인당 취소손실': f"{f['Per_Person_Loss_KRW']:,.0f}원" if f['Per_Person_Loss_KRW'] > 0 else "-",
                         '1인당 실지불(Net)': f"{max(0, f['Per_Person_Net_KRW']):,.0f}원",
-                        '1인당 왕복 환산 요금': rt_eq_str, # [Modified] 편도 시 '왕복요금으로 환산' 안내 문구 포함
+                        '1인당 왕복 환산 요금': rt_eq_str,
                         '상태': status_str
                     })
                     
-                    if f['Refund_Rate'] < 100.0 and f['RT_Equivalent_Per_Person_KRW'] > 0:
+                    # [핵심 수정] 부분환불/취소/스케줄변경 이력이 있는 항공권은 비교 차트에서 완전히 배제 (오직 100% 정상 탑승 건만 비교)
+                    if f['Refund_Rate'] == 0.0 and f['Refund_KRW'] <= 0 and f['RT_Equivalent_Per_Person_KRW'] > 0:
                         chart_flight_data.append({
                             'Flight_Label': f"{f['Route']} ({f['TripName']})",
                             '1인당 왕복 환산 요금(원)': f['RT_Equivalent_Per_Person_KRW']
@@ -1820,8 +1810,21 @@ if st.session_state.show_spi:
                 
                 if chart_flight_data:
                     chart_flight_df = pd.DataFrame(chart_flight_data).sort_values(by='1인당 왕복 환산 요금(원)', ascending=True)
-                    fig_flight = px.bar(chart_flight_df, x='Flight_Label', y='1인당 왕복 환산 요금(원)', color='1인당 왕복 환산 요금(원)', color_continuous_scale='Reds', title="✈️ 1인당 왕복 기준 항공요금 공평 비교 (편도 노선 2배 환산 적용/취소 제외)")
-                    fig_flight.update_layout(xaxis_title=None, yaxis_title="1인당 왕복 환산 요금 (원)", margin=dict(l=10, r=10, t=30, b=100))
+                    fig_flight = px.bar(
+                        chart_flight_df, 
+                        x='Flight_Label', 
+                        y='1인당 왕복 환산 요금(원)', 
+                        color='1인당 왕복 환산 요금(원)', 
+                        color_continuous_scale='Reds', 
+                        title="✈️ 1인당 왕복 기준 항공요금 공평 비교 (편도 노선 2배 환산 적용 / 취소·환불 노선 제외)"
+                    )
+                    # [핵심 수정] coloraxis_showscale=False 로 우측 세로 색상표 범례 완전 삭제
+                    fig_flight.update_layout(
+                        xaxis_title=None, 
+                        yaxis_title="1인당 왕복 환산 요금 (원)", 
+                        margin=dict(l=10, r=10, t=30, b=100),
+                        coloraxis_showscale=False
+                    )
                     st.plotly_chart(fig_flight, use_container_width=True, config={'displaylogo': False})
             else:
                 st.info("비교할 항공권 내역이 없습니다.")
