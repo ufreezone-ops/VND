@@ -1336,7 +1336,7 @@ if st.session_state.show_spi:
         sub_tab_spi, sub_tab_hotel, sub_tab_flight = st.tabs(["📊 1일비용", "🏨 호텔", "✈️ 항공"])
       
         # ----------------------------------------------------------------------
-        # 5.01.00 | Channel 1: Daily Living Cost (SPI) (정식 숙박 국가 전용 분석)
+        # 5.01.00 | Channel 1: Daily Living Cost (SPI) (수평 누적 가로막대 차트)
         # ----------------------------------------------------------------------
         with sub_tab_spi:
             # 5.01.01 | Stay Nights & Travelers Normalization Matrix
@@ -1375,10 +1375,9 @@ if st.session_state.show_spi:
                         if not hotel_df.empty:
                             ext = hotel_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
                             extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
-                    # [핵심 수정] 숙박 호텔이 없는 단순 환승이나 기항지는 1박으로 강제하지 않고 0박으로 처리
                     stay_nights[(trip, country)] = extracted_nights
 
-            # [핵심 필터링] 실제 1박 이상 숙박(호텔 투숙)이 존재하는 정규 체류 국가만 추출 (싱가폴 환승, 기항지, 한국 출발지 자동 배제)
+            # 실제 1박 이상 숙박(호텔 투숙)이 존재하는 정규 체류 국가만 추출
             def is_valid_stay_country(r):
                 t_name, c_name = str(r['TripName']), str(r['Country'])
                 if any(ex in c_name for ex in ['글로벌', '경유', '환승', '크루즈', '한국', '크로아티아', '불가리아']):
@@ -1442,17 +1441,17 @@ if st.session_state.show_spi:
                 agg_total['Theme'] = theme_notes
                 final_total_df = agg_total.sort_values(by='Daily_SPI', ascending=True)
                 
-                # 5.01.03 | Daily Survival Cost Bar Chart & Table
+                # 5.01.03 | Horizontal Stacked Bar Chart & Display Table
                 if not final_total_df.empty:
                     st.markdown("### 여행지 1박비용(원)")
+                    
+                    # [2줄 라벨 적용: 국가명 <br> (여행명)]
                     def make_chart_label(r):
                         country, trip = str(r['Country']), str(r['TripName'])
-                        if "발칸" in trip: return country 
-                        match = re.search(r'([가-힣]+)', trip)
-                        city = match.group(1) if match else ""
-                        return f"{country}({city})" if city and city not in country else country
+                        return f"<b>{country}</b><br><span style='font-size:11px; color:#A0AEC0;'>({trip})</span>"
 
                     final_total_df['Chart_Label'] = final_total_df.apply(make_chart_label, axis=1)
+                    
                     display_df = final_total_df.copy()
                     display_df['Daily_SPI_Fmt'] = display_df['Daily_SPI'].apply(lambda x: f"{x:,.0f} 원")
                     display_df = display_df.rename(columns={'TripName': '여행명', 'Country': '국가', 'Travelers': '인원수', 'Nights': '숙박일(박)', 'Daily_SPI_Fmt': '1박 체감물가', 'Theme': '💡 특이사항 및 요인'})
@@ -1460,12 +1459,35 @@ if st.session_state.show_spi:
                     
                     label_map = dict(zip(zip(final_total_df['TripName'], final_total_df['Country']), final_total_df['Chart_Label']))
                     agg_group['Chart_Label'] = agg_group.apply(lambda r: label_map.get((r['TripName'], r['Country']), r['Country']), axis=1)
-                    category_order_x = final_total_df['Chart_Label'].tolist()
+                    
+                    category_order_y = final_total_df['Chart_Label'].tolist()
                     stack_order = ['📱 기타', '🚕 로컬교통', '🍔 식음료', '🏄 투어/액티비티', '🏨 숙박', '🚗 렌트카']
                     color_map = {'🚗 렌트카': '#D32F2F', '🏨 숙박': '#1976D2', '🏄 투어/액티비티': '#9C27B0', '🍔 식음료': '#4CAF50', '🚕 로컬교통': '#00ACC1', '📱 기타': '#795548'}
-                    fig_stacked = px.bar(agg_group, x='Chart_Label', y='Daily_SPI', color='SPI_Group', color_discrete_map=color_map, category_orders={"Chart_Label": category_order_x, "SPI_Group": stack_order})
-                    fig_stacked.update_layout(barmode='stack', margin=dict(l=10, r=10, t=10, b=30), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5, title=None), xaxis_title=None, yaxis_title=None)
-                    st.plotly_chart(fig_stacked, use_container_width=True)
+                    
+                    # 📊 [수평 누적 가로 막대 차트 (Horizontal Stacked Bar)]
+                    fig_stacked = px.bar(
+                        agg_group, 
+                        x='Daily_SPI', 
+                        y='Chart_Label', 
+                        orientation='h',
+                        color='SPI_Group', 
+                        color_discrete_map=color_map, 
+                        category_orders={"Chart_Label": category_order_y, "SPI_Group": stack_order},
+                        title="📊 여행지별 1박 체감물가 구성 비교 (누적 가로막대)"
+                    )
+                    
+                    dynamic_spi_height = max(480, len(final_total_df) * 44 + 110)
+                    
+                    fig_stacked.update_layout(
+                        barmode='stack', 
+                        xaxis_title="1박 체감비용 (원)",
+                        yaxis_title=None,
+                        margin=dict(l=10, r=40, t=50, b=30), 
+                        height=dynamic_spi_height,
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, title=None),
+                        yaxis=dict(autorange="reversed") # 저렴한 가성비 여행지부터 위에서 아래로 순위별 정렬
+                    )
+                    st.plotly_chart(fig_stacked, use_container_width=True, config={'displaylogo': False})
 
         # ----------------------------------------------------------------------
         # 5.02.00 | Channel 2: Hotel Unit Cost Analytics (2줄 레이블 가로 막대 차트)
