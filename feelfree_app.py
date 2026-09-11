@@ -304,6 +304,8 @@ SURVIVAL_CATS =["간식", "Grab", "DiDi", "VinBus", "지하철", "마사지", "�
 FIXED_COST_CATS =["항공권", "호텔", "보험"]
 DOMESTIC_CATS =["항공권", "호텔", "보험", "지하철", "택시"]
 
+# [에러 방어] 하위 호환성을 위한 current_tz 안전 등록
+if 'current_tz' not in st.session_state: st.session_state.current_tz = TZ_KST
 if 'last_cat_name' not in st.session_state: st.session_state.last_cat_name = "식사"
 
 
@@ -1334,7 +1336,7 @@ if st.session_state.show_spi:
         sub_tab_spi, sub_tab_hotel, sub_tab_flight = st.tabs(["📊 1일비용", "🏨 호텔", "✈️ 항공"])
       
         # ----------------------------------------------------------------------
-        # 5.01.00 | Channel 1: Daily Living Cost (SPI) (1일 체감비용 분석)
+        # 5.01.00 | Channel 1: Daily Living Cost (SPI) (정식 숙박 국가 전용 분석)
         # ----------------------------------------------------------------------
         with sub_tab_spi:
             # 5.01.01 | Stay Nights & Travelers Normalization Matrix
@@ -1373,13 +1375,22 @@ if st.session_state.show_spi:
                         if not hotel_df.empty:
                             ext = hotel_df['Description'].str.extract(r'(\d+(?:\.\d+)?)\s*박')
                             extracted_nights = pd.to_numeric(ext[0], errors='coerce').fillna(0).sum()
-                    stay_nights[(trip, country)] = max(1, extracted_nights if extracted_nights > 0 else 1)
+                    # [핵심 수정] 숙박 호텔이 없는 단순 환승이나 기항지는 1박으로 강제하지 않고 0박으로 처리
+                    stay_nights[(trip, country)] = extracted_nights
 
-            df_spi = df_all[(df_all['Category'].isin(SPI_CATS)) & (~df_all['Country'].str.contains('글로벌|경유|크로아티아|불가리아', na=False))].copy()
+            # [핵심 필터링] 실제 1박 이상 숙박(호텔 투숙)이 존재하는 정규 체류 국가만 추출 (싱가폴 환승, 기항지, 한국 출발지 자동 배제)
+            def is_valid_stay_country(r):
+                t_name, c_name = str(r['TripName']), str(r['Country'])
+                if any(ex in c_name for ex in ['글로벌', '경유', '환승', '크루즈', '한국', '크로아티아', '불가리아']):
+                    return False
+                return stay_nights.get((t_name, c_name), 0) > 0
+
+            valid_mask = df_all.apply(is_valid_stay_country, axis=1)
+            df_spi = df_all[(df_all['Category'].isin(SPI_CATS)) & valid_mask].copy()
             
             if not df_spi.empty:
                 df_spi['KRW_val'] = df_spi.apply(lambda r: r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate']), axis=1)
-                refund_df = df_all[(df_all['Category'] == '환불') & (~df_all['Country'].str.contains('글로벌|경유|크로아티아|불가리아', na=False))].copy()
+                refund_df = df_all[(df_all['Category'] == '환불') & valid_mask].copy()
                 if not refund_df.empty:
                     refund_df['KRW_val'] = refund_df.apply(lambda r: -(r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * float(r['AppliedRate'])), axis=1)
                     def map_refund_group(desc):
@@ -3267,7 +3278,7 @@ else:
     # --------------------------------------------------------------------------
     with tab_final:
         if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
-            # 6.04.01 | Executive Macro KPI Summary Cards (간결한 명칭 적용)
+            # 6.04.01 | Executive Macro KPI Summary Cards
             total_trip_krw = exp_df['KRW_val'].sum()
             total_trip_loc = exp_df['Local_val'].sum()
             
@@ -3296,7 +3307,6 @@ else:
                 
             st.markdown("<h3 style='margin-top: 0px; margin-bottom: 8px;'>🏁 여행요약</h3>", unsafe_allow_html=True)
             k1, k2, k3, k4 = st.columns(4)
-            # [수정] 요청하신 간결한 문구 4종 적용
             with k1: st.markdown(kpi_box("최종 지출", total_trip_krw, total_trip_loc), unsafe_allow_html=True)
             with k2: st.markdown(kpi_box("국내 지출", dom_total_krw), unsafe_allow_html=True)
             with k3: st.markdown(kpi_box("현지 지출", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
@@ -3332,7 +3342,7 @@ else:
                 st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
             
             # ------------------------------------------------------------------
-            # 6.04.03 | Donut Category Distribution Chart (상하 여백 대폭 압축 밀착형)
+            # 6.04.03 | Donut Category Distribution Chart
             # ------------------------------------------------------------------
             st.markdown("<h4 style='margin-top: 12px; margin-bottom: 0px;'>🍕 지출비중</h4>", unsafe_allow_html=True)
             cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
@@ -3371,7 +3381,7 @@ else:
                 m_af = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_arr.iloc[-1]['Date']))
                 if m_af: arr_dt_f = datetime.strptime(m_af.group(0), "%Y-%m-%d").date()
 
-            today_f = datetime.now(st.session_state.current_tz).date()
+            today_f = datetime.now(TZ_KST).date()
 
             if dep_dt_f and arr_dt_f:
                 cal_days_f = (arr_dt_f - dep_dt_f).days + 1
@@ -3394,7 +3404,6 @@ else:
                 font=dict(size=16)
             )
             
-            # [핵심] 상단 마진(t=5), 하단 마진(b=20), 높이(height=440), 범례(y=-0.05) 대폭 밀착
             fig_donut.update_layout(
                 height=440, 
                 margin=dict(l=10, r=10, t=5, b=20), 
@@ -3403,4 +3412,4 @@ else:
             st.plotly_chart(fig_donut, use_container_width=True)
 
 # 6.04.04 | Build Version & Sync Timestamp Footer
-st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(st.session_state.current_tz).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(TZ_KST).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
