@@ -1655,7 +1655,7 @@ if st.session_state.show_spi:
                 st.info("비교할 호텔 숙박 내역이 없습니다. (카테고리가 '호텔', '숙박'이며 내용에 'X박'이 명시되어야 합니다.)")
                 
         # ----------------------------------------------------------------------
-        # 5.03.00 | Channel 3: Flight Pricing Matrix (항공권 왕복 환산 및 노선 비교)
+        # 5.03.00 | Channel 3: Flight Pricing Matrix (정밀 1:1 환불 매칭 엔진 탑재)
         # ----------------------------------------------------------------------
         with sub_tab_flight:
             st.subheader("✈️ 항공권 요금 비교")
@@ -1729,33 +1729,50 @@ if st.session_state.show_spi:
                         
                 elif cat == '환불':
                     desc_lower = desc.lower()
-                    if any(k in desc_lower for k in ["항공", "비행기", "페가수스", "세르비아", "항공사", "flight", "airline", "귁첸", "소피아", "베오그라드", "부다페스트"]):
+                    if any(k in desc_lower for k in ["항공", "비행기", "페가수스", "세르비아", "항공사", "flight", "airline", "귁첸", "소피아", "베오그라드", "부다페스트", "티켓"]):
                         flight_refund_rows.append(row)
 
-            # 5.03.02 | Surcharge/Baggage Allocation & Penalty Calculator
+            # 5.03.02 | Surcharge/Baggage Allocation & Strict 1:1 Refund Matcher
+            matched_refund_indices = set()
+            
             for f in primary_flights:
                 f_route = f['Route']
+                f_trip = f['TripName']
                 
-                # 동일 여행지 내에서 노선이 없는 수화물/추가비용 행들을 메인 항공비용에 누적 합산
+                # 동일 여행지 수화물/추가비용 합산
                 for s in flight_surcharges:
-                    if s['TripName'] == f['TripName']:
+                    if s['TripName'] == f_trip:
                         f['Surcharge_Sum_KRW'] += s['Ticket_KRW']
                 
-                # 동일 여행지 내 노선별 환불 매칭 및 위약금 연산
-                for r in flight_refund_rows:
-                    if r['TripName'] == f['TripName']:
+                # [핵심] 출발지-도착지 동시 일치 엄격 검증 & 중복 매칭 차단 (1:1 매칭)
+                if f_route and '-' in f_route:
+                    dep_city, arr_city = f_route.split('-', 1)
+                    dep_city, arr_city = dep_city.strip().lower(), arr_city.strip().lower()
+                    
+                    for r_idx, r in enumerate(flight_refund_rows):
+                        if r_idx in matched_refund_indices:
+                            continue
+                        if r['TripName'] != f_trip:
+                            continue
+                            
                         r_desc = str(r['Description']).lower()
                         r_route = extract_airport_route(r['Description'])
-                        if (f_route and r_route and f_route == r_route) or (f_route and any(k in r_desc for k in f_route.split('-'))):
+                        
+                        # 조건: 노선이 일치하거나, 환불 설명란에 출발도시와 도착도시가 '동시에' 모두 들어있는 경우만 매칭!
+                        is_exact_route = bool(r_route and r_route == f_route)
+                        is_both_cities_in_desc = (dep_city in r_desc and arr_city in r_desc)
+                        
+                        if is_exact_route or is_both_cities_in_desc:
                             r_cost_krw = r['Amount'] if r['Currency'] == 'KRW' else r['Amount'] * r['AppliedRate']
                             f['Refund_KRW'] += r_cost_krw
                             f['Refund_Foreign'] += r['Amount']
+                            matched_refund_indices.add(r_idx) # 다른 항공권에 중복 적용 차단
                 
                 num_travelers = travelers_map.get(f['TripName'], 2)
                 total_initial = f['Ticket_KRW'] + f['Extra_Fee_KRW'] + f['Surcharge_Sum_KRW']
-                f['Net_Cost_KRW'] = total_initial - f['Refund_KRW']
+                f['Net_Cost_KRW'] = max(0, total_initial - f['Refund_KRW'])
                 f['Refund_Rate'] = min(100.0, (f['Refund_Foreign'] / f['Amount']) * 100.0) if f['Amount'] > 0 else 0.0
-                f['Loss_KRW'] = f['Ticket_KRW'] - f['Refund_KRW'] if f['Refund_KRW'] > 0 else 0.0
+                f['Loss_KRW'] = max(0, f['Ticket_KRW'] - f['Refund_KRW']) if f['Refund_KRW'] > 0 else 0.0
                 
                 f['Per_Person_Initial_KRW'] = total_initial / num_travelers
                 f['Per_Person_Net_KRW'] = f['Net_Cost_KRW'] / num_travelers
@@ -1775,7 +1792,7 @@ if st.session_state.show_spi:
                 
                 for f in primary_flights:
                     status_str = "정상"
-                    if f['Refund_Rate'] >= 100.0: status_str = "🔴 100% 취소"
+                    if f['Refund_Rate'] >= 99.0: status_str = "🔴 100% 취소"
                     elif f['Refund_Rate'] > 0.0: status_str = f"🟡 부분환불 ({f['Refund_Rate']:.1f}%)"
                     
                     num_travelers = int(travelers_map.get(f['TripName'], 2))
@@ -1794,12 +1811,12 @@ if st.session_state.show_spi:
                         '1인당 환불액': f"{f['Per_Person_Refund_KRW']:,.0f}원" if f['Per_Person_Refund_KRW'] > 0 else "-",
                         '환불율': f"{f['Refund_Rate']:.1f}%" if f['Refund_Rate'] > 0 else "-",
                         '1인당 취소손실': f"{f['Per_Person_Loss_KRW']:,.0f}원" if f['Per_Person_Loss_KRW'] > 0 else "-",
-                        '1인당 실지불(Net)': f"{max(0, f['Per_Person_Net_KRW']):,.0f}원",
+                        '1인당 실지불(Net)': f"{f['Per_Person_Net_KRW']:,.0f}원",
                         '1인당 왕복 환산 요금': rt_eq_str,
                         '상태': status_str
                     })
                     
-                    # [핵심 수정] 부분환불/취소/스케줄변경 이력이 있는 항공권은 비교 차트에서 완전히 배제 (오직 100% 정상 탑승 건만 비교)
+                    # 100% 정상 탑승 항공권만 비교 차트에 포함 (환불/취소 노선 제외)
                     if f['Refund_Rate'] == 0.0 and f['Refund_KRW'] <= 0 and f['RT_Equivalent_Per_Person_KRW'] > 0:
                         chart_flight_data.append({
                             'Flight_Label': f"{f['Route']} ({f['TripName']})",
@@ -1818,7 +1835,6 @@ if st.session_state.show_spi:
                         color_continuous_scale='Reds', 
                         title="✈️ 1인당 왕복 기준 항공요금 공평 비교 (편도 노선 2배 환산 적용 / 취소·환불 노선 제외)"
                     )
-                    # [핵심 수정] coloraxis_showscale=False 로 우측 세로 색상표 범례 완전 삭제
                     fig_flight.update_layout(
                         xaxis_title=None, 
                         yaxis_title="1인당 왕복 환산 요금 (원)", 
