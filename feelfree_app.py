@@ -271,7 +271,6 @@ def sort_trips(trip_names):
 
 sorted_trips_initial = sort_trips(list(TRIP_CONFIGS.keys()))
 
-# [핵심] URL 인코딩(공백/특수문자) 차이에도 100% 일치하는 여행지를 찾아내는 헬퍼
 def find_matching_trip(target_name):
     if not target_name: return None
     target_clean = str(target_name).replace("+", " ").strip()
@@ -299,15 +298,12 @@ FIRST_NODE_NAME = list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys
 FIRST_NODE = TRIP_CONFIGS[st.session_state.current_trip]["nodes"][FIRST_NODE_NAME]
 TRAVEL_CURRENCY = FIRST_NODE["currency"]
 LOCAL_SYM = FIRST_NODE["symbol"]
-TRIP_TZ = timezone(timedelta(hours=FIRST_NODE["timezone"]))
 MULTIPLIER = FIRST_NODE["multiplier"]
 EXPENSE_CATS = TRIP_CONFIGS[st.session_state.current_trip]["cats"]
 SURVIVAL_CATS =["간식", "Grab", "DiDi", "VinBus", "지하철", "마사지", "팁", "식사", "교통"]
 FIXED_COST_CATS =["항공권", "호텔", "보험"]
 DOMESTIC_CATS =["항공권", "호텔", "보험", "지하철", "택시"]
 
-if 'current_tz' not in st.session_state: st.session_state.current_tz = TZ_KST
-if 'shared_date' not in st.session_state: st.session_state.shared_date = datetime.now(st.session_state.current_tz).date()
 if 'last_cat_name' not in st.session_state: st.session_state.last_cat_name = "식사"
 
 
@@ -1020,11 +1016,12 @@ with st.sidebar:
             st.info("💡 **글로벌 물가 지표(SPI) 비교 분석 중**\n\n특정 여행의 지출 내역이나 잔고를 보시려면 상단의 '내 여행함'에서 여행지를 선택해 주세요.")
         else:
             st.info("➕ **새로운 여행지 개설 모드**\n\n새 여행지를 등록하거나 기존 여행지를 보시려면 상단 '내 여행함'에서 여행지를 선택해 주세요.")
-        st.divider()
-        tz_sel = st.radio("📍 기준 시간 (Timezone)",["🇰🇷 한국 시간", "🌍 현지 시간"], horizontal=True, index=0)
-        st.session_state.current_tz = TZ_KST if "한국" in tz_sel else TRIP_TZ
-        st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
-        if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
+        
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+        if st.button("🔄 Cloud Refresh", use_container_width=True): 
+            st.cache_data.clear()
+            st.query_params["trip"] = st.session_state.current_trip
+            st.rerun()
     else:
         # ----------------------------------------------------------------------
         # 4.01.02 | Multi-Currency Dynamic Wallet Monitor & Physical Cash Counter
@@ -1042,21 +1039,21 @@ with st.sidebar:
             m_arr = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_arr_row.iloc[-1]['Date']))
             if m_arr:
                 arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
-                today_dt = datetime.now(st.session_state.current_tz).date()
+                today_dt = datetime.now(TZ_KST).date()
                 is_trip_active = (today_dt <= arr_dt)
 
         active_currs = set([k.split('(')[1].replace(')','') for k in current_inventory_batches.keys() if len(current_inventory_batches[k]) > 0 and sum(b['qty'] for b in current_inventory_batches[k]) > 0])
         trip_currs = set(node['currency'] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())
         display_currs = sorted(list(active_currs | trip_currs))
 
-        # [글로벌 실물현금: 지폐 + 동전 통합 권종 매핑]
+        # 글로벌 실물현금 권종 매핑
         CURR_BILLS = {
-            "VND": BILLS,  # 베트남은 동전 없음 (50만동 ~ 1천동 지폐)
-            "EUR": [100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1],  # 100~5€ 지폐 + 2€, 1€, 50c, 20c, 10c 동전
-            "USD": [100, 50, 20, 10, 5, 2, 1, 0.25, 0.1],      # 지폐 + 25¢(쿼터), 10¢(다임) 동전
-            "TRY": [200, 100, 50, 20, 10, 5, 1, 0.5],          # 지폐 + 1₺, 50kr 동전
-            "JPY": [10000, 5000, 2000, 1000, 500, 100, 50, 10], # 지폐 + 동전
-            "PHP": [1000, 500, 200, 100, 50, 20, 10, 5, 1],    # 지폐 + 동전
+            "VND": BILLS,
+            "EUR": [100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1],
+            "USD": [100, 50, 20, 10, 5, 2, 1, 0.25, 0.1],
+            "TRY": [200, 100, 50, 20, 10, 5, 1, 0.5],
+            "JPY": [10000, 5000, 2000, 1000, 500, 100, 50, 10],
+            "PHP": [1000, 500, 200, 100, 50, 20, 10, 5, 1],
             "CNY": [100, 50, 20, 10, 5, 1, 0.5, 0.1]
         }
 
@@ -1064,7 +1061,7 @@ with st.sidebar:
             "VND": 1000000, "USD": 50, "EUR": 50, "TRY": 1000, "JPY": 5000, "CNY": 300, "PHP": 2000
         }
         
-        ### 📊 [GUI: Chart/Table] 통화별 잔고 표시
+        ### 통화별 잔고 표시
         for c in display_currs:
             if c == "KRW": continue
 
@@ -1110,7 +1107,7 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # [개편] 🪙 실물현금 카운터 (지폐 + 동전 완벽 지원)
+                # 실물현금 카운터
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("🪙 실물현금 카운터", expanded=False):
@@ -1152,7 +1149,6 @@ with st.sidebar:
                             b_flt = float(bill)
                             b_key_id = str(bill).replace('.', '_')
                             
-                            # [통화별 지폐 및 동전 라벨 정규화]
                             if c == "VND":
                                 b_label = f"{int(bill // 10000)}만동" if bill >= 10000 else f"{int(bill // 1000)}천동"
                             elif c == "EUR":
@@ -1186,7 +1182,6 @@ with st.sidebar:
                             cur_counts[b_flt] = final_cnt
                             total_counted += bill * final_cnt
                             
-                        # 센트 단위 부동소수점 오차 방지
                         total_counted = round(total_counted, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted)
                         
                         st.markdown(f"""
@@ -1250,20 +1245,18 @@ with st.sidebar:
                 
                 st.divider()
 
-        # 4.01.03 | Net Financial Summary KPI Display (총 예산 및 실지출 총액)
-        st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
+        # 4.01.03 | Net Financial Summary KPI Display
+        st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
         st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
         st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
 
-        # 4.01.04 | Dual Timezone Controller & Cache Refresh Trigger
+        # 4.01.04 | Cloud Refresh Trigger (단독 클라우드 새로고침 버튼)
         st.divider()
-        ### 🎛️[GUI: Component] 타임존 및 새로고침
-        st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
-        tz_sel = st.radio("📍 기준 시간 (Timezone)",["🇰🇷 한국 시간", "🌍 여행지 현지 시간"], horizontal=True, index=0 if "한국" in str(st.session_state.current_tz) else 1)
-        st.session_state.current_tz = TZ_KST if "한국" in tz_sel else TRIP_TZ
-
-        st.markdown("<div style='margin-top:35px;'></div>", unsafe_allow_html=True)
-        if st.button("🔄 Cloud Refresh", use_container_width=True): st.cache_data.clear(); st.rerun()
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+        if st.button("🔄 Cloud Refresh", use_container_width=True): 
+            st.cache_data.clear()
+            st.query_params["trip"] = st.session_state.current_trip
+            st.rerun()
 
 # ------------------------------------------------------------------------------
 # 4.02.00 | Top Navigation Router (여행지 선택 및 관제탑 모드 스위처)
@@ -1884,14 +1877,13 @@ else:
     tab_in, tab_his, tab_stats, tab_final = st.tabs(["Data입력", "Data조회", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
-    # 6.01.00 | Console Tab 1: Input Engine (단일국가 시 국가선택 자동 숨김)
+    # 6.01.00 | Console Tab 1: Input Engine (스마트 로컬 타임존 자동 계산 엔진)
     # --------------------------------------------------------------------------
     with tab_in:
         trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
         node_keys = list(trip_nodes.keys())
         is_single_country = len(node_keys) <= 1
 
-        # [스마트 분기] 단일 국가 여행 시 '국가 선택' 숨김 처리
         if is_single_country:
             sel_node = node_keys[0] if node_keys else FIRST_NODE_NAME
             IN_CFG = trip_nodes.get(sel_node, FIRST_NODE)
@@ -1908,7 +1900,34 @@ else:
             with c_mode:
                 mode = st.radio("기록 모드 선택", ["일반 지출", "🛫 항공권(특수)", "🏨 호텔(특수)", "자산 이동", "환불(취소)"], horizontal=True, key="mode_radio", label_visibility="collapsed")
         
-        dynamic_tz = timezone(timedelta(hours=IN_CFG["timezone"])) if "한국" not in str(st.session_state.current_tz) else TZ_KST
+        # [스마트 로컬 타임존 자동 판별 로직]
+        dep_rows_tz = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
+        korea_dep_tz = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
+        t_dep_tz = korea_dep_tz if not korea_dep_tz.empty else dep_rows_tz
+        
+        dep_dt_calc = None
+        if not t_dep_tz.empty:
+            m_d = re.search(r'(\d{4}-\d{2}-\d{2})', str(t_dep_tz.iloc[0]['Date']))
+            if m_d: dep_dt_calc = datetime.strptime(m_d.group(1), "%Y-%m-%d").date()
+
+        arr_rows_tz = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
+        korea_arr_tz = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
+        t_arr_tz = korea_arr_tz if not korea_arr_tz.empty else arr_rows_tz
+        
+        arr_dt_calc = None
+        if not t_arr_tz.empty:
+            m_a = re.search(r'(\d{4}-\d{2}-\d{2})', str(t_arr_tz.iloc[-1]['Date']))
+            if m_a: arr_dt_calc = datetime.strptime(m_a.group(1), "%Y-%m-%d").date()
+
+        today_kst_now = datetime.now(TZ_KST).date()
+        is_traveling_now = bool(dep_dt_calc and arr_dt_calc and dep_dt_calc <= today_kst_now <= arr_dt_calc)
+
+        # 여행 진행 중이면 선택한 국가의 로컬 타임존, 출발 전/귀국 후는 한국 시간 자동 세팅
+        if is_traveling_now:
+            dynamic_tz = timezone(timedelta(hours=IN_CFG["timezone"]))
+        else:
+            dynamic_tz = TZ_KST
+
         sel_date = st.date_input("날짜 선택", value=datetime.now(dynamic_tz).date(), key="shared_date_input")
         available_currs = sorted(list(set(node["currency"] for node in trip_nodes.values())))
 
@@ -2003,7 +2022,7 @@ else:
                     st.session_state.clear_exp_desc = True
                     st.rerun()
 
-        # 6.01.02 | Sub-Form: Flight Integrated Scheduler (항공권 특수)
+        # 6.01.02 | Sub-Form: Flight Integrated Scheduler
         elif mode == "🛫 항공권(특수)":
             st.subheader("✈️ 항공권 및 스케줄 통합 기록")
             f_trip_type = st.radio("여정 구분", ["왕복", "편도"], horizontal=True)
@@ -2074,7 +2093,7 @@ else:
                 if append_new_data(pd.concat(new_rows, ignore_index=True)):
                     st.success("항공권과 일정이 모두 기록되었습니다!"); time.sleep(1); st.rerun()
                     
-        # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 특수)
+        # 6.01.03 | Sub-Form: Hotel Integrated Booking
         elif mode == "🏨 호텔(특수)":
             st.subheader("🏨 호텔/숙소 예약 상세 기록")
             c1, c2 = st.columns(2)
@@ -2274,7 +2293,7 @@ else:
                         new_rows.append(fee_row)
                     if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
                         
-        # 6.01.05 | Sub-Form: Refund Inventory Rollback (환불 취소)
+        # 6.01.05 | Sub-Form: Refund Inventory Rollback
         elif mode == "환불(취소)":
             st.subheader("🔙 결제 취소 및 환불 (Rollback)")
             col_r1, col_r2 = st.columns(2)
@@ -2293,7 +2312,7 @@ else:
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
                 if append_new_data(new_row): st.rerun()
 
-        # 6.01.06 | Sub-Form: Immigration Schedule (출입국 일정 기록)
+        # 6.01.06 | Sub-Form: Immigration Schedule
         else:
             st.subheader("✈️ 출입국 일정 기록")
             io_type = st.radio("구분",["출국", "입국"], horizontal=True, key="io_radio")
