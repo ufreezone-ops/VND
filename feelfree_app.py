@@ -181,7 +181,7 @@ TRIP_CONFIGS = get_trip_configs()
 # 1.05.00 | GUI Design System (커스텀 다크/화이트 듀얼 테마 엔진)
 # ------------------------------------------------------------------------------
 
-# 1.05.01 | Base Layout & Slim KPI Box CSS
+# 1.05.01 | Base Layout & Slim KPI Box CSS (모바일 제목 줄바꿈 방지 탑재)
 if 'app_theme' not in st.session_state:
     st.session_state.app_theme = "🌙 다크"
 
@@ -203,10 +203,22 @@ st.markdown(f"""
     .block-container {{ padding-top: 3.5rem !important; padding-bottom: 2rem !important; padding-left: 0.8rem !important; padding-right: 0.8rem !important; }}
     div[data-testid="stSelectbox"] {{ margin-top: 0px !important; margin-bottom: 0px !important; }}
     hr {{ margin: 0.4rem 0 0.6rem 0 !important; }}
-    h1 {{ padding-top: 0rem !important; margin-top: 0rem !important; padding-bottom: 0.2rem !important; margin-bottom: 0.8rem !important; }}
+    
+    /* 📱 [모바일 메인 제목 줄바꿈 절대 방지: 후쿠오카/발칸 1줄 고정] */
+    h1 {{ 
+        font-size: 26px !important; 
+        white-space: nowrap !important; 
+        overflow: hidden !important; 
+        text-overflow: ellipsis !important;
+        line-height: 1.2 !important;
+        padding-top: 0rem !important; 
+        margin-top: 0rem !important; 
+        padding-bottom: 0.2rem !important; 
+        margin-bottom: 0.8rem !important; 
+    }}
     .main {{ background-color: {bg_main}; color: {color_main}; }}
 
-    /* 슬림 KPI 카드 (2/3 높이 압축) */
+    /* 슬림 KPI 카드 */
     .kpi-box {{ background-color: {kpi_bg}; padding: 12px 14px; border-radius: 12px; border-left: 6px solid {kpi_border}; margin-bottom: 10px; min-height: 78px; box-shadow: 2px 4px 10px rgba(0,0,0,0.2); }}
     .kpi-title {{ font-size: 13px; color: {kpi_title_c}; margin-bottom: 3px; font-weight: 600; }}
     .kpi-value-krw {{ font-size: 20px; font-weight: bold; color: {kpi_val_c}; line-height: 1.15; }}
@@ -235,98 +247,51 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# 1.05.03 | Tab Navigation CSS (직관적인 3D 입체 앱 버튼 스타일)
-tab_bg_unselected = "#1E2433" if is_dark else "#E2E8F0"
-tab_border_unselected = "#3E4C66" if is_dark else "#CBD5E1"
-tab_text_unselected = "#38BDF8" if is_dark else "#0369A1"
+# 1.05.03 | Tab Navigation CSS (단정하고 선명한 뱃지 탭)
+tab_bg_unselected = "#18202E" if is_dark else "#E2E8F0"
+tab_text_unselected = "#38BDF8" if is_dark else "#0284C7"
 
 st.markdown(f"""
     <style>
-    /* 빨간 밑줄 제거 */
+    .stTabs [data-baseweb="tab-list"] {{ display: flex !important; width: 100% !important; gap: 6px !important; padding: 4px !important; background: transparent !important; margin-bottom: 16px !important; }}
+    .stTabs [data-baseweb="tab"] {{ flex: 1 1 0% !important; height: 42px !important; background-color: {tab_bg_unselected} !important; border-radius: 10px !important; border: 1px solid #334155 !important; display: flex !important; align-items: center !important; justify-content: center !important; }}
+    .stTabs [data-baseweb="tab"] p {{ font-size: 15.5px !important; font-weight: 600 !important; color: {tab_text_unselected} !important; margin: 0px !important; }}
+    .stTabs [aria-selected="true"] {{ background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; border: 1px solid #FFA500 !important; }}
+    .stTabs [aria-selected="true"] p {{ color: #FFFFFF !important; font-size: 16px !important; font-weight: 800 !important; }}
     .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{ display: none !important; }}
-    
-    /* 탭 전체 컨테이너를 앱 Dock 버튼 바 형태로 구성 */
-    .stTabs [data-baseweb="tab-list"] {{
-        display: flex !important;
-        width: 100% !important;
-        gap: 8px !important;
-        padding: 6px !important;
-        background: {'rgba(22, 27, 38, 0.8)' if is_dark else '#F1F5F9'} !important;
-        border-radius: 14px !important;
-        border: 1.5px solid {'#2D3748' if is_dark else '#CBD5E1'} !important;
-        margin-bottom: 16px !important;
-    }}
-    
-    /* 🔘 비선택 탭: 테두리와 볼륨감이 있는 직관적인 '누를 수 있는 버튼' */
-    .stTabs [data-baseweb="tab"] {{
-        flex: 1 1 0% !important;
-        height: 44px !important;
-        background-color: {tab_bg_unselected} !important;
-        border-radius: 10px !important;
-        border: 1.5px solid {tab_border_unselected} !important;
-        box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.15) !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        cursor: pointer !important;
-        transition: all 0.15s ease !important;
-    }}
-    
-    /* 비선택 탭 텍스트: 선명한 블루 */
-    .stTabs [data-baseweb="tab"] p, .stTabs [data-baseweb="tab"] * {{
-        font-size: 16px !important;
-        font-weight: 700 !important;
-        color: {tab_text_unselected} !important;
-        margin: 0px !important;
-    }}
-    
-    /* 마우스 호버 / 터치 시 피드백 */
-    .stTabs [data-baseweb="tab"]:hover {{
-        filter: brightness(1.15) !important;
-        transform: translateY(-1px) !important;
-    }}
-    
-    /* 🌟 선택된 탭: 확실하게 눌려 활성화된 '오렌지 골드 버튼' */
-    .stTabs [aria-selected="true"] {{
-        background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important;
-        border: 1.5px solid #FFA500 !important;
-        box-shadow: 0px 3px 10px rgba(234, 88, 12, 0.4) !important;
-    }}
-    
-    .stTabs [aria-selected="true"] p, .stTabs [aria-selected="true"] * {{
-        color: #FFFFFF !important;
-        font-size: 16.5px !important;
-        font-weight: 800 !important;
-        text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.3) !important;
-    }}
     </style>
 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# 1.06.00 | Session State Orchestrator (동적 세션 상태 및 URL 파라미터 기억 엔진)
+# 1.06.00 | Session State Orchestrator (동적 세션 상태 및 URL 파라미터 안전 복원)
 # ------------------------------------------------------------------------------
-# 1.06.01 | Dynamic Session Context & Initializer (후쿠오카 우선 + F5 새로고침 복원)
+# 1.06.01 | Dynamic Session Context & Initializer
 def sort_trips(trip_names):
     return sorted(trip_names, key=lambda x: (re.search(r'\((\d{4})\)', x).group(1) if re.search(r'\((\d{4})\)', x) else '0000', x), reverse=True)
 
 sorted_trips_initial = sort_trips(list(TRIP_CONFIGS.keys()))
 
-# 1. 브라우저 URL 주소창의 쿼리 파라미터(F5 새로고침 기억) 확인
-query_trip = st.query_params.get("trip", None)
+# [핵심] URL 인코딩(공백/특수문자) 차이에도 100% 일치하는 여행지를 찾아내는 헬퍼
+def find_matching_trip(target_name):
+    if not target_name: return None
+    target_clean = str(target_name).replace("+", " ").strip()
+    for k in TRIP_CONFIGS.keys():
+        if k == target_clean or k.replace(" ", "") == target_clean.replace(" ", ""):
+            return k
+    return None
+
+raw_query_trip = st.query_params.get("trip", None)
+matched_query_trip = find_matching_trip(raw_query_trip)
 
 if 'current_trip' not in st.session_state or st.session_state.current_trip not in TRIP_CONFIGS:
-    # (1) URL에 기존에 보던 여행지가 남아있다면 최우선 복원
-    if query_trip and query_trip in TRIP_CONFIGS:
-        st.session_state.current_trip = query_trip
+    if matched_query_trip:
+        st.session_state.current_trip = matched_query_trip
     else:
-        # (2) 여행 목록 중 '후쿠오카'가 존재하면 무조건 1순위 시작 (딸아이 가계부 맞춤)
         fukuoka_candidates = [t for t in sorted_trips_initial if "후쿠오카" in t or "FUKUOKA" in t.upper()]
         if fukuoka_candidates:
             st.session_state.current_trip = fukuoka_candidates[0]
         else:
-            # (3) 그 외(아버님 가계부 등)는 가장 최신 여행(후에 2026 등)으로 시작
             st.session_state.current_trip = sorted_trips_initial[0]
-            
     st.query_params["trip"] = st.session_state.current_trip
 
 ACTIVE_SHEET = TRIP_CONFIGS[st.session_state.current_trip]["sheet"]
@@ -1319,7 +1284,7 @@ if 'show_spi' not in st.session_state:
 if 'show_new_trip' not in st.session_state:
     st.session_state.show_new_trip = False
 
-# 현재 선택된 여행지가 목록에 없을 때 안전 보정
+# 현재 선택된 여행지가 목록에 있는지 확인
 if 'current_trip' not in st.session_state or st.session_state.current_trip not in sorted_trips:
     fukuoka_cands = [t for t in sorted_trips if "후쿠오카" in t or "FUKUOKA" in t.upper()]
     st.session_state.current_trip = fukuoka_cands[0] if fukuoka_cands else sorted_trips[0]
@@ -1332,7 +1297,7 @@ elif st.session_state.show_new_trip:
 else:
     curr_idx = sorted_trips.index(st.session_state.current_trip)
 
-# [핵심] 여행지 변경 이벤트 콜백 (URL 쿼리 파라미터 실시간 동기화)
+# [핵심 버그 수정] 드롭다운 변경 즉시 원장 데이터를 동기화하고 재실행(st.rerun)
 def on_trip_change():
     chosen = st.session_state.top_nav_trip_selector
     if chosen == SPECIAL_MODE_SPI:
@@ -1347,9 +1312,10 @@ def on_trip_change():
         st.session_state.show_spi = False
         st.session_state.show_new_trip = False
         st.session_state.current_trip = chosen
-        st.query_params["trip"] = chosen  # 👈 URL에 현재 여행지 실시간 기록
+        st.query_params["trip"] = chosen
         if "mode" in st.query_params:
             del st.query_params["mode"]
+    st.rerun() # 👈 드롭다운 선택 즉시 새 여행지 원장으로 완벽 전환!
 
 st.selectbox(
     "✈️ 내 여행함 (Trip Selector)", 
