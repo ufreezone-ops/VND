@@ -303,15 +303,31 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# 1.06.00 | Session State Orchestrator (동적 세션 상태 및 컨텍스트 초기화)
+# 1.06.00 | Session State Orchestrator (동적 세션 상태 및 URL 파라미터 기억 엔진)
 # ------------------------------------------------------------------------------
-# 1.06.01 | Dynamic Session Context & Initializer (가장 최신 여행 자동 시작)
+# 1.06.01 | Dynamic Session Context & Initializer (후쿠오카 우선 + F5 새로고침 복원)
 def sort_trips(trip_names):
     return sorted(trip_names, key=lambda x: (re.search(r'\((\d{4})\)', x).group(1) if re.search(r'\((\d{4})\)', x) else '0000', x), reverse=True)
 
 sorted_trips_initial = sort_trips(list(TRIP_CONFIGS.keys()))
-if 'current_trip' not in st.session_state: 
-    st.session_state.current_trip = sorted_trips_initial[0]  # 무조건 가장 최신 여행으로 시작
+
+# 1. 브라우저 URL 주소창의 쿼리 파라미터(F5 새로고침 기억) 확인
+query_trip = st.query_params.get("trip", None)
+
+if 'current_trip' not in st.session_state or st.session_state.current_trip not in TRIP_CONFIGS:
+    # (1) URL에 기존에 보던 여행지가 남아있다면 최우선 복원
+    if query_trip and query_trip in TRIP_CONFIGS:
+        st.session_state.current_trip = query_trip
+    else:
+        # (2) 여행 목록 중 '후쿠오카'가 존재하면 무조건 1순위 시작 (딸아이 가계부 맞춤)
+        fukuoka_candidates = [t for t in sorted_trips_initial if "후쿠오카" in t or "FUKUOKA" in t.upper()]
+        if fukuoka_candidates:
+            st.session_state.current_trip = fukuoka_candidates[0]
+        else:
+            # (3) 그 외(아버님 가계부 등)는 가장 최신 여행(후에 2026 등)으로 시작
+            st.session_state.current_trip = sorted_trips_initial[0]
+            
+    st.query_params["trip"] = st.session_state.current_trip
 
 ACTIVE_SHEET = TRIP_CONFIGS[st.session_state.current_trip]["sheet"]
 FIRST_NODE_NAME = list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())[0]
@@ -1303,9 +1319,10 @@ if 'show_spi' not in st.session_state:
 if 'show_new_trip' not in st.session_state:
     st.session_state.show_new_trip = False
 
-# 현재 선택된 여행지가 목록에 없을 때만 최초 1회 첫 번째 여행지로 안전 설정
+# 현재 선택된 여행지가 목록에 없을 때 안전 보정
 if 'current_trip' not in st.session_state or st.session_state.current_trip not in sorted_trips:
-    st.session_state.current_trip = sorted_trips[0]
+    fukuoka_cands = [t for t in sorted_trips if "후쿠오카" in t or "FUKUOKA" in t.upper()]
+    st.session_state.current_trip = fukuoka_cands[0] if fukuoka_cands else sorted_trips[0]
 
 # 현재 보고 있는 인덱스 계산
 if st.session_state.show_spi:
@@ -1315,19 +1332,24 @@ elif st.session_state.show_new_trip:
 else:
     curr_idx = sorted_trips.index(st.session_state.current_trip)
 
-# [핵심] 여행지/특수모드 변경 이벤트 콜백
+# [핵심] 여행지 변경 이벤트 콜백 (URL 쿼리 파라미터 실시간 동기화)
 def on_trip_change():
     chosen = st.session_state.top_nav_trip_selector
     if chosen == SPECIAL_MODE_SPI:
         st.session_state.show_spi = True
         st.session_state.show_new_trip = False
+        st.query_params["mode"] = "spi"
     elif chosen == SPECIAL_MODE_NEW:
         st.session_state.show_spi = False
         st.session_state.show_new_trip = True
+        st.query_params["mode"] = "new"
     else:
         st.session_state.show_spi = False
         st.session_state.show_new_trip = False
         st.session_state.current_trip = chosen
+        st.query_params["trip"] = chosen  # 👈 URL에 현재 여행지 실시간 기록
+        if "mode" in st.query_params:
+            del st.query_params["mode"]
 
 st.selectbox(
     "✈️ 내 여행함 (Trip Selector)", 
