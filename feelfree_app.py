@@ -1445,7 +1445,6 @@ if st.session_state.show_spi:
                 if not final_total_df.empty:
                     st.markdown("### 여행지 1박비용(원)")
                     
-                    # [2줄 라벨 적용: 국가명 <br> (여행명)]
                     def make_chart_label(r):
                         country, trip = str(r['Country']), str(r['TripName'])
                         return f"<b>{country}</b><br><span style='font-size:11px; color:#A0AEC0;'>({trip})</span>"
@@ -1464,7 +1463,9 @@ if st.session_state.show_spi:
                     stack_order = ['📱 기타', '🚕 로컬교통', '🍔 식음료', '🏄 투어/액티비티', '🏨 숙박', '🚗 렌트카']
                     color_map = {'🚗 렌트카': '#D32F2F', '🏨 숙박': '#1976D2', '🏄 투어/액티비티': '#9C27B0', '🍔 식음료': '#4CAF50', '🚕 로컬교통': '#00ACC1', '📱 기타': '#795548'}
                     
-                    # 📊 [수평 누적 가로 막대 차트 (Horizontal Stacked Bar)]
+                    # 📊 [충돌 완전 해결: 제목을 상단 독립 헤더로 분리]
+                    st.markdown("<h4 style='margin-top:25px; margin-bottom: 6px;'>📊 여행지별 1박 체감물가 구성 비교</h4>", unsafe_allow_html=True)
+                    
                     fig_stacked = px.bar(
                         agg_group, 
                         x='Daily_SPI', 
@@ -1473,19 +1474,26 @@ if st.session_state.show_spi:
                         color='SPI_Group', 
                         color_discrete_map=color_map, 
                         category_orders={"Chart_Label": category_order_y, "SPI_Group": stack_order},
-                        title="📊 여행지별 1박 체감물가 구성 비교 (누적 가로막대)"
+                        title=None  # 👈 Plotly 내부 제목을 제거하여 범례와의 겹침 원천 차단
                     )
                     
-                    dynamic_spi_height = max(480, len(final_total_df) * 44 + 110)
+                    dynamic_spi_height = max(480, len(final_total_df) * 44 + 100)
                     
                     fig_stacked.update_layout(
                         barmode='stack', 
                         xaxis_title="1박 체감비용 (원)",
                         yaxis_title=None,
-                        margin=dict(l=10, r=40, t=50, b=30), 
+                        margin=dict(l=10, r=40, t=10, b=30), 
                         height=dynamic_spi_height,
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, title=None),
-                        yaxis=dict(autorange="reversed") # 저렴한 가성비 여행지부터 위에서 아래로 순위별 정렬
+                        legend=dict(
+                            orientation="h", 
+                            yanchor="bottom", 
+                            y=1.02, 
+                            xanchor="center", 
+                            x=0.5, 
+                            title=None
+                        ),
+                        yaxis=dict(autorange="reversed")
                     )
                     st.plotly_chart(fig_stacked, use_container_width=True, config={'displaylogo': False})
 
