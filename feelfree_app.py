@@ -1468,7 +1468,7 @@ if st.session_state.show_spi:
                     st.plotly_chart(fig_stacked, use_container_width=True)
 
         # ----------------------------------------------------------------------
-        # 5.02.00 | Channel 2: Hotel Unit Cost Analytics (호텔 요금 및 투숙 비교)
+        # 5.02.00 | Channel 2: Hotel Unit Cost Analytics (2줄 레이블 가로 막대 차트)
         # ----------------------------------------------------------------------
         with sub_tab_hotel:
             st.subheader("🏨 호텔 1박 요금 비교")
@@ -1493,14 +1493,12 @@ if st.session_state.show_spi:
                 amt = float(row['Amount'])
                 is_exp = int(row['IsExpense']) if 'IsExpense' in row else 1
                 
-                # 1-1. 환불 내역 수집
                 if cat == '환불':
                     desc_lower = desc.lower()
                     if any(k in desc_lower for k in ["호텔", "숙박", "인페라", "라이온", "스플랜디도", "벨몬트", "센터호텔", "agoda", "아고다", "booking", "소피아", "코럴베이", "파노라마"]):
                         refund_rows.append(row)
                         continue
                 
-                # 1-2. 실제 지출이 발생한 호텔 카테고리 수집
                 if cat in ['호텔', '숙박'] and is_exp == 1 and amt > 0:
                     h_name = clean_hotel_name(desc)
                     match_nights = re.search(r'(\d+)\s*박', desc)
@@ -1520,7 +1518,6 @@ if st.session_state.show_spi:
                         'Type': 'HOTEL_ROW'
                     })
                     
-                # 1-3. 도시세/수수료 행 수집
                 elif cat in ['수수료', '기타'] and is_exp == 1 and amt > 0:
                     desc_lower = desc.lower()
                     if any(k in desc_lower for k in ["도시세", "시티택스", "시티 택스", "citytax", "city tax", "tourist tax"]):
@@ -1627,9 +1624,10 @@ if st.session_state.show_spi:
                         '환차손익(환율차이)': fx_loss_str
                     })
                     
+                    # [2줄 라벨 적용: 호텔명 <br> (여행명)]
                     if h['Cancellation_Rate'] < 100.0 and avg_rate > 0:
                         chart_data.append({
-                            'Hotel_Label': f"{h['Clean_Name']} ({h['TripName']})",
+                            'Hotel_Label': f"<b>{h['Clean_Name']}</b><br><span style='font-size:11px; color:#A0AEC0;'>({h['TripName']})</span>",
                             '1박당 요금(원)': avg_rate
                         })
                 
@@ -1649,30 +1647,29 @@ if st.session_state.show_spi:
                         title="🏨 숙소별 1박 실질 투숙 비용 비교 (도시세/업그레이드 포함 / 취소 제외)"
                     )
                     
-                    # 막대 끝에 1박 요금 직접 표기
                     fig_hotel.update_traces(
                         texttemplate=" %{x:,.0f}원",
                         textposition="outside",
                         cliponaxis=False
                     )
                     
-                    # 등록된 숙소 수에 비례한 동적 세로 높이 계산
-                    dynamic_hotel_height = max(450, len(chart_df) * 32 + 100)
+                    # 2줄 라벨에 맞춘 여유 있는 세로 높이 계산
+                    dynamic_hotel_height = max(450, len(chart_df) * 44 + 100)
                     
                     fig_hotel.update_layout(
                         xaxis_title=None, 
                         yaxis_title=None, 
                         margin=dict(l=10, r=80, t=40, b=30),
                         height=dynamic_hotel_height,
-                        coloraxis_showscale=False, # 👈 우측 색상표 제거
-                        yaxis=dict(autorange="reversed") # 저렴한 알뜰 숙소부터 위에서 아래로 순위별 정렬
+                        coloraxis_showscale=False,
+                        yaxis=dict(autorange="reversed")
                     )
                     st.plotly_chart(fig_hotel, use_container_width=True, config={'displaylogo': False})
             else:
                 st.info("비교할 호텔 숙박 내역이 없습니다. (카테고리가 '호텔', '숙박'이며 내용에 'X박'이 명시되어야 합니다.)")
                 
         # ----------------------------------------------------------------------
-        # 5.03.00 | Channel 3: Flight Pricing Matrix (수평 가로 막대 랭킹 차트)
+        # 5.03.00 | Channel 3: Flight Pricing Matrix (2줄 레이블 가로 막대 차트)
         # ----------------------------------------------------------------------
         with sub_tab_flight:
             st.subheader("✈️ 항공권 요금 비교")
@@ -1760,7 +1757,6 @@ if st.session_state.show_spi:
                     if s['TripName'] == f_trip:
                         f['Surcharge_Sum_KRW'] += s['Ticket_KRW']
                 
-                # 정밀 1:1 노선 매칭
                 if f_route and '-' in f_route:
                     dep_city, arr_city = f_route.split('-', 1)
                     dep_city, arr_city = dep_city.strip().lower(), arr_city.strip().lower()
@@ -1831,16 +1827,15 @@ if st.session_state.show_spi:
                         '상태': status_str
                     })
                     
-                    # 100% 정상 탑승 항공권만 비교 차트에 포함
+                    # [2줄 라벨 적용: 노선명 <br> (여행명)]
                     if f['Refund_Rate'] == 0.0 and f['Refund_KRW'] <= 0 and f['RT_Equivalent_Per_Person_KRW'] > 0:
                         chart_flight_data.append({
-                            'Flight_Label': f"{f['Route']} ({f['TripName']})",
+                            'Flight_Label': f"<b>{f['Route']}</b><br><span style='font-size:11px; color:#A0AEC0;'>({f['TripName']})</span>",
                             '1인당 왕복 환산 요금(원)': f['RT_Equivalent_Per_Person_KRW']
                         })
                 
                 st.dataframe(pd.DataFrame(display_flight_rows), use_container_width=True, hide_index=True)
                 
-                # 📊 [가로 막대 랭킹 차트 렌더링]
                 if chart_flight_data:
                     chart_flight_df = pd.DataFrame(chart_flight_data).sort_values(by='1인당 왕복 환산 요금(원)', ascending=True)
                     
@@ -1854,15 +1849,14 @@ if st.session_state.show_spi:
                         title="✈️ 1인당 왕복 기준 항공요금 공평 비교 (편도 노선 2배 환산 적용 / 취소·환불 노선 제외)"
                     )
                     
-                    # 막대 끝에 금액 표기
                     fig_flight.update_traces(
                         texttemplate=" %{x:,.0f}원",
                         textposition="outside",
                         cliponaxis=False
                     )
                     
-                    # 노선 수에 비례한 동적 세로 높이 계산
-                    dynamic_chart_height = max(450, len(chart_flight_df) * 36 + 100)
+                    # 2줄 라벨에 맞춘 여유 있는 세로 높이 계산
+                    dynamic_chart_height = max(450, len(chart_flight_df) * 44 + 100)
                     
                     fig_flight.update_layout(
                         xaxis_title=None, 
@@ -1870,7 +1864,7 @@ if st.session_state.show_spi:
                         margin=dict(l=10, r=80, t=40, b=30),
                         height=dynamic_chart_height,
                         coloraxis_showscale=False,
-                        yaxis=dict(autorange="reversed") # 저렴한 최저가 노선이 위에서부터 순위별로 정렬
+                        yaxis=dict(autorange="reversed")
                     )
                     st.plotly_chart(fig_flight, use_container_width=True, config={'displaylogo': False})
             else:
