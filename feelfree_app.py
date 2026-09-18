@@ -1962,7 +1962,7 @@ else:
     tab_in, tab_his, tab_stats, tab_final = st.tabs(["Data입력", "Data조회", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
-    # 6.01.00 | Console Tab 1: Input Engine (스마트 로컬 타임존 자동 계산 엔진)
+    # 6.01.00 | Console Tab 1: Input Engine (EUR 유로화 결제 통화 전역 추가)
     # --------------------------------------------------------------------------
     with tab_in:
         trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
@@ -1985,7 +1985,7 @@ else:
             with c_mode:
                 mode = st.radio("기록 모드 선택", ["일반 지출", "🛫 항공권(특수)", "🏨 호텔(특수)", "자산 이동", "환불(취소)"], horizontal=True, key="mode_radio", label_visibility="collapsed")
         
-        # [스마트 로컬 타임존 자동 판별 로직]
+        # [스마트 로컬 타임존 자동 판별]
         dep_rows_tz = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
         korea_dep_tz = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
         t_dep_tz = korea_dep_tz if not korea_dep_tz.empty else dep_rows_tz
@@ -2007,14 +2007,16 @@ else:
         today_kst_now = datetime.now(TZ_KST).date()
         is_traveling_now = bool(dep_dt_calc and arr_dt_calc and dep_dt_calc <= today_kst_now <= arr_dt_calc)
 
-        # 여행 진행 중이면 선택한 국가의 로컬 타임존, 출발 전/귀국 후는 한국 시간 자동 세팅
         if is_traveling_now:
             dynamic_tz = timezone(timedelta(hours=IN_CFG["timezone"]))
         else:
             dynamic_tz = TZ_KST
 
         sel_date = st.date_input("날짜 선택", value=datetime.now(dynamic_tz).date(), key="shared_date_input")
-        available_currs = sorted(list(set(node["currency"] for node in trip_nodes.values())))
+        
+        # 전역 사용 가능 통화 목록 (현지통화, 원화, 달러, 유로 기본 포함)
+        node_currs = [node["currency"] for node in trip_nodes.values()]
+        available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
         # 6.01.01 | Sub-Form: General Expense
         if mode == "일반 지출":        
@@ -2048,7 +2050,9 @@ else:
                 
             col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
             with col_m1: 
-                curr_opts =[IN_CURR, "KRW", "USD"] +[c for c in available_currs if c not in[IN_CURR, "KRW", "USD"]]
+                # [수정] 현지통화, KRW, USD, EUR을 최상단에 우선 배치
+                primary_currs = [IN_CURR, "KRW", "USD", "EUR"]
+                curr_opts = [c for i, c in enumerate(primary_currs) if c not in primary_currs[:i]] + [c for c in available_currs if c not in primary_currs]
                 curr = st.selectbox("통화", curr_opts, key="exp_curr")
             with col_m2:
                 if curr != "KRW": met_options = [f"현금({curr})", f"트래블카드({curr})", f"호텔외상({curr})", "원화계좌(한국)", "해외송금(한국계좌)", "원화계좌(현지)"]
@@ -2192,7 +2196,7 @@ else:
                 h_checkout = h_checkin + timedelta(days=h_nights)
                 st.caption(f"📅 체크아웃 예정: {h_checkout.strftime('%Y-%m-%d')}")
                 h_detail = st.text_area("6. 내용 (룸타입/특징)", placeholder="예: 디럭스 더블, 수영장뷰, 30m2", height=68)
-                h_curr = st.selectbox("7. 결제 통화", ["KRW", "VND", "USD", "PHP", "EUR", "CNY", "TRY"], key="h_curr")
+                h_curr = st.selectbox("7. 결제 통화", ["KRW", "USD", "EUR", "VND", "PHP", "CNY", "TRY"], key="h_curr")
 
             c3, c4, c5 = st.columns(3)
             with c3: h_amt = st.number_input(f"8. 결제 금액({h_curr})", min_value=0.0, step=1.0)
@@ -2267,7 +2271,7 @@ else:
 
             elif "이월잔액" in ty:
                 with c1:
-                    curr_opts_tr = [IN_CURR, "USD"] + [c for c in available_currs if c not in [IN_CURR, "USD", "KRW"]]
+                    curr_opts_tr = [IN_CURR, "USD", "EUR"] + [c for c in available_currs if c not in [IN_CURR, "USD", "EUR", "KRW"]]
                     curr_tr = st.selectbox("대상 통화", curr_opts_tr, key="tr_curr")
                     if curr_tr == IN_CURR and IN_MULTI == 100: t_amt = st.number_input(f"가져온 잔돈 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
                     else: t_amt = st.number_input(f"가져온 잔돈 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_target_flt")
@@ -2348,7 +2352,7 @@ else:
             
             else:
                 with c1:
-                    curr_opts_tr =[IN_CURR, "USD"] +[c for c in available_currs if c not in[IN_CURR, "USD", "KRW"]]
+                    curr_opts_tr =[IN_CURR, "USD", "EUR"] +[c for c in available_currs if c not in[IN_CURR, "USD", "EUR", "KRW"]]
                     curr_tr = st.selectbox("대상 통화", curr_opts_tr, key="tr_curr")
                     if curr_tr == IN_CURR and IN_MULTI == 100: t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
                     else: t_amt = st.number_input(f"받은 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_target_flt")
@@ -2383,7 +2387,7 @@ else:
             st.subheader("🔙 결제 취소 및 환불 (Rollback)")
             col_r1, col_r2 = st.columns(2)
             with col_r1:
-                curr_opts_rf =[IN_CURR, "KRW", "USD"] +[c for c in available_currs if c not in[IN_CURR, "KRW", "USD"]]
+                curr_opts_rf =[IN_CURR, "KRW", "USD", "EUR"] +[c for c in available_currs if c not in[IN_CURR, "KRW", "USD", "EUR"]]
                 r_curr = st.selectbox("취소된 통화", curr_opts_rf, key="rf_curr")
                 
                 r_met = st.selectbox("돌려받을 지갑",[f"현금({r_curr})", f"트래블카드({r_curr})", "원화계좌(한국)", "원화계좌(현지)"] if r_curr != "KRW" else["원화계좌(한국)", "원화계좌(현지)"], key="rf_met")
