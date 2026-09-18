@@ -1044,9 +1044,21 @@ with st.sidebar:
                 today_dt = datetime.now(TZ_KST).date()
                 is_trip_active = (today_dt <= arr_dt)
 
+        # [핵심] 여행지 메인 통화(VND 등) 최우선 정렬 엔진
         active_currs = set([k.split('(')[1].replace(')','') for k in current_inventory_batches.keys() if len(current_inventory_batches[k]) > 0 and sum(b['qty'] for b in current_inventory_batches[k]) > 0])
-        trip_currs = set(node['currency'] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values())
-        display_currs = sorted(list(active_currs | trip_currs))
+        
+        # 1순위: 현재 여행지에 등록된 메인 노드 통화들 (등록 순서 유지)
+        trip_currs_ordered = [node['currency'] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values()]
+        primary_trip_currs = []
+        for c in trip_currs_ordered:
+            if c not in primary_trip_currs and c != "KRW":
+                primary_trip_currs.append(c)
+
+        # 2순위: 결제에 사용되었거나 잔고가 있는 기타 보조 외화 (EUR, USD 등)
+        secondary_currs = sorted([c for c in active_currs if c not in primary_trip_currs and c != "KRW"])
+
+        # 최종 표시 목록: [메인 통화] -> [보조 외화]
+        display_currs = primary_trip_currs + secondary_currs
 
         # 글로벌 실물현금 권종 매핑
         CURR_BILLS = {
@@ -1079,7 +1091,7 @@ with st.sidebar:
             c_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블카드({c})",[])])
             c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
             
-            if c_card > 0 or c_cash > 0 or c in trip_currs:
+            if c_card > 0 or c_cash > 0 or c in primary_trip_currs:
                 st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
                 st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
                 st.markdown(f"<div style='margin-bottom:14px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
@@ -1252,7 +1264,7 @@ with st.sidebar:
         st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
         st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
 
-        # 4.01.04 | Cloud Refresh Trigger (단독 클라우드 새로고침 버튼)
+        # 4.01.04 | Cloud Refresh Trigger
         st.divider()
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         if st.button("🔄 Cloud Refresh", use_container_width=True): 
