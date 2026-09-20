@@ -1010,6 +1010,14 @@ def calculate_summary_metrics(df):
 # 4.01.00 | Sidebar Dashboard (지갑 잔고, 외상 관리, KPI 모니터링)
 # ------------------------------------------------------------------------------
 ### 🎨 [GUI: Layout] 사이드바 영역
+
+# [에러 방지] 클라우드 실물현금 가져오기 콜백 함수 (위젯 생성 전 세션 안전 주입)
+def cb_pull_cloud_cash(curr_c, counts_dict, b_list):
+    for bill_val in b_list:
+        b_id = str(bill_val).replace('.', '_')
+        loaded_val = counts_dict.get(float(bill_val), 0)
+        st.session_state[f"cnt_{curr_c}_{b_id}"] = int(loaded_val) if loaded_val > 0 else None
+
 with st.sidebar:
     # 4.01.01 | SPI / Provisioning Mode Context-Aware Panel
     if st.session_state.get('show_spi', False) or st.session_state.get('show_new_trip', False):
@@ -1044,20 +1052,17 @@ with st.sidebar:
                 today_dt = datetime.now(TZ_KST).date()
                 is_trip_active = (today_dt <= arr_dt)
 
-        # [핵심] 여행지 메인 통화(VND 등) 최우선 정렬 엔진
         active_currs = set([k.split('(')[1].replace(')','') for k in current_inventory_batches.keys() if len(current_inventory_batches[k]) > 0 and sum(b['qty'] for b in current_inventory_batches[k]) > 0])
         
-        # 1순위: 현재 여행지에 등록된 메인 노드 통화들 (등록 순서 유지)
+        # 1순위: 메인 노드 통화
         trip_currs_ordered = [node['currency'] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values()]
         primary_trip_currs = []
         for c in trip_currs_ordered:
             if c not in primary_trip_currs and c != "KRW":
                 primary_trip_currs.append(c)
 
-        # 2순위: 결제에 사용되었거나 잔고가 있는 기타 보조 외화 (EUR, USD 등)
+        # 2순위: 기타 보조 외화
         secondary_currs = sorted([c for c in active_currs if c not in primary_trip_currs and c != "KRW"])
-
-        # 최종 표시 목록: [메인 통화] -> [보조 외화]
         display_currs = primary_trip_currs + secondary_currs
 
         # 글로벌 실물현금 권종 매핑
@@ -1230,14 +1235,14 @@ with st.sidebar:
                             
                             col_sel1, col_sel2 = st.columns(2)
                             with col_sel1:
-                                if st.button("📥 클라우드 가져오기", key=f"btn_pull_{c}", use_container_width=True):
-                                    for b in bills_to_count:
-                                        val_b = cloud_counts.get(float(b), 0)
-                                        b_key_id = str(b).replace('.', '_')
-                                        st.session_state[f"cnt_{c}_{b_key_id}"] = int(val_b) if val_b > 0 else None
-                                    st.success("가져오기 완료!")
-                                    time.sleep(0.6)
-                                    st.rerun()
+                                # [수정] on_click 콜백을 연결하여 위젯 에러 완전 차단
+                                st.button(
+                                    "📥 클라우드 가져오기", 
+                                    key=f"btn_pull_{c}", 
+                                    on_click=cb_pull_cloud_cash, 
+                                    args=(c, cloud_counts, bills_to_count),
+                                    use_container_width=True
+                                )
                                     
                             with col_sel2:
                                 if st.button("⚠️ 현재값 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True):
