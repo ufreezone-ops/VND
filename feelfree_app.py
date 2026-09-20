@@ -1344,8 +1344,7 @@ if st.session_state.show_spi:
     
     if not df_all.empty:
 
-        # [Added] 1일비용, 호텔, 항공 3개 서브탭 생성
-        sub_tab_spi, sub_tab_hotel, sub_tab_flight = st.tabs(["📊 1일비용", "🏨 호텔", "✈️ 항공"])
+        sub_tab_spi, sub_tab_hotel, sub_tab_flight = st.tabs(["1일비용", "호텔", "항공"])
       
         # ----------------------------------------------------------------------
         # 5.01.00 | Channel 1: Daily Living Cost (SPI) (수평 누적 가로막대 차트)
@@ -1435,7 +1434,7 @@ if st.session_state.show_spi:
                 
                 agg_total = agg_group.groupby(['TripName', 'Country']).agg({'Daily_SPI': 'sum', 'Travelers': 'first', 'Nights': 'first'}).reset_index()
 
-                # 5.01.02 | Spending Factor Diagnosis (Theme Generator)
+                # 5.01.02 | Spending Factor Diagnosis
                 theme_notes = []
                 for idx, row in agg_total.iterrows():
                     t, c, pp_nights = row['TripName'], row['Country'], row['Travelers'] * row['Nights']
@@ -1453,7 +1452,7 @@ if st.session_state.show_spi:
                 agg_total['Theme'] = theme_notes
                 final_total_df = agg_total.sort_values(by='Daily_SPI', ascending=True)
                 
-                # 5.01.03 | Horizontal Stacked Bar Chart & Display Table
+                # 5.01.03 | Horizontal Stacked Bar Chart & Display Table (확대/스크롤 고정)
                 if not final_total_df.empty:
                     st.markdown("### 여행지 1박비용(원)")
                     
@@ -1475,7 +1474,6 @@ if st.session_state.show_spi:
                     stack_order = ['📱 기타', '🚕 로컬교통', '🍔 식음료', '🏄 투어/액티비티', '🏨 숙박', '🚗 렌트카']
                     color_map = {'🚗 렌트카': '#D32F2F', '🏨 숙박': '#1976D2', '🏄 투어/액티비티': '#9C27B0', '🍔 식음료': '#4CAF50', '🚕 로컬교통': '#00ACC1', '📱 기타': '#795548'}
                     
-                    # 📊 [충돌 완전 해결: 제목을 상단 독립 헤더로 분리]
                     st.markdown("<h4 style='margin-top:25px; margin-bottom: 6px;'>📊 여행지별 1박 체감물가 구성 비교</h4>", unsafe_allow_html=True)
                     
                     fig_stacked = px.bar(
@@ -1486,15 +1484,17 @@ if st.session_state.show_spi:
                         color='SPI_Group', 
                         color_discrete_map=color_map, 
                         category_orders={"Chart_Label": category_order_y, "SPI_Group": stack_order},
-                        title=None  # 👈 Plotly 내부 제목을 제거하여 범례와의 겹침 원천 차단
+                        title=None
                     )
                     
                     dynamic_spi_height = max(480, len(final_total_df) * 44 + 100)
                     
+                    # [핵심] fixedrange=True, dragmode=False 로 모바일 확대 방지 및 부드러운 스크롤 보장
                     fig_stacked.update_layout(
                         barmode='stack', 
-                        xaxis_title="1박 체감비용 (원)",
-                        yaxis_title=None,
+                        xaxis=dict(fixedrange=True, title="1박 체감비용 (원)"),
+                        yaxis=dict(fixedrange=True, autorange="reversed", title=None),
+                        dragmode=False,
                         margin=dict(l=10, r=40, t=10, b=30), 
                         height=dynamic_spi_height,
                         legend=dict(
@@ -1504,19 +1504,17 @@ if st.session_state.show_spi:
                             xanchor="center", 
                             x=0.5, 
                             title=None
-                        ),
-                        yaxis=dict(autorange="reversed")
+                        )
                     )
-                    st.plotly_chart(fig_stacked, use_container_width=True, config={'displaylogo': False})
+                    st.plotly_chart(fig_stacked, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
 
         # ----------------------------------------------------------------------
-        # 5.02.00 | Channel 2: Hotel Unit Cost Analytics (2줄 레이블 가로 막대 차트)
+        # 5.02.00 | Channel 2: Hotel Unit Cost Analytics (수평 가로 막대 차트)
         # ----------------------------------------------------------------------
         with sub_tab_hotel:
             st.subheader("🏨 호텔 1박 요금 비교")
             st.caption("💡 실제 지출이 발생한 호텔 결제 정보(Category='호텔', Amount > 0)만 수집하며, 단순 일정인 체크인은 제외합니다. 동일 호텔명으로 기록된 여러 결제 건 중 '가장 금액이 큰 건'을 기본숙박비로 지정하여 투숙일수를 추출하고, '그 외 금액이 작은 결제 건'은 일수 증가 없이 기타추가비용(업그레이드/세금 등)으로 자동 분류하여 정합성을 보장합니다.")
             
-            # 5.02.01 | Hotel Data Cleaning & Magnitude Priority Sorter
             def clean_hotel_name(desc):
                 s = str(desc)
                 s = re.sub(r'^\[.*?\]\s*', '', s)
@@ -1528,7 +1526,6 @@ if st.session_state.show_spi:
             raw_hotel_rows = []
             refund_rows = []
             
-            # 1. 1차 수집
             for _, row in df_all.iterrows():
                 cat = str(row['Category']).strip()
                 desc = str(row['Description']).strip()
@@ -1578,7 +1575,6 @@ if st.session_state.show_spi:
                             'Type': 'SURCHARGE_ROW'
                         })
             
-            # 5.02.02 | Multi-Payment Merging & Surcharge Aggregator
             from collections import defaultdict
             grouped_hotels = defaultdict(list)
             for r in raw_hotel_rows:
@@ -1634,7 +1630,6 @@ if st.session_state.show_spi:
                     'FX_GainLoss': total_fx_loss
                 })
 
-            # 5.02.03 | Net Nightly Rate & Cancellation Matrix Table
             if consolidated_hotels:
                 display_hotel_rows = []
                 chart_data = []
@@ -1666,7 +1661,6 @@ if st.session_state.show_spi:
                         '환차손익(환율차이)': fx_loss_str
                     })
                     
-                    # [2줄 라벨 적용: 호텔명 <br> (여행명)]
                     if h['Cancellation_Rate'] < 100.0 and avg_rate > 0:
                         chart_data.append({
                             'Hotel_Label': f"<b>{h['Clean_Name']}</b><br><span style='font-size:11px; color:#A0AEC0;'>({h['TripName']})</span>",
@@ -1675,7 +1669,7 @@ if st.session_state.show_spi:
                 
                 st.dataframe(pd.DataFrame(display_hotel_rows), use_container_width=True, hide_index=True)
                 
-                # 📊 [5.02.04 | 수평 가로 막대 호텔 랭킹 차트]
+                # 📊 [5.02.04 | 수평 가로 막대 호텔 랭킹 차트 - 터치 스크롤 고정]
                 if chart_data:
                     chart_df = pd.DataFrame(chart_data).sort_values(by='1박당 요금(원)', ascending=True)
                     
@@ -1695,29 +1689,27 @@ if st.session_state.show_spi:
                         cliponaxis=False
                     )
                     
-                    # 2줄 라벨에 맞춘 여유 있는 세로 높이 계산
                     dynamic_hotel_height = max(450, len(chart_df) * 44 + 100)
                     
                     fig_hotel.update_layout(
-                        xaxis_title=None, 
-                        yaxis_title=None, 
+                        xaxis=dict(fixedrange=True, title=None),
+                        yaxis=dict(fixedrange=True, autorange="reversed", title=None),
+                        dragmode=False,
                         margin=dict(l=10, r=80, t=40, b=30),
                         height=dynamic_hotel_height,
-                        coloraxis_showscale=False,
-                        yaxis=dict(autorange="reversed")
+                        coloraxis_showscale=False
                     )
-                    st.plotly_chart(fig_hotel, use_container_width=True, config={'displaylogo': False})
+                    st.plotly_chart(fig_hotel, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
             else:
-                st.info("비교할 호텔 숙박 내역이 없습니다. (카테고리가 '호텔', '숙박'이며 내용에 'X박'이 명시되어야 합니다.)")
-                
+                st.info("비교할 호텔 숙박 내역이 없습니다.")
+
         # ----------------------------------------------------------------------
-        # 5.03.00 | Channel 3: Flight Pricing Matrix (2줄 레이블 가로 막대 차트)
+        # 5.03.00 | Channel 3: Flight Pricing Matrix (수평 가로 막대 차트)
         # ----------------------------------------------------------------------
         with sub_tab_flight:
             st.subheader("✈️ 항공권 요금 비교")
             st.caption("💡 각 항공권의 왕복/편도 여정을 구분하여 '1인당 왕복 환산 요금'으로 공평하게 비교합니다. 노선(Route)이 기재되지 않은 수화물/수수료 행은 해당 여행지의 메인 항공권에 자동으로 합산되며, 여행지별 설정된 인원수(Travelers)로 나누어 실질적인 '1인당 비용'을 산출합니다.")
             
-            # 5.03.01 | Flight Route Extraction & Journey Classifier
             def extract_airport_route(text):
                 match = re.search(r'([가-힣a-zA-Z\s]+)-([가-힣a-zA-Z\s]+)', str(text))
                 if match:
@@ -1732,7 +1724,6 @@ if st.session_state.show_spi:
             flight_surcharges = []
             flight_refund_rows = []
             
-            # 1. 1차 분류 및 수집
             for _, row in df_all.iterrows():
                 cat = str(row['Category']).strip()
                 desc = str(row['Description']).strip()
@@ -1832,13 +1823,12 @@ if st.session_state.show_spi:
                 f['Per_Person_Loss_KRW'] = f['Loss_KRW'] / num_travelers
                 f['Per_Person_Refund_KRW'] = f['Refund_KRW'] / num_travelers
                 
-                # 5.03.03 | Per-Person Roundtrip Equivalent Normalizer
                 if f['Type'] == "편도":
                     f['RT_Equivalent_Per_Person_KRW'] = f['Per_Person_Net_KRW'] * 2
                 else:
                     f['RT_Equivalent_Per_Person_KRW'] = f['Per_Person_Net_KRW']
 
-            # 5.03.04 | Horizontal Flight Price Benchmark Bar Chart & Display Table
+            # 5.03.04 | Horizontal Flight Price Benchmark Bar Chart & Display Table (터치 스크롤 고정)
             if primary_flights:
                 display_flight_rows = []
                 chart_flight_data = []
@@ -1869,7 +1859,6 @@ if st.session_state.show_spi:
                         '상태': status_str
                     })
                     
-                    # [2줄 라벨 적용: 노선명 <br> (여행명)]
                     if f['Refund_Rate'] == 0.0 and f['Refund_KRW'] <= 0 and f['RT_Equivalent_Per_Person_KRW'] > 0:
                         chart_flight_data.append({
                             'Flight_Label': f"<b>{f['Route']}</b><br><span style='font-size:11px; color:#A0AEC0;'>({f['TripName']})</span>",
@@ -1897,24 +1886,23 @@ if st.session_state.show_spi:
                         cliponaxis=False
                     )
                     
-                    # 2줄 라벨에 맞춘 여유 있는 세로 높이 계산
                     dynamic_chart_height = max(450, len(chart_flight_df) * 44 + 100)
                     
                     fig_flight.update_layout(
-                        xaxis_title=None, 
-                        yaxis_title=None, 
+                        xaxis=dict(fixedrange=True, title=None),
+                        yaxis=dict(fixedrange=True, autorange="reversed", title=None),
+                        dragmode=False,
                         margin=dict(l=10, r=80, t=40, b=30),
                         height=dynamic_chart_height,
-                        coloraxis_showscale=False,
-                        yaxis=dict(autorange="reversed")
+                        coloraxis_showscale=False
                     )
-                    st.plotly_chart(fig_flight, use_container_width=True, config={'displaylogo': False})
+                    st.plotly_chart(fig_flight, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
             else:
                 st.info("비교할 항공권 내역이 없습니다.")
 
-        # ----------------------------------------------------------------------
-        # 5.04.00 | Global Provisioning View (새로운 여행지 개설 단독 화면)
-        # ----------------------------------------------------------------------
+# ==============================================================================
+# [Module 5.04.00] Global Provisioning View (새로운 여행지 개설 단독 화면)
+# ==============================================================================
 elif st.session_state.get('show_new_trip', False):
     st.title("➕ 새로운 여행지 개설")
     st.info("💡 새로운 여행지를 개설하면 관제탑(`_GTL_CONFIG_`)에 자동 등록되고 전용 데이터베이스 시트가 생성됩니다.")
