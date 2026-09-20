@@ -1704,26 +1704,28 @@ if st.session_state.show_spi:
                 st.info("비교할 호텔 숙박 내역이 없습니다.")
 
         # ----------------------------------------------------------------------
-        # 5.03.00 | Channel 3: Flight Pricing Matrix (수평 가로 막대 차트)
+        # 5.03.00 | Channel 3: Flight Pricing Matrix (다구간 경유 노선 온전 추출 엔진)
         # ----------------------------------------------------------------------
         with sub_tab_flight:
             st.subheader("✈️ 항공권 요금 비교")
             st.caption("💡 각 항공권의 왕복/편도 여정을 구분하여 '1인당 왕복 환산 요금'으로 공평하게 비교합니다. 노선(Route)이 기재되지 않은 수화물/수수료 행은 해당 여행지의 메인 항공권에 자동으로 합산되며, 여행지별 설정된 인원수(Travelers)로 나누어 실질적인 '1인당 비용'을 산출합니다.")
             
+            # 5.03.01 | Multi-Hop Flight Route Extractor (다구간/경유지 체인 완벽 추출)
             def extract_airport_route(text):
-                match = re.search(r'([가-힣a-zA-Z\s]+)-([가-힣a-zA-Z\s]+)', str(text))
+                cleaned = re.sub(r'\[.*?\]', '', str(text)).strip()
+                cleaned = re.split(r'[\(\|,]', cleaned)[0].strip()
+                match = re.search(r'([가-힣a-zA-Z]+(?:\s*-\s*[가-힣a-zA-Z]+)+)', cleaned)
                 if match:
-                    dep = match.group(1).replace('[', '').replace(']', '').strip()
-                    arr = match.group(2).replace('[', '').replace(']', '').strip()
-                    dep_clean = dep.split()[-1] if dep.split() else dep
-                    arr_clean = arr.split()[0] if arr.split() else arr
-                    return f"{dep_clean}-{arr_clean}"
+                    parts = [p.strip() for p in re.split(r'\s*-\s*', match.group(0)) if p.strip()]
+                    if len(parts) >= 2:
+                        return "-".join(parts)
                 return None
 
             primary_flights = []
             flight_surcharges = []
             flight_refund_rows = []
             
+            # 1. 1차 분류 및 수집
             for _, row in df_all.iterrows():
                 cat = str(row['Category']).strip()
                 desc = str(row['Description']).strip()
@@ -1790,9 +1792,10 @@ if st.session_state.show_spi:
                     if s['TripName'] == f_trip:
                         f['Surcharge_Sum_KRW'] += s['Ticket_KRW']
                 
+                # 정밀 1:1 노선 매칭
                 if f_route and '-' in f_route:
-                    dep_city, arr_city = f_route.split('-', 1)
-                    dep_city, arr_city = dep_city.strip().lower(), arr_city.strip().lower()
+                    route_cities = [c.strip().lower() for c in f_route.split('-') if c.strip()]
+                    dep_city, arr_city = route_cities[0], route_cities[-1]
                     
                     for r_idx, r in enumerate(flight_refund_rows):
                         if r_idx in matched_refund_indices:
@@ -1823,6 +1826,7 @@ if st.session_state.show_spi:
                 f['Per_Person_Loss_KRW'] = f['Loss_KRW'] / num_travelers
                 f['Per_Person_Refund_KRW'] = f['Refund_KRW'] / num_travelers
                 
+                # 5.03.03 | Per-Person Roundtrip Equivalent Normalizer
                 if f['Type'] == "편도":
                     f['RT_Equivalent_Per_Person_KRW'] = f['Per_Person_Net_KRW'] * 2
                 else:
@@ -1859,6 +1863,7 @@ if st.session_state.show_spi:
                         '상태': status_str
                     })
                     
+                    # [2줄 라벨 적용: 온전한 다구간 노선명 <br> (여행명)]
                     if f['Refund_Rate'] == 0.0 and f['Refund_KRW'] <= 0 and f['RT_Equivalent_Per_Person_KRW'] > 0:
                         chart_flight_data.append({
                             'Flight_Label': f"<b>{f['Route']}</b><br><span style='font-size:11px; color:#A0AEC0;'>({f['TripName']})</span>",
