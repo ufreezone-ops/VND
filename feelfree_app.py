@@ -2427,10 +2427,10 @@ else:
                     st.rerun()
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Console Tab 2: Audit History & Viewer (조회 및 행 순서 재배열)
+    # 6.02.00 | Console Tab 2: Audit History & Viewer (인라인 전체 필드 수정 지원)
     # --------------------------------------------------------------------------
     with tab_his:
-        st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 사후 영수증 AI 스캔이 펼쳐집니다!**")
+        st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 항목/결제수단 변경이 펼쳐집니다!**")
         viewer_placeholder = st.empty()
 
         # 6.02.01 | Multi-Dimensional AND Filter Bar
@@ -2631,22 +2631,21 @@ else:
                 elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
                     selected_idx = df_event.selection.rows[0]
 
-                # 6.02.04 | Detail Voucher Viewer & Order Arranger (순서 이동 🔼/🔽 탑재)
+                # 6.02.04 | Detail Voucher Viewer & Full Field In-line Editor
                 if selected_idx is not None:
                     real_idx = render_df.index[selected_idx] 
                     row_data = display_df.loc[real_idx]
                     
                     with viewer_placeholder.container():
                         st.markdown("---")
-                        c_info, c_edit = st.columns([1, 1])
+                        c_info, c_edit = st.columns([1, 1.2])
                         
                         with c_info:
                             st.subheader("🧾 상세 내역 및 영수증 뷰어")
                             
-                            # [신설] 같은 날짜 내 행 순서 1칸 위로/아래로 즉시 이동 제어기
                             c_up, c_down = st.columns(2)
                             with c_up:
-                                if st.button("🔼 위로 한 칸 이동 (시간순 정렬)", key=f"btn_move_up_{real_idx}", use_container_width=True):
+                                if st.button("🔼 위로 한 칸 이동", key=f"btn_move_up_{real_idx}", use_container_width=True):
                                     if real_idx > 0:
                                         display_df.iloc[real_idx - 1], display_df.iloc[real_idx] = display_df.iloc[real_idx].copy(), display_df.iloc[real_idx - 1].copy()
                                         if save_data(display_df):
@@ -2665,7 +2664,7 @@ else:
                             krw_display = f" ➔ <span style='color:#FFD700'>약 {krw_equivalent:,.0f} 원</span>" if row_data['Currency'] != 'KRW' else ""
                             
                             st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}{krw_display})", unsafe_allow_html=True)
-                            st.markdown(f"**🏦 결제수단:** {row_data['PaymentMethod']}")
+                            st.markdown(f"**🏦 결제수단:** `{row_data['PaymentMethod']}`")
                             
                             def smart_krw_translator(text, rate, curr):
                                 if rate <= 0 or curr == 'KRW': return text
@@ -2724,23 +2723,40 @@ else:
                             else:
                                 st.info("첨부된 영수증 사진이 없습니다.")
                                 
-                        # 6.02.05 | 인라인 수정기 (호텔 복귀 후 사후 영수증 추가 & AI 스캔 완벽 지원)
+                        # 6.02.05 | 인라인 수정기 (모바일에서 카테고리/결제수단/금액 원클릭 즉시 수정!)
                         with c_edit:
-                            st.subheader("✏️ 내역 보강 & 사후 영수증 AI 스캔")
+                            st.subheader("✏️ 상세 내역 & 결제정보 수정")
                             
-                            if row_data['Currency'] != 'KRW' and row_data['AppliedRate'] > 0:
-                                with st.expander(f"🧮 타임머신 계산기 (적용 환율: {row_data['AppliedRate']:.4f})", expanded=False):
-                                    mini_amt = st.number_input(f"현지 금액 입력 ({row_data['Currency']})", min_value=0.0, step=10.0, key="mini_calc")
-                                    if mini_amt > 0:
-                                        st.success(f"➔ 당시 원화 가치: **{mini_amt * row_data['AppliedRate']:,.0f} 원**")
+                            # [모바일 특화] 카테고리, 결제수단, 금액 즉시 수정 폼
+                            all_cats_avail = list(dict.fromkeys(EXPENSE_CATS + ['상환', '충전', '환전', '입금', '직접환전', '이월잔액', '환불', '개인지출', '재환전', '출국', '귀국', '체크인', '체크아웃']))
+                            cur_cat = str(row_data['Category']).strip()
+                            cat_idx_sel = all_cats_avail.index(cur_cat) if cur_cat in all_cats_avail else 0
+                            
+                            ec1, ec2 = st.columns(2)
+                            with ec1:
+                                edit_cat = st.selectbox("1. 항목(카테고리)", all_cats_avail, index=cat_idx_sel, key=f"edit_cat_sel_{real_idx}")
+                            with ec2:
+                                edit_amt = st.number_input("2. 결제 금액", value=float(row_data['Amount']), step=1000.0 if row_data['Currency']=="VND" else 1.0, format="%.2f" if row_data['Currency']!="VND" else "%.0f", key=f"edit_amt_val_{real_idx}")
+                                
+                            cur_method = str(row_data['PaymentMethod']).strip()
+                            avail_methods = list(dict.fromkeys([
+                                cur_method,
+                                f"트래블카드({row_data['Currency']})",
+                                f"현금({row_data['Currency']})",
+                                f"호텔외상({row_data['Currency']})",
+                                "원화계좌(한국)",
+                                "해외송금(한국계좌)",
+                                "정보"
+                            ]))
+                            method_idx_sel = avail_methods.index(cur_method) if cur_method in avail_methods else 0
+                            edit_method = st.selectbox("3. 결제 수단(자산)", avail_methods, index=method_idx_sel, key=f"edit_met_sel_{real_idx}")
                             
                             desc_key = f"edit_desc_{real_idx}"
                             if st.session_state.get('current_edit_idx') != real_idx:
                                 st.session_state[desc_key] = str(row_data['Description'])
                                 st.session_state['current_edit_idx'] = real_idx
                                 
-                            # [사후 영수증 업로드 & 즉시 AI 번역 스캔]
-                            new_receipts = st.file_uploader("📸 호텔에서 영수증 사후 업로드 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
+                            new_receipts = st.file_uploader("📸 영수증 사후 업로드 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
                             if new_receipts:
                                 if st.button("🤖 첨부된 영수증 AI 스캔 & 내용에 자동 추가", key=f"btn_ai_scan_inline_{real_idx}", use_container_width=True, type="primary"):
                                     with st.spinner(f"AI가 {len(new_receipts)}장의 사진을 분석 중..."):
@@ -2755,12 +2771,16 @@ else:
                                             st.toast("영수증 품목 분석 완료!", icon="🤖")
                                             st.rerun()
 
-                            new_desc = st.text_area("📝 세부 내역 (수정/추가)", height=150, key=desc_key)
+                            new_desc = st.text_area("4. 세부 내역 (수정/추가)", height=100, key=desc_key)
                             
-                            if st.button("💾 이 내역 업데이트", use_container_width=True, type="primary"):
+                            if st.button("💾 이 내역 전체 업데이트 (항목/수단/내용 동시저장)", use_container_width=True, type="primary"):
+                                display_df.at[real_idx, 'Category'] = edit_cat
+                                display_df.at[real_idx, 'Amount'] = edit_amt
+                                display_df.at[real_idx, 'PaymentMethod'] = edit_method
                                 display_df.at[real_idx, 'Description'] = new_desc
+                                
                                 if new_receipts:
-                                    with st.spinner(f"📸 {len(new_receipts)}장의 영수증을 클라우드에 전송 중..."):
+                                    with st.spinner("📸 영수증 클라우드 전송 중..."):
                                         new_urls = []
                                         for f in new_receipts:
                                             u = upload_image_to_imgbb(f)
@@ -2773,10 +2793,9 @@ else:
                                             display_df.at[real_idx, 'Receipt_URL'] = ",".join(merged_urls)
                                             
                                 if save_data(display_df): 
-                                    st.toast("내역 및 영수증 업데이트 완료!", icon="✅")
+                                    st.toast("🎉 수정사항이 완벽하게 저장되었습니다!", icon="✅")
                                     time.sleep(0.8); st.rerun()
                         st.markdown("---")
-
     # --------------------------------------------------------------------------
     # 6.03.00 | Console Tab 3: Daily Statistics & Tree Visualizer (통계 및 일별 시각화)
     # --------------------------------------------------------------------------
