@@ -2151,7 +2151,6 @@ else:
             col_desc, col_receipt = st.columns([3, 1.2])
             
             with col_receipt: 
-                # 👈 PDF 파일 업로드 포맷 추가!
                 uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
                     if st.button("🤖 영수증 AI 스캔 (통합 번역)", use_container_width=True, type="primary"):
@@ -2241,14 +2240,13 @@ else:
 
             col_f_input, col_f_rcpt = st.columns([3, 1.2])
             with col_f_rcpt:
-                # 👈 PDF e-티켓 업로드 지원
                 uploaded_flight_files = st.file_uploader("📸 e-티켓/확인서 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"flight_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_flight_files:
                     if st.button("🤖 e-티켓 AI 자동분석 & 폼 채우기", key="btn_ai_flight", use_container_width=True, type="primary"):
                         with st.spinner(f"AI가 {len(uploaded_flight_files)}개의 e-티켓 문서를 분석 중..."):
                             all_f_texts = []
                             for f in uploaded_flight_files:
-                                all_f_texts.append(extract_text_from_file_or_image(f.getvalue(), getattr(f, 'name', '')) dialogue)
+                                all_f_texts.append(extract_text_from_file_or_image(f.getvalue(), getattr(f, 'name', '')))
                             parsed_flight = parse_flight_ticket_with_gemini("\n---\n".join(all_f_texts))
                             if parsed_flight:
                                 st.session_state.f_ai_data = parsed_flight
@@ -2349,7 +2347,6 @@ else:
 
             col_h_input, col_h_rcpt = st.columns([3, 1.2])
             with col_h_rcpt:
-                # 👈 PDF 바우처 업로드 지원
                 uploaded_hotel_files = st.file_uploader("📸 호텔 바우처 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"hotel_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_hotel_files:
                     if st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel", use_container_width=True, type="primary"):
@@ -2409,7 +2406,7 @@ else:
                     
                 full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout_calc.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
                 
-                hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{f_fee}원" if h_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
+                hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{f_fee}원" if f_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
                 
                 checkin_desc = f"🏨 {h_name} 체크인 ({h_nights}박)"
                 checkin_row = pd.DataFrame([{'Date': h_checkin.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크인', 'Description': checkin_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkin', 'Receipt_URL': ''}])
@@ -2567,7 +2564,19 @@ else:
                 if st.button("🚀 개인지출 기록하기", use_container_width=True):
                     if s_amt <= 0 or not s_desc: st.warning("금액과 용도를 입력하세요."); st.stop()
                     fifo_rate = auto_calc_fifo_rate(s_amt, source_met, curr_tr)
-                    new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '개인지출', 'Description': f"[개인지출] {s_desc}", 'Currency': curr_tr, 'Amount': s_amt, 'PaymentMethod': source_met, 'IsExpense': 0, 'AppliedRate': fifo_rate, 'Note': 'Exclude from Travel', 'Receipt_URL': ''}])
+                    new_row = pd.DataFrame([{
+                        'Date': sel_date.strftime("%Y-%m-%d(%a)"),
+                        'Country': sel_node,
+                        'Category': '개인지출',
+                        'Description': f"[개인지출] {s_desc}",
+                        'Currency': curr_tr,
+                        'Amount': s_amt,
+                        'PaymentMethod': source_met,
+                        'IsExpense': 0,
+                        'AppliedRate': fifo_rate,
+                        'Note': 'Exclude from Travel',
+                        'Receipt_URL': ''
+                    }])
                     if append_new_data(new_row):
                         st.toast("개인지출 기록 완료!", icon="✅")
                         st.rerun()
