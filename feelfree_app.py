@@ -1007,11 +1007,10 @@ def calculate_summary_metrics(df):
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 4.01.00 | Sidebar Dashboard (지갑 잔고, 외상 관리, KPI 모니터링)
+# 4.01.00 | Sidebar Dashboard (지갑 잔고, 외상 관리, K단위 실물현금 카운터)
 # ------------------------------------------------------------------------------
 ### 🎨 [GUI: Layout] 사이드바 영역
 
-# [에러 방지] 클라우드 실물현금 가져오기 콜백 함수 (위젯 생성 전 세션 안전 주입)
 def cb_pull_cloud_cash(curr_c, counts_dict, b_list):
     for bill_val in b_list:
         b_id = str(bill_val).replace('.', '_')
@@ -1028,20 +1027,19 @@ with st.sidebar:
             st.info("➕ **새로운 여행지 개설 모드**\n\n새 여행지를 등록하거나 기존 여행지를 보시려면 상단 '내 여행함'에서 여행지를 선택해 주세요.")
         
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
-        if st.button("🔄 Cloud Refresh", use_container_width=True): 
+        if st.button("🔄 Cloud Refresh (데이터 동기화)", use_container_width=True): 
             st.cache_data.clear()
             st.query_params["trip"] = st.session_state.current_trip
             st.rerun()
     else:
         # ----------------------------------------------------------------------
-        # 4.01.02 | Multi-Currency Dynamic Wallet Monitor & Physical Cash Counter
+        # 4.01.02 | Multi-Currency Dynamic Wallet Monitor & K-Unit Physical Counter
         # ----------------------------------------------------------------------
         st.subheader("💰 지갑 잔고")
         b_val, spent_val = calculate_summary_metrics(ledger_df)
         
-        # 1. 여행 진행 중 여부 판별
-        korea_arr = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
-        arr_rows = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
+        korea_arr = ledger_df[ledger_df['Category'].str.contains('귀국|입국_한국|입국.*한국|귀국.*한국', na=False)]
+        arr_rows = ledger_df[ledger_df['Category'].str.contains('귀국|입국', na=False)]
         target_arr_row = korea_arr if not korea_arr.empty else arr_rows
 
         is_trip_active = True
@@ -1054,18 +1052,15 @@ with st.sidebar:
 
         active_currs = set([k.split('(')[1].replace(')','') for k in current_inventory_batches.keys() if len(current_inventory_batches[k]) > 0 and sum(b['qty'] for b in current_inventory_batches[k]) > 0])
         
-        # 1순위: 메인 노드 통화
         trip_currs_ordered = [node['currency'] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values()]
         primary_trip_currs = []
         for c in trip_currs_ordered:
             if c not in primary_trip_currs and c != "KRW":
                 primary_trip_currs.append(c)
 
-        # 2순위: 기타 보조 외화
         secondary_currs = sorted([c for c in active_currs if c not in primary_trip_currs and c != "KRW"])
         display_currs = primary_trip_currs + secondary_currs
 
-        # 글로벌 실물현금 권종 매핑
         CURR_BILLS = {
             "VND": BILLS,
             "EUR": [100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1],
@@ -1080,7 +1075,6 @@ with st.sidebar:
             "VND": 1000000, "USD": 50, "EUR": 50, "TRY": 1000, "JPY": 5000, "CNY": 300, "PHP": 2000
         }
         
-        ### 통화별 잔고 표시
         for c in display_currs:
             if c == "KRW": continue
 
@@ -1091,20 +1085,20 @@ with st.sidebar:
             current_debt = debt_amt - repay_amt
             
             if current_debt > 0:
-                st.markdown(f"<div style='color:#FF4B4B; font-size:14px;'>📌 <b>미결제 외상: {fmt.format(current_debt)}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='color:#FF4B4B; font-size:13.5px; font-weight:bold;'>📌 미결제 외상: {fmt.format(current_debt)} {c}</div>", unsafe_allow_html=True)
             
             c_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블카드({c})",[])])
             c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
             
             if c_card > 0 or c_cash > 0 or c in primary_trip_currs:
-                st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:14px; margin-bottom:12px;'>● {c}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:12px; margin-bottom:10px;'>● {c}</div>", unsafe_allow_html=True)
                 st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
-                st.markdown(f"<div style='margin-bottom:14px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
+                st.markdown(f"<div style='margin-bottom:12px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
 
                 threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
                 if is_trip_active and c_cash <= threshold:
                     st.markdown("""
-                        <div style='color:#FFA500; font-size:13px; font-weight:bold; margin-top:2px; margin-bottom:16px; padding: 6px 12px; background-color: rgba(255, 165, 0, 0.12); border-radius: 8px; border-left: 3px solid #FFA500;'>
+                        <div style='color:#FFA500; font-size:12.5px; font-weight:bold; margin-top:2px; margin-bottom:14px; padding: 5px 10px; background-color: rgba(255, 165, 0, 0.12); border-radius: 6px; border-left: 3px solid #FFA500;'>
                             🚨 현금 부족 경고
                         </div>
                     """, unsafe_allow_html=True)
@@ -1115,18 +1109,16 @@ with st.sidebar:
                 if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
                     with st.expander("🔍 상세 배치", expanded=is_trip_active):
                         r_fmt = ".4f" if c in ["VND", "HUF"] else ".2f"
-                        
                         if any(b['qty'] > 0 for b in card_batches):
                             st.caption("[카드]")
                             for b in card_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
-                                    
                         if any(b['qty'] > 0 for b in cash_batches):
                             st.caption("[현금]")
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # 실물현금 카운터
+                # 🪙 [개편] 베트남 현지 K단위 (500K, 200K... 1K) 실물현금 카운터
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("🪙 실물현금 카운터", expanded=False):
@@ -1140,13 +1132,10 @@ with st.sidebar:
                             if m_sync.any():
                                 row_sync = cash_df[m_sync].iloc[0]
                                 cloud_total = float(row_sync.get('Total_Amount', 0))
-                                
                                 raw_t = str(row_sync.get('Updated_At', '')).strip()
                                 m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
-                                if m_t:
-                                    cloud_time = f"{m_t.group(1)} {int(m_t.group(2)):02d}:{m_t.group(3)}"
-                                else:
-                                    cloud_time = raw_t[5:16].rstrip(':')
+                                if m_t: cloud_time = f"{m_t.group(1)} {int(m_t.group(2)):02d}:{m_t.group(3)}"
+                                else: cloud_time = raw_t[5:16].rstrip(':')
                                     
                                 for item in str(row_sync.get('Bill_Counts', '')).split(";"):
                                     if ":" in item:
@@ -1168,8 +1157,9 @@ with st.sidebar:
                             b_flt = float(bill)
                             b_key_id = str(bill).replace('.', '_')
                             
+                            # [현지 K단위 및 글로벌 권종 포맷]
                             if c == "VND":
-                                b_label = f"{int(bill // 10000)}만동" if bill >= 10000 else f"{int(bill // 1000)}천동"
+                                b_label = f"{int(bill // 1000)}K"  # 👈 50만동 -> 500K, 20만동 -> 200K, 1만동 -> 10K
                             elif c == "EUR":
                                 b_label = f"{int(bill)} €" if bill >= 1 else f"{int(round(bill * 100))} c"
                             elif c == "USD":
@@ -1212,12 +1202,9 @@ with st.sidebar:
                         
                         diff_val = round(total_counted - c_cash, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted - c_cash)
                         if total_counted > 0:
-                            if abs(diff_val) < 0.001:
-                                st.success("✅ 장부/실물 일치!")
-                            elif diff_val < 0:
-                                st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족!")
-                            else:
-                                st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
+                            if abs(diff_val) < 0.001: st.success("✅ 장부/실물 일치!")
+                            elif diff_val < 0: st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족!")
+                            else: st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
 
                         has_cloud_record = bool(cloud_counts)
                         has_conflict = has_cloud_record and (cur_counts != cloud_counts)
@@ -1235,46 +1222,36 @@ with st.sidebar:
                             
                             col_sel1, col_sel2 = st.columns(2)
                             with col_sel1:
-                                # [수정] on_click 콜백을 연결하여 위젯 에러 완전 차단
-                                st.button(
-                                    "📥 클라우드 가져오기", 
-                                    key=f"btn_pull_{c}", 
-                                    on_click=cb_pull_cloud_cash, 
-                                    args=(c, cloud_counts, bills_to_count),
-                                    use_container_width=True
-                                )
-                                    
+                                st.button("📥 클라우드 가져오기", key=f"btn_pull_{c}", on_click=cb_pull_cloud_cash, args=(c, cloud_counts, bills_to_count), use_container_width=True)
                             with col_sel2:
                                 if st.button("⚠️ 현재값 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True):
                                     with st.spinner("클라우드 저장 중..."):
                                         if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
                                             st.success("덮어쓰기 완료!")
-                                            time.sleep(0.6)
-                                            st.rerun()
+                                            time.sleep(0.6); st.rerun()
                         else:
-                            if cloud_total > 0:
-                                st.caption(f"클라우드 동기완료 ({cloud_time})")
-                                
+                            if cloud_total > 0: st.caption(f"클라우드 동기완료 ({cloud_time})")
                             if st.button(f"💾 {c} 실물현금 저장", key=f"btn_save_normal_{c}", use_container_width=True):
                                 with st.spinner("구글 시트 저장 중..."):
                                     if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
                                         st.success("🎉 저장 완료!")
-                                        time.sleep(0.6)
-                                        st.rerun()
-                
+                                        time.sleep(0.6); st.rerun()
                 st.divider()
 
         # 4.01.03 | Net Financial Summary KPI Display
-        st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
         st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
 
-        # 4.01.04 | Cloud Refresh Trigger
+        # 4.01.04 | Master Cloud Refresh (정합성 자동 재계산 일괄 실행)
         st.divider()
-        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
-        if st.button("🔄 Cloud Refresh", use_container_width=True): 
+        st.markdown("<div style='margin-top:15px;'></div>", unsafe_allow_html=True)
+        if st.button("🔄 Cloud Refresh (데이터 동기화)", use_container_width=True, type="primary"): 
             st.cache_data.clear()
             st.query_params["trip"] = st.session_state.current_trip
+            if save_data(ledger_df):
+                st.toast("✅ 클라우드 동기화 및 가계부 정합성 재계산 완료!", icon="🎉")
+                time.sleep(0.5)
             st.rerun()
 
 # ------------------------------------------------------------------------------
@@ -1972,7 +1949,7 @@ else:
     tab_in, tab_his, tab_stats, tab_final = st.tabs(["Data입력", "Data조회", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
-    # 6.01.00 | Console Tab 1: Input Engine (EUR 유로화 결제 통화 전역 추가)
+    # 6.01.00 | Console Tab 1: Input Engine (호텔 체크인/아웃 자동생성 & 폼 리셋)
     # --------------------------------------------------------------------------
     with tab_in:
         trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
@@ -1995,7 +1972,6 @@ else:
             with c_mode:
                 mode = st.radio("기록 모드 선택", ["일반 지출", "🛫 항공권(특수)", "🏨 호텔(특수)", "자산 이동", "환불(취소)"], horizontal=True, key="mode_radio", label_visibility="collapsed")
         
-        # [스마트 로컬 타임존 자동 판별]
         dep_rows_tz = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
         korea_dep_tz = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
         t_dep_tz = korea_dep_tz if not korea_dep_tz.empty else dep_rows_tz
@@ -2005,8 +1981,8 @@ else:
             m_d = re.search(r'(\d{4}-\d{2}-\d{2})', str(t_dep_tz.iloc[0]['Date']))
             if m_d: dep_dt_calc = datetime.strptime(m_d.group(1), "%Y-%m-%d").date()
 
-        arr_rows_tz = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
-        korea_arr_tz = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
+        arr_rows_tz = ledger_df[ledger_df['Category'].str.contains('귀국|입국', na=False)]
+        korea_arr_tz = ledger_df[ledger_df['Category'].str.contains('귀국_한국|귀국.*한국|입국_한국|입국.*한국', na=False)]
         t_arr_tz = korea_arr_tz if not korea_arr_tz.empty else arr_rows_tz
         
         arr_dt_calc = None
@@ -2023,8 +1999,6 @@ else:
             dynamic_tz = TZ_KST
 
         sel_date = st.date_input("날짜 선택", value=datetime.now(dynamic_tz).date(), key="shared_date_input")
-        
-        # 전역 사용 가능 통화 목록 (현지통화, 원화, 달러, 유로 기본 포함)
         node_currs = [node["currency"] for node in trip_nodes.values()]
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
@@ -2034,6 +2008,8 @@ else:
             cat = st.radio("항목 선택", EXPENSE_CATS, index=def_index, horizontal=True, key="exp_cat")
             st.session_state.last_cat_name = cat
             
+            # [영수증 업로더 동적 키 관리: 저장 후 사진 자동 비우기]
+            if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
             if st.session_state.get('clear_exp_desc', False):
                 st.session_state.exp_desc = ""
                 st.session_state.clear_exp_desc = False
@@ -2041,7 +2017,7 @@ else:
             col_desc, col_receipt = st.columns([3, 1])
             
             with col_receipt: 
-                uploaded_files = st.file_uploader("📸 영수증 첨부 (다중 가능)", type=['png', 'jpg', 'jpeg'], key="exp_receipt", accept_multiple_files=True)
+                uploaded_files = st.file_uploader("📸 영수증 첨부 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
                     if st.button("🤖 영수증 AI 스캔 (통합 번역)", use_container_width=True):
                         with st.spinner(f"AI가 {len(uploaded_files)}장의 사진을 분석 중..."):
@@ -2052,7 +2028,7 @@ else:
                             combined_text = "\n---\n".join(all_raw_texts)
                             smart_text = summarize_receipt_with_gemini(combined_text)
                             if smart_text:
-                                st.session_state.exp_desc = st.session_state.get('exp_desc', '') + "\n" + smart_text
+                                st.session_state.exp_desc = (st.session_state.get('exp_desc', '') + "\n" + smart_text).strip()
                                 st.rerun()
                                 
             with col_desc: 
@@ -2060,7 +2036,6 @@ else:
                 
             col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
             with col_m1: 
-                # [수정] 현지통화, KRW, USD, EUR을 최상단에 우선 배치
                 primary_currs = [IN_CURR, "KRW", "USD", "EUR"]
                 curr_opts = [c for i, c in enumerate(primary_currs) if c not in primary_currs[:i]] + [c for c in available_currs if c not in primary_currs]
                 curr = st.selectbox("통화", curr_opts, key="exp_curr")
@@ -2093,10 +2068,10 @@ else:
                     cr_final = st.number_input("확정 환율", value=float(calc_rate), format="%.5f", key=f"exp_cr_auto_{met}_{amt}")
                 else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else get_default_rate(curr)), format="%.5f", key=f"exp_cr_man_{curr}")
                 
-            if st.button("🚀 지출 기록하기", use_container_width=True):
+            if st.button("🚀 지출 기록하기", use_container_width=True, type="primary"):
                 final_receipt_urls = ""
                 if uploaded_files:
-                    with st.spinner("📸 모든 영수증을 클라우드에 보관 중..."):
+                    with st.spinner("📸 영수증을 클라우드에 보관 중..."):
                         url_list = []
                         for file in uploaded_files:
                             u = upload_image_to_imgbb(file)
@@ -2118,10 +2093,13 @@ else:
                     'Receipt_URL': final_receipt_urls
                 }])
                 if append_new_data(new_row): 
+                    st.toast("🎉 지출이 성공적으로 기록되었습니다!", icon="✅")
                     st.session_state.clear_exp_desc = True
+                    st.session_state.rcpt_key_idx += 1 # 👈 업로드된 사진 목록 자동 리셋!
+                    time.sleep(0.6)
                     st.rerun()
 
-        # 6.01.02 | Sub-Form: Flight Integrated Scheduler
+        # 6.01.02 | Sub-Form: Flight Integrated Scheduler (귀국 명칭 통일)
         elif mode == "🛫 항공권(특수)":
             st.subheader("✈️ 항공권 및 스케줄 통합 기록")
             f_trip_type = st.radio("여정 구분", ["왕복", "편도"], horizontal=True)
@@ -2129,17 +2107,17 @@ else:
             c1, c2, c3 = st.columns(3)
             with c1: f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 트립닷컴")
             with c2: f_carrier = st.text_input("2. 항공사", placeholder="예: 비엣젯")
-            with c3: f_route = st.text_input("3. 노선", placeholder="예: 부산-푸꾸옥")
+            with c3: f_route = st.text_input("3. 노선", placeholder="예: 부산-다낭")
 
             c4, c5 = st.columns(2)
             with c4:
                 st.info(f"🛫 {'출국' if f_trip_type == '왕복' else '탑승'} 스케줄")
-                f_dep_info = st.text_input("4. 스케줄 정보", placeholder="예: VJ969, 07:45 - 11:10")
+                f_dep_info = st.text_input("4. 스케줄 정보", placeholder="예: BX773, 20:50 - 23:50")
                 f_dep_date = st.date_input("5. 탑승 날짜", value=sel_date)
             with c5:
                 if f_trip_type == "왕복":
                     st.success("🛬 귀국 스케줄")
-                    f_ret_info = st.text_input("6. 귀국편 정보", placeholder="예: VJ968, 23:10 - 06:40 (+1)")
+                    f_ret_info = st.text_input("6. 귀국편 정보", placeholder="예: BX774, 00:50 - 07:00")
                     f_ret_date = st.date_input("7. 귀국 날짜", value=sel_date + timedelta(days=7))
                 else:
                     st.empty()
@@ -2147,10 +2125,10 @@ else:
 
             c6, c7, c8 = st.columns([1, 1, 1])
             with c6: f_baggage = st.selectbox("8. 위탁수화물", ["포함", "미포함", "일부포함"])
-            with c7: f_bag_memo = st.text_input("9. 수화물 상세", placeholder="예: 귀국편 20kg 추가")
+            with c7: f_bag_memo = st.text_input("9. 수화물 상세", placeholder="예: 20kg 무료")
             with c8: f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
                 
-            f_memo = st.text_input("📝 비고/메모 (결제 후 변경 이력 등 기록)", placeholder="예: 3/10 결제 후, 3/12에 항공사 스케줄 1회 변경됨")
+            f_memo = st.text_input("📝 비고/메모", placeholder="예: 좌석 지정 완료")
 
             st.divider()
             c9, c10, c11, c12 = st.columns([1, 2, 1, 1])
@@ -2161,14 +2139,13 @@ else:
             with c11: f_rate = st.number_input("13. 환율", value=1.0 if f_curr=="KRW" or "네이버" in f_asset else get_default_rate(f_curr), format="%.4f")
             with c12: f_fee = st.number_input("14. 수수료(원)", min_value=0)
 
-            btn_label = "🚀 항공권 및 출입국 일정(왕복) 동시 기록" if f_trip_type == "왕복" else "🚀 항공권 및 편도 일정 동시 기록"
+            btn_label = "🚀 항공권 및 출귀국 일정(왕복) 동시 기록" if f_trip_type == "왕복" else "🚀 항공권 및 편도 일정 동시 기록"
             if st.button(btn_label, use_container_width=True, type="primary"):
                 if not f_gw or not f_route:
                     st.warning("결제 플랫폼과 노선 정보는 필수입니다."); st.stop()
                 
                 clean_asset = f_asset.split('(')[0].strip()
-                if "트래블카드" in f_asset:
-                    clean_asset = f"트래블카드({f_curr})"
+                if "트래블카드" in f_asset: clean_asset = f"트래블카드({f_curr})"
 
                 route_str = f" | 출국:{f_dep_info}" if f_dep_info else ""
                 ret_str = f" | 귀국:{f_ret_info}" if f_trip_type == "왕복" and f_ret_info else ""
@@ -2185,27 +2162,28 @@ else:
                     new_rows.append(dep_row)
                     
                 if f_trip_type == "왕복" and f_ret_info:
-                    arr_desc = f"🛬 {f_route} 입국 ({f_ret_info})"
-                    arr_row = pd.DataFrame([{'Date': f_ret_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '입국', 'Description': arr_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
+                    arr_desc = f"🛬 {f_route} 귀국 ({f_ret_info})"
+                    arr_row = pd.DataFrame([{'Date': f_ret_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '귀국', 'Description': arr_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
                     new_rows.append(arr_row)
                 
                 if append_new_data(pd.concat(new_rows, ignore_index=True)):
-                    st.success("항공권과 일정이 모두 기록되었습니다!"); time.sleep(1); st.rerun()
+                    st.toast("🎉 항공권과 출귀국 일정이 모두 기록되었습니다!", icon="✅")
+                    time.sleep(0.8); st.rerun()
                     
-        # 6.01.03 | Sub-Form: Hotel Integrated Booking
+        # 6.01.03 | Sub-Form: Hotel Integrated Booking (체크인/아웃 자동생성 완벽 복원)
         elif mode == "🏨 호텔(특수)":
-            st.subheader("🏨 호텔/숙소 예약 상세 기록")
+            st.subheader("🏨 호텔/숙소 예약 및 체크인·아웃 자동 기록")
             c1, c2 = st.columns(2)
             with c1:
                 h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com")
-                h_name = st.text_input("2. 호텔명", placeholder="예: 인터콘티넨털 호치민")
-                h_checkin = st.date_input("3. 체크인", value=sel_date)
+                h_name = st.text_input("2. 호텔명", placeholder="예: 사누바 다낭 호텔")
+                h_checkin = st.date_input("3. 체크인 날짜", value=sel_date)
                 h_asset = st.selectbox("4. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
             with c2:
                 h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1)
                 h_checkout = h_checkin + timedelta(days=h_nights)
-                st.caption(f"📅 체크아웃 예정: {h_checkout.strftime('%Y-%m-%d')}")
-                h_detail = st.text_area("6. 내용 (룸타입/특징)", placeholder="예: 디럭스 더블, 수영장뷰, 30m2", height=68)
+                st.info(f"📅 체크아웃 예정일: **{h_checkout.strftime('%Y-%m-%d')}** ({h_nights}박)")
+                h_detail = st.text_area("6. 내용 (룸타입/특징)", placeholder="예: 디럭스 더블, 시티뷰, 조식포함", height=68)
                 h_curr = st.selectbox("7. 결제 통화", ["KRW", "USD", "EUR", "VND", "PHP", "CNY", "TRY"], key="h_curr")
 
             c3, c4, c5 = st.columns(3)
@@ -2213,41 +2191,83 @@ else:
             with c4: h_rate = st.number_input("9. 적용 환율", value=1.0 if h_curr=="KRW" or "네이버" in h_asset else get_default_rate(h_curr), format="%.4f")
             with c5: h_fee = st.number_input("10. 환율 수수료(원)", min_value=0)
 
-            if st.button("🚀 호텔 예약 저장", use_container_width=True):
-                if not h_gw: st.warning("결제 플랫폼을 입력하세요."); st.stop()
+            if st.button("🚀 호텔 예약 및 체크인·체크아웃 동시 저장", use_container_width=True, type="primary"):
+                if not h_gw or not h_name: st.warning("결제 플랫폼과 호텔명을 입력하세요."); st.stop()
                 
                 clean_asset = h_asset.split('(')[0].strip()
-                if "트래블카드" in h_asset:
-                    clean_asset = f"트래블카드({h_curr})"
+                if "트래블카드" in h_asset: clean_asset = f"트래블카드({h_curr})"
                     
-                full_desc = f"[{h_gw}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
-                new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else ""}])
-                if append_new_data(new_row): st.rerun()
+                full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
+                
+                # 1. 호텔 결제 지출 행
+                hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else ""}])
+                
+                # 2. [자동생성] 체크인 일정 행 (Amount = 0)
+                checkin_desc = f"🏨 {h_name} 체크인 ({h_nights}박)"
+                checkin_row = pd.DataFrame([{'Date': h_checkin.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크인', 'Description': checkin_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkin'}])
+                
+                # 3. [자동생성] 체크아웃 일정 행 (Amount = 0)
+                checkout_desc = f"🏨 {h_name} 체크아웃"
+                checkout_row = pd.DataFrame([{'Date': h_checkout.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크아웃', 'Description': checkout_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkout'}])
+                
+                if append_new_data(pd.concat([hotel_pay_row, checkin_row, checkout_row], ignore_index=True)):
+                    st.toast(f"🎉 '{h_name}' 예약 및 체크인/아웃 일정이 자동 생성되었습니다!", icon="✅")
+                    time.sleep(0.8); st.rerun()
                     
-        # 6.01.04 | Sub-Form: Asset Transfer & Dual FX Swap
+        # 6.01.04 | Sub-Form: Asset Transfer & Dual FX Swap (호텔외상 청산 상환 옵션 강화)
         elif mode == "자산 이동":
-            st.subheader("🔁 자산 이동 및 환전")
+            st.subheader("🔁 자산 이동 / 환전 / 외상 청산")
             ty = st.selectbox("유형",[
+                "외상 청산 (호텔외상 -> 현금/카드 상환)", # 👈 호텔 외상 청산 1순위 배치!
                 "이월잔액 (지난여행 -> 현금잔액)", 
                 "직접환전 (원화계좌 -> 로컬현금)", 
-                "이종환전 (외화 -> 타국 외화)",
+                "이종환전 (외화 -> 타국 외화)", 
                 "충전 (원화계좌 -> 트래블카드)", 
                 "ATM출금 (카드 -> 로컬현금)", 
-                "재환전 (외화 -> 원화계좌)",
+                "재환전 (외화 -> 원화계좌)", 
                 "개인지출 (외화잔액 -> 여행외 소비)"
             ], key="tr_type")
             c1, c2 = st.columns(2)
             
-            if "이종환전" in ty:
+            # [신설] 외상 청산 전용 처리기
+            if "외상 청산" in ty:
+                with c1:
+                    curr_opts_tr = [IN_CURR, "USD", "EUR"] + [c for c in available_currs if c not in [IN_CURR, "USD", "EUR", "KRW"]]
+                    curr_tr = st.selectbox("청산할 외상 통화", curr_opts_tr, key="tr_curr")
+                    s_amt = st.number_input(f"청산 금액 ({curr_tr})", min_value=0.0, step=1000.0 if curr_tr=="VND" else 1.0, format="%.2f" if curr_tr!="VND" else "%d")
+                with c2:
+                    pay_source = st.selectbox("체크아웃 정산 지불 수단", [f"현금({curr_tr})", f"트래블카드({curr_tr})", "원화계좌(한국)"], key="tr_repay_src")
+                    r_desc = st.text_input("상환 메모", value="호텔 체크아웃 외상 청산", key="tr_repay_desc")
+                    
+                if st.button("🚀 외상 청산 완료 (미결제 외상 잔액에서 즉시 차감)", use_container_width=True, type="primary"):
+                    if s_amt <= 0: st.warning("청산 금액을 입력하세요."); st.stop()
+                    
+                    fifo_rate = auto_calc_fifo_rate(s_amt, pay_source, curr_tr)
+                    new_row = pd.DataFrame([{
+                        'Date': sel_date.strftime("%Y-%m-%d(%a)"),
+                        'Country': sel_node,
+                        'Category': '상환', # 👈 상환 카테고리로 기록되어 미결제 외상 0원 처리!
+                        'Description': r_desc,
+                        'Currency': curr_tr,
+                        'Amount': s_amt,
+                        'PaymentMethod': pay_source,
+                        'IsExpense': 0,
+                        'AppliedRate': fifo_rate,
+                        'Note': 'Hotel Credit Cleared',
+                        'Receipt_URL': ''
+                    }])
+                    if append_new_data(new_row):
+                        st.toast(f"✅ {s_amt:,.0f} {curr_tr} 호텔 외상이 성공적으로 청산되었습니다!", icon="🎉")
+                        time.sleep(0.8); st.rerun()
+
+            elif "이종환전" in ty:
                 with c1:
                     curr_opts_tr = [c for c in available_currs if c not in ["KRW"]]
                     curr_tr = st.selectbox("얻게 되는 통화 (Target)", curr_opts_tr, key="tr_target_curr")
                     tr_target_met = st.selectbox("얻은 통화 보관 자산", [f"트래블카드({curr_tr})", f"현금({curr_tr})"], key="tr_target_met")
                     
-                    if curr_tr == IN_CURR and IN_MULTI == 100: 
-                        t_amt = st.number_input(f"얻은 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
-                    else: 
-                        t_amt = st.number_input(f"얻은 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_target_flt")
+                    if curr_tr == IN_CURR and IN_MULTI == 100: t_amt = st.number_input(f"얻은 금액 ({curr_tr})", min_value=0, step=1000, format="%d", key="tr_target_int")
+                    else: t_amt = st.number_input(f"얻은 금액 ({curr_tr})", min_value=0.0, step=10.0, format="%.2f", key="tr_target_flt")
                 with c2:
                     curr_opts_src = [c for c in available_currs if c not in ["KRW", curr_tr]]
                     curr_src = st.selectbox("지불하는 외화 (Source)", curr_opts_src, key="tr_source_curr")
@@ -2261,10 +2281,8 @@ else:
                         st.info(f"💡 시스템 내 지불 원가: **{est_krw_cost:,.0f} 원**")
                         st.success(f"🎯 획득한 {curr_tr}의 산출 환율: **{target_rate:.5f}**")
                         
-                if st.button("🔄 이종환전 실행 (차감 및 충전 동시기록)", use_container_width=True, type="primary"):
-                    if s_amt <= 0 or t_amt <= 0:
-                        st.warning("금액을 정확히 입력해 주세요."); st.stop()
-                    
+                if st.button("🔄 이종환전 실행", use_container_width=True, type="primary"):
+                    if s_amt <= 0 or t_amt <= 0: st.warning("금액을 정확히 입력해 주세요."); st.stop()
                     fifo_rate = auto_calc_fifo_rate(s_amt, src_met, curr_src)
                     target_rate = (s_amt * fifo_rate) / t_amt if t_amt > 0 else 0
                     
@@ -2276,8 +2294,8 @@ else:
                     row_tgt = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': tgt_cat, 'Description': desc_tgt, 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': src_met, 'IsExpense': 0, 'AppliedRate': target_rate, 'Note': '', 'Receipt_URL': ''}])
                     
                     if append_new_data(pd.concat([row_src, row_tgt], ignore_index=True)): 
-                        st.success("이종 자산 환전 기록이 성공적으로 완료되었습니다!")
-                        time.sleep(1); st.rerun()
+                        st.toast("이종 환전 완료!", icon="✅")
+                        time.sleep(0.8); st.rerun()
 
             elif "이월잔액" in ty:
                 with c1:
@@ -2290,7 +2308,9 @@ else:
                     st.caption(f"💡 시스템 투입 가치: **{(t_amt * applied_tr_rate):,.0f} 원**")
                 if st.button("🚀 이월잔고 현금지갑에 투입", use_container_width=True, type="primary"):
                     new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '이월잔액', 'Description': f"지난여행 잔돈 유입 (-> 현금({curr_tr}))", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': '기타(지난여행)', 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': 'Carry-over Asset', 'Receipt_URL': ''}])
-                    if append_new_data(new_row): st.rerun()
+                    if append_new_data(new_row): 
+                        st.toast("이월 잔고 투입 완료!", icon="✅")
+                        st.rerun()
 
             elif "재환전" in ty:
                 with c1:
@@ -2307,14 +2327,12 @@ else:
                         fx_diff = rcv_krw - fifo_cost
                         if rcv_krw > 0:
                             st.caption(f"적용 매도 환율: {(rcv_krw/s_amt):.4f}")
-                            if fx_diff < -1: st.error(f"📉 환차손(손해) 발생: {abs(fx_diff):,.0f} 원")
-                            elif fx_diff > 1: st.success(f"📈 환차익(이익) 발생: {fx_diff:,.0f} 원")
-                            else: st.success("⚖️ 환차손익 없음")
+                            if fx_diff < -1: st.error(f"📉 환차손(손해): {abs(fx_diff):,.0f} 원")
+                            elif fx_diff > 1: st.success(f"📈 환차익(이익): {fx_diff:,.0f} 원")
                             
-                if st.button("🔄 재환전 실행 (환차손익 분할기록)", use_container_width=True):
+                if st.button("🔄 재환전 실행", use_container_width=True):
                     applied_sell_rate = rcv_krw / s_amt if s_amt > 0 else 0
                     main_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '재환전', 'Description': f"남은 {curr_tr} 재환전 (외화매도)", 'Currency': curr_tr, 'Amount': s_amt, 'PaymentMethod': source_met, 'IsExpense': 0, 'AppliedRate': applied_sell_rate, 'Note': f"원화 {rcv_krw}원 입금", 'Receipt_URL': ''}])
-                    
                     new_rows = [main_row]
                     fx_diff = rcv_krw - (s_amt * auto_calc_fifo_rate(s_amt, source_met, curr_tr)) if s_amt > 0 else 0
                     if abs(fx_diff) >= 1:
@@ -2322,7 +2340,9 @@ else:
                         desc_fx = f"[{curr_tr} 재환전] 환차익" if fx_diff > 0 else f"[{curr_tr} 재환전] 환차손"
                         fx_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '수수료', 'Description': desc_fx, 'Currency': 'KRW', 'Amount': fx_amt, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': 'Auto-FX Diff', 'Receipt_URL': ''}])
                         new_rows.append(fx_row)
-                    if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
+                    if append_new_data(pd.concat(new_rows, ignore_index=True)): 
+                        st.toast("재환전 완료!", icon="✅")
+                        st.rerun()
 
             elif "개인지출" in ty:
                 with c1:
@@ -2331,34 +2351,18 @@ else:
                     s_amt = st.number_input(f"사용 외화 금액 ({curr_tr})", min_value=0.0, step=1.0, format="%.2f", key="tr_sell_flt")
                     source_met = st.selectbox("외화 출처", [f"트래블카드({curr_tr})", f"현금({curr_tr})"], key="tr_sell_met")
                 with c2:
-                    s_desc = st.text_input("상세 용도 (예: 알리익스프레스 결제)", placeholder="여행 경비가 아닌 개인지출 용도 입력", key="tr_sell_desc")
+                    s_desc = st.text_input("상세 용도 (예: 알리 결제)", placeholder="여행 경비가 아닌 개인지출 용도 입력", key="tr_sell_desc")
                     if s_amt > 0:
                         fifo_rate = auto_calc_fifo_rate(s_amt, source_met, curr_tr)
-                        fifo_cost = s_amt * fifo_rate
-                        st.info(f"💡 시스템 내 회수 원가(FIFO): **{fifo_cost:,.0f} 원**")
-                        st.caption(f"적용 환율: {fifo_rate:.4f}")
+                        st.info(f"💡 회수 원가: **{(s_amt * fifo_rate):,.0f} 원**")
                         
-                if st.button("🚀 개인지출 기록하기 (여행비용 제외 및 잔고 차감)", use_container_width=True):
-                    if s_amt <= 0 or not s_desc:
-                        st.warning("금액과 상세 용도를 정확히 입력해 주세요."); st.stop()
-                    
+                if st.button("🚀 개인지출 기록하기", use_container_width=True):
+                    if s_amt <= 0 or not s_desc: st.warning("금액과 용도를 입력하세요."); st.stop()
                     fifo_rate = auto_calc_fifo_rate(s_amt, source_met, curr_tr)
-                    new_row = pd.DataFrame([{
-                        'Date': sel_date.strftime("%Y-%m-%d(%a)"),
-                        'Country': sel_node,
-                        'Category': '개인지출',
-                        'Description': f"[개인지출] {s_desc}",
-                        'Currency': curr_tr,
-                        'Amount': s_amt,
-                        'PaymentMethod': source_met,
-                        'IsExpense': 0,
-                        'AppliedRate': fifo_rate,
-                        'Note': 'Exclude from Travel',
-                        'Receipt_URL': ''
-                    }])
+                    new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '개인지출', 'Description': f"[개인지출] {s_desc}", 'Currency': curr_tr, 'Amount': s_amt, 'PaymentMethod': source_met, 'IsExpense': 0, 'AppliedRate': fifo_rate, 'Note': 'Exclude from Travel', 'Receipt_URL': ''}])
                     if append_new_data(new_row):
-                        st.success("개인지출 기록 완료!")
-                        time.sleep(1); st.rerun()
+                        st.toast("개인지출 기록 완료!", icon="✅")
+                        st.rerun()
             
             else:
                 with c1:
@@ -2370,7 +2374,6 @@ else:
                     if "ATM" in ty:
                         inherited_r = auto_calc_fifo_rate(t_amt, f"트래블카드({curr_tr})", curr_tr)
                         st.info(f"💳 카드 재고 계승 환율: **{inherited_r:.5f}**")
-                        st.success(f"💰 인출로 소모되는 원화 가치: **{(t_amt * inherited_r):,.0f} 원**")
                         applied_tr_rate = inherited_r
                     else:
                         s_cost = st.number_input("소요 원금 (KRW)", min_value=0, step=1, format="%d", key="tr_source_swap")
@@ -2382,15 +2385,15 @@ else:
                 if st.button("🔄 이동 실행", use_container_width=True):
                     dest = f"트래블카드({curr_tr})" if "충전" in ty else f"현금({curr_tr})"
                     source = "원화계좌(한국)" if "원화계좌" in ty else f"트래블카드({curr_tr})"
-                    
                     main_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': ty.split(" ")[0], 'Description': f"{ty.split(' ')[0]} (-> {dest})", 'Currency': curr_tr, 'Amount': t_amt, 'PaymentMethod': source, 'IsExpense': 0, 'AppliedRate': applied_tr_rate, 'Note': '', 'Receipt_URL': ''}])
-                    
                     new_rows = [main_row]
                     if fee_amt > 0:
                         fee_rate = auto_calc_fifo_rate(fee_amt, f"트래블카드({curr_tr})", curr_tr)
                         fee_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': "수수료", 'Description': f"{ty.split(' ')[0]} 수수료", 'Currency': curr_tr, 'Amount': fee_amt, 'PaymentMethod': f"트래블카드({curr_tr})", 'IsExpense': 1, 'AppliedRate': fee_rate, 'Note': '', 'Receipt_URL': ''}])
                         new_rows.append(fee_row)
-                    if append_new_data(pd.concat(new_rows, ignore_index=True)): st.rerun()
+                    if append_new_data(pd.concat(new_rows, ignore_index=True)):
+                        st.toast("이동 완료!", icon="✅")
+                        st.rerun()
                         
         # 6.01.05 | Sub-Form: Refund Inventory Rollback
         elif mode == "환불(취소)":
@@ -2399,7 +2402,6 @@ else:
             with col_r1:
                 curr_opts_rf =[IN_CURR, "KRW", "USD", "EUR"] +[c for c in available_currs if c not in[IN_CURR, "KRW", "USD", "EUR"]]
                 r_curr = st.selectbox("취소된 통화", curr_opts_rf, key="rf_curr")
-                
                 r_met = st.selectbox("돌려받을 지갑",[f"현금({r_curr})", f"트래블카드({r_curr})", "원화계좌(한국)", "원화계좌(현지)"] if r_curr != "KRW" else["원화계좌(한국)", "원화계좌(현지)"], key="rf_met")
                 if r_curr == "KRW" or (r_curr == IN_CURR and IN_MULTI == 100): r_amt = st.number_input("환불 금액", min_value=0, step=1000 if r_curr != "KRW" else 1, format="%d", key="rf_amt_int")
                 else: r_amt = st.number_input("환불 금액", min_value=0.0, step=1.0, format="%.2f", key="rf_amt_flt")
@@ -2409,27 +2411,29 @@ else:
                 
             if st.button("🔙 환불 인벤토리 롤백 실행", use_container_width=True):
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
-                if append_new_data(new_row): st.rerun()
+                if append_new_data(new_row): 
+                    st.toast("환불 롤백 완료!", icon="✅")
+                    st.rerun()
 
-        # 6.01.06 | Sub-Form: Immigration Schedule
+        # 6.01.06 | Sub-Form: Immigration Schedule (귀국 명칭 통일)
         else:
-            st.subheader("✈️ 출입국 일정 기록")
-            io_type = st.radio("구분",["출국", "입국"], horizontal=True, key="io_radio")
+            st.subheader("✈️ 출귀국 일정 기록")
+            io_type = st.radio("구분",["출국", "귀국"], horizontal=True, key="io_radio") # 👈 '입국' -> '귀국' 수정
             io_desc = st.text_input("내용 (메모)", placeholder="편명, 시간 등", key="io_desc_input")
             if st.button("🚀 일정 기록 완료", use_container_width=True):
-                new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': io_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '원화계좌(한국)', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
-                if append_new_data(new_row): st.rerun()
+                new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': io_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
+                if append_new_data(new_row): 
+                    st.toast("일정 기록 완료!", icon="✅")
+                    st.rerun()
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Console Tab 2: Audit History & Viewer (조회 및 내역 수정)
+    # 6.02.00 | Console Tab 2: Audit History & Viewer (조회 및 행 순서 재배열)
     # --------------------------------------------------------------------------
     with tab_his:
-        st.info("💡 **표의 행(Row)을 클릭(터치)하시면 바로 아래에 상세 내역 수정과 영수증 첨부 화면이 펼쳐집니다!**")
+        st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 사후 영수증 AI 스캔이 펼쳐집니다!**")
         viewer_placeholder = st.empty()
 
-        # 6.02.01 | Multi-Dimensional AND Filter Bar (다차원 필터 및 직접 수정 토글)
-        # ➔ 🚀 [Modified] AND 연산 기반 다차원 필터링 레이아웃으로 변경
-        # 세션 스테이트 초기화 및 로드 데이터 기준 동적 카테고리 생성 준비
+        # 6.02.01 | Multi-Dimensional AND Filter Bar
         initial_country = st.session_state.get('his_country', "이번 여행가계부")
         if initial_country == "모든 여행가계부":
             temp_display_df = load_all_trips_data()
@@ -2438,14 +2442,12 @@ else:
             if initial_country != "이번 여행가계부":
                 temp_display_df = temp_display_df[temp_display_df['Country'] == initial_country]
         
-        # 현재 데이터에 들어있는 유니크 카테고리만 동적으로 추출
         if not temp_display_df.empty:
             cat_list = sorted(list(temp_display_df['Category'].dropna().unique()))
             cat_options = ["모든 카테고리"] + cat_list
         else:
             cat_options = ["모든 카테고리"]
 
-        # 4분할 레이아웃 배치
         c_filter, c_cat, c_search, c_tog = st.columns([2.5, 2.5, 3.5, 1.5])
         with c_filter:
             filter_options = ["모든 여행가계부", "이번 여행가계부"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())
@@ -2458,7 +2460,6 @@ else:
             st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
             edit_mode = st.toggle("✏️ 직접 수정", value=False, key="his_edit_toggle")
         
-        # ➔ 🚀 [Modified] 필터 선택에 따른 원본 데이터셋 확보 및 정합성 재계산
         if country_filter == "모든 여행가계부":
             st.warning("⚠️ '모든 여행가계부' 모드에서는 내역 조회만 가능하며, 수정은 불가능합니다.")
             edit_mode = False 
@@ -2468,29 +2469,23 @@ else:
             if country_filter != "이번 여행가계부":
                 display_df = display_df[display_df['Country'] == country_filter]
 
-        # 6.02.02 | Ledger Integrity Auto-Rebuilder Trigger
-        if st.button(f"🔄 '{st.session_state.current_trip}' 가계부 정합성 재계산", use_container_width=True, type="primary"):
-            if save_data(ledger_df):
-                st.success("데이터 정합성 복구 완료!"); time.sleep(1); st.rerun()
-                
-        # 6.02.03 | Interactive Dataframe / Direct Grid Editor (보색 대비 웜앰버+블루 지브라)
+        # 6.02.03 | Interactive Dataframe
         if not display_df.empty: 
-            display_df = display_df.sort_values(by='Date', kind='mergesort').reset_index(drop=True)
             display_df = display_df.reindex(columns=FINAL_COLUMNS)
             link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
             
             if edit_mode:
                 edited_df = st.data_editor(display_df, use_container_width=True, num_rows="dynamic", key="editor_gtl_final", column_config={"Receipt_URL": link_cfg})
-                if not display_df.equals(edited_df) and st.button("💾 데이터베이스 수정사항 저장", use_container_width=True):
-                    if save_data(edited_df): st.rerun()
+                if not display_df.equals(edited_df) and st.button("💾 데이터베이스 직접 수정사항 저장", use_container_width=True, type="primary"):
+                    if save_data(edited_df): 
+                        st.toast("데이터베이스 수정 저장 완료!", icon="✅")
+                        st.rerun()
             else:
                 render_df = display_df.copy()
                 
-                # 1차 필터: 카테고리 AND 조건
                 if cat_filter != "모든 카테고리":
                     render_df = render_df[render_df['Category'] == cat_filter]
                 
-                # 2차 필터: 검색어 AND 조건
                 if search_query.strip():
                     mask = (
                         render_df['Category'].str.contains(search_query, case=False, na=False) | 
@@ -2502,7 +2497,6 @@ else:
                     
                 st.write(f"🔎 검색 결과: {len(render_df)}건")
 
-                # 1. 출국일(dep_dt) 및 입국일(arr_dt) 파싱
                 dep_rows = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
                 korea_dep = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
                 target_dep_row = korea_dep if not korea_dep.empty else dep_rows
@@ -2510,17 +2504,15 @@ else:
                 dep_dt, arr_dt = None, None
                 if not target_dep_row.empty:
                     m_dep = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_dep_row.iloc[0]['Date']))
-                    if m_dep: 
-                        dep_dt = datetime.strptime(m_dep.group(1), "%Y-%m-%d").date()
+                    if m_dep: dep_dt = datetime.strptime(m_dep.group(1), "%Y-%m-%d").date()
 
-                arr_rows = ledger_df[ledger_df['Category'].str.contains('입국', na=False)]
-                korea_arr = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
+                arr_rows = ledger_df[ledger_df['Category'].str.contains('귀국|입국', na=False)]
+                korea_arr = ledger_df[ledger_df['Category'].str.contains('귀국_한국|귀국.*한국|입국_한국|입국.*한국', na=False)]
                 target_arr_row = korea_arr if not korea_arr.empty else arr_rows
                 
                 if not target_arr_row.empty:
                     m_arr = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_arr_row.iloc[-1]['Date']))
-                    if m_arr: 
-                        arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
+                    if m_arr: arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
 
                 unique_dates = sorted(list(set(re.search(r'(\d{4}-\d{2})-(\d{2})', str(d)).group(0) for d in render_df['Date'] if re.search(r'(\d{4}-\d{2})-(\d{2})', str(d)))))
                 date_to_group = {d: i % 2 for i, d in enumerate(unique_dates)}
@@ -2534,12 +2526,11 @@ else:
 
                 def is_real_arrival(cat, cur_d):
                     if not arr_dt: return False
-                    if '입국_한국' in cat: return True
-                    if '입국' in cat and cur_d == arr_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥', '칭다오', '세부', '필리핀']):
+                    if '귀국_한국' in cat or '입국_한국' in cat: return True
+                    if ('귀국' in cat or '입국' in cat) and cur_d == arr_dt and not any(k in cat for k in ['베트남', '일본', '중국', '태국', '미국', '유럽', '다낭', '나트랑', '푸꾸옥', '칭다오', '세부', '필리핀']):
                         return True
                     return False
 
-                # 2. 날짜 포맷터
                 day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                 def format_display_date_se(row):
                     orig_d = str(row['Date']).strip()
@@ -2560,8 +2551,7 @@ else:
                         cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
                         day_kr = day_kr_names[cur_d.weekday()]
                     except:
-                        cur_d = None
-                        day_kr = ""
+                        cur_d, day_kr = None, ""
                         
                     day_str = f"({day_kr})" if day_kr else ""
                     short_d = f"{mm}/{dd}{day_str}"
@@ -2582,13 +2572,11 @@ else:
                 styled_render_df = render_df.copy()
                 styled_render_df['Date'] = styled_render_df.apply(format_display_date_se, axis=1)
 
-                # 3. 단일 국가 여행 시 'Country' 열 자동 숨김
                 trip_nodes = TRIP_CONFIGS.get(st.session_state.current_trip, {}).get("nodes", {})
                 is_single_country = (len(trip_nodes) <= 1) or (styled_render_df['Country'].dropna().nunique() <= 1)
                 if is_single_country and 'Country' in styled_render_df.columns:
                     styled_render_df = styled_render_df.drop(columns=['Country'])
 
-                # 4. [보색 대비 완벽 튜닝] 웜 앰버 배경 + 비비드 블루 글씨 스타일러
                 def style_journey_rows_se(row):
                     cat = str(row.get('Category', '')).strip()
                     orig_d = str(render_df.loc[row.name, 'Date'])
@@ -2597,21 +2585,14 @@ else:
                     pure_date = m.group(0)
                     cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
                     
-                    # (1) [출국일]: 앰버 골드 음영 + 볼드
                     if is_real_departure(cat, cur_d):
                         return ['background-color: rgba(245, 158, 11, 0.28); font-weight: bold; color: #F59E0B;'] * len(row)
-                            
-                    # (2) [귀국일]: 에메랄드 그린 음영 + 볼드
                     if is_real_arrival(cat, cur_d):
                         return ['background-color: rgba(16, 185, 129, 0.28); font-weight: bold; color: #10B981;'] * len(row)
-
-                    # (3) [사전결제]: 차분한 음영
                     if dep_dt:
                         diff = (cur_d - dep_dt).days
-                        if diff < 0:
-                            return ['opacity: 0.7; font-style: italic;'] * len(row)
+                        if diff < 0: return ['opacity: 0.7; font-style: italic;'] * len(row)
 
-                    # (4) [지브라 교대행]: 청색의 보색(은은한 웜 앰버 틴트) 배경 + 선명한 코발트/스카이블루 글씨
                     grp = date_to_group.get(pure_date, 0)
                     if grp == 1:
                         return ['background-color: rgba(249, 115, 22, 0.12); color: #0284C7; font-weight: normal;'] * len(row)
@@ -2620,7 +2601,6 @@ else:
 
                 styled_table = styled_render_df.style.apply(style_journey_rows_se, axis=1)
                 
-                # 숫자 포맷터
                 def smart_num_fmt(v):
                     if pd.isna(v) or not isinstance(v, (int, float)): return v
                     if v == 0: return "0"
@@ -2631,7 +2611,6 @@ else:
                 num_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
                 styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
                 
-                # 5. 테이블 렌더링
                 col_cfg = {
                     "Date": st.column_config.TextColumn("날짜", width=120),
                     "Category": st.column_config.TextColumn("항목", width="small"),
@@ -2646,14 +2625,13 @@ else:
                     on_select="rerun"
                 )
 
-                # 6. 터치된 셀의 행 인덱스 감지
                 selected_idx = None
                 if getattr(df_event.selection, "cells", None) and len(df_event.selection.cells) > 0:
                     selected_idx = df_event.selection.cells[0][0]
                 elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
                     selected_idx = df_event.selection.rows[0]
 
-                # 6.02.04 | Detail Voucher Viewer & Smart KRW Currency Translator
+                # 6.02.04 | Detail Voucher Viewer & Order Arranger (순서 이동 🔼/🔽 탑재)
                 if selected_idx is not None:
                     real_idx = render_df.index[selected_idx] 
                     row_data = display_df.loc[real_idx]
@@ -2662,11 +2640,27 @@ else:
                         st.markdown("---")
                         c_info, c_edit = st.columns([1, 1])
                         
-                        # 6.02.04 | 상세 내역 및 영수증 뷰어 (개별 사진 삭제 버튼 탑재)
                         with c_info:
                             st.subheader("🧾 상세 내역 및 영수증 뷰어")
-                            amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
+                            
+                            # [신설] 같은 날짜 내 행 순서 1칸 위로/아래로 즉시 이동 제어기
+                            c_up, c_down = st.columns(2)
+                            with c_up:
+                                if st.button("🔼 위로 한 칸 이동 (시간순 정렬)", key=f"btn_move_up_{real_idx}", use_container_width=True):
+                                    if real_idx > 0:
+                                        display_df.iloc[real_idx - 1], display_df.iloc[real_idx] = display_df.iloc[real_idx].copy(), display_df.iloc[real_idx - 1].copy()
+                                        if save_data(display_df):
+                                            st.toast("🔼 순서가 위로 이동되었습니다!", icon="✅")
+                                            st.rerun()
+                            with c_down:
+                                if st.button("🔽 아래로 한 칸 이동", key=f"btn_move_down_{real_idx}", use_container_width=True):
+                                    if real_idx < len(display_df) - 1:
+                                        display_df.iloc[real_idx + 1], display_df.iloc[real_idx] = display_df.iloc[real_idx].copy(), display_df.iloc[real_idx + 1].copy()
+                                        if save_data(display_df):
+                                            st.toast("🔽 순서가 아래로 이동되었습니다!", icon="✅")
+                                            st.rerun()
 
+                            amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
                             krw_equivalent = row_data['Amount'] if row_data['Currency'] == 'KRW' else row_data['Amount'] * row_data['AppliedRate']
                             krw_display = f" ➔ <span style='color:#FFD700'>약 {krw_equivalent:,.0f} 원</span>" if row_data['Currency'] != 'KRW' else ""
                             
@@ -2716,7 +2710,6 @@ else:
                                     trans_item = smart_krw_translator(desc_full, rate_for_calc, curr_for_calc)
                                     st.markdown(f"**📝 내역:** {trans_item}", unsafe_allow_html=True)
                                 
-                            # 영수증 사진 표시 및 삭제
                             receipt_data = str(row_data['Receipt_URL']).strip()
                             if receipt_data.startswith("http"):
                                 urls = [u.strip() for u in receipt_data.split(",") if u.strip().startswith("http")]
@@ -2726,20 +2719,18 @@ else:
                                         remaining_urls = [u for i, u in enumerate(urls) if i != idx]
                                         display_df.at[real_idx, 'Receipt_URL'] = ",".join(remaining_urls)
                                         if save_data(display_df):
-                                            st.success(f"사진 #{idx+1}이 성공적으로 삭제되었습니다!")
-                                            time.sleep(0.6)
-                                            st.rerun()
+                                            st.toast(f"사진 #{idx+1} 삭제 완료!", icon="✅")
+                                            time.sleep(0.6); st.rerun()
                             else:
                                 st.info("첨부된 영수증 사진이 없습니다.")
                                 
-                        # 6.02.05 | 인라인 수정기
+                        # 6.02.05 | 인라인 수정기 (호텔 복귀 후 사후 영수증 추가 & AI 스캔 완벽 지원)
                         with c_edit:
-                            st.subheader("✏️ 내역 보강 및 영수증 첨부")
-                            st.caption("세부 내역을 엑셀에서 복사해 붙여넣거나 엔터(줄바꿈)로 여러 개 입력하시면, 왼쪽 뷰어에서 깔끔하게 분리되어 표시됩니다.")
+                            st.subheader("✏️ 내역 보강 & 사후 영수증 AI 스캔")
                             
                             if row_data['Currency'] != 'KRW' and row_data['AppliedRate'] > 0:
                                 with st.expander(f"🧮 타임머신 계산기 (적용 환율: {row_data['AppliedRate']:.4f})", expanded=False):
-                                    mini_amt = st.number_input(f"영수증 속 현지 금액을 입력해 보세요 ({row_data['Currency']})", min_value=0.0, step=10.0, key="mini_calc")
+                                    mini_amt = st.number_input(f"현지 금액 입력 ({row_data['Currency']})", min_value=0.0, step=10.0, key="mini_calc")
                                     if mini_amt > 0:
                                         st.success(f"➔ 당시 원화 가치: **{mini_amt * row_data['AppliedRate']:,.0f} 원**")
                             
@@ -2748,9 +2739,10 @@ else:
                                 st.session_state[desc_key] = str(row_data['Description'])
                                 st.session_state['current_edit_idx'] = real_idx
                                 
-                            new_receipts = st.file_uploader("📸 새 영수증 사진 업로드 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
+                            # [사후 영수증 업로드 & 즉시 AI 번역 스캔]
+                            new_receipts = st.file_uploader("📸 호텔에서 영수증 사후 업로드 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
                             if new_receipts:
-                                if st.button("🤖 첨부된 사진 AI 스캔 (스마트 번역)", use_container_width=True):
+                                if st.button("🤖 첨부된 영수증 AI 스캔 & 내용에 자동 추가", key=f"btn_ai_scan_inline_{real_idx}", use_container_width=True, type="primary"):
                                     with st.spinner(f"AI가 {len(new_receipts)}장의 사진을 분석 중..."):
                                         all_raw_texts = []
                                         for f in new_receipts:
@@ -2759,12 +2751,13 @@ else:
                                         combined_text = "\n---\n".join(all_raw_texts)
                                         smart_text = summarize_receipt_with_gemini(combined_text)
                                         if smart_text:
-                                            st.session_state[desc_key] = st.session_state.get(desc_key, '') + "\n" + smart_text
+                                            st.session_state[desc_key] = (st.session_state.get(desc_key, '') + "\n" + smart_text).strip()
+                                            st.toast("영수증 품목 분석 완료!", icon="🤖")
                                             st.rerun()
 
                             new_desc = st.text_area("📝 세부 내역 (수정/추가)", height=150, key=desc_key)
                             
-                            if st.button("💾 이 내역 업데이트", use_container_width=True):
+                            if st.button("💾 이 내역 업데이트", use_container_width=True, type="primary"):
                                 display_df.at[real_idx, 'Description'] = new_desc
                                 if new_receipts:
                                     with st.spinner(f"📸 {len(new_receipts)}장의 영수증을 클라우드에 전송 중..."):
@@ -2779,7 +2772,9 @@ else:
                                             merged_urls = existing_urls + new_urls
                                             display_df.at[real_idx, 'Receipt_URL'] = ",".join(merged_urls)
                                             
-                                if save_data(display_df): st.success("업데이트 완료!"); time.sleep(1); st.rerun()
+                                if save_data(display_df): 
+                                    st.toast("내역 및 영수증 업데이트 완료!", icon="✅")
+                                    time.sleep(0.8); st.rerun()
                         st.markdown("---")
 
     # --------------------------------------------------------------------------
