@@ -352,31 +352,25 @@ def get_default_rate(curr):
     return fallback_rates.get(curr, 1.0)
 
 # ------------------------------------------------------------------------------
-# 2.02.00 | Media & Vision AI Subsystem (이미지 업로드, OCR, Gemini 번역)
+# 2.02.00 | Media & Vision AI Subsystem (이미지 업로드, OCR, Gemini 지능형 파서)
 # ------------------------------------------------------------------------------
 # 2.02.01 | ImgBB Cloud Media Uploader
-### ⚙️ [Logic: API] ImgBB 영수증 업로드
 def upload_image_to_imgbb(image_file):
     try:
-        # [Fixed] 다중 업로드 및 재사용 시 파일 포인터를 항상 처음으로 되감기
         if hasattr(image_file, "seek"):
             image_file.seek(0)
-            
-        # [Fixed] getvalue() 우선 사용으로 스트림 소모 방지
         img_bytes = image_file.getvalue() if hasattr(image_file, "getvalue") else image_file.read()
-        if not img_bytes:
-            return ""
+        if not img_bytes: return ""
             
         payload = {"key": IMGBB_API_KEY, "image": base64.b64encode(img_bytes).decode("utf-8")}
         res = requests.post("https://api.imgbb.com/1/upload", data=payload, timeout=15)
         if res.status_code == 200: 
-            time.sleep(0.2)  # 연속 업로드 시 API 레이트 리밋 보호
+            time.sleep(0.2)
             return res.json()['data']['url']
     except: pass
     return ""
 
 # 2.02.02 | Google Cloud Vision OCR Engine
-### ⚙️[Logic: AI OCR - Vision] 구글 클라우드 비전 API 텍스트 추출 엔진 (눈)
 def extract_text_from_vision_api(image_bytes):
     try:
         from google.oauth2 import service_account
@@ -416,15 +410,12 @@ def extract_text_from_vision_api(image_bytes):
     except ImportError: return "⚠️ [설정 오류] 'google-cloud-vision' 라이브러리가 없습니다."
     except Exception as e: return f"⚠️ [에러 발생]: {e}"
 
-# 2.02.03 | Gemini LLM Multi-Lingual Receipt Parser
-### ⚙️[Logic: AI LLM - Gemini] [Modified] 영수증 스마트 번역/요약 엔진 (뇌)
+# 2.02.03 | Gemini LLM Multi-Lingual Receipt Parser (식음료/일반 지출 전용)
 def summarize_receipt_with_gemini(raw_text):
     if not raw_text or "⚠️" in raw_text: return raw_text
     try:
         import google.generativeai as genai
-        if "GEMINI_API_KEY" not in st.secrets:
-            return raw_text + "\n\n(⚠️ Gemini API 키가 설정되지 않아 원본을 출력합니다.)"
-        
+        if "GEMINI_API_KEY" not in st.secrets: return raw_text
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         
         prompt = """너는 다국어 영수증 전문 분석가야. 아래 주어진 영수증 텍스트에서 상호명, 주소, 전화번호, 세금(Tax), 날짜, 카드번호, 총액(Total) 등 불필요한 정보는 모두 버리고 오직 '소비한 품목'과 '가격'만 추출해.
@@ -432,33 +423,116 @@ def summarize_receipt_with_gemini(raw_text):
 1. 품목 이름은 무조건 '한국어'로 가장 자연스럽게 번역해 (예: CA PHE SUA DA -> 아이스 연유 커피).
 2. 한국어 품목 이름 다음에 영문 품목이름을 넣어줘 (예: 후시코르트(Fucicort) 연고)
 3. 품목의 주요특징을 요약해서 넣어줘 (예: (피부염/항생제, 15g))
-4. 수량이 2개 이상일 때만 품목 이름 뒤에 '(X개)'라고 표시해 (예: 소고기 쌀국수 (2개) 120,000). 수량이 1개면 적지 마.
-5. 가격 숫자는 베트남, 원화 등은 소수점 없이, 미국, 중국, 유로국가 등은 소수점 2자리까지 표기하고 화폐단위는 영문 3자리로 표기해 (예: 10,000 vnd, 10.00 usd, 10.00 eur)
-6. 각 항목은 '품목명(영문) (특징, 용량) 가격' 형태로 한 줄씩 출력해. (예: 후시코르트(Fucicort) 연고 (피부염/항생제, 15g), 148,000)
-7. 각 항목의 품목 이름에 주요 특징이 포함되어 있으면, 품목은 간단하게 표시하고, 특징을 중복해서 기록하지는 마. (예: 타이거밤(Tiger Balm) 통증 완화 파스 (통증 완화, 7x10cm) (3개) 156,000 vnd 라고 하지 말고, 타이거밤(Tiger Balm) 파스 (통증 완화, 7x10cm) (3개) 156,000 vnd 라고 해.)
-8. 인사말이나 부연 설명은 절대 하지 말고 위 규칙에 맞춘 결과만 딱 출력해.
+4. 수량이 2개 이상일 때만 품목 이름 뒤에 '(X개)'라고 표시해. 수량이 1개면 적지 마.
+5. 가격 숫자는 베트남, 원화 등은 소수점 없이, 미국, 중국, 유로국가 등은 소수점 2자리까지 표기하고 화폐단위는 영문 3자리로 표기해.
+6. 각 항목은 '품목명(영문) (특징, 용량) 가격' 형태로 한 줄씩 출력해.
+7. 인사말이나 부연 설명은 절대 하지 말고 위 규칙에 맞춘 결과만 딱 출력해.
 
 [영수증 텍스트]
 """ + raw_text
 
-        # [Modified] 모델명 버전 호환성 404 에러를 해결하는 다중 Fallback 로직 탑재 (최신 모델 반영)
-        models_to_try =['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-pro-latest']
-        last_error = ""
-        
+        models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-pro-latest']
         for m_name in models_to_try:
             try:
                 model = genai.GenerativeModel(m_name)
                 response = model.generate_content(prompt)
                 if response.text: return response.text.strip()
             except Exception as e:
-                last_error = str(e)
-                # 404(Not Found) 에러면 다음 모델 이름으로 재시도
                 if "404" in str(e) or "not found" in str(e).lower(): continue
-                break # 404가 아닌 다른 에러(키 오류 등)면 중단
-                
-        return raw_text + f"\n\n(⚠️ Gemini 요약 에러: {last_error})"
-    except ImportError: return raw_text + "\n\n(⚠️ google-generativeai 라이브러리가 없어 원본 출력)"
-    except Exception as e: return raw_text + f"\n\n(⚠️ Gemini 요약 에러: {e})"
+                break
+        return raw_text
+    except Exception as e: return raw_text
+
+# 2.02.04 | Gemini Hotel Voucher Intelligent Structure Parser (호텔 바우처 전용 AI 파서)
+def parse_hotel_voucher_with_gemini(raw_text):
+    if not raw_text or "⚠️" in raw_text: return {}
+    try:
+        import google.generativeai as genai
+        import json
+        if "GEMINI_API_KEY" not in st.secrets: return {}
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        
+        prompt = """너는 아고다(Agoda), 부킹닷컴, 호텔스닷컴, 트립닷컴 등 호텔 예약 확인서(바우처) 전문 분석 AI야.
+아래 주어진 바우처 텍스트에서 호텔 예약에 필요한 모든 정보를 찾아내서 오직 JSON 형식으로만 응답해:
+{
+    "platform": "예약 플랫폼명 (예: Agoda, Booking.com, Trip.com 등)",
+    "hotel_name": "호텔 이름 (한글 친화적 명칭 + 영문 포함. 예: 센츄리 리버사이드 호텔 후에 / Century Riverside Hotel Hue)",
+    "checkin_date": "체크인 날짜 (YYYY-MM-DD 형식)",
+    "checkout_date": "체크아웃 날짜 (YYYY-MM-DD 형식)",
+    "nights": 1,
+    "room_detail": "룸타입, 침대 형태, 전망, 조식 포함 여부, 무료 취소 등 핵심 요약 (예: 디럭스 가든뷰 트윈, 2인 조식/무료 취소)",
+    "payment_method": "결제 수단 추론 (네이버페이, 카카오페이, 트래블카드, 원화계좌 등)",
+    "currency": "결제 통화 코드 (KRW, VND, USD, EUR 등)",
+    "amount": 0
+}
+지침:
+1. 부연 설명이나 마크다운 백틱(```json) 없이 순수 JSON 텍스트만 출력해.
+2. 일수(nights)는 체크인과 체크아웃 날짜 차이로 정수로 계산해.
+3. 알 수 없는 필드는 빈 문자열("") 또는 0으로 채워.
+
+[바우처 텍스트]
+""" + raw_text
+
+        models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-pro-latest']
+        for m_name in models_to_try:
+            try:
+                model = genai.GenerativeModel(m_name)
+                response = model.generate_content(prompt)
+                if response.text:
+                    cleaned_json = re.sub(r'```(?:json)?\s*', '', response.text).strip('` \n')
+                    return json.loads(cleaned_json)
+            except Exception as e:
+                if "404" in str(e) or "not found" in str(e).lower(): continue
+                break
+        return {}
+    except: return {}
+
+# 2.02.05 | Gemini Flight e-Ticket Intelligent Structure Parser (항공권 e-티켓 전용 AI 파서)
+def parse_flight_ticket_with_gemini(raw_text):
+    if not raw_text or "⚠️" in raw_text: return {}
+    try:
+        import google.generativeai as genai
+        import json
+        if "GEMINI_API_KEY" not in st.secrets: return {}
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        
+        prompt = """너는 항공권 e-티켓 및 예약 확인서 전문 분석 AI야.
+아래 주어진 텍스트에서 항공 일정 정보를 찾아내서 오직 JSON 형식으로만 응답해:
+{
+    "platform": "예약처 (예: 트립닷컴, 네이버항공, 마이리얼트립 등)",
+    "carrier": "항공사 이름 (예: 비엣젯항공, 에어부산 등)",
+    "route": "노선 도시명 (예: 부산-다낭, 인천-싱가폴-이스탄불)",
+    "trip_type": "왕복 또는 편도",
+    "dep_info": "출국/탑승 편명 및 시각 (예: VJ969, 07:45 - 11:10)",
+    "dep_date": "출국/탑승 날짜 (YYYY-MM-DD 형식)",
+    "ret_info": "귀국 편명 및 시각 (예: VJ968, 23:10 - 06:40)",
+    "ret_date": "귀국 날짜 (YYYY-MM-DD 형식)",
+    "baggage": "위탁수화물 (포함, 미포함, 일부포함 중 선택)",
+    "bag_memo": "수화물 무게 상세 (예: 20kg 무료)",
+    "payment_method": "결제수단 추론 (네이버페이, 원화계좌, 트래블카드 등)",
+    "currency": "결제 통화 코드 (KRW, USD, EUR 등)",
+    "amount": 0
+}
+지침:
+1. 부연 설명 없이 순수 JSON 텍스트만 출력해.
+2. 모르는 항목은 빈 문자열("") 또는 0으로 둬.
+
+[항공권 텍스트]
+""" + raw_text
+
+        models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-pro-latest']
+        for m_name in models_to_try:
+            try:
+                model = genai.GenerativeModel(m_name)
+                response = model.generate_content(prompt)
+                if response.text:
+                    cleaned_json = re.sub(r'```(?:json)?\s*', '', response.text).strip('` \n')
+                    return json.loads(cleaned_json)
+            except Exception as e:
+                if "404" in str(e) or "not found" in str(e).lower(): continue
+                break
+        return {}
+    except: return {}
 
 # ------------------------------------------------------------------------------
 # 2.03.00 | Data Cleansing & ETL Pipeline (데이터 정규화, 로드, 캐시 제어)
@@ -1949,7 +2023,7 @@ else:
     tab_in, tab_his, tab_stats, tab_final = st.tabs(["Data입력", "Data조회", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
-    # 6.01.00 | Console Tab 1: Input Engine (항공권/호텔 전역 AI 영수증 스캔 탑재)
+    # 6.01.00 | Console Tab 1: Input Engine (호텔/항공 폼 완벽 자동 채우기 탑재)
     # --------------------------------------------------------------------------
     with tab_in:
         trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
@@ -2002,8 +2076,16 @@ else:
         node_currs = [node["currency"] for node in trip_nodes.values()]
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
-        # [영수증 업로더 동적 키 관리: 저장 후 사진 자동 비우기]
         if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
+
+        # 날짜 문자열 안전 파싱 헬퍼
+        def safe_parse_date_obj(d_str, fallback):
+            if not d_str: return fallback
+            m = re.search(r'(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})', str(d_str))
+            if m:
+                try: return dt_date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                except: pass
+            return fallback
 
         # ----------------------------------------------------------------------
         # 6.01.01 | Sub-Form: General Expense (일반 지출)
@@ -2035,7 +2117,7 @@ else:
                                 st.rerun()
                                 
             with col_desc: 
-                desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=120, key="exp_desc")
+                desc = st.text_area("📝 내용 (상호명 및 다중 내역)", value=st.session_state.get('exp_desc', ''), placeholder="예: 안바카페 - 소고기버거\n반미정식", height=120, key="exp_desc_input")
                 
             col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
             with col_m1: 
@@ -2102,64 +2184,72 @@ else:
                     time.sleep(0.6); st.rerun()
 
         # ----------------------------------------------------------------------
-        # 6.01.02 | Sub-Form: Flight Integrated Scheduler (항공권 e-티켓 AI 스캔 탑재)
+        # 6.01.02 | Sub-Form: Flight Integrated Scheduler (항공권 e-티켓 AI 폼 자동채우기)
         # ----------------------------------------------------------------------
         elif mode == "🛫 항공권(특수)":
-            st.subheader("✈️ 항공권 및 스케줄 통합 기록 (e-티켓 AI 스캔 지원)")
-            f_trip_type = st.radio("여정 구분", ["왕복", "편도"], horizontal=True)
+            st.subheader("✈️ 항공권 및 스케줄 통합 기록 (e-티켓 AI 자동입력 지원)")
             
-            # [신설] 항공권 e-티켓/영수증 업로더 & AI 스캐너
-            if st.session_state.get('clear_flight_memo', False):
-                st.session_state.flight_memo = ""
-                st.session_state.clear_flight_memo = False
+            # [AI 스캔 데이터 임시 세션 보관소]
+            if 'f_ai_data' not in st.session_state: st.session_state.f_ai_data = {}
 
             col_f_input, col_f_rcpt = st.columns([3, 1.2])
             with col_f_rcpt:
                 uploaded_flight_files = st.file_uploader("📸 e-티켓/예약확인서 첨부", type=['png', 'jpg', 'jpeg'], key=f"flight_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_flight_files:
-                    if st.button("🤖 e-티켓 AI 스캔", key="btn_ai_flight", use_container_width=True, type="primary"):
-                        with st.spinner(f"AI가 {len(uploaded_flight_files)}장의 e-티켓을 분석 중..."):
+                    if st.button("🤖 e-티켓 AI 자동분석 & 폼 채우기", key="btn_ai_flight", use_container_width=True, type="primary"):
+                        with st.spinner(f"AI가 {len(uploaded_flight_files)}장의 e-티켓을 정밀 분석 중..."):
                             all_f_texts = []
                             for f in uploaded_flight_files:
                                 all_f_texts.append(extract_text_from_vision_api(f.getvalue()))
-                            smart_f_text = summarize_receipt_with_gemini("\n---\n".join(all_f_texts))
-                            if smart_f_text:
-                                st.session_state.flight_memo = (st.session_state.get('flight_memo', '') + "\n" + smart_f_text).strip()
-                                st.toast("e-티켓 정보 추출 완료!", icon="🤖")
+                            parsed_flight = parse_flight_ticket_with_gemini("\n---\n".join(all_f_texts))
+                            if parsed_flight:
+                                st.session_state.f_ai_data = parsed_flight
+                                st.toast("✈️ 항공권 정보가 폼에 자동 입력되었습니다!", icon="🎉")
                                 st.rerun()
 
+            f_ai = st.session_state.f_ai_data
             with col_f_input:
+                f_trip_type = st.radio("여정 구분", ["왕복", "편도"], index=0 if f_ai.get('trip_type') != "편도" else 1, horizontal=True)
+                
                 c1, c2, c3 = st.columns(3)
-                with c1: f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 트립닷컴")
-                with c2: f_carrier = st.text_input("2. 항공사", placeholder="예: 비엣젯")
-                with c3: f_route = st.text_input("3. 노선", placeholder="예: 부산-다낭")
+                with c1: f_gw = st.text_input("1. 결제 플랫폼 (필수)", value=f_ai.get('platform', ''), placeholder="예: 트립닷컴, 네이버항공")
+                with c2: f_carrier = st.text_input("2. 항공사", value=f_ai.get('carrier', ''), placeholder="예: 비엣젯항공, 에어부산")
+                with c3: f_route = st.text_input("3. 노선", value=f_ai.get('route', ''), placeholder="예: 부산-다낭, 인천-싱가폴-이스탄불")
 
                 c4, c5 = st.columns(2)
                 with c4:
                     st.info(f"🛫 {'출국' if f_trip_type == '왕복' else '탑승'} 스케줄")
-                    f_dep_info = st.text_input("4. 스케줄 정보", placeholder="예: VJ969, 07:45 - 11:10")
-                    f_dep_date = st.date_input("5. 탑승 날짜", value=sel_date)
+                    f_dep_info = st.text_input("4. 스케줄 정보", value=f_ai.get('dep_info', ''), placeholder="예: VJ969, 07:45 - 11:10")
+                    f_dep_date = st.date_input("5. 탑승 날짜", value=safe_parse_date_obj(f_ai.get('dep_date'), sel_date))
                 with c5:
                     if f_trip_type == "왕복":
                         st.success("🛬 귀국 스케줄")
-                        f_ret_info = st.text_input("6. 귀국편 정보", placeholder="예: VJ968, 23:10 - 06:40 (+1)")
-                        f_ret_date = st.date_input("7. 귀국 날짜", value=sel_date + timedelta(days=7))
+                        f_ret_info = st.text_input("6. 귀국편 정보", value=f_ai.get('ret_info', ''), placeholder="예: VJ968, 23:10 - 06:40 (+1)")
+                        f_ret_date = st.date_input("7. 귀국 날짜", value=safe_parse_date_obj(f_ai.get('ret_date'), sel_date + timedelta(days=7)))
                     else:
                         st.empty(); f_ret_info, f_ret_date = "", None
 
                 c6, c7, c8 = st.columns([1, 1, 1])
-                with c6: f_baggage = st.selectbox("8. 위탁수화물", ["포함", "미포함", "일부포함"])
-                with c7: f_bag_memo = st.text_input("9. 수화물 상세", placeholder="예: 20kg 무료")
-                with c8: f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
+                bag_opts = ["포함", "미포함", "일부포함"]
+                bag_idx = bag_opts.index(f_ai.get('baggage')) if f_ai.get('baggage') in bag_opts else 0
+                with c6: f_baggage = st.selectbox("8. 위탁수화물", bag_opts, index=bag_idx)
+                with c7: f_bag_memo = st.text_input("9. 수화물 상세", value=f_ai.get('bag_memo', ''), placeholder="예: 20kg 무료")
+                
+                asset_opts = ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"]
+                asset_match_idx = 0
+                for idx, a_opt in enumerate(asset_opts):
+                    if any(k in f_ai.get('payment_method', '').lower() for k in a_opt.lower().split('(')[0]): asset_match_idx = idx; break
+                with c8: f_asset = st.selectbox("10. 결제 수단", asset_opts, index=asset_match_idx)
                     
-                f_memo = st.text_input("📝 비고/메모 (AI 스캔 내용 포함)", value=st.session_state.get('flight_memo', ''), key="flight_memo_input", placeholder="예: 좌석 지정 완료 등")
+                f_memo = st.text_input("📝 비고/메모", placeholder="예: 좌석 지정 완료 등")
 
             st.divider()
             c9, c10, c11, c12 = st.columns([1, 2, 1, 1])
             with c9: 
                 curr_opts_flight = ["KRW", "USD", "EUR"] + [c for c in available_currs if c not in ["KRW", "USD", "EUR"]]
-                f_curr = st.selectbox("11. 통화", curr_opts_flight)
-            with c10: f_amt = st.number_input(f"12. 결제 금액({f_curr})", min_value=0.0, step=1.0)
+                curr_f_idx = curr_opts_flight.index(f_ai.get('currency')) if f_ai.get('currency') in curr_opts_flight else 0
+                f_curr = st.selectbox("11. 통화", curr_opts_flight, index=curr_f_idx)
+            with c10: f_amt = st.number_input(f"12. 결제 금액({f_curr})", min_value=0.0, value=float(f_ai.get('amount', 0.0)), step=1.0)
             with c11: f_rate = st.number_input("13. 환율", value=1.0 if f_curr=="KRW" or "네이버" in f_asset else get_default_rate(f_curr), format="%.4f")
             with c12: f_fee = st.number_input("14. 수수료(원)", min_value=0)
 
@@ -2199,52 +2289,60 @@ else:
                 
                 if append_new_data(pd.concat(new_rows, ignore_index=True)):
                     st.toast("🎉 항공권과 일정이 모두 기록되었습니다!", icon="✅")
-                    st.session_state.clear_flight_memo = True
+                    st.session_state.f_ai_data = {}
                     st.session_state.rcpt_key_idx += 1
                     time.sleep(0.8); st.rerun()
 
         # ----------------------------------------------------------------------
-        # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 바우처 AI 스캔 탑재)
+        # 6.01.03 | Sub-Form: Hotel Integrated Booking (바우처 AI 1초 완벽 자동채우기)
         # ----------------------------------------------------------------------
         elif mode == "🏨 호텔(특수)":
-            st.subheader("🏨 호텔 예약 및 체크인·아웃 자동 기록 (바우처 AI 스캔 지원)")
+            st.subheader("🏨 호텔 예약 및 체크인·아웃 자동 기록 (바우처 AI 자동입력 지원)")
             
-            # [신설] 호텔 바우처/영수증 업로더 & AI 스캐너
-            if st.session_state.get('clear_hotel_detail', False):
-                st.session_state.hotel_detail = ""
-                st.session_state.clear_hotel_detail = False
+            # [AI 스캔 데이터 임시 세션 보관소]
+            if 'h_ai_data' not in st.session_state: st.session_state.h_ai_data = {}
 
             col_h_input, col_h_rcpt = st.columns([3, 1.2])
             with col_h_rcpt:
                 uploaded_hotel_files = st.file_uploader("📸 호텔 바우처/영수증 첨부", type=['png', 'jpg', 'jpeg'], key=f"hotel_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_hotel_files:
-                    if st.button("🤖 바우처 AI 스캔", key="btn_ai_hotel", use_container_width=True, type="primary"):
-                        with st.spinner(f"AI가 {len(uploaded_hotel_files)}장의 바우처를 분석 중..."):
+                    if st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel", use_container_width=True, type="primary"):
+                        with st.spinner(f"AI가 {len(uploaded_hotel_files)}장의 바우처를 정밀 분석 중..."):
                             all_h_texts = []
                             for f in uploaded_hotel_files:
                                 all_h_texts.append(extract_text_from_vision_api(f.getvalue()))
-                            smart_h_text = summarize_receipt_with_gemini("\n---\n".join(all_h_texts))
-                            if smart_h_text:
-                                st.session_state.hotel_detail = (st.session_state.get('hotel_detail', '') + "\n" + smart_h_text).strip()
-                                st.toast("호텔 바우처 정보 추출 완료!", icon="🤖")
+                            parsed_hotel = parse_hotel_voucher_with_gemini("\n---\n".join(all_h_texts))
+                            if parsed_hotel:
+                                st.session_state.h_ai_data = parsed_hotel
+                                st.toast("🏨 호텔 바우처 정보가 폼에 자동 입력되었습니다!", icon="🎉")
                                 st.rerun()
 
+            h_ai = st.session_state.h_ai_data
             with col_h_input:
                 c1, c2 = st.columns(2)
                 with c1:
-                    h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com")
-                    h_name = st.text_input("2. 호텔명", placeholder="예: 사누바 다낭 호텔")
-                    h_checkin = st.date_input("3. 체크인 날짜", value=sel_date)
-                    h_asset = st.selectbox("4. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
+                    h_gw = st.text_input("1. 결제 플랫폼 (필수)", value=h_ai.get('platform', 'Agoda'), placeholder="예: Agoda, Booking.com")
+                    h_name = st.text_input("2. 호텔명", value=h_ai.get('hotel_name', ''), placeholder="예: 센츄리 리버사이드 호텔 후에")
+                    h_checkin = st.date_input("3. 체크인 날짜", value=safe_parse_date_obj(h_ai.get('checkin_date'), sel_date))
+                    
+                    hotel_assets = ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"]
+                    h_asset_idx = 0
+                    for idx, a_opt in enumerate(hotel_assets):
+                        if any(k in h_ai.get('payment_method', '').lower() for k in a_opt.lower().split('(')[0]): h_asset_idx = idx; break
+                    h_asset = st.selectbox("4. 결제 수단", hotel_assets, index=h_asset_idx)
                 with c2:
-                    h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1)
-                    h_checkout = h_checkin + timedelta(days=h_nights)
-                    st.info(f"📅 체크아웃 예정일: **{h_checkout.strftime('%Y-%m-%d')}** ({h_nights}박)")
-                    h_detail = st.text_area("6. 내용 (룸타입/특징/AI스캔)", value=st.session_state.get('hotel_detail', ''), placeholder="예: 디럭스 더블, 조식포함 등", height=68, key="hotel_detail_input")
-                    h_curr = st.selectbox("7. 결제 통화", ["KRW", "USD", "EUR", "VND", "PHP", "CNY", "TRY"], key="h_curr")
+                    h_nights_val = int(h_ai.get('nights', 1)) if h_ai.get('nights') else 1
+                    h_nights = st.number_input("5. 숙박 일수", min_value=1, value=max(1, h_nights_val), step=1)
+                    h_checkout_calc = safe_parse_date_obj(h_ai.get('checkout_date'), h_checkin + timedelta(days=h_nights))
+                    st.info(f"📅 체크아웃 예정일: **{h_checkout_calc.strftime('%Y-%m-%d')}** ({h_nights}박)")
+                    h_detail = st.text_area("6. 내용 (룸타입/특징/AI스캔)", value=h_ai.get('room_detail', ''), placeholder="예: 디럭스 더블, 조식포함 등", height=68, key="hotel_detail_input")
+                    
+                    h_curr_opts = ["KRW", "USD", "EUR", "VND", "PHP", "CNY", "TRY"]
+                    h_curr_idx = h_curr_opts.index(h_ai.get('currency')) if h_ai.get('currency') in h_curr_opts else 0
+                    h_curr = st.selectbox("7. 결제 통화", h_curr_opts, index=h_curr_idx, key="h_curr")
 
             c3, c4, c5 = st.columns(3)
-            with c3: h_amt = st.number_input(f"8. 결제 금액({h_curr})", min_value=0.0, step=1.0)
+            with c3: h_amt = st.number_input(f"8. 결제 금액({h_curr})", min_value=0.0, value=float(h_ai.get('amount', 0.0)), step=1.0)
             with c4: h_rate = st.number_input("9. 적용 환율", value=1.0 if h_curr=="KRW" or "네이버" in h_asset else get_default_rate(h_curr), format="%.4f")
             with c5: h_fee = st.number_input("10. 환율 수수료(원)", min_value=0)
 
@@ -2263,19 +2361,19 @@ else:
                             if u: u_list.append(u)
                         final_hotel_receipts = ",".join(u_list)
                     
-                full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
+                full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout_calc.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
                 
-                hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
+                hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{f_fee}원" if h_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
                 
                 checkin_desc = f"🏨 {h_name} 체크인 ({h_nights}박)"
                 checkin_row = pd.DataFrame([{'Date': h_checkin.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크인', 'Description': checkin_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkin', 'Receipt_URL': ''}])
                 
                 checkout_desc = f"🏨 {h_name} 체크아웃"
-                checkout_row = pd.DataFrame([{'Date': h_checkout.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크아웃', 'Description': checkout_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkout', 'Receipt_URL': ''}])
+                checkout_row = pd.DataFrame([{'Date': h_checkout_calc.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크아웃', 'Description': checkout_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkout', 'Receipt_URL': ''}])
                 
                 if append_new_data(pd.concat([hotel_pay_row, checkin_row, checkout_row], ignore_index=True)):
                     st.toast(f"🎉 '{h_name}' 예약 및 체크인/아웃 일정이 자동 생성되었습니다!", icon="✅")
-                    st.session_state.clear_hotel_detail = True
+                    st.session_state.h_ai_data = {}
                     st.session_state.rcpt_key_idx += 1
                     time.sleep(0.8); st.rerun()
                     
