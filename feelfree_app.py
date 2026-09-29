@@ -1949,7 +1949,7 @@ else:
     tab_in, tab_his, tab_stats, tab_final = st.tabs(["Data입력", "Data조회", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
-    # 6.01.00 | Console Tab 1: Input Engine (호텔 체크인/아웃 자동생성 & 폼 리셋)
+    # 6.01.00 | Console Tab 1: Input Engine (항공권/호텔 전역 AI 영수증 스캔 탑재)
     # --------------------------------------------------------------------------
     with tab_in:
         trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
@@ -2002,24 +2002,27 @@ else:
         node_currs = [node["currency"] for node in trip_nodes.values()]
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
-        # 6.01.01 | Sub-Form: General Expense
+        # [영수증 업로더 동적 키 관리: 저장 후 사진 자동 비우기]
+        if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
+
+        # ----------------------------------------------------------------------
+        # 6.01.01 | Sub-Form: General Expense (일반 지출)
+        # ----------------------------------------------------------------------
         if mode == "일반 지출":        
             def_index = EXPENSE_CATS.index(st.session_state.last_cat_name) if st.session_state.last_cat_name in EXPENSE_CATS else 0
             cat = st.radio("항목 선택", EXPENSE_CATS, index=def_index, horizontal=True, key="exp_cat")
             st.session_state.last_cat_name = cat
             
-            # [영수증 업로더 동적 키 관리: 저장 후 사진 자동 비우기]
-            if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
             if st.session_state.get('clear_exp_desc', False):
                 st.session_state.exp_desc = ""
                 st.session_state.clear_exp_desc = False
                 
-            col_desc, col_receipt = st.columns([3, 1])
+            col_desc, col_receipt = st.columns([3, 1.2])
             
             with col_receipt: 
                 uploaded_files = st.file_uploader("📸 영수증 첨부 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
-                    if st.button("🤖 영수증 AI 스캔 (통합 번역)", use_container_width=True):
+                    if st.button("🤖 영수증 AI 스캔 (통합 번역)", use_container_width=True, type="primary"):
                         with st.spinner(f"AI가 {len(uploaded_files)}장의 사진을 분석 중..."):
                             all_raw_texts = []
                             for file in uploaded_files:
@@ -2095,40 +2098,61 @@ else:
                 if append_new_data(new_row): 
                     st.toast("🎉 지출이 성공적으로 기록되었습니다!", icon="✅")
                     st.session_state.clear_exp_desc = True
-                    st.session_state.rcpt_key_idx += 1 # 👈 업로드된 사진 목록 자동 리셋!
-                    time.sleep(0.6)
-                    st.rerun()
+                    st.session_state.rcpt_key_idx += 1
+                    time.sleep(0.6); st.rerun()
 
-        # 6.01.02 | Sub-Form: Flight Integrated Scheduler (귀국 명칭 통일)
+        # ----------------------------------------------------------------------
+        # 6.01.02 | Sub-Form: Flight Integrated Scheduler (항공권 e-티켓 AI 스캔 탑재)
+        # ----------------------------------------------------------------------
         elif mode == "🛫 항공권(특수)":
-            st.subheader("✈️ 항공권 및 스케줄 통합 기록")
+            st.subheader("✈️ 항공권 및 스케줄 통합 기록 (e-티켓 AI 스캔 지원)")
             f_trip_type = st.radio("여정 구분", ["왕복", "편도"], horizontal=True)
             
-            c1, c2, c3 = st.columns(3)
-            with c1: f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 트립닷컴")
-            with c2: f_carrier = st.text_input("2. 항공사", placeholder="예: 비엣젯")
-            with c3: f_route = st.text_input("3. 노선", placeholder="예: 부산-다낭")
+            # [신설] 항공권 e-티켓/영수증 업로더 & AI 스캐너
+            if st.session_state.get('clear_flight_memo', False):
+                st.session_state.flight_memo = ""
+                st.session_state.clear_flight_memo = False
 
-            c4, c5 = st.columns(2)
-            with c4:
-                st.info(f"🛫 {'출국' if f_trip_type == '왕복' else '탑승'} 스케줄")
-                f_dep_info = st.text_input("4. 스케줄 정보", placeholder="예: BX773, 20:50 - 23:50")
-                f_dep_date = st.date_input("5. 탑승 날짜", value=sel_date)
-            with c5:
-                if f_trip_type == "왕복":
-                    st.success("🛬 귀국 스케줄")
-                    f_ret_info = st.text_input("6. 귀국편 정보", placeholder="예: BX774, 00:50 - 07:00")
-                    f_ret_date = st.date_input("7. 귀국 날짜", value=sel_date + timedelta(days=7))
-                else:
-                    st.empty()
-                    f_ret_info, f_ret_date = "", None
+            col_f_input, col_f_rcpt = st.columns([3, 1.2])
+            with col_f_rcpt:
+                uploaded_flight_files = st.file_uploader("📸 e-티켓/예약확인서 첨부", type=['png', 'jpg', 'jpeg'], key=f"flight_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
+                if uploaded_flight_files:
+                    if st.button("🤖 e-티켓 AI 스캔", key="btn_ai_flight", use_container_width=True, type="primary"):
+                        with st.spinner(f"AI가 {len(uploaded_flight_files)}장의 e-티켓을 분석 중..."):
+                            all_f_texts = []
+                            for f in uploaded_flight_files:
+                                all_f_texts.append(extract_text_from_vision_api(f.getvalue()))
+                            smart_f_text = summarize_receipt_with_gemini("\n---\n".join(all_f_texts))
+                            if smart_f_text:
+                                st.session_state.flight_memo = (st.session_state.get('flight_memo', '') + "\n" + smart_f_text).strip()
+                                st.toast("e-티켓 정보 추출 완료!", icon="🤖")
+                                st.rerun()
 
-            c6, c7, c8 = st.columns([1, 1, 1])
-            with c6: f_baggage = st.selectbox("8. 위탁수화물", ["포함", "미포함", "일부포함"])
-            with c7: f_bag_memo = st.text_input("9. 수화물 상세", placeholder="예: 20kg 무료")
-            with c8: f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
-                
-            f_memo = st.text_input("📝 비고/메모", placeholder="예: 좌석 지정 완료")
+            with col_f_input:
+                c1, c2, c3 = st.columns(3)
+                with c1: f_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: 트립닷컴")
+                with c2: f_carrier = st.text_input("2. 항공사", placeholder="예: 비엣젯")
+                with c3: f_route = st.text_input("3. 노선", placeholder="예: 부산-다낭")
+
+                c4, c5 = st.columns(2)
+                with c4:
+                    st.info(f"🛫 {'출국' if f_trip_type == '왕복' else '탑승'} 스케줄")
+                    f_dep_info = st.text_input("4. 스케줄 정보", placeholder="예: VJ969, 07:45 - 11:10")
+                    f_dep_date = st.date_input("5. 탑승 날짜", value=sel_date)
+                with c5:
+                    if f_trip_type == "왕복":
+                        st.success("🛬 귀국 스케줄")
+                        f_ret_info = st.text_input("6. 귀국편 정보", placeholder="예: VJ968, 23:10 - 06:40 (+1)")
+                        f_ret_date = st.date_input("7. 귀국 날짜", value=sel_date + timedelta(days=7))
+                    else:
+                        st.empty(); f_ret_info, f_ret_date = "", None
+
+                c6, c7, c8 = st.columns([1, 1, 1])
+                with c6: f_baggage = st.selectbox("8. 위탁수화물", ["포함", "미포함", "일부포함"])
+                with c7: f_bag_memo = st.text_input("9. 수화물 상세", placeholder="예: 20kg 무료")
+                with c8: f_asset = st.selectbox("10. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
+                    
+                f_memo = st.text_input("📝 비고/메모 (AI 스캔 내용 포함)", value=st.session_state.get('flight_memo', ''), key="flight_memo_input", placeholder="예: 좌석 지정 완료 등")
 
             st.divider()
             c9, c10, c11, c12 = st.columns([1, 2, 1, 1])
@@ -2141,50 +2165,83 @@ else:
 
             btn_label = "🚀 항공권 및 출귀국 일정(왕복) 동시 기록" if f_trip_type == "왕복" else "🚀 항공권 및 편도 일정 동시 기록"
             if st.button(btn_label, use_container_width=True, type="primary"):
-                if not f_gw or not f_route:
-                    st.warning("결제 플랫폼과 노선 정보는 필수입니다."); st.stop()
+                if not f_gw or not f_route: st.warning("결제 플랫폼과 노선 정보는 필수입니다."); st.stop()
                 
                 clean_asset = f_asset.split('(')[0].strip()
                 if "트래블카드" in f_asset: clean_asset = f"트래블카드({f_curr})"
+
+                final_flight_receipts = ""
+                if uploaded_flight_files:
+                    with st.spinner("📸 e-티켓 영수증 클라우드 전송 중..."):
+                        u_list = []
+                        for f in uploaded_flight_files:
+                            u = upload_image_to_imgbb(f)
+                            if u: u_list.append(u)
+                        final_flight_receipts = ",".join(u_list)
 
                 route_str = f" | 출국:{f_dep_info}" if f_dep_info else ""
                 ret_str = f" | 귀국:{f_ret_info}" if f_trip_type == "왕복" and f_ret_info else ""
                 memo_str = f" | 메모:{f_memo}" if f_memo else ""
                 
                 full_desc = f"[{f_gw}+{clean_asset}] {f_route}({f_carrier}){route_str}{ret_str} | 수화물:{f_baggage}({f_bag_memo}){memo_str}"
-                flight_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '항공권', 'Description': full_desc, 'Currency': f_curr, 'Amount': f_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': f_rate, 'Note': f"수수료:{f_fee}원" if f_fee > 0 else ""}])
+                flight_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '항공권', 'Description': full_desc, 'Currency': f_curr, 'Amount': f_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': f_rate, 'Note': f"수수료:{f_fee}원" if f_fee > 0 else "", 'Receipt_URL': final_flight_receipts}])
                 
                 new_rows = [flight_row]
-                
                 if f_dep_info:
                     dep_desc = f"🛫 {f_route} {'출국' if f_trip_type == '왕복' else '탑승'} ({f_dep_info})"
-                    dep_row = pd.DataFrame([{'Date': f_dep_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '출국' if f_trip_type == '왕복' else '항공스케줄', 'Description': dep_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
+                    dep_row = pd.DataFrame([{'Date': f_dep_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '출국' if f_trip_type == '왕복' else '항공스케줄', 'Description': dep_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created', 'Receipt_URL': ''}])
                     new_rows.append(dep_row)
                     
                 if f_trip_type == "왕복" and f_ret_info:
                     arr_desc = f"🛬 {f_route} 귀국 ({f_ret_info})"
-                    arr_row = pd.DataFrame([{'Date': f_ret_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '귀국', 'Description': arr_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created'}])
+                    arr_row = pd.DataFrame([{'Date': f_ret_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '귀국', 'Description': arr_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-created', 'Receipt_URL': ''}])
                     new_rows.append(arr_row)
                 
                 if append_new_data(pd.concat(new_rows, ignore_index=True)):
-                    st.toast("🎉 항공권과 출귀국 일정이 모두 기록되었습니다!", icon="✅")
+                    st.toast("🎉 항공권과 일정이 모두 기록되었습니다!", icon="✅")
+                    st.session_state.clear_flight_memo = True
+                    st.session_state.rcpt_key_idx += 1
                     time.sleep(0.8); st.rerun()
-                    
-        # 6.01.03 | Sub-Form: Hotel Integrated Booking (체크인/아웃 자동생성 완벽 복원)
+
+        # ----------------------------------------------------------------------
+        # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 바우처 AI 스캔 탑재)
+        # ----------------------------------------------------------------------
         elif mode == "🏨 호텔(특수)":
-            st.subheader("🏨 호텔/숙소 예약 및 체크인·아웃 자동 기록")
-            c1, c2 = st.columns(2)
-            with c1:
-                h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com")
-                h_name = st.text_input("2. 호텔명", placeholder="예: 사누바 다낭 호텔")
-                h_checkin = st.date_input("3. 체크인 날짜", value=sel_date)
-                h_asset = st.selectbox("4. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
-            with c2:
-                h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1)
-                h_checkout = h_checkin + timedelta(days=h_nights)
-                st.info(f"📅 체크아웃 예정일: **{h_checkout.strftime('%Y-%m-%d')}** ({h_nights}박)")
-                h_detail = st.text_area("6. 내용 (룸타입/특징)", placeholder="예: 디럭스 더블, 시티뷰, 조식포함", height=68)
-                h_curr = st.selectbox("7. 결제 통화", ["KRW", "USD", "EUR", "VND", "PHP", "CNY", "TRY"], key="h_curr")
+            st.subheader("🏨 호텔 예약 및 체크인·아웃 자동 기록 (바우처 AI 스캔 지원)")
+            
+            # [신설] 호텔 바우처/영수증 업로더 & AI 스캐너
+            if st.session_state.get('clear_hotel_detail', False):
+                st.session_state.hotel_detail = ""
+                st.session_state.clear_hotel_detail = False
+
+            col_h_input, col_h_rcpt = st.columns([3, 1.2])
+            with col_h_rcpt:
+                uploaded_hotel_files = st.file_uploader("📸 호텔 바우처/영수증 첨부", type=['png', 'jpg', 'jpeg'], key=f"hotel_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
+                if uploaded_hotel_files:
+                    if st.button("🤖 바우처 AI 스캔", key="btn_ai_hotel", use_container_width=True, type="primary"):
+                        with st.spinner(f"AI가 {len(uploaded_hotel_files)}장의 바우처를 분석 중..."):
+                            all_h_texts = []
+                            for f in uploaded_hotel_files:
+                                all_h_texts.append(extract_text_from_vision_api(f.getvalue()))
+                            smart_h_text = summarize_receipt_with_gemini("\n---\n".join(all_h_texts))
+                            if smart_h_text:
+                                st.session_state.hotel_detail = (st.session_state.get('hotel_detail', '') + "\n" + smart_h_text).strip()
+                                st.toast("호텔 바우처 정보 추출 완료!", icon="🤖")
+                                st.rerun()
+
+            with col_h_input:
+                c1, c2 = st.columns(2)
+                with c1:
+                    h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com")
+                    h_name = st.text_input("2. 호텔명", placeholder="예: 사누바 다낭 호텔")
+                    h_checkin = st.date_input("3. 체크인 날짜", value=sel_date)
+                    h_asset = st.selectbox("4. 결제 수단", ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"])
+                with c2:
+                    h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1)
+                    h_checkout = h_checkin + timedelta(days=h_nights)
+                    st.info(f"📅 체크아웃 예정일: **{h_checkout.strftime('%Y-%m-%d')}** ({h_nights}박)")
+                    h_detail = st.text_area("6. 내용 (룸타입/특징/AI스캔)", value=st.session_state.get('hotel_detail', ''), placeholder="예: 디럭스 더블, 조식포함 등", height=68, key="hotel_detail_input")
+                    h_curr = st.selectbox("7. 결제 통화", ["KRW", "USD", "EUR", "VND", "PHP", "CNY", "TRY"], key="h_curr")
 
             c3, c4, c5 = st.columns(3)
             with c3: h_amt = st.number_input(f"8. 결제 금액({h_curr})", min_value=0.0, step=1.0)
@@ -2196,29 +2253,39 @@ else:
                 
                 clean_asset = h_asset.split('(')[0].strip()
                 if "트래블카드" in h_asset: clean_asset = f"트래블카드({h_curr})"
+
+                final_hotel_receipts = ""
+                if uploaded_hotel_files:
+                    with st.spinner("📸 호텔 바우처 영수증 클라우드 전송 중..."):
+                        u_list = []
+                        for f in uploaded_hotel_files:
+                            u = upload_image_to_imgbb(f)
+                            if u: u_list.append(u)
+                        final_hotel_receipts = ",".join(u_list)
                     
                 full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
                 
-                # 1. 호텔 결제 지출 행
-                hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else ""}])
+                hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
                 
-                # 2. [자동생성] 체크인 일정 행 (Amount = 0)
                 checkin_desc = f"🏨 {h_name} 체크인 ({h_nights}박)"
-                checkin_row = pd.DataFrame([{'Date': h_checkin.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크인', 'Description': checkin_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkin'}])
+                checkin_row = pd.DataFrame([{'Date': h_checkin.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크인', 'Description': checkin_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkin', 'Receipt_URL': ''}])
                 
-                # 3. [자동생성] 체크아웃 일정 행 (Amount = 0)
                 checkout_desc = f"🏨 {h_name} 체크아웃"
-                checkout_row = pd.DataFrame([{'Date': h_checkout.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크아웃', 'Description': checkout_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkout'}])
+                checkout_row = pd.DataFrame([{'Date': h_checkout.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크아웃', 'Description': checkout_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkout', 'Receipt_URL': ''}])
                 
                 if append_new_data(pd.concat([hotel_pay_row, checkin_row, checkout_row], ignore_index=True)):
                     st.toast(f"🎉 '{h_name}' 예약 및 체크인/아웃 일정이 자동 생성되었습니다!", icon="✅")
+                    st.session_state.clear_hotel_detail = True
+                    st.session_state.rcpt_key_idx += 1
                     time.sleep(0.8); st.rerun()
                     
-        # 6.01.04 | Sub-Form: Asset Transfer & Dual FX Swap (호텔외상 청산 상환 옵션 강화)
+        # ----------------------------------------------------------------------
+        # 6.01.04 | Sub-Form: Asset Transfer & Dual FX Swap
+        # ----------------------------------------------------------------------
         elif mode == "자산 이동":
             st.subheader("🔁 자산 이동 / 환전 / 외상 청산")
             ty = st.selectbox("유형",[
-                "외상 청산 (호텔외상 -> 현금/카드 상환)", # 👈 호텔 외상 청산 1순위 배치!
+                "외상 청산 (호텔외상 -> 현금/카드 상환)", 
                 "이월잔액 (지난여행 -> 현금잔액)", 
                 "직접환전 (원화계좌 -> 로컬현금)", 
                 "이종환전 (외화 -> 타국 외화)", 
@@ -2229,7 +2296,6 @@ else:
             ], key="tr_type")
             c1, c2 = st.columns(2)
             
-            # [신설] 외상 청산 전용 처리기
             if "외상 청산" in ty:
                 with c1:
                     curr_opts_tr = [IN_CURR, "USD", "EUR"] + [c for c in available_currs if c not in [IN_CURR, "USD", "EUR", "KRW"]]
@@ -2246,7 +2312,7 @@ else:
                     new_row = pd.DataFrame([{
                         'Date': sel_date.strftime("%Y-%m-%d(%a)"),
                         'Country': sel_node,
-                        'Category': '상환', # 👈 상환 카테고리로 기록되어 미결제 외상 0원 처리!
+                        'Category': '상환',
                         'Description': r_desc,
                         'Currency': curr_tr,
                         'Amount': s_amt,
@@ -2257,7 +2323,7 @@ else:
                         'Receipt_URL': ''
                     }])
                     if append_new_data(new_row):
-                        st.toast(f"✅ {s_amt:,.0f} {curr_tr} 호텔 외상이 성공적으로 청산되었습니다!", icon="🎉")
+                        st.toast(f"✅ {s_amt:,.0f} {curr_tr} 외상 청산 완료!", icon="🎉")
                         time.sleep(0.8); st.rerun()
 
             elif "이종환전" in ty:
@@ -2395,7 +2461,9 @@ else:
                         st.toast("이동 완료!", icon="✅")
                         st.rerun()
                         
+        # ----------------------------------------------------------------------
         # 6.01.05 | Sub-Form: Refund Inventory Rollback
+        # ----------------------------------------------------------------------
         elif mode == "환불(취소)":
             st.subheader("🔙 결제 취소 및 환불 (Rollback)")
             col_r1, col_r2 = st.columns(2)
@@ -2415,10 +2483,12 @@ else:
                     st.toast("환불 롤백 완료!", icon="✅")
                     st.rerun()
 
-        # 6.01.06 | Sub-Form: Immigration Schedule (귀국 명칭 통일)
+        # ----------------------------------------------------------------------
+        # 6.01.06 | Sub-Form: Immigration Schedule
+        # ----------------------------------------------------------------------
         else:
             st.subheader("✈️ 출귀국 일정 기록")
-            io_type = st.radio("구분",["출국", "귀국"], horizontal=True, key="io_radio") # 👈 '입국' -> '귀국' 수정
+            io_type = st.radio("구분",["출국", "귀국"], horizontal=True, key="io_radio")
             io_desc = st.text_input("내용 (메모)", placeholder="편명, 시간 등", key="io_desc_input")
             if st.button("🚀 일정 기록 완료", use_container_width=True):
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': io_type, 'Description': io_desc, 'Currency': 'KRW', 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 1, 'AppliedRate': 1.0, 'Note': '', 'Receipt_URL': ''}])
