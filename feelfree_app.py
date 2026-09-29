@@ -352,15 +352,25 @@ def get_default_rate(curr):
     return fallback_rates.get(curr, 1.0)
 
 # ------------------------------------------------------------------------------
-# 2.02.00 | Media & Vision AI Subsystem (이미지 업로드, OCR, Gemini 지능형 파서)
+# 2.02.00 | Media & Vision AI Subsystem (이미지/PDF 업로드, OCR, Gemini 지능형 파서)
 # ------------------------------------------------------------------------------
-# 2.02.01 | ImgBB Cloud Media Uploader
+# 2.02.01 | ImgBB Cloud Media Uploader (PDF 및 이미지 통합 업로더)
 def upload_image_to_imgbb(image_file):
     try:
         if hasattr(image_file, "seek"):
             image_file.seek(0)
         img_bytes = image_file.getvalue() if hasattr(image_file, "getvalue") else image_file.read()
         if not img_bytes: return ""
+        
+        f_name = getattr(image_file, 'name', '').lower()
+        if f_name.endswith('.pdf') or img_bytes.startswith(b"%PDF"):
+            try:
+                import fitz
+                doc = fitz.open(stream=img_bytes, filetype="pdf")
+                if len(doc) > 0:
+                    pix = doc[0].get_pixmap(dpi=150)
+                    img_bytes = pix.tobytes("png")
+            except: pass
             
         payload = {"key": IMGBB_API_KEY, "image": base64.b64encode(img_bytes).decode("utf-8")}
         res = requests.post("https://api.imgbb.com/1/upload", data=payload, timeout=15)
@@ -410,7 +420,49 @@ def extract_text_from_vision_api(image_bytes):
     except ImportError: return "⚠️ [설정 오류] 'google-cloud-vision' 라이브러리가 없습니다."
     except Exception as e: return f"⚠️ [에러 발생]: {e}"
 
-# 2.02.03 | Gemini LLM Multi-Lingual Receipt Parser (식음료/일반 지출 전용)
+# 2.02.03 | Universal Multi-Format Document Text Extractor (PDF/이미지 통합 분석)
+def extract_text_from_file_or_image(file_bytes, filename=""):
+    if not file_bytes: return ""
+    is_pdf = filename.lower().endswith(".pdf") or file_bytes.startswith(b"%PDF")
+    
+    if is_pdf:
+        # 1. pypdf/fitz를 통한 디지털 텍스트 초고속 추출
+        try:
+            import io, pypdf
+            reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+            extracted_pages = [page.extract_text() for page in reader.pages if page.extract_text()]
+            pdf_text = "\n".join(extracted_pages).strip()
+            if len(pdf_text) > 20: return pdf_text
+        except: pass
+        
+        try:
+            import fitz
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            pdf_text = "\n".join([page.get_text() for page in doc if page.get_text()]).strip()
+            if len(pdf_text) > 20: return pdf_text
+        except: pass
+
+        # 2. Gemini 네이티브 PDF 멀티모달 직접 분석
+        try:
+            import google.generativeai as genai
+            if "GEMINI_API_KEY" in st.secrets:
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                for m_name in ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest']:
+                    try:
+                        model = genai.GenerativeModel(m_name)
+                        res = model.generate_content([
+                            {"mime_type": "application/pdf", "data": file_bytes},
+                            "이 영수증/바우처/문서에 포함된 모든 텍스트 내용을 요약하지 말고 있는 그대로 원문 텍스트로 추출해줘."
+                        ])
+                        if res.text and len(res.text.strip()) > 10:
+                            return res.text.strip()
+                    except: continue
+        except: pass
+
+    # 3. 일반 이미지 파일은 Cloud Vision OCR 실행
+    return extract_text_from_vision_api(file_bytes)
+
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (식음료/일반 지출)
 def summarize_receipt_with_gemini(raw_text):
     if not raw_text or "⚠️" in raw_text: return raw_text
     try:
@@ -443,7 +495,7 @@ def summarize_receipt_with_gemini(raw_text):
         return raw_text
     except Exception as e: return raw_text
 
-# 2.02.04 | Gemini Hotel Voucher Intelligent Structure Parser (호텔 바우처 전용 AI 파서)
+# 2.02.05 | Gemini Hotel Voucher Intelligent Structure Parser (호텔 바우처 파서)
 def parse_hotel_voucher_with_gemini(raw_text):
     if not raw_text or "⚠️" in raw_text: return {}
     try:
@@ -466,7 +518,7 @@ def parse_hotel_voucher_with_gemini(raw_text):
     "amount": 0
 }
 지침:
-1. 부연 설명이나 마크다운 백틱(```json) 없이 순수 JSON 텍스트만 출력해.
+1. 부연 설명 없이 순수 JSON 텍스트만 출력해.
 2. 일수(nights)는 체크인과 체크아웃 날짜 차이로 정수로 계산해.
 3. 알 수 없는 필드는 빈 문자열("") 또는 0으로 채워.
 
@@ -487,7 +539,7 @@ def parse_hotel_voucher_with_gemini(raw_text):
         return {}
     except: return {}
 
-# 2.02.05 | Gemini Flight e-Ticket Intelligent Structure Parser (항공권 e-티켓 전용 AI 파서)
+# 2.02.06 | Gemini Flight e-Ticket Intelligent Structure Parser (항공권 파서)
 def parse_flight_ticket_with_gemini(raw_text):
     if not raw_text or "⚠️" in raw_text: return {}
     try:
@@ -2023,7 +2075,7 @@ else:
     tab_in, tab_his, tab_stats, tab_final = st.tabs(["Data입력", "Data조회", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
-    # 6.01.00 | Console Tab 1: Input Engine (호텔/항공 폼 완벽 자동 채우기 탑재)
+    # 6.01.00 | Console Tab 1: Input Engine (전역 PDF/이미지 업로드 & AI 스캔)
     # --------------------------------------------------------------------------
     with tab_in:
         trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
@@ -2078,7 +2130,6 @@ else:
 
         if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
 
-        # 날짜 문자열 안전 파싱 헬퍼
         def safe_parse_date_obj(d_str, fallback):
             if not d_str: return fallback
             m = re.search(r'(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})', str(d_str))
@@ -2087,9 +2138,7 @@ else:
                 except: pass
             return fallback
 
-        # ----------------------------------------------------------------------
-        # 6.01.01 | Sub-Form: General Expense (일반 지출)
-        # ----------------------------------------------------------------------
+        # 6.01.01 | Sub-Form: General Expense (PDF/이미지 지원)
         if mode == "일반 지출":        
             def_index = EXPENSE_CATS.index(st.session_state.last_cat_name) if st.session_state.last_cat_name in EXPENSE_CATS else 0
             cat = st.radio("항목 선택", EXPENSE_CATS, index=def_index, horizontal=True, key="exp_cat")
@@ -2102,13 +2151,14 @@ else:
             col_desc, col_receipt = st.columns([3, 1.2])
             
             with col_receipt: 
-                uploaded_files = st.file_uploader("📸 영수증 첨부 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
+                # 👈 PDF 파일 업로드 포맷 추가!
+                uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
                     if st.button("🤖 영수증 AI 스캔 (통합 번역)", use_container_width=True, type="primary"):
-                        with st.spinner(f"AI가 {len(uploaded_files)}장의 사진을 분석 중..."):
+                        with st.spinner(f"AI가 {len(uploaded_files)}개의 문서를 분석 중..."):
                             all_raw_texts = []
                             for file in uploaded_files:
-                                raw_text = extract_text_from_vision_api(file.getvalue())
+                                raw_text = extract_text_from_file_or_image(file.getvalue(), getattr(file, 'name', ''))
                                 all_raw_texts.append(raw_text)
                             combined_text = "\n---\n".join(all_raw_texts)
                             smart_text = summarize_receipt_with_gemini(combined_text)
@@ -2156,7 +2206,7 @@ else:
             if st.button("🚀 지출 기록하기", use_container_width=True, type="primary"):
                 final_receipt_urls = ""
                 if uploaded_files:
-                    with st.spinner("📸 영수증을 클라우드에 보관 중..."):
+                    with st.spinner("📸 영수증 문서를 클라우드에 보관 중..."):
                         url_list = []
                         for file in uploaded_files:
                             u = upload_image_to_imgbb(file)
@@ -2183,24 +2233,22 @@ else:
                     st.session_state.rcpt_key_idx += 1
                     time.sleep(0.6); st.rerun()
 
-        # ----------------------------------------------------------------------
-        # 6.01.02 | Sub-Form: Flight Integrated Scheduler (항공권 e-티켓 AI 폼 자동채우기)
-        # ----------------------------------------------------------------------
+        # 6.01.02 | Sub-Form: Flight Integrated Scheduler (PDF e-티켓 지원)
         elif mode == "🛫 항공권(특수)":
-            st.subheader("✈️ 항공권 및 스케줄 통합 기록 (e-티켓 AI 자동입력 지원)")
+            st.subheader("✈️ 항공권 및 스케줄 통합 기록 (PDF/사진 e-티켓 지원)")
             
-            # [AI 스캔 데이터 임시 세션 보관소]
             if 'f_ai_data' not in st.session_state: st.session_state.f_ai_data = {}
 
             col_f_input, col_f_rcpt = st.columns([3, 1.2])
             with col_f_rcpt:
-                uploaded_flight_files = st.file_uploader("📸 e-티켓/예약확인서 첨부", type=['png', 'jpg', 'jpeg'], key=f"flight_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
+                # 👈 PDF e-티켓 업로드 지원
+                uploaded_flight_files = st.file_uploader("📸 e-티켓/확인서 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"flight_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_flight_files:
                     if st.button("🤖 e-티켓 AI 자동분석 & 폼 채우기", key="btn_ai_flight", use_container_width=True, type="primary"):
-                        with st.spinner(f"AI가 {len(uploaded_flight_files)}장의 e-티켓을 정밀 분석 중..."):
+                        with st.spinner(f"AI가 {len(uploaded_flight_files)}개의 e-티켓 문서를 분석 중..."):
                             all_f_texts = []
                             for f in uploaded_flight_files:
-                                all_f_texts.append(extract_text_from_vision_api(f.getvalue()))
+                                all_f_texts.append(extract_text_from_file_or_image(f.getvalue(), getattr(f, 'name', '')) dialogue)
                             parsed_flight = parse_flight_ticket_with_gemini("\n---\n".join(all_f_texts))
                             if parsed_flight:
                                 st.session_state.f_ai_data = parsed_flight
@@ -2262,7 +2310,7 @@ else:
 
                 final_flight_receipts = ""
                 if uploaded_flight_files:
-                    with st.spinner("📸 e-티켓 영수증 클라우드 전송 중..."):
+                    with st.spinner("📸 e-티켓 영수증 문서를 보관 중..."):
                         u_list = []
                         for f in uploaded_flight_files:
                             u = upload_image_to_imgbb(f)
@@ -2293,24 +2341,22 @@ else:
                     st.session_state.rcpt_key_idx += 1
                     time.sleep(0.8); st.rerun()
 
-        # ----------------------------------------------------------------------
-        # 6.01.03 | Sub-Form: Hotel Integrated Booking (바우처 AI 1초 완벽 자동채우기)
-        # ----------------------------------------------------------------------
+        # 6.01.03 | Sub-Form: Hotel Integrated Booking (PDF 바우처 지원)
         elif mode == "🏨 호텔(특수)":
-            st.subheader("🏨 호텔 예약 및 체크인·아웃 자동 기록 (바우처 AI 자동입력 지원)")
+            st.subheader("🏨 호텔 예약 및 체크인·아웃 자동 기록 (PDF/사진 바우처 AI 지원)")
             
-            # [AI 스캔 데이터 임시 세션 보관소]
             if 'h_ai_data' not in st.session_state: st.session_state.h_ai_data = {}
 
             col_h_input, col_h_rcpt = st.columns([3, 1.2])
             with col_h_rcpt:
-                uploaded_hotel_files = st.file_uploader("📸 호텔 바우처/영수증 첨부", type=['png', 'jpg', 'jpeg'], key=f"hotel_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
+                # 👈 PDF 바우처 업로드 지원
+                uploaded_hotel_files = st.file_uploader("📸 호텔 바우처 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"hotel_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_hotel_files:
                     if st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel", use_container_width=True, type="primary"):
-                        with st.spinner(f"AI가 {len(uploaded_hotel_files)}장의 바우처를 정밀 분석 중..."):
+                        with st.spinner(f"AI가 {len(uploaded_hotel_files)}개의 바우처 문서를 분석 중..."):
                             all_h_texts = []
                             for f in uploaded_hotel_files:
-                                all_h_texts.append(extract_text_from_vision_api(f.getvalue()))
+                                all_h_texts.append(extract_text_from_file_or_image(f.getvalue(), getattr(f, 'name', '')))
                             parsed_hotel = parse_hotel_voucher_with_gemini("\n---\n".join(all_h_texts))
                             if parsed_hotel:
                                 st.session_state.h_ai_data = parsed_hotel
@@ -2354,7 +2400,7 @@ else:
 
                 final_hotel_receipts = ""
                 if uploaded_hotel_files:
-                    with st.spinner("📸 호텔 바우처 영수증 클라우드 전송 중..."):
+                    with st.spinner("📸 호텔 바우처 문서를 클라우드에 보관 중..."):
                         u_list = []
                         for f in uploaded_hotel_files:
                             u = upload_image_to_imgbb(f)
@@ -2377,9 +2423,7 @@ else:
                     st.session_state.rcpt_key_idx += 1
                     time.sleep(0.8); st.rerun()
                     
-        # ----------------------------------------------------------------------
         # 6.01.04 | Sub-Form: Asset Transfer & Dual FX Swap
-        # ----------------------------------------------------------------------
         elif mode == "자산 이동":
             st.subheader("🔁 자산 이동 / 환전 / 외상 청산")
             ty = st.selectbox("유형",[
@@ -2403,7 +2447,7 @@ else:
                     pay_source = st.selectbox("체크아웃 정산 지불 수단", [f"현금({curr_tr})", f"트래블카드({curr_tr})", "원화계좌(한국)"], key="tr_repay_src")
                     r_desc = st.text_input("상환 메모", value="호텔 체크아웃 외상 청산", key="tr_repay_desc")
                     
-                if st.button("🚀 외상 청산 완료 (미결제 외상 잔액에서 즉시 차감)", use_container_width=True, type="primary"):
+                if st.button("🚀 외상 청산 완료", use_container_width=True, type="primary"):
                     if s_amt <= 0: st.warning("청산 금액을 입력하세요."); st.stop()
                     
                     fifo_rate = auto_calc_fifo_rate(s_amt, pay_source, curr_tr)
@@ -2559,9 +2603,7 @@ else:
                         st.toast("이동 완료!", icon="✅")
                         st.rerun()
                         
-        # ----------------------------------------------------------------------
         # 6.01.05 | Sub-Form: Refund Inventory Rollback
-        # ----------------------------------------------------------------------
         elif mode == "환불(취소)":
             st.subheader("🔙 결제 취소 및 환불 (Rollback)")
             col_r1, col_r2 = st.columns(2)
@@ -2581,9 +2623,7 @@ else:
                     st.toast("환불 롤백 완료!", icon="✅")
                     st.rerun()
 
-        # ----------------------------------------------------------------------
         # 6.01.06 | Sub-Form: Immigration Schedule
-        # ----------------------------------------------------------------------
         else:
             st.subheader("✈️ 출귀국 일정 기록")
             io_type = st.radio("구분",["출국", "귀국"], horizontal=True, key="io_radio")
@@ -2595,10 +2635,10 @@ else:
                     st.rerun()
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Console Tab 2: Audit History & Viewer (인라인 전체 필드 수정 지원)
+    # 6.02.00 | Console Tab 2: Audit History & Viewer (PDF 사후 업로드 지원)
     # --------------------------------------------------------------------------
     with tab_his:
-        st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 항목/결제수단 변경이 펼쳐집니다!**")
+        st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 사후 영수증(PDF/사진) AI 스캔이 펼쳐집니다!**")
         viewer_placeholder = st.empty()
 
         # 6.02.01 | Multi-Dimensional AND Filter Bar
@@ -2891,11 +2931,10 @@ else:
                             else:
                                 st.info("첨부된 영수증 사진이 없습니다.")
                                 
-                        # 6.02.05 | 인라인 수정기 (모바일에서 카테고리/결제수단/금액 원클릭 즉시 수정!)
+                        # 6.02.05 | 인라인 수정기 (사후 PDF/사진 영수증 업로드 & AI 분석)
                         with c_edit:
                             st.subheader("✏️ 상세 내역 & 결제정보 수정")
                             
-                            # [모바일 특화] 카테고리, 결제수단, 금액 즉시 수정 폼
                             all_cats_avail = list(dict.fromkeys(EXPENSE_CATS + ['상환', '충전', '환전', '입금', '직접환전', '이월잔액', '환불', '개인지출', '재환전', '출국', '귀국', '체크인', '체크아웃']))
                             cur_cat = str(row_data['Category']).strip()
                             cat_idx_sel = all_cats_avail.index(cur_cat) if cur_cat in all_cats_avail else 0
@@ -2924,13 +2963,14 @@ else:
                                 st.session_state[desc_key] = str(row_data['Description'])
                                 st.session_state['current_edit_idx'] = real_idx
                                 
-                            new_receipts = st.file_uploader("📸 영수증 사후 업로드 (다중 가능)", type=['png', 'jpg', 'jpeg'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
+                            # 👈 PDF 파일 업로드 지원
+                            new_receipts = st.file_uploader("📸 영수증 사후 업로드 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
                             if new_receipts:
-                                if st.button("🤖 첨부된 영수증 AI 스캔 & 내용에 자동 추가", key=f"btn_ai_scan_inline_{real_idx}", use_container_width=True, type="primary"):
-                                    with st.spinner(f"AI가 {len(new_receipts)}장의 사진을 분석 중..."):
+                                if st.button("🤖 첨부된 문서 AI 스캔 & 내용에 자동 추가", key=f"btn_ai_scan_inline_{real_idx}", use_container_width=True, type="primary"):
+                                    with st.spinner(f"AI가 {len(new_receipts)}개의 문서를 분석 중..."):
                                         all_raw_texts = []
                                         for f in new_receipts:
-                                            ext_text = extract_text_from_vision_api(f.getvalue())
+                                            ext_text = extract_text_from_file_or_image(f.getvalue(), getattr(f, 'name', ''))
                                             all_raw_texts.append(ext_text)
                                         combined_text = "\n---\n".join(all_raw_texts)
                                         smart_text = summarize_receipt_with_gemini(combined_text)
@@ -2964,6 +3004,7 @@ else:
                                     st.toast("🎉 수정사항이 완벽하게 저장되었습니다!", icon="✅")
                                     time.sleep(0.8); st.rerun()
                         st.markdown("---")
+
     # --------------------------------------------------------------------------
     # 6.03.00 | Console Tab 3: Daily Statistics & Tree Visualizer (통계 및 일별 시각화)
     # --------------------------------------------------------------------------
