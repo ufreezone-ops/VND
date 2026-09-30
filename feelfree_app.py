@@ -409,81 +409,62 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Safe Runner (Native PDF/Image Direct Streamer)
+# 2.02.03 | Gemini Multimodal Direct Runner
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
-        st.session_state['gemini_error_detail'] = "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
-        return ""
+        return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
         
-    st.session_state['gemini_error_detail'] = ""
-    last_error = ""
+    candidate_models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+    last_err = ""
 
-    # 1단계: Python SDK 직결 시도 (Native PDF 지원)
-    candidate_models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-pro']
+    # 1. Python SDK 시도
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         full_payload = []
         for item in contents:
-            if isinstance(item, str):
-                full_payload.append(item)
+            if isinstance(item, str): full_payload.append(item)
             elif isinstance(item, dict) and "data" in item:
-                full_payload.append({
-                    "mime_type": item.get("mime_type", "application/pdf"),
-                    "data": item["data"]
-                })
-        if prompt_text:
-            full_payload.append(prompt_text)
+                full_payload.append({"mime_type": item.get("mime_type", "application/pdf"), "data": item["data"]})
+        if prompt_text: full_payload.append(prompt_text)
             
         for m_name in candidate_models:
             try:
                 model = genai.GenerativeModel(m_name)
                 res = model.generate_content(full_payload)
                 if res and res.text:
-                    return res.text.strip()
-            except Exception as e_m:
-                last_error = f"SDK({m_name}): {str(e_m)}"
-                continue
+                    return res.text.strip(), ""
+            except Exception as e:
+                last_err = f"SDK({m_name}): {e}"
     except Exception as e_sdk:
-        last_error = f"SDK Load: {str(e_sdk)}"
+        last_err = f"SDK 임포트 에러: {e_sdk}"
 
-    # 2단계: REST API 직접 호출 폴백 (라이브러리 미설치/버전 무관 100% 작동)
-    rest_models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash']
+    # 2. REST API 직접 전송 (SDK 미지원/버전 충돌 대비 무적 폴백)
     rest_parts = []
     for item in contents:
-        if isinstance(item, str):
-            rest_parts.append({"text": item})
+        if isinstance(item, str): rest_parts.append({"text": item})
         elif isinstance(item, dict) and "data" in item:
             b64_str = base64.b64encode(item["data"]).decode("utf-8")
-            rest_parts.append({
-                "inline_data": {
-                    "mime_type": item.get("mime_type", "application/pdf"),
-                    "data": b64_str
-                }
-            })
-    if prompt_text:
-        rest_parts.append({"text": prompt_text})
+            rest_parts.append({"inline_data": {"mime_type": item.get("mime_type", "application/pdf"), "data": b64_str}})
+    if prompt_text: rest_parts.append({"text": prompt_text})
 
-    for r_m in rest_models:
+    for r_m in ['gemini-1.5-flash', 'gemini-2.0-flash']:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{r_m}:generateContent?key={api_key}"
-            payload = {"contents": [{"parts": rest_parts}]}
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+            resp = requests.post(url, json={"contents": [{"parts": rest_parts}]}, headers={"Content-Type": "application/json"}, timeout=30)
             if resp.status_code == 200:
-                data = resp.json()
-                cand = data.get("candidates", [])
+                cand = resp.json().get("candidates", [])
                 if cand:
                     parts = cand[0].get("content", {}).get("parts", [])
                     if parts and "text" in parts[0]:
-                        return parts[0]["text"].strip()
+                        return parts[0]["text"].strip(), ""
             else:
-                last_error = f"REST({r_m}) {resp.status_code}: {resp.text[:120]}"
+                last_err = f"REST({r_m}) {resp.status_code}: {resp.text[:120]}"
         except Exception as e_rest:
-            last_error = f"REST Ex: {str(e_rest)}"
+            last_err = f"REST 통신 에러: {e_rest}"
 
-    st.session_state['gemini_error_detail'] = last_error
-    return ""
+    return "", last_err
 
 # 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (일반 영수증)
 def summarize_receipt_files_with_gemini(uploaded_files):
@@ -515,32 +496,30 @@ def summarize_receipt_files_with_gemini(uploaded_files):
             
     return call_gemini_multimodal(contents, prompt)
 
-# 2.02.05 | Gemini Hotel Voucher Intelligent Structure Parser (Direct Native Stream)
+# 2.02.05 | Gemini Hotel Voucher Parser
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
-    if not uploaded_files: return {}
-    prompt = """너는 아고다(Agoda), 부킹닷컴, 네이버페이 현금영수증 등 호텔 바우처 및 결제 영수증 전문 분석 AI야.
-첨부된 문서(PDF 또는 이미지) 전체를 종합 분석하여 아래 JSON 포맷으로만 응답해.
-
-[응답 JSON 스키마]:
+    if not uploaded_files: 
+        return {}, "첨부된 파일이 없습니다."
+        
+    prompt = """너는 아고다(Agoda), 네이버페이 영수증 등 호텔 바우처 전문 분석 AI야.
+첨부된 문서를 분석하여 아래 JSON 포맷으로만 응답해:
 {
-    "platform": "예약 플랫폼 (예: Agoda, Booking.com, 네이버페이 등)",
-    "hotel_name": "호텔 이름 (예: 사누바 다낭 호텔 / Sanouva Danang Hotel)",
-    "payment_date": "실제 결제일 (반드시 YYYY-MM-DD 형식. 예: August 9, 2026 -> 2026-08-09)",
-    "checkin_date": "체크인 날짜 (반드시 YYYY-MM-DD 형식. 예: September 21, 2026 -> 2026-09-21)",
-    "checkout_date": "체크아웃 날짜 (반드시 YYYY-MM-DD 형식. 예: September 23, 2026 -> 2026-09-23)",
+    "platform": "Agoda",
+    "hotel_name": "사누바 다낭 호텔 (Sanouva Danang Hotel)",
+    "payment_date": "2026-08-09",
+    "checkin_date": "2026-09-21",
+    "checkout_date": "2026-09-23",
     "nights": 2,
-    "room_detail": "룸타입 및 포함 혜택 요약 (예: 디럭스 트윈 시티뷰, 데일리 애프터눈티 포함)",
+    "room_detail": "디럭스 트윈 시티뷰, 데일리 애프터눈티 포함",
     "payment_method": "네이버페이(원화고정)",
     "currency": "KRW",
     "amount": 118716
 }
-
-[🔥 엄격한 추출 지침]:
-1. 날짜 변환 규칙: 문서에 'August 9, 2026'이나 'September 21, 2026'처럼 영문으로 적혀 있어도 payment_date, checkin_date, checkout_date는 무조건 'YYYY-MM-DD'(예: 2026-08-09, 2026-09-21, 2026-09-23) 숫자로 변환해.
-2. 결제 금액/통화: USD(예: USD 84.32)와 KRW(예: KRW 118,716 또는 118,716원)가 같이 있거나 네이버페이 영수증이 있다면, 한국 계좌/카드에서 실제 빠져나간 '확정 원화 금액'인 currency: "KRW", amount: 118716 으로 최우선 선택해.
-3. 호텔이 여러 개 섞여 있다면 결제 금액(영수증)이 명시된 호텔(예: 사누바 다낭 호텔)을 기준으로 추출해.
-4. room_detail: '데일리 애프터눈 티(Daily Afternoon Tea)', '조식', '디럭스 트윈 시티뷰' 등 상품명과 객실 특징을 풍성하게 한 줄로 합쳐줘.
-5. 마크다운 백틱(```json) 없이 순수 JSON 문자열만 출력해.
+지침:
+1. 결제일(August 9, 2026 등)과 체크인/아웃 날짜는 반드시 YYYY-MM-DD 숫자로 변환해.
+2. USD(84.32)와 KRW(118,716)가 같이 적혀 있거나 네이버페이 영수증이 있다면 실제 결제된 확정 원화인 currency: "KRW", amount: 118716 을 최우선 선택해.
+3. 룸타입 상세에 '데일리 애프터눈티'나 '조식' 혜택을 반드시 포함해.
+4. 순수 JSON 텍스트만 출력해.
 """
     contents = []
     for f in uploaded_files:
@@ -548,26 +527,22 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
             if hasattr(f, "seek"): f.seek(0)
             f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
             if not f_bytes: continue
-            
             f_name = getattr(f, "name", "").lower()
-            mime = "application/pdf" if (f_name.endswith(".pdf") or f_bytes.startswith(b"%PDF")) else ("image/png" if f_name.endswith(".png") else "image/jpeg")
+            mime = "application/pdf" if (f_name.endswith(".pdf") or f_bytes.startswith(b"%PDF")) else "image/jpeg"
             contents.append({"mime_type": mime, "data": f_bytes})
-        except Exception:
-            continue
-            
-    if not contents:
-        return {}
+        except: continue
 
-    raw_res = call_gemini_multimodal(contents, prompt)
+    if not contents:
+        return {}, "파일 바이트를 읽어들이지 못했습니다."
+
+    raw_res, err = call_gemini_multimodal(contents, prompt)
     if raw_res:
         cleaned = re.sub(r'```(?:json)?\s*', '', raw_res).strip('` \n')
         m = re.search(r'\{.*\}', cleaned, re.DOTALL)
         if m:
-            try:
-                return json.loads(m.group(0))
-            except Exception:
-                pass
-    return {}
+            try: return json.loads(m.group(0)), ""
+            except: pass
+    return {}, err if err else "AI 응답 파싱 실패"
 
 # 2.02.06 | Gemini Flight e-Ticket Intelligent Structure Parser
 def parse_flight_ticket_files_with_gemini(uploaded_files):
@@ -2486,9 +2461,36 @@ else:
             if "호텔 예약/결제" in hotel_sub_mode:
                 col_h_input, col_h_rcpt = st.columns([3, 1.2])
                 with col_h_rcpt:
-                    uploaded_hotel_files = st.file_uploader("📸 호텔 바우처/영수증 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"hotel_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
+                    uploaded_hotel_files = st.file_uploader("📸 호텔 바우처/영수증 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key="hotel_direct_uploader", accept_multiple_files=True)
                     if uploaded_hotel_files:
-                        st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel", on_click=cb_run_ai_hotel_scan, use_container_width=True, type="primary")
+                        if st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel_direct", use_container_width=True, type="primary"):
+                            with st.spinner("AI가 호텔 바우처/영수증을 정밀 분석 중..."):
+                                parsed, err = parse_hotel_voucher_files_with_gemini(uploaded_hotel_files)
+                                if parsed:
+                                    st.session_state['h_gw_input'] = parsed.get('platform', 'Agoda')
+                                    st.session_state['h_name_input'] = parsed.get('hotel_name', '')
+                                    st.session_state['h_detail_input'] = parsed.get('room_detail', '')
+                                    st.session_state['h_nights_input'] = max(1, int(parsed.get('nights', 1)))
+                                    st.session_state['h_amt_input'] = clean_amount_to_float(parsed.get('amount', 0.0))
+                                    
+                                    if parsed.get('currency'):
+                                        st.session_state['h_curr_select'] = str(parsed.get('currency')).upper()
+                                    if parsed.get('payment_method'):
+                                        pm = str(parsed.get('payment_method'))
+                                        for cand in ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)"]:
+                                            if any(k in pm for k in ["네이버", "원화계좌", "트래블", "신용카드"]):
+                                                st.session_state['h_asset_select'] = cand
+                                                break
+                                    if parsed.get('checkin_date'):
+                                        st.session_state['h_checkin_input'] = safe_parse_date_obj(parsed.get('checkin_date'), datetime.now().date())
+                                    if parsed.get('payment_date'):
+                                        st.session_state['shared_date_input'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
+                                    
+                                    st.toast("🎉 호텔 바우처 및 결제정보 자동 입력 완료!", icon="✅")
+                                    time.sleep(0.5)
+                                    st.rerun()
+                                else:
+                                    st.error(f"🚨 분석 실패 사유: {err}")
 
                 with col_h_input:
                     c1, c2 = st.columns(2)
@@ -2543,7 +2545,6 @@ else:
                         st.toast(f"🎉 '{h_name}' 예약 및 체크인/아웃 일정이 자동 생성되었습니다!", icon="✅")
                         for k in ['h_gw_input', 'h_name_input', 'h_checkin_input', 'h_nights_input', 'h_detail_input', 'h_amt_input']:
                             if k in st.session_state: del st.session_state[k]
-                        st.session_state.rcpt_key_idx += 1
                         time.sleep(0.8); st.rerun()
 
             elif "체크인 보증금 결제" in hotel_sub_mode:
