@@ -2080,7 +2080,7 @@ else:
     tab_in, tab_his, tab_stats, tab_final = st.tabs(["Data입력", "Data조회", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
-    # 6.01.00 | Console Tab 1: Input Engine (호텔 4대전주기 통합 & 클린 입력 모드)
+    # 6.01.00 | Console Tab 1: Input Engine (on_click 콜백 기반 무결점 AI 폼 주입)
     # --------------------------------------------------------------------------
     with tab_in:
         trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
@@ -2144,19 +2144,79 @@ else:
             try: return float(cleaned) if cleaned else 0.0
             except: return 0.0
 
+        if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
+
+        # ----------------------------------------------------------------------
+        # [핵심] on_click 콜백 함수: 위젯 생성 전 세션에 1:1 주입하여 에러 원천 방지
+        # ----------------------------------------------------------------------
+        def cb_run_ai_hotel_scan():
+            rcpt_k = f"hotel_rcpt_{st.session_state.get('rcpt_key_idx', 0)}"
+            files = st.session_state.get(rcpt_k, [])
+            if files:
+                parsed = parse_hotel_voucher_files_with_gemini(files)
+                if parsed:
+                    st.session_state['h_gw_input'] = parsed.get('platform', 'Agoda')
+                    st.session_state['h_name_input'] = parsed.get('hotel_name', '')
+                    st.session_state['h_detail_input'] = parsed.get('room_detail', '')
+                    st.session_state['h_nights_input'] = max(1, int(parsed.get('nights', 1)))
+                    st.session_state['h_amt_input'] = clean_amount_to_float(parsed.get('amount', 0.0))
+                    
+                    if parsed.get('checkin_date'):
+                        st.session_state['h_checkin_input'] = safe_parse_date_obj(parsed.get('checkin_date'), datetime.now().date())
+                    if parsed.get('payment_date'):
+                        st.session_state['shared_date_input'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
+                    
+                    st.session_state['ai_toast_msg'] = "🏨 호텔 바우처 및 결제정보가 폼에 자동 입력되었습니다!"
+
+        def cb_run_ai_flight_scan():
+            rcpt_k = f"flight_rcpt_{st.session_state.get('rcpt_key_idx', 0)}"
+            files = st.session_state.get(rcpt_k, [])
+            if files:
+                parsed = parse_flight_ticket_files_with_gemini(files)
+                if parsed:
+                    st.session_state['f_gw_input'] = parsed.get('platform', '트립닷컴')
+                    st.session_state['f_carrier_input'] = parsed.get('carrier', '')
+                    st.session_state['f_route_input'] = parsed.get('route', '')
+                    st.session_state['f_dep_info_input'] = parsed.get('dep_info', '')
+                    st.session_state['f_ret_info_input'] = parsed.get('ret_info', '')
+                    st.session_state['f_bag_memo_input'] = parsed.get('bag_memo', '')
+                    st.session_state['f_amt_input'] = clean_amount_to_float(parsed.get('amount', 0.0))
+                    
+                    if parsed.get('dep_date'):
+                        st.session_state['f_dep_date_input'] = safe_parse_date_obj(parsed.get('dep_date'), datetime.now().date())
+                    if parsed.get('ret_date'):
+                        st.session_state['f_ret_date_input'] = safe_parse_date_obj(parsed.get('ret_date'), datetime.now().date() + timedelta(days=7))
+                    if parsed.get('payment_date'):
+                        st.session_state['shared_date_input'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
+                    
+                    st.session_state['ai_toast_msg'] = "✈️ 항공권 e-티켓 정보가 폼에 자동 입력되었습니다!"
+
+        def cb_run_ai_exp_scan():
+            rcpt_k = f"exp_receipt_{st.session_state.get('rcpt_key_idx', 0)}"
+            files = st.session_state.get(rcpt_k, [])
+            if files:
+                smart_text = summarize_receipt_files_with_gemini(files)
+                if smart_text:
+                    prev = st.session_state.get('exp_desc_input', '')
+                    st.session_state['exp_desc_input'] = (prev + "\n" + smart_text).strip() if prev else smart_text
+                    st.session_state['ai_toast_msg'] = "🧾 영수증 품목 번역 완료!"
+
+        # 토스트 알림 출력
+        if st.session_state.get('ai_toast_msg'):
+            st.toast(st.session_state['ai_toast_msg'], icon="🎉")
+            del st.session_state['ai_toast_msg']
+
+        # 상단 결제일자 달력 위젯
         default_cal_date = st.session_state.get('shared_date_input', datetime.now(dynamic_tz).date())
         sel_date = st.date_input("날짜 선택", value=default_cal_date, key="shared_date_input")
         
         node_currs = [node["currency"] for node in trip_nodes.values()]
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
-        if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
-
         # ----------------------------------------------------------------------
-        # 6.01.01 | Sub-Form: General Expense (순수 일상/현지 소비 전용 클린 카테고리)
+        # 6.01.01 | Sub-Form: General Expense (일반 지출)
         # ----------------------------------------------------------------------
         if mode == "일반 지출":        
-            # [클린업] 항공권, 호텔, 보증금, 상환, 보험 완전 제거!
             clean_daily_cats = [c for c in EXPENSE_CATS if c not in ['항공권', '호텔', '보증금', '상환', '보험']]
             if not clean_daily_cats: clean_daily_cats = ["식사", "간식", "마트", "교통", "기타"]
             
@@ -2173,12 +2233,7 @@ else:
             with col_receipt: 
                 uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
-                    if st.button("🤖 영수증 AI 스캔 (통합 번역)", use_container_width=True, type="primary"):
-                        with st.spinner(f"AI가 {len(uploaded_files)}개의 문서를 정밀 분석 중..."):
-                            smart_text = summarize_receipt_files_with_gemini(uploaded_files)
-                            if smart_text:
-                                st.session_state.exp_desc_input = (st.session_state.get('exp_desc_input', '') + "\n" + smart_text).strip()
-                                st.rerun()
+                    st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp", on_click=cb_run_ai_exp_scan, use_container_width=True, type="primary")
                                 
             with col_desc: 
                 desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=120, key="exp_desc_input")
@@ -2248,7 +2303,7 @@ else:
                     time.sleep(0.6); st.rerun()
 
         # ----------------------------------------------------------------------
-        # 6.01.02 | Sub-Form: Flight Integrated Scheduler (항공권 특수)
+        # 6.01.02 | Sub-Form: Flight Integrated Scheduler
         # ----------------------------------------------------------------------
         elif mode == "🛫 항공권(특수)":
             st.subheader("✈️ 항공권 및 스케줄 통합 기록 (e-티켓 AI 자동입력 지원)")
@@ -2257,25 +2312,7 @@ else:
             with col_f_rcpt:
                 uploaded_flight_files = st.file_uploader("📸 e-티켓/확인서 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"flight_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_flight_files:
-                    if st.button("🤖 e-티켓 AI 자동분석 & 폼 채우기", key="btn_ai_flight", use_container_width=True, type="primary"):
-                        with st.spinner(f"AI가 {len(uploaded_flight_files)}개의 e-티켓 문서를 분석 중..."):
-                            parsed_flight = parse_flight_ticket_files_with_gemini(uploaded_flight_files)
-                            if parsed_flight:
-                                st.session_state['f_gw_input'] = parsed_flight.get('platform', '트립닷컴')
-                                st.session_state['f_carrier_input'] = parsed_flight.get('carrier', '')
-                                st.session_state['f_route_input'] = parsed_flight.get('route', '')
-                                st.session_state['f_dep_info_input'] = parsed_flight.get('dep_info', '')
-                                st.session_state['f_dep_date_input'] = safe_parse_date_obj(parsed_flight.get('dep_date'), sel_date)
-                                st.session_state['f_ret_info_input'] = parsed_flight.get('ret_info', '')
-                                st.session_state['f_ret_date_input'] = safe_parse_date_obj(parsed_flight.get('ret_date'), sel_date + timedelta(days=7))
-                                st.session_state['f_bag_memo_input'] = parsed_flight.get('bag_memo', '')
-                                st.session_state['f_amt_input'] = clean_amount_to_float(parsed_flight.get('amount', 0.0))
-                                
-                                if parsed_flight.get('payment_date'):
-                                    st.session_state['shared_date_input'] = safe_parse_date_obj(parsed_flight.get('payment_date'), sel_date)
-                                
-                                st.toast("✈️ 항공권 정보 및 결제일자가 폼에 자동 입력되었습니다!", icon="🎉")
-                                st.rerun()
+                    st.button("🤖 e-티켓 AI 자동분석 & 폼 채우기", key="btn_ai_flight", on_click=cb_run_ai_flight_scan, use_container_width=True, type="primary")
 
             with col_f_input:
                 f_trip_type = st.radio("여정 구분", ["왕복", "편도"], horizontal=True, key="f_trip_type_radio")
@@ -2309,9 +2346,7 @@ else:
             c9, c10, c11, c12 = st.columns([1, 2, 1, 1])
             with c9: 
                 curr_opts_flight = ["KRW", "USD", "EUR"] + [c for c in available_currs if c not in ["KRW", "USD", "EUR"]]
-                curr_f_target = str(st.session_state.get('f_curr_input', 'KRW')).upper().strip()
-                curr_f_idx = curr_opts_flight.index(curr_f_target) if curr_f_target in curr_opts_flight else 0
-                f_curr = st.selectbox("11. 통화", curr_opts_flight, index=curr_f_idx, key="f_curr_select")
+                f_curr = st.selectbox("11. 통화", curr_opts_flight, key="f_curr_select")
             with c10: 
                 f_amt_val = clean_amount_to_float(st.session_state.get('f_amt_input', 0.0))
                 f_amt = st.number_input(f"12. 결제 금액({f_curr})", min_value=0.0, value=f_amt_val, step=1.0, key="f_amt_input")
@@ -2360,12 +2395,11 @@ else:
                     time.sleep(0.8); st.rerun()
 
         # ----------------------------------------------------------------------
-        # 6.01.03 | Sub-Form: Hotel Integrated Booking (호텔 4대 전주기 라이프사이클)
+        # 6.01.03 | Sub-Form: Hotel Integrated Booking
         # ----------------------------------------------------------------------
         elif mode == "🏨 호텔(특수)":
             st.subheader("🏨 호텔 4대 통합 관리 (예약·체크인/아웃·보증금·외상청산)")
             
-            # [호텔 4대 세부 업무 탭 선택]
             hotel_sub_mode = st.radio(
                 "호텔 업무 선택", 
                 ["🏨 호텔 예약/결제 (체크인·아웃 자동생성)", "🏷️ 체크인 보증금 결제 (Deposit)", "🔙 체크아웃 보증금 환급 (Deposit Return)", "💳 체크아웃 외상 청산 (룸차지/맥주 상환)"],
@@ -2374,29 +2408,13 @@ else:
             )
             st.divider()
 
-            # ① 호텔 예약/결제 모드
             if "호텔 예약/결제" in hotel_sub_mode:
                 col_h_input, col_h_rcpt = st.columns([3, 1.2])
                 with col_h_rcpt:
                     uploaded_hotel_files = st.file_uploader("📸 호텔 바우처/영수증 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"hotel_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                     if uploaded_hotel_files:
-                        if st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel", use_container_width=True, type="primary"):
-                            with st.spinner(f"AI가 {len(uploaded_hotel_files)}개의 문서를 정밀 분석 중..."):
-                                parsed_hotel = parse_hotel_voucher_files_with_gemini(uploaded_hotel_files)
-                                if parsed_hotel:
-                                    st.session_state['h_gw_input'] = parsed_hotel.get('platform', 'Agoda')
-                                    st.session_state['h_name_input'] = parsed_hotel.get('hotel_name', '')
-                                    st.session_state['h_checkin_input'] = safe_parse_date_obj(parsed_hotel.get('checkin_date'), sel_date)
-                                    st.session_state['h_nights_input'] = max(1, int(parsed_hotel.get('nights', 1)))
-                                    st.session_state['h_detail_input'] = parsed_hotel.get('room_detail', '')
-                                    st.session_state['h_amt_input'] = clean_amount_to_float(parsed_hotel.get('amount', 0.0))
-                                    
-                                    # 결제일자(2026-08-09) 자동 세팅
-                                    if parsed_hotel.get('payment_date'):
-                                        st.session_state['shared_date_input'] = safe_parse_date_obj(parsed_hotel.get('payment_date'), sel_date)
-                                    
-                                    st.toast("🏨 호텔 바우처 및 확정 결제금액이 폼에 자동 입력되었습니다!", icon="🎉")
-                                    st.rerun()
+                        # [핵심] on_click 콜백으로 안전하게 바인딩하여 튕김/에러 100% 차단!
+                        st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel", on_click=cb_run_ai_hotel_scan, use_container_width=True, type="primary")
 
                 with col_h_input:
                     c1, c2 = st.columns(2)
@@ -2450,7 +2468,6 @@ else:
                         st.session_state.rcpt_key_idx += 1
                         time.sleep(0.8); st.rerun()
 
-            # ② 체크인 보증금 결제 모드 (Deposit)
             elif "체크인 보증금 결제" in hotel_sub_mode:
                 st.info("💡 호텔 체크인 시 임시로 맡기는 보증금(디파짓)을 기록합니다. (지출액에 포함되지 않으며 지갑에서만 안전하게 차감됩니다)")
                 c_d1, c_d2 = st.columns(2)
@@ -2482,7 +2499,6 @@ else:
                         st.toast("✅ 호텔 보증금 결제 완료!", icon="🎉")
                         time.sleep(0.8); st.rerun()
 
-            # ③ 체크아웃 보증금 환급 모드 (Deposit Return)
             elif "체크아웃 보증금 환급" in hotel_sub_mode:
                 st.info("💡 체크아웃 시 돌려받은 보증금을 외화 지갑(카드/현금)으로 다시 입금합니다.")
                 c_r1, c_r2 = st.columns(2)
@@ -2514,7 +2530,6 @@ else:
                         st.toast("✅ 호텔 보증금 환급 복구 완료!", icon="🎉")
                         time.sleep(0.8); st.rerun()
 
-            # ④ 체크아웃 외상 청산 모드 (Debt Clear)
             else:
                 st.info("💡 호텔 체크아웃 시 룸차지(수영장 맥주, 룸서비스 등) 외상을 청산하고, **사이드바의 미결제 외상을 0원으로 즉시 정산**합니다.")
                 c_c1, c_c2 = st.columns(2)
@@ -2531,7 +2546,7 @@ else:
                     new_row = pd.DataFrame([{
                         'Date': sel_date.strftime("%Y-%m-%d(%a)"),
                         'Country': sel_node,
-                        'Category': '상환', # 👈 상환 카테고리로 기록되어 미결제 외상 0원 처리!
+                        'Category': '상환',
                         'Description': clear_desc,
                         'Currency': clear_curr,
                         'Amount': clear_amt,
@@ -2546,7 +2561,7 @@ else:
                         time.sleep(0.8); st.rerun()
 
         # ----------------------------------------------------------------------
-        # 6.01.04 | Sub-Form: Asset Transfer (순수 금융 자산 이동 전용)
+        # 6.01.04 | Sub-Form: Asset Transfer
         # ----------------------------------------------------------------------
         elif mode == "자산 이동":
             st.subheader("🔁 순수 금융 자산 이동 및 환전")
@@ -2705,9 +2720,7 @@ else:
                         st.toast("이동 완료!", icon="✅")
                         st.rerun()
                         
-        # ----------------------------------------------------------------------
         # 6.01.05 | Sub-Form: Refund Inventory Rollback
-        # ----------------------------------------------------------------------
         elif mode == "환불(취소)":
             st.subheader("🔙 결제 취소 및 일반 환불 (Rollback)")
             col_r1, col_r2 = st.columns(2)
@@ -2727,9 +2740,7 @@ else:
                     st.toast("환불 롤백 완료!", icon="✅")
                     st.rerun()
 
-        # ----------------------------------------------------------------------
         # 6.01.06 | Sub-Form: Immigration Schedule
-        # ----------------------------------------------------------------------
         else:
             st.subheader("✈️ 출귀국 일정 기록")
             io_type = st.radio("구분",["출국", "귀국"], horizontal=True, key="io_radio")
