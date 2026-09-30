@@ -590,9 +590,10 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
 
 # 2.02.06 | Gemini Flight e-Ticket Intelligent Structure Parser
 def parse_flight_ticket_files_with_gemini(uploaded_files):
+    import json
     if not uploaded_files: return {}
     prompt = """너는 항공권 e-티켓 및 결제 영수증 전문 분석 AI야.
-첨부된 문서(PDF 텍스트 또는 이미지)를 정밀 분석하여 다음 JSON 형식으로만 응답해:
+첨부된 문서(PDF 또는 이미지) 전체를 종합 분석하여 다음 JSON 형식으로만 응답해:
 {
     "platform": "예약처 (예: 트립닷컴, 네이버항공, 마이리얼트립 등)",
     "carrier": "항공사 이름 (예: 비엣젯항공, 에어부산 등)",
@@ -611,30 +612,34 @@ def parse_flight_ticket_files_with_gemini(uploaded_files):
 }
 지침:
 1. 네이버페이/카드 영수증이 있다면 실제 결제된 확정 원화(KRW) 금액을 우선 채워.
-2. 부연 설명 없이 순수 JSON 텍스트만 출력해.
+2. 부연 설명 없이 오직 순수 JSON 텍스트 하나만 출력해.
 """
     contents = []
     for f in uploaded_files:
-        f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
-        f_name = getattr(f, "name", "").lower()
-        if f_name.endswith('.pdf') or f_bytes.startswith(b"%PDF"):
-            pdf_text = extract_full_text_from_pdf(f_bytes)
-            if len(pdf_text) > 40:
-                contents.append(f"--- [항공권 e-티켓 PDF 원문 내용] ---\n{pdf_text}\n---")
-            else:
-                img_data = extract_pdf_first_page_image(f_bytes)
-                if img_data: contents.append({"mime_type": "image/png", "data": img_data})
-        else:
-            mime = "image/png" if f_name.endswith(".png") else "image/jpeg"
+        try:
+            if hasattr(f, "seek"): f.seek(0)
+            f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
+            if not f_bytes: continue
+            f_name = getattr(f, "name", "").lower()
+            mime = "application/pdf" if (f_name.endswith(".pdf") or f_bytes.startswith(b"%PDF")) else "image/jpeg"
             contents.append({"mime_type": mime, "data": f_bytes})
+        except Exception:
+            continue
             
-    raw_res = call_gemini_multimodal(contents, prompt)
+    if not contents:
+        return {}
+
+    # call_gemini_multimodal의 튜플 반환값(raw_res, err) 정상 수신
+    raw_res, err = call_gemini_multimodal(contents, prompt)
     if raw_res:
         cleaned = re.sub(r'```(?:json)?\s*', '', raw_res).strip('` \n')
-        m = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        if m:
-            try: return json.loads(m.group(0))
-            except Exception: pass
+        first_brace = cleaned.find('{')
+        last_brace = cleaned.rfind('}')
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            try:
+                return json.loads(cleaned[first_brace:last_brace + 1])
+            except Exception:
+                pass
     return {}
 
 # ------------------------------------------------------------------------------
@@ -2279,7 +2284,8 @@ else:
                     if parsed.get('ret_date'):
                         st.session_state['f_ret_date_input'] = safe_parse_date_obj(parsed.get('ret_date'), datetime.now().date() + timedelta(days=7))
                     if parsed.get('payment_date'):
-                        st.session_state['shared_date_input'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
+                        # 👈 [Fixed] shared_date_input 직접 수정 대신 ai_payment_date를 통해 안전하게 전달
+                        st.session_state['ai_payment_date'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
                     
                     st.session_state['ai_toast_msg'] = "✈️ 항공권 e-티켓 정보가 폼에 자동 입력되었습니다!"
                     st.rerun()
