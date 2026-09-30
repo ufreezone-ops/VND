@@ -409,22 +409,30 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Safe Runner (SDK + Direct REST Fallback & Real Error Logger)
+# 2.02.03 | Gemini Multimodal Safe Runner (Native PDF/Image Direct Streamer)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
-        st.session_state['gemini_error_detail'] = "Streamlit secrets에 GEMINI_API_KEY가 설정되지 않았습니다."
+        st.session_state['gemini_error_detail'] = "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
         return ""
         
     st.session_state['gemini_error_detail'] = ""
     last_error = ""
 
-    # 1단계: Python SDK 시도
-    candidate_models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
+    # 1단계: Python SDK 직결 시도 (Native PDF 지원)
+    candidate_models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-pro']
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        full_payload = list(contents)
+        full_payload = []
+        for item in contents:
+            if isinstance(item, str):
+                full_payload.append(item)
+            elif isinstance(item, dict) and "data" in item:
+                full_payload.append({
+                    "mime_type": item.get("mime_type", "application/pdf"),
+                    "data": item["data"]
+                })
         if prompt_text:
             full_payload.append(prompt_text)
             
@@ -435,13 +443,13 @@ def call_gemini_multimodal(contents, prompt_text=""):
                 if res and res.text:
                     return res.text.strip()
             except Exception as e_m:
-                last_error = f"SDK({m_name}) 실패: {str(e_m)}"
+                last_error = f"SDK({m_name}): {str(e_m)}"
                 continue
     except Exception as e_sdk:
-        last_error = f"SDK 임포트/설정 실패: {str(e_sdk)}"
+        last_error = f"SDK Load: {str(e_sdk)}"
 
-    # 2단계: SDK 실패 시 순수 REST API(HTTP POST) 직접 호출 (라이브러리 충돌 100% 방어)
-    rest_models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+    # 2단계: REST API 직접 호출 폴백 (라이브러리 미설치/버전 무관 100% 작동)
+    rest_models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash']
     rest_parts = []
     for item in contents:
         if isinstance(item, str):
@@ -450,7 +458,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
             b64_str = base64.b64encode(item["data"]).decode("utf-8")
             rest_parts.append({
                 "inline_data": {
-                    "mime_type": item.get("mime_type", "image/png"),
+                    "mime_type": item.get("mime_type", "application/pdf"),
                     "data": b64_str
                 }
             })
@@ -461,7 +469,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{r_m}:generateContent?key={api_key}"
             payload = {"contents": [{"parts": rest_parts}]}
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 cand = data.get("candidates", [])
@@ -470,9 +478,9 @@ def call_gemini_multimodal(contents, prompt_text=""):
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip()
             else:
-                last_error = f"REST({r_m}) HTTP {resp.status_code}: {resp.text[:120]}"
+                last_error = f"REST({r_m}) {resp.status_code}: {resp.text[:120]}"
         except Exception as e_rest:
-            last_error = f"REST 통신 에러: {str(e_rest)}"
+            last_error = f"REST Ex: {str(e_rest)}"
 
     st.session_state['gemini_error_detail'] = last_error
     return ""
@@ -507,11 +515,11 @@ def summarize_receipt_files_with_gemini(uploaded_files):
             
     return call_gemini_multimodal(contents, prompt)
 
-# 2.02.05 | Gemini Hotel Voucher Intelligent Structure Parser (영문 날짜/네이버페이/아고다 복합 완벽 대응)
+# 2.02.05 | Gemini Hotel Voucher Intelligent Structure Parser (Direct Native Stream)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
     if not uploaded_files: return {}
     prompt = """너는 아고다(Agoda), 부킹닷컴, 네이버페이 현금영수증 등 호텔 바우처 및 결제 영수증 전문 분석 AI야.
-첨부된 문서(PDF 텍스트 및 이미지) 전체를 종합 분석하여 아래 JSON 포맷으로만 응답해.
+첨부된 문서(PDF 또는 이미지) 전체를 종합 분석하여 아래 JSON 포맷으로만 응답해.
 
 [응답 JSON 스키마]:
 {
@@ -536,23 +544,20 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
 """
     contents = []
     for f in uploaded_files:
-        if hasattr(f, "seek"): f.seek(0)
-        f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
-        f_name = getattr(f, "name", "").lower()
-        
-        if f_name.endswith('.pdf') or f_bytes.startswith(b"%PDF"):
-            pdf_text = extract_full_text_from_pdf(f_bytes)
-            # 텍스트가 풍부하면 텍스트 주입
-            if len(pdf_text) > 40:
-                contents.append(f"--- [파일: {f_name} 원문 텍스트] ---\n{pdf_text}\n---")
-            # 네이버페이 등 스캔 이미지형 PDF는 첫 페이지 이미지로도 함께 전송
-            img_data = extract_pdf_first_page_image(f_bytes)
-            if img_data:
-                contents.append({"mime_type": "image/png", "data": img_data})
-        else:
-            mime = "image/png" if f_name.endswith(".png") else "image/jpeg"
-            contents.append({"mime_type": mime, "data": f_bytes})
+        try:
+            if hasattr(f, "seek"): f.seek(0)
+            f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
+            if not f_bytes: continue
             
+            f_name = getattr(f, "name", "").lower()
+            mime = "application/pdf" if (f_name.endswith(".pdf") or f_bytes.startswith(b"%PDF")) else ("image/png" if f_name.endswith(".png") else "image/jpeg")
+            contents.append({"mime_type": mime, "data": f_bytes})
+        except Exception:
+            continue
+            
+    if not contents:
+        return {}
+
     raw_res = call_gemini_multimodal(contents, prompt)
     if raw_res:
         cleaned = re.sub(r'```(?:json)?\s*', '', raw_res).strip('` \n')
