@@ -409,62 +409,88 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (공식 표준 모델 영구 고정)
+# 2.02.03 | Gemini Multimodal Direct Runner (실시간 가용 모델 자동 조회 & 404 원천 차단)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
-        
-    # v1beta에서 100% 정상 작동하는 공식 표준 모델 단 2개
-    official_models = ['gemini-1.5-flash', 'gemini-1.5-pro']
-    last_err = ""
 
-    # 1. Python SDK 시도
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        full_payload = []
-        for item in contents:
-            if isinstance(item, str): full_payload.append(item)
-            elif isinstance(item, dict) and "data" in item:
-                full_payload.append({"mime_type": item.get("mime_type", "application/pdf"), "data": item["data"]})
-        if prompt_text: full_payload.append(prompt_text)
-            
-        for m_name in official_models:
-            try:
-                model = genai.GenerativeModel(m_name)
-                res = model.generate_content(full_payload)
-                if res and res.text:
-                    return res.text.strip(), ""
-            except Exception as e:
-                last_err = f"SDK({m_name}): {e}"
-                continue
-    except Exception as e_sdk:
-        last_err = f"SDK 임포트 에러: {e_sdk}"
+    # 1단계: 구글 서버에서 내 API 키로 실제 호출 가능한 모델 목록을 실시간 자동 조회
+    available_models = []
+    for ver in ['v1', 'v1beta']:
+        try:
+            list_url = f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}"
+            l_resp = requests.get(list_url, timeout=5)
+            if l_resp.status_code == 200:
+                m_list = l_resp.json().get('models', [])
+                for m in m_list:
+                    methods = m.get('supportedGenerationMethods', [])
+                    if 'generateContent' in methods:
+                        clean_name = m['name'].replace('models/', '')
+                        if clean_name not in available_models:
+                            available_models.append((ver, clean_name))
+        except Exception:
+            pass
 
-    # 2. REST API 직접 전송 (표준 엔드포인트)
+    # 내 계정에서 가용한 모델 중 flash 계열을 최우선 정렬
+    def model_priority(item):
+        v, name = item
+        if '2.5-flash' in name: return 1
+        if '2.0-flash' in name: return 2
+        if '1.5-flash' in name: return 3
+        if 'flash' in name: return 4
+        if 'pro' in name: return 5
+        return 6
+
+    available_models.sort(key=model_priority)
+
+    # 만약 목록 조회가 실패했을 때의 대비용 기본 후보군
+    if not available_models:
+        available_models = [
+            ('v1', 'gemini-2.5-flash'),
+            ('v1beta', 'gemini-2.5-flash'),
+            ('v1', 'gemini-1.5-flash'),
+            ('v1beta', 'gemini-1.5-flash'),
+            ('v1', 'gemini-1.5-pro'),
+            ('v1beta', 'gemini-1.5-pro')
+        ]
+
+    # 전송 페이로드 구성
     rest_parts = []
     for item in contents:
-        if isinstance(item, str): rest_parts.append({"text": item})
+        if isinstance(item, str):
+            rest_parts.append({"text": item})
         elif isinstance(item, dict) and "data" in item:
             b64_str = base64.b64encode(item["data"]).decode("utf-8")
-            rest_parts.append({"inline_data": {"mime_type": item.get("mime_type", "application/pdf"), "data": b64_str}})
-    if prompt_text: rest_parts.append({"text": prompt_text})
+            rest_parts.append({
+                "inline_data": {
+                    "mime_type": item.get("mime_type", "application/pdf"),
+                    "data": b64_str
+                }
+            })
+    if prompt_text:
+        rest_parts.append({"text": prompt_text})
 
-    for r_m in official_models:
+    payload = {"contents": [{"parts": rest_parts}]}
+    last_err = ""
+
+    # 2단계: 실제 가용 모델로 순차 호출
+    for api_ver, m_name in available_models:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{r_m}:generateContent?key={api_key}"
-            resp = requests.post(url, json={"contents": [{"parts": rest_parts}]}, headers={"Content-Type": "application/json"}, timeout=30)
+            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
             if resp.status_code == 200:
-                cand = resp.json().get("candidates", [])
+                data = resp.json()
+                cand = data.get("candidates", [])
                 if cand:
                     parts = cand[0].get("content", {}).get("parts", [])
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip(), ""
             else:
-                last_err = f"REST({r_m}) {resp.status_code}: {resp.text[:120]}"
-        except Exception as e_rest:
-            last_err = f"REST 통신 에러: {e_rest}"
+                last_err = f"[{api_ver}/{m_name}] {resp.status_code}: {resp.text[:120]}"
+        except Exception as e:
+            last_err = f"[{api_ver}/{m_name}] 통신에러: {e}"
+            continue
 
     return "", last_err
 
