@@ -525,8 +525,10 @@ def summarize_receipt_files_with_gemini(uploaded_files):
     res_text, _ = call_gemini_multimodal(contents, prompt)
     return res_text
 
-# 2.02.05 | Gemini Hotel Voucher Parser (예약확인서+영수증 상호결합 & 철벽 JSON 파서)
+# 2.02.05 | Gemini Hotel Voucher Parser (import json 내장 완결형)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
+    import json  # 👈 [Fixed] 누락된 json 라이브러리 직접 임포트
+
     if not uploaded_files: 
         return {}, "첨부된 파일이 없습니다."
         
@@ -573,10 +575,9 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
     if not raw_res:
         return {}, err if err else "AI로부터 응답을 받지 못했습니다."
 
-    # 철벽 JSON 추출 로직 (어떤 앞뒤 부연설명이나 백틱도 완전 무력화)
+    # 철벽 JSON 추출 로직
     try:
         cleaned = re.sub(r'```(?:json)?', '', raw_res).strip('` \n')
-        # 가장 바깥쪽 { 와 } 찾기
         first_brace = cleaned.find('{')
         last_brace = cleaned.rfind('}')
         if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
