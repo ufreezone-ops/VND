@@ -409,27 +409,72 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Safe Runner
+# 2.02.03 | Gemini Multimodal Safe Runner (SDK + Direct REST Fallback & Real Error Logger)
 def call_gemini_multimodal(contents, prompt_text=""):
-    if "GEMINI_API_KEY" not in st.secrets:
+    api_key = st.secrets.get("GEMINI_API_KEY", "")
+    if not api_key:
+        st.session_state['gemini_error_detail'] = "Streamlit secrets에 GEMINI_API_KEY가 설정되지 않았습니다."
         return ""
+        
+    st.session_state['gemini_error_detail'] = ""
+    last_error = ""
+
+    # 1단계: Python SDK 시도
+    candidate_models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
     try:
         import google.generativeai as genai
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        genai.configure(api_key=api_key)
         full_payload = list(contents)
         if prompt_text:
             full_payload.append(prompt_text)
             
-        for m_name in ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']:
+        for m_name in candidate_models:
             try:
                 model = genai.GenerativeModel(m_name)
                 res = model.generate_content(full_payload)
                 if res and res.text:
                     return res.text.strip()
-            except Exception:
+            except Exception as e_m:
+                last_error = f"SDK({m_name}) 실패: {str(e_m)}"
                 continue
-    except Exception:
-        pass
+    except Exception as e_sdk:
+        last_error = f"SDK 임포트/설정 실패: {str(e_sdk)}"
+
+    # 2단계: SDK 실패 시 순수 REST API(HTTP POST) 직접 호출 (라이브러리 충돌 100% 방어)
+    rest_models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+    rest_parts = []
+    for item in contents:
+        if isinstance(item, str):
+            rest_parts.append({"text": item})
+        elif isinstance(item, dict) and "data" in item:
+            b64_str = base64.b64encode(item["data"]).decode("utf-8")
+            rest_parts.append({
+                "inline_data": {
+                    "mime_type": item.get("mime_type", "image/png"),
+                    "data": b64_str
+                }
+            })
+    if prompt_text:
+        rest_parts.append({"text": prompt_text})
+
+    for r_m in rest_models:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{r_m}:generateContent?key={api_key}"
+            payload = {"contents": [{"parts": rest_parts}]}
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
+            if resp.status_code == 200:
+                data = resp.json()
+                cand = data.get("candidates", [])
+                if cand:
+                    parts = cand[0].get("content", {}).get("parts", [])
+                    if parts and "text" in parts[0]:
+                        return parts[0]["text"].strip()
+            else:
+                last_error = f"REST({r_m}) HTTP {resp.status_code}: {resp.text[:120]}"
+        except Exception as e_rest:
+            last_error = f"REST 통신 에러: {str(e_rest)}"
+
+    st.session_state['gemini_error_detail'] = last_error
     return ""
 
 # 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (일반 영수증)
@@ -2149,7 +2194,7 @@ else:
 
         if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
 
-        # [AI 스캔 콜백] 호텔 바우처 분석 및 폼 강제 동기화
+        # [AI 스캔 콜백] 호텔 바우처 분석 및 에러 상세 진단
         def cb_run_ai_hotel_scan():
             rcpt_k = f"hotel_rcpt_{st.session_state.get('rcpt_key_idx', 0)}"
             files = st.session_state.get(rcpt_k, [])
@@ -2163,8 +2208,7 @@ else:
                     st.session_state['h_amt_input'] = clean_amount_to_float(parsed.get('amount', 0.0))
                     
                     if parsed.get('currency'):
-                        c_code = str(parsed.get('currency')).upper()
-                        st.session_state['h_curr_select'] = c_code
+                        st.session_state['h_curr_select'] = str(parsed.get('currency')).upper()
                         
                     if parsed.get('payment_method'):
                         pm = str(parsed.get('payment_method'))
@@ -2179,12 +2223,15 @@ else:
                     if parsed.get('payment_date'):
                         st.session_state['shared_date_input'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
                     
-                    st.session_state['ai_toast_msg'] = "🏨 호텔 바우처 및 결제정보(사누바 다낭 118,716원) 자동 입력 완료!"
+                    st.session_state['ai_toast_msg'] = "🏨 호텔 바우처 자동 입력 완료!"
                     st.rerun()
                 else:
-                    st.session_state['ai_toast_msg'] = "⚠️ AI가 영수증 정보를 읽지 못했습니다. GEMINI_API_KEY 상태를 확인해 주세요."
+                    err_msg = st.session_state.get('gemini_error_detail', '')
+                    if not err_msg:
+                        err_msg = "PDF에서 유효한 텍스트 또는 이미지를 추출하지 못했습니다."
+                    st.session_state['ai_toast_msg'] = f"🚨 AI 분석 실패: {err_msg}"
                     st.rerun()
-
+                    
         def cb_run_ai_flight_scan():
             rcpt_k = f"flight_rcpt_{st.session_state.get('rcpt_key_idx', 0)}"
             files = st.session_state.get(rcpt_k, [])
