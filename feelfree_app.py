@@ -409,14 +409,14 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (404 방지 공식 엔드포인트 자동 Failover)
+# 2.02.03 | Gemini Multimodal Direct Runner (공식 표준 모델 영구 고정)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
         
-    # 만료된 2.0-flash 대신 100% 가동 중인 공식 안정 엔드포인트 리스트
-    active_models = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-2.0-flash-exp', 'gemini-1.5-pro-latest', 'gemini-1.5-pro']
+    # v1beta에서 100% 정상 작동하는 공식 표준 모델 단 2개
+    official_models = ['gemini-1.5-flash', 'gemini-1.5-pro']
     last_err = ""
 
     # 1. Python SDK 시도
@@ -430,7 +430,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
                 full_payload.append({"mime_type": item.get("mime_type", "application/pdf"), "data": item["data"]})
         if prompt_text: full_payload.append(prompt_text)
             
-        for m_name in active_models:
+        for m_name in official_models:
             try:
                 model = genai.GenerativeModel(m_name)
                 res = model.generate_content(full_payload)
@@ -442,7 +442,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
     except Exception as e_sdk:
         last_err = f"SDK 임포트 에러: {e_sdk}"
 
-    # 2. REST API 직접 전송 (SDK 404 발생 시 다이렉트 통신)
+    # 2. REST API 직접 전송 (표준 엔드포인트)
     rest_parts = []
     for item in contents:
         if isinstance(item, str): rest_parts.append({"text": item})
@@ -451,7 +451,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
             rest_parts.append({"inline_data": {"mime_type": item.get("mime_type", "application/pdf"), "data": b64_str}})
     if prompt_text: rest_parts.append({"text": prompt_text})
 
-    for r_m in ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest']:
+    for r_m in official_models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{r_m}:generateContent?key={api_key}"
             resp = requests.post(url, json={"contents": [{"parts": rest_parts}]}, headers={"Content-Type": "application/json"}, timeout=30)
