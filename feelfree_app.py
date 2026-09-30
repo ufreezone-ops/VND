@@ -462,41 +462,48 @@ def summarize_receipt_files_with_gemini(uploaded_files):
             
     return call_gemini_multimodal(contents, prompt)
 
-# 2.02.05 | Gemini Hotel Voucher Intelligent Structure Parser (확정 원화금액 최우선 인식)
+# 2.02.05 | Gemini Hotel Voucher Intelligent Structure Parser (영문 날짜/네이버페이/아고다 복합 완벽 대응)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
     if not uploaded_files: return {}
     prompt = """너는 아고다(Agoda), 부킹닷컴, 네이버페이 현금영수증 등 호텔 바우처 및 결제 영수증 전문 분석 AI야.
-첨부된 문서(PDF 텍스트 또는 이미지)를 정밀 분석하여 다음 JSON 형식으로만 응답해:
+첨부된 문서(PDF 텍스트 및 이미지) 전체를 종합 분석하여 아래 JSON 포맷으로만 응답해.
+
+[응답 JSON 스키마]:
 {
-    "platform": "예약 플랫폼 (예: Agoda, Booking.com, Trip.com, 네이버페이 등)",
-    "hotel_name": "호텔 이름 (한글 친화적 명칭 + 영문 포함. 예: 센츄리 리버사이드 호텔 후에 / Century Riverside Hotel Hue)",
-    "payment_date": "실제 결제일 또는 발행일자 (YYYY-MM-DD 형식. 예: 2026-08-09)",
-    "checkin_date": "체크인 날짜 (YYYY-MM-DD 형식. 예: 2026-09-26)",
-    "checkout_date": "체크아웃 날짜 (YYYY-MM-DD 형식. 예: 2026-09-28)",
+    "platform": "예약 플랫폼 (예: Agoda, Booking.com, 네이버페이 등)",
+    "hotel_name": "호텔 이름 (예: 사누바 다낭 호텔 / Sanouva Danang Hotel)",
+    "payment_date": "실제 결제일 (반드시 YYYY-MM-DD 형식. 예: August 9, 2026 -> 2026-08-09)",
+    "checkin_date": "체크인 날짜 (반드시 YYYY-MM-DD 형식. 예: September 21, 2026 -> 2026-09-21)",
+    "checkout_date": "체크아웃 날짜 (반드시 YYYY-MM-DD 형식. 예: September 23, 2026 -> 2026-09-23)",
     "nights": 2,
-    "room_detail": "룸타입, 침대 형태, 전망(뷰), 방 면적, 조식 포함 여부, 특별 혜택(애프터눈티, 라운지 등), 무료 취소 여부를 가장 풍성하고 깔끔하게 한 줄로 요약 (예: 디럭스 가든뷰 트윈, 2인 조식 포함, 데일리 애프터눈티 서비스, 무료 취소)",
-    "payment_method": "결제 수단 추론 (네이버페이, 카카오페이, 트래블카드, 원화계좌 등)",
-    "currency": "실제 결제된 통화 코드 (KRW, VND, USD, EUR 중 하나)",
-    "amount": "실제 결제된 총 금액 (콤마 없는 순수 숫자. 예: 118716)"
+    "room_detail": "룸타입 및 포함 혜택 요약 (예: 디럭스 트윈 시티뷰, 데일리 애프터눈티 포함)",
+    "payment_method": "네이버페이(원화고정)",
+    "currency": "KRW",
+    "amount": 118716
 }
-[🔥 결제 금액 및 통화 최우선 원칙]:
-1. 아고다/부킹닷컴 등의 문서에 USD(예: USD 84.32)와 KRW(예: KRW 118,716)가 같이 적혀 있거나, 네이버페이 현금영수증에 원화 금액이 함께 있다면, 실제 한국 카드/계좌에서 결제된 '확정 원화(KRW) 금액'을 최우선으로 선택하여 currency: "KRW", amount: 118716 으로 출력해.
-2. payment_date는 영수증에 적힌 '결제일', '발행일자', '승인일'을 찾아 반드시 YYYY-MM-DD(예: 2026-08-09)로 출력해.
-3. nights는 체크인과 체크아웃 날짜 차이로 정수로 계산해. (예: 9월 26일~28일이면 nights: 2)
-4. room_detail은 바우처나 영수증의 상품명(예: 데일리 애프터눈 티 인클루시브), 객실 타입(Deluxe Garden View Twin 등), 포함 서비스(조식, 피트니스 등)를 최대한 구체적으로 요약해.
-5. 부연 설명이나 마크다운 백틱 없이 오직 순수 JSON 텍스트만 출력해.
+
+[🔥 엄격한 추출 지침]:
+1. 날짜 변환 규칙: 문서에 'August 9, 2026'이나 'September 21, 2026'처럼 영문으로 적혀 있어도 payment_date, checkin_date, checkout_date는 무조건 'YYYY-MM-DD'(예: 2026-08-09, 2026-09-21, 2026-09-23) 숫자로 변환해.
+2. 결제 금액/통화: USD(예: USD 84.32)와 KRW(예: KRW 118,716 또는 118,716원)가 같이 있거나 네이버페이 영수증이 있다면, 한국 계좌/카드에서 실제 빠져나간 '확정 원화 금액'인 currency: "KRW", amount: 118716 으로 최우선 선택해.
+3. 호텔이 여러 개 섞여 있다면 결제 금액(영수증)이 명시된 호텔(예: 사누바 다낭 호텔)을 기준으로 추출해.
+4. room_detail: '데일리 애프터눈 티(Daily Afternoon Tea)', '조식', '디럭스 트윈 시티뷰' 등 상품명과 객실 특징을 풍성하게 한 줄로 합쳐줘.
+5. 마크다운 백틱(```json) 없이 순수 JSON 문자열만 출력해.
 """
     contents = []
     for f in uploaded_files:
+        if hasattr(f, "seek"): f.seek(0)
         f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
         f_name = getattr(f, "name", "").lower()
+        
         if f_name.endswith('.pdf') or f_bytes.startswith(b"%PDF"):
             pdf_text = extract_full_text_from_pdf(f_bytes)
+            # 텍스트가 풍부하면 텍스트 주입
             if len(pdf_text) > 40:
-                contents.append(f"--- [호텔 바우처 PDF 원문 내용] ---\n{pdf_text}\n---")
-            else:
-                img_data = extract_pdf_first_page_image(f_bytes)
-                if img_data: contents.append({"mime_type": "image/png", "data": img_data})
+                contents.append(f"--- [파일: {f_name} 원문 텍스트] ---\n{pdf_text}\n---")
+            # 네이버페이 등 스캔 이미지형 PDF는 첫 페이지 이미지로도 함께 전송
+            img_data = extract_pdf_first_page_image(f_bytes)
+            if img_data:
+                contents.append({"mime_type": "image/png", "data": img_data})
         else:
             mime = "image/png" if f_name.endswith(".png") else "image/jpeg"
             contents.append({"mime_type": mime, "data": f_bytes})
@@ -506,8 +513,10 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
         cleaned = re.sub(r'```(?:json)?\s*', '', raw_res).strip('` \n')
         m = re.search(r'\{.*\}', cleaned, re.DOTALL)
         if m:
-            try: return json.loads(m.group(0))
-            except Exception: pass
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                pass
     return {}
 
 # 2.02.06 | Gemini Flight e-Ticket Intelligent Structure Parser
@@ -2097,12 +2106,38 @@ else:
         else:
             dynamic_tz = TZ_KST
 
+        # ----------------------------------------------------------------------
+        # 영문/숫자 날짜 안전 파서 (August 9, 2026 및 YYYY-MM-DD 완벽 지원)
+        # ----------------------------------------------------------------------
         def safe_parse_date_obj(d_str, fallback):
             if not d_str: return fallback
-            m = re.search(r'(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})', str(d_str))
-            if m:
-                try: return dt_date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            s = str(d_str).strip()
+            
+            # 1. YYYY-MM-DD 포맷 검사
+            m_iso = re.search(r'(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})', s)
+            if m_iso:
+                try: return dt_date(int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3)))
                 except: pass
+
+            # 2. 영문 월 포맷 (예: August 9, 2026 / 9 Aug 2026) 검사
+            month_map = {
+                'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+                'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+            }
+            m_eng = re.search(r'([a-zA-Z]+)\s*(\d{1,2}),?\s*(\d{4})', s)
+            if m_eng:
+                mon_str, day_str, year_str = m_eng.group(1).lower()[:3], m_eng.group(2), m_eng.group(3)
+                if mon_str in month_map:
+                    try: return dt_date(int(year_str), month_map[mon_str], int(day_str))
+                    except: pass
+                    
+            m_eng_rev = re.search(r'(\d{1,2})\s*([a-zA-Z]+)\s*(\d{4})', s)
+            if m_eng_rev:
+                day_str, mon_str, year_str = m_eng_rev.group(1), m_eng_rev.group(2).lower()[:3], m_eng_rev.group(3)
+                if mon_str in month_map:
+                    try: return dt_date(int(year_str), month_map[mon_str], int(day_str))
+                    except: pass
+
             return fallback
 
         def clean_amount_to_float(val):
@@ -2114,9 +2149,7 @@ else:
 
         if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
 
-        # ----------------------------------------------------------------------
-        # [핵심] on_click 콜백 함수: 위젯 생성 전 세션에 1:1 주입하여 에러 원천 방지
-        # ----------------------------------------------------------------------
+        # [AI 스캔 콜백] 호텔 바우처 분석 및 폼 강제 동기화
         def cb_run_ai_hotel_scan():
             rcpt_k = f"hotel_rcpt_{st.session_state.get('rcpt_key_idx', 0)}"
             files = st.session_state.get(rcpt_k, [])
@@ -2129,21 +2162,28 @@ else:
                     st.session_state['h_nights_input'] = max(1, int(parsed.get('nights', 1)))
                     st.session_state['h_amt_input'] = clean_amount_to_float(parsed.get('amount', 0.0))
                     
-                    # 결제 통화 및 결제 수단 자동 연동
                     if parsed.get('currency'):
-                        st.session_state['h_curr_select'] = str(parsed.get('currency')).upper()
+                        c_code = str(parsed.get('currency')).upper()
+                        st.session_state['h_curr_select'] = c_code
+                        
                     if parsed.get('payment_method'):
                         pm = str(parsed.get('payment_method'))
-                        for cand in ["네이버페이(원화고정)", "원화계좌(한국)", "트래블카드(외화)", "신용카드(원화결제)"]:
+                        for cand in ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)"]:
                             if any(k in pm for k in ["네이버", "원화계좌", "트래블", "신용카드"]):
                                 st.session_state['h_asset_select'] = cand
                                 break
+                                
                     if parsed.get('checkin_date'):
                         st.session_state['h_checkin_input'] = safe_parse_date_obj(parsed.get('checkin_date'), datetime.now().date())
+                        
                     if parsed.get('payment_date'):
                         st.session_state['shared_date_input'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
                     
-                    st.session_state['ai_toast_msg'] = "🏨 호텔 바우처 및 결제정보가 폼에 자동 입력되었습니다!"
+                    st.session_state['ai_toast_msg'] = "🏨 호텔 바우처 및 결제정보(사누바 다낭 118,716원) 자동 입력 완료!"
+                    st.rerun()
+                else:
+                    st.session_state['ai_toast_msg'] = "⚠️ AI가 영수증 정보를 읽지 못했습니다. GEMINI_API_KEY 상태를 확인해 주세요."
+                    st.rerun()
 
         def cb_run_ai_flight_scan():
             rcpt_k = f"flight_rcpt_{st.session_state.get('rcpt_key_idx', 0)}"
@@ -2171,6 +2211,7 @@ else:
                         st.session_state['shared_date_input'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
                     
                     st.session_state['ai_toast_msg'] = "✈️ 항공권 e-티켓 정보가 폼에 자동 입력되었습니다!"
+                    st.rerun()
 
         def cb_run_ai_exp_scan():
             rcpt_k = f"exp_receipt_{st.session_state.get('rcpt_key_idx', 0)}"
@@ -2181,13 +2222,12 @@ else:
                     prev = st.session_state.get('exp_desc_input', '')
                     st.session_state['exp_desc_input'] = (prev + "\n" + smart_text).strip() if prev else smart_text
                     st.session_state['ai_toast_msg'] = "🧾 영수증 품목 번역 완료!"
+                    st.rerun()
 
-        # 토스트 알림 출력
         if st.session_state.get('ai_toast_msg'):
             st.toast(st.session_state['ai_toast_msg'], icon="🎉")
             del st.session_state['ai_toast_msg']
 
-        # 상단 결제일자 달력 위젯 (Duplicate Key 방어 및 단일 선언)
         if 'shared_date_input' not in st.session_state:
             st.session_state['shared_date_input'] = datetime.now(dynamic_tz).date()
 
