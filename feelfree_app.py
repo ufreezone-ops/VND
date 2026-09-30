@@ -2187,14 +2187,11 @@ else:
             st.toast(st.session_state['ai_toast_msg'], icon="🎉")
             del st.session_state['ai_toast_msg']
 
+        # 상단 결제일자 달력 위젯 (Duplicate Key 방어 및 단일 선언)
         if 'shared_date_input' not in st.session_state:
             st.session_state['shared_date_input'] = datetime.now(dynamic_tz).date()
-            
-        sel_date = st.date_input("날짜 선택", key="shared_date_input")
 
-        # 상단 결제일자 달력 위젯
-        default_cal_date = st.session_state.get('shared_date_input', datetime.now(dynamic_tz).date())
-        sel_date = st.date_input("날짜 선택", value=default_cal_date, key="shared_date_input")
+        sel_date = st.date_input("날짜 선택", key="shared_date_input")
         
         node_currs = [node["currency"] for node in trip_nodes.values()]
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
