@@ -525,16 +525,18 @@ def summarize_receipt_files_with_gemini(uploaded_files):
     res_text, _ = call_gemini_multimodal(contents, prompt)
     return res_text
 
-# 2.02.05 | Gemini Hotel Voucher Parser
+# 2.02.05 | Gemini Hotel Voucher Parser (예약확인서+영수증 상호결합 & 철벽 JSON 파서)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
     if not uploaded_files: 
         return {}, "첨부된 파일이 없습니다."
         
-    prompt = """너는 아고다(Agoda), 네이버페이 영수증 등 호텔 바우처 전문 분석 AI야.
-첨부된 문서를 분석하여 아래 JSON 포맷으로만 응답해:
+    prompt = """너는 아고다(Agoda), 부킹닷컴, 네이버페이 현금영수증 등 호텔 바우처 및 결제 영수증 전문 분석 AI야.
+첨부된 문서들을 종합 분석하여 아래 JSON 포맷으로만 응답해.
+
+[응답 JSON 스키마]:
 {
     "platform": "Agoda",
-    "hotel_name": "사누바 다낭 호텔 (Sanouva Danang Hotel)",
+    "hotel_name": "호텔 이름 (예: 사누바 다낭 호텔 / Sanouva Danang Hotel)",
     "payment_date": "2026-08-09",
     "checkin_date": "2026-09-21",
     "checkout_date": "2026-09-23",
@@ -544,11 +546,14 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
     "currency": "KRW",
     "amount": 118716
 }
-지침:
-1. 결제일(August 9, 2026 등)과 체크인/아웃 날짜는 반드시 YYYY-MM-DD 숫자로 변환해.
-2. USD(84.32)와 KRW(118,716)가 같이 적혀 있거나 네이버페이 영수증이 있다면 실제 결제된 확정 원화인 currency: "KRW", amount: 118716 을 최우선 선택해.
-3. 룸타입 상세에 '데일리 애프터눈티'나 '조식' 혜택을 반드시 포함해.
-4. 순수 JSON 텍스트만 출력해.
+
+[🔥 엄격한 다중 문서 크로스 분석 지침]:
+1. 첨부 문서 중 '예약 확인서(Confirmation)'에는 날짜와 호텔명이 있고, '영수증(Receipt/현금영수증)'에는 금액이 있을 수 있어. 둘을 교차 분석해서 하나의 완성된 정보를 만들어.
+2. 결제일(August 9, 2026 등), 체크인, 체크아웃 날짜는 문서에 영문으로 적혀 있어도 반드시 'YYYY-MM-DD'(예: 2026-08-09) 숫자로 변환해.
+3. 확정 원화 우선: 영수증에 USD(84.32)와 KRW(118,716)가 같이 적혀 있거나 네이버페이 영수증이 있다면, 실제 결제된 확정 원화인 currency: "KRW", amount: 118716 을 최우선 선택해. 만약 문서에 결제 금액이 전혀 없다면 amount: 0, currency: "KRW" 로 처리해.
+4. 호텔명이 여러 개일 경우 영수증(결제내역)이 존재하는 호텔명을 1순위로 선택해.
+5. room_detail: '데일리 애프터눈티', '조식', '룸타입(Deluxe Twin 등)' 특징을 최대한 풍성하게 요약해.
+6. 다른 말은 일절 하지 말고 오직 '{' 로 시작해서 '}' 로 끝나는 순수 JSON 하나만 출력해.
 """
     contents = []
     for f in uploaded_files:
@@ -565,13 +570,22 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
         return {}, "파일 바이트를 읽어들이지 못했습니다."
 
     raw_res, err = call_gemini_multimodal(contents, prompt)
-    if raw_res:
-        cleaned = re.sub(r'```(?:json)?\s*', '', raw_res).strip('` \n')
-        m = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        if m:
-            try: return json.loads(m.group(0)), ""
-            except: pass
-    return {}, err if err else "AI 응답 파싱 실패"
+    if not raw_res:
+        return {}, err if err else "AI로부터 응답을 받지 못했습니다."
+
+    # 철벽 JSON 추출 로직 (어떤 앞뒤 부연설명이나 백틱도 완전 무력화)
+    try:
+        cleaned = re.sub(r'```(?:json)?', '', raw_res).strip('` \n')
+        # 가장 바깥쪽 { 와 } 찾기
+        first_brace = cleaned.find('{')
+        last_brace = cleaned.rfind('}')
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            json_str = cleaned[first_brace:last_brace + 1]
+            return json.loads(json_str), ""
+    except Exception as parse_e:
+        return {}, f"JSON 파싱 실패: {parse_e} | 원문: {raw_res[:80]}"
+
+    return {}, f"유효한 JSON을 찾을 수 없습니다: {raw_res[:80]}"
 
 # 2.02.06 | Gemini Flight e-Ticket Intelligent Structure Parser
 def parse_flight_ticket_files_with_gemini(uploaded_files):
