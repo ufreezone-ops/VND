@@ -2511,7 +2511,6 @@ else:
                 with col_h_rcpt:
                     uploaded_hotel_files = st.file_uploader("📸 호텔 바우처/영수증 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key="hotel_direct_uploader", accept_multiple_files=True)
                     if uploaded_hotel_files:
-                        if uploaded_hotel_files:
                         if st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel_direct", use_container_width=True, type="primary"):
                             with st.spinner("AI가 호텔 바우처/영수증을 정밀 분석 중..."):
                                 parsed, err = parse_hotel_voucher_files_with_gemini(uploaded_hotel_files)
@@ -2533,14 +2532,10 @@ else:
                                     if parsed.get('checkin_date'):
                                         st.session_state['h_checkin_input'] = safe_parse_date_obj(parsed.get('checkin_date'), datetime.now().date())
                                     if parsed.get('payment_date'):
-                                        # 👈 [Fixed] 위젯 충돌 방지를 위해 ai_payment_date 임시 키에 저장
                                         st.session_state['ai_payment_date'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
                                     
                                     st.toast("🎉 호텔 바우처 및 결제정보 자동 입력 완료!", icon="✅")
                                     time.sleep(0.5)
-                                    st.rerun()
-                                else:
-                                    st.error(f"🚨 분석 실패 사유: {err}")
                                     st.rerun()
                                 else:
                                     st.error(f"🚨 분석 실패 사유: {err}")
