@@ -352,7 +352,7 @@ def get_default_rate(curr):
     return fallback_rates.get(curr, 1.0)
 
 # ------------------------------------------------------------------------------
-# 2.02.00 | Media & Vision AI Subsystem (이미지/PDF 멀티모달 직접 분석 엔진)
+# 2.02.00 | Media & Vision AI Subsystem (안전한 멀티모달 & 바우처 파서)
 # ------------------------------------------------------------------------------
 # 2.02.01 | ImgBB Cloud Media Uploader
 def upload_image_to_imgbb(image_file):
@@ -380,92 +380,62 @@ def upload_image_to_imgbb(image_file):
     except: pass
     return ""
 
-# 2.02.02 | Google Cloud Vision OCR Engine
-def extract_text_from_vision_api(image_bytes):
+# 2.02.02 | PDF Text & Image Fallback Extractor
+def extract_pdf_first_page_image(pdf_bytes):
     try:
-        from google.oauth2 import service_account
-        from google.cloud import vision
-        
-        def find_gcp_key(d):
-            try:
-                if "private_key" in d and "client_email" in d: return dict(d)
-                for k, v in d.items():
-                    if isinstance(v, dict) or hasattr(v, 'items'):
-                        res = find_gcp_key(v)
-                        if res: return res
-            except: pass
-            return None
-            
-        secret_dict = find_gcp_key(st.secrets)
-        if not secret_dict: return ""
-            
-        if "type" not in secret_dict: secret_dict["type"] = "service_account"
-        if "project_id" not in secret_dict:
-            email = secret_dict.get("client_email", "")
-            if "@" in email and ".iam" in email: secret_dict["project_id"] = email.split("@")[1].split(".iam")[0]
-            else: secret_dict["project_id"] = "gtl-project-auto"
-                
-        if "\\n" in secret_dict["private_key"]:
-            secret_dict["private_key"] = secret_dict["private_key"].replace('\\n', '\n')
-            
-        credentials = service_account.Credentials.from_service_account_info(secret_dict)
-        client = vision.ImageAnnotatorClient(credentials=credentials)
-        image = vision.Image(content=image_bytes)
-        response = client.text_detection(image=image)
-        
-        texts = response.text_annotations
-        if texts: return texts[0].description
-        return ""
-    except: return ""
+        import fitz
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        if len(doc) > 0:
+            pix = doc[0].get_pixmap(dpi=150)
+            return pix.tobytes("png")
+    except: pass
+    return None
 
-# 2.02.03 | Universal Multi-Format Document Text Extractor
-def extract_text_from_file_or_image(file_bytes, filename=""):
-    if not file_bytes: return ""
-    is_pdf = filename.lower().endswith(".pdf") or file_bytes.startswith(b"%PDF")
+def extract_full_text_from_pdf(pdf_bytes):
+    text_content = ""
+    try:
+        import pypdf, io
+        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+        pages_text = [page.extract_text() for page in reader.pages if page.extract_text()]
+        text_content = "\n".join(pages_text).strip()
+        if len(text_content) > 30: return text_content
+    except: pass
     
-    if is_pdf:
-        try:
-            import io, pypdf
-            reader = pypdf.PdfReader(io.BytesIO(file_bytes))
-            extracted_pages = [page.extract_text() for page in reader.pages if page.extract_text()]
-            pdf_text = "\n".join(extracted_pages).strip()
-            if len(pdf_text) > 20: return pdf_text
-        except: pass
-        
-        try:
-            import fitz
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            pdf_text = "\n".join([page.get_text() for page in doc if page.get_text()]).strip()
-            if len(pdf_text) > 20: return pdf_text
-        except: pass
+    try:
+        import fitz
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        pages_text = [page.get_text() for page in doc if page.get_text()]
+        text_content = "\n".join(pages_text).strip()
+    except: pass
+    return text_content
 
-        try:
-            import google.generativeai as genai
-            if "GEMINI_API_KEY" in st.secrets:
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                for m_name in ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest']:
-                    try:
-                        model = genai.GenerativeModel(m_name)
-                        res = model.generate_content([
-                            {"mime_type": "application/pdf", "data": file_bytes},
-                            "이 영수증/바우처/문서에 포함된 모든 텍스트 내용을 요약하지 말고 있는 그대로 원문 텍스트로 추출해줘."
-                        ])
-                        if res.text and len(res.text.strip()) > 10:
-                            return res.text.strip()
-                    except: continue
-        except: pass
-
-    return extract_text_from_vision_api(file_bytes)
-
-# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (일반 지출)
-def summarize_receipt_files_with_gemini(uploaded_files):
-    if not uploaded_files: return ""
+# 2.02.03 | Gemini Multimodal Safe Runner
+def call_gemini_multimodal(contents, prompt_text=""):
+    if "GEMINI_API_KEY" not in st.secrets:
+        return ""
     try:
         import google.generativeai as genai
-        if "GEMINI_API_KEY" not in st.secrets: return ""
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        
-        prompt = """너는 다국어 영수증 전문 분석가야. 첨부된 영수증 문서(PDF/사진)에서 상호명, 주소, 전화번호, 세금, 날짜, 카드번호, 총액 등 불필요한 정보는 버리고 오직 '소비한 품목'과 '가격'만 추출해.
+        full_payload = list(contents)
+        if prompt_text:
+            full_payload.append(prompt_text)
+            
+        for m_name in ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']:
+            try:
+                model = genai.GenerativeModel(m_name)
+                res = model.generate_content(full_payload)
+                if res and res.text:
+                    return res.text.strip()
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return ""
+
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (일반 영수증)
+def summarize_receipt_files_with_gemini(uploaded_files):
+    if not uploaded_files: return ""
+    prompt = """너는 다국어 영수증 전문 분석가야. 첨부된 문서에서 상호명, 주소, 전화번호, 세금, 날짜, 카드번호, 총액 등 불필요한 정보는 버리고 오직 '소비한 품목'과 '가격'만 추출해.
 지침:
 1. 품목 이름은 무조건 '한국어'로 자연스럽게 번역해.
 2. 한국어 품목 이름 다음에 영문 품목이름을 넣어줘 (예: 후시코르트(Fucicort) 연고).
@@ -473,38 +443,32 @@ def summarize_receipt_files_with_gemini(uploaded_files):
 4. 수량이 2개 이상일 때만 품목 이름 뒤에 '(X개)'라고 표시해.
 5. 가격 숫자는 소수점 정리하고 화폐단위(VND, KRW, USD 등)를 표기해.
 6. 각 항목은 '품목명(영문) (특징) 가격' 형태로 한 줄씩 출력해.
-7. 인사말이나 부연 설명 없이 결과만 딱 출력해.
+7. 부연 설명 없이 결과만 한 줄씩 출력해.
 """
-        contents = []
-        for f in uploaded_files:
-            f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
-            f_name = getattr(f, "name", "").lower()
-            mime = "application/pdf" if (f_name.endswith(".pdf") or f_bytes.startswith(b"%PDF")) else "image/jpeg"
+    contents = []
+    for f in uploaded_files:
+        f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
+        f_name = getattr(f, "name", "").lower()
+        if f_name.endswith('.pdf') or f_bytes.startswith(b"%PDF"):
+            pdf_text = extract_full_text_from_pdf(f_bytes)
+            if len(pdf_text) > 30:
+                contents.append(f"--- [PDF 문서 원문 텍스트] ---\n{pdf_text}\n---")
+            else:
+                img_data = extract_pdf_first_page_image(f_bytes)
+                if img_data: contents.append({"mime_type": "image/png", "data": img_data})
+        else:
+            mime = "image/png" if f_name.endswith(".png") else "image/jpeg"
             contents.append({"mime_type": mime, "data": f_bytes})
-        contents.append(prompt)
-        
-        for m_name in ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-flash-latest']:
-            try:
-                model = genai.GenerativeModel(m_name)
-                res = model.generate_content(contents)
-                if res.text: return res.text.strip()
-            except: continue
-        return ""
-    except: return ""
+            
+    return call_gemini_multimodal(contents, prompt)
 
 # 2.02.05 | Gemini Hotel Voucher Intelligent Structure Parser (확정 원화금액 최우선 인식)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
     if not uploaded_files: return {}
-    try:
-        import google.generativeai as genai
-        import json
-        if "GEMINI_API_KEY" not in st.secrets: return {}
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        
-        prompt = """너는 아고다(Agoda), 부킹닷컴, 네이버페이 현금영수증 등 호텔 바우처 및 결제 영수증 전문 분석 AI야.
-첨부된 문서(PDF 또는 이미지) 전체를 종합 분석하여 다음 JSON 형식으로만 응답해:
+    prompt = """너는 아고다(Agoda), 부킹닷컴, 네이버페이 현금영수증 등 호텔 바우처 및 결제 영수증 전문 분석 AI야.
+첨부된 문서(PDF 텍스트 또는 이미지)를 정밀 분석하여 다음 JSON 형식으로만 응답해:
 {
-    "platform": "예약 플랫폼 (예: Agoda, Booking.com, Trip.com 등)",
+    "platform": "예약 플랫폼 (예: Agoda, Booking.com, Trip.com, 네이버페이 등)",
     "hotel_name": "호텔 이름 (한글 친화적 명칭 + 영문 포함. 예: 센츄리 리버사이드 호텔 후에 / Century Riverside Hotel Hue)",
     "payment_date": "실제 결제일 또는 발행일자 (YYYY-MM-DD 형식. 예: 2026-08-09)",
     "checkin_date": "체크인 날짜 (YYYY-MM-DD 형식. 예: 2026-09-26)",
@@ -515,43 +479,42 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
     "currency": "실제 결제된 통화 코드 (KRW, VND, USD, EUR 중 하나)",
     "amount": "실제 결제된 총 금액 (콤마 없는 순수 숫자. 예: 118716)"
 }
-[🔥 결제 금액/통화 최우선 원칙]:
+[🔥 결제 금액 및 통화 최우선 원칙]:
 1. 아고다/부킹닷컴 등의 문서에 USD(예: USD 84.32)와 KRW(예: KRW 118,716)가 같이 적혀 있거나, 네이버페이 현금영수증에 원화 금액이 함께 있다면, 실제 한국 카드/계좌에서 결제된 '확정 원화(KRW) 금액'을 최우선으로 선택하여 currency: "KRW", amount: 118716 으로 출력해.
 2. payment_date는 영수증에 적힌 '결제일', '발행일자', '승인일'을 찾아 반드시 YYYY-MM-DD(예: 2026-08-09)로 출력해.
 3. nights는 체크인과 체크아웃 날짜 차이로 정수로 계산해. (예: 9월 26일~28일이면 nights: 2)
 4. room_detail은 바우처나 영수증의 상품명(예: 데일리 애프터눈 티 인클루시브), 객실 타입(Deluxe Garden View Twin 등), 포함 서비스(조식, 피트니스 등)를 최대한 구체적으로 요약해.
 5. 부연 설명이나 마크다운 백틱 없이 오직 순수 JSON 텍스트만 출력해.
 """
-        contents = []
-        for f in uploaded_files:
-            f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
-            f_name = getattr(f, "name", "").lower()
-            mime = "application/pdf" if (f_name.endswith(".pdf") or f_bytes.startswith(b"%PDF")) else "image/jpeg"
+    contents = []
+    for f in uploaded_files:
+        f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
+        f_name = getattr(f, "name", "").lower()
+        if f_name.endswith('.pdf') or f_bytes.startswith(b"%PDF"):
+            pdf_text = extract_full_text_from_pdf(f_bytes)
+            if len(pdf_text) > 40:
+                contents.append(f"--- [호텔 바우처 PDF 원문 내용] ---\n{pdf_text}\n---")
+            else:
+                img_data = extract_pdf_first_page_image(f_bytes)
+                if img_data: contents.append({"mime_type": "image/png", "data": img_data})
+        else:
+            mime = "image/png" if f_name.endswith(".png") else "image/jpeg"
             contents.append({"mime_type": mime, "data": f_bytes})
-        contents.append(prompt)
-        
-        for m_name in ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-flash-latest']:
-            try:
-                model = genai.GenerativeModel(m_name)
-                res = model.generate_content(contents)
-                if res.text:
-                    cleaned = re.sub(r'```(?:json)?\s*', '', res.text).strip('` \n')
-                    return json.loads(cleaned)
-            except: continue
-        return {}
-    except: return {}
+            
+    raw_res = call_gemini_multimodal(contents, prompt)
+    if raw_res:
+        cleaned = re.sub(r'```(?:json)?\s*', '', raw_res).strip('` \n')
+        m = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        if m:
+            try: return json.loads(m.group(0))
+            except Exception: pass
+    return {}
 
 # 2.02.06 | Gemini Flight e-Ticket Intelligent Structure Parser
 def parse_flight_ticket_files_with_gemini(uploaded_files):
     if not uploaded_files: return {}
-    try:
-        import google.generativeai as genai
-        import json
-        if "GEMINI_API_KEY" not in st.secrets: return {}
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        
-        prompt = """너는 항공권 e-티켓 및 결제 영수증 전문 분석 AI야.
-첨부된 문서(PDF 또는 이미지) 전체를 종합 분석하여 다음 JSON 형식으로만 응답해:
+    prompt = """너는 항공권 e-티켓 및 결제 영수증 전문 분석 AI야.
+첨부된 문서(PDF 텍스트 또는 이미지)를 정밀 분석하여 다음 JSON 형식으로만 응답해:
 {
     "platform": "예약처 (예: 트립닷컴, 네이버항공, 마이리얼트립 등)",
     "carrier": "항공사 이름 (예: 비엣젯항공, 에어부산 등)",
@@ -572,24 +535,29 @@ def parse_flight_ticket_files_with_gemini(uploaded_files):
 1. 네이버페이/카드 영수증이 있다면 실제 결제된 확정 원화(KRW) 금액을 우선 채워.
 2. 부연 설명 없이 순수 JSON 텍스트만 출력해.
 """
-        contents = []
-        for f in uploaded_files:
-            f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
-            f_name = getattr(f, "name", "").lower()
-            mime = "application/pdf" if (f_name.endswith(".pdf") or f_bytes.startswith(b"%PDF")) else "image/jpeg"
+    contents = []
+    for f in uploaded_files:
+        f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
+        f_name = getattr(f, "name", "").lower()
+        if f_name.endswith('.pdf') or f_bytes.startswith(b"%PDF"):
+            pdf_text = extract_full_text_from_pdf(f_bytes)
+            if len(pdf_text) > 40:
+                contents.append(f"--- [항공권 e-티켓 PDF 원문 내용] ---\n{pdf_text}\n---")
+            else:
+                img_data = extract_pdf_first_page_image(f_bytes)
+                if img_data: contents.append({"mime_type": "image/png", "data": img_data})
+        else:
+            mime = "image/png" if f_name.endswith(".png") else "image/jpeg"
             contents.append({"mime_type": mime, "data": f_bytes})
-        contents.append(prompt)
-        
-        for m_name in ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-flash-latest']:
-            try:
-                model = genai.GenerativeModel(m_name)
-                res = model.generate_content(contents)
-                if res.text:
-                    cleaned = re.sub(r'```(?:json)?\s*', '', res.text).strip('` \n')
-                    return json.loads(cleaned)
-            except: continue
-        return {}
-    except: return {}
+            
+    raw_res = call_gemini_multimodal(contents, prompt)
+    if raw_res:
+        cleaned = re.sub(r'```(?:json)?\s*', '', raw_res).strip('` \n')
+        m = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        if m:
+            try: return json.loads(m.group(0))
+            except Exception: pass
+    return {}
 
 # ------------------------------------------------------------------------------
 # 2.03.00 | Data Cleansing & ETL Pipeline (데이터 정규화, 로드, 캐시 제어)
@@ -2161,6 +2129,15 @@ else:
                     st.session_state['h_nights_input'] = max(1, int(parsed.get('nights', 1)))
                     st.session_state['h_amt_input'] = clean_amount_to_float(parsed.get('amount', 0.0))
                     
+                    # 결제 통화 및 결제 수단 자동 연동
+                    if parsed.get('currency'):
+                        st.session_state['h_curr_select'] = str(parsed.get('currency')).upper()
+                    if parsed.get('payment_method'):
+                        pm = str(parsed.get('payment_method'))
+                        for cand in ["네이버페이(원화고정)", "원화계좌(한국)", "트래블카드(외화)", "신용카드(원화결제)"]:
+                            if any(k in pm for k in ["네이버", "원화계좌", "트래블", "신용카드"]):
+                                st.session_state['h_asset_select'] = cand
+                                break
                     if parsed.get('checkin_date'):
                         st.session_state['h_checkin_input'] = safe_parse_date_obj(parsed.get('checkin_date'), datetime.now().date())
                     if parsed.get('payment_date'):
@@ -2182,6 +2159,10 @@ else:
                     st.session_state['f_bag_memo_input'] = parsed.get('bag_memo', '')
                     st.session_state['f_amt_input'] = clean_amount_to_float(parsed.get('amount', 0.0))
                     
+                    if parsed.get('currency'):
+                        st.session_state['f_curr_select'] = str(parsed.get('currency')).upper()
+                    if parsed.get('trip_type') in ["왕복", "편도"]:
+                        st.session_state['f_trip_type_radio'] = parsed.get('trip_type')
                     if parsed.get('dep_date'):
                         st.session_state['f_dep_date_input'] = safe_parse_date_obj(parsed.get('dep_date'), datetime.now().date())
                     if parsed.get('ret_date'):
@@ -2205,6 +2186,11 @@ else:
         if st.session_state.get('ai_toast_msg'):
             st.toast(st.session_state['ai_toast_msg'], icon="🎉")
             del st.session_state['ai_toast_msg']
+
+        if 'shared_date_input' not in st.session_state:
+            st.session_state['shared_date_input'] = datetime.now(dynamic_tz).date()
+            
+        sel_date = st.date_input("날짜 선택", key="shared_date_input")
 
         # 상단 결제일자 달력 위젯
         default_cal_date = st.session_state.get('shared_date_input', datetime.now(dynamic_tz).date())
@@ -2413,7 +2399,6 @@ else:
                 with col_h_rcpt:
                     uploaded_hotel_files = st.file_uploader("📸 호텔 바우처/영수증 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"hotel_rcpt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                     if uploaded_hotel_files:
-                        # [핵심] on_click 콜백으로 안전하게 바인딩하여 튕김/에러 100% 차단!
                         st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel", on_click=cb_run_ai_hotel_scan, use_container_width=True, type="primary")
 
                 with col_h_input:
@@ -2421,21 +2406,25 @@ else:
                     with c1:
                         h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com", key="h_gw_input")
                         h_name = st.text_input("2. 호텔명", placeholder="예: 센츄리 리버사이드 호텔 후에", key="h_name_input")
-                        h_checkin = st.date_input("3. 체크인 날짜", value=st.session_state.get('h_checkin_input', sel_date), key="h_checkin_input")
+                        if 'h_checkin_input' not in st.session_state: st.session_state['h_checkin_input'] = sel_date
+                        h_checkin = st.date_input("3. 체크인 날짜", key="h_checkin_input")
                         hotel_assets = ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"]
+                        if 'h_asset_select' not in st.session_state: st.session_state['h_asset_select'] = hotel_assets[0]
                         h_asset = st.selectbox("4. 결제 수단", hotel_assets, key="h_asset_select")
                     with c2:
-                        h_nights = st.number_input("5. 숙박 일수", min_value=1, value=max(1, int(st.session_state.get('h_nights_input', 1))), step=1, key="h_nights_input")
-                        h_checkout_calc = h_checkin + timedelta(days=h_nights)
+                        if 'h_nights_input' not in st.session_state: st.session_state['h_nights_input'] = 1
+                        h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1, key="h_nights_input")
+                        h_checkout_calc = h_checkin + timedelta(days=int(h_nights))
                         st.info(f"📅 체크아웃 예정일: **{h_checkout_calc.strftime('%Y-%m-%d')}** ({h_nights}박)")
-                        h_detail = st.text_area("6. 내용 (룸타입/특징)", placeholder="예: 디럭스 더블, 조식포함 등", height=68, key="h_detail_input")
+                        h_detail = st.text_area("6. 내용 (룸타입/애프터눈티/특징)", placeholder="예: 디럭스 리버뷰 트윈, 조식포함, 데일리 애프터눈티", height=68, key="h_detail_input")
                         h_curr_opts = ["KRW", "USD", "EUR", "VND", "PHP", "CNY", "TRY"]
+                        if 'h_curr_select' not in st.session_state: st.session_state['h_curr_select'] = "KRW"
                         h_curr = st.selectbox("7. 결제 통화", h_curr_opts, key="h_curr_select")
 
                 c3, c4, c5 = st.columns(3)
                 with c3: 
-                    h_amt_val = clean_amount_to_float(st.session_state.get('h_amt_input', 0.0))
-                    h_amt = st.number_input(f"8. 결제 금액({h_curr})", min_value=0.0, value=h_amt_val, step=1.0, key="h_amt_input")
+                    if 'h_amt_input' not in st.session_state: st.session_state['h_amt_input'] = 0.0
+                    h_amt = st.number_input(f"8. 결제 금액({h_curr})", min_value=0.0, step=1.0, key="h_amt_input")
                 with c4: h_rate = st.number_input("9. 적용 환율", value=1.0 if h_curr=="KRW" or "네이버" in h_asset else get_default_rate(h_curr), format="%.4f")
                 with c5: h_fee = st.number_input("10. 환율 수수료(원)", min_value=0)
 
@@ -2453,9 +2442,9 @@ else:
                                 if u: u_list.append(u)
                             final_hotel_receipts = ",".join(u_list)
                         
-                    full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout_calc.strftime('%m/%d')}) | {h_detail.replace('\\n', ' ')}"
+                    full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout_calc.strftime('%m/%d')}) | {h_detail.replace(chr(10), ' ')}"
                     
-                    hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{f_fee}원" if f_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
+                    hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
                     checkin_desc = f"🏨 {h_name} 체크인 ({h_nights}박)"
                     checkin_row = pd.DataFrame([{'Date': h_checkin.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크인', 'Description': checkin_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkin', 'Receipt_URL': ''}])
                     checkout_desc = f"🏨 {h_name} 체크아웃"
@@ -2469,7 +2458,7 @@ else:
                         time.sleep(0.8); st.rerun()
 
             elif "체크인 보증금 결제" in hotel_sub_mode:
-                st.info("💡 호텔 체크인 시 임시로 맡기는 보증금(디파짓)을 기록합니다. (지출액에 포함되지 않으며 지갑에서만 안전하게 차감됩니다)")
+                st.info("💡 호텔 체크인 시 임시로 맡기는 보증금(디파짓)을 기록합니다. (지출액 제외, 외화 지갑 인벤토리 차감)")
                 c_d1, c_d2 = st.columns(2)
                 with c_d1:
                     dep_h_name = st.text_input("호텔명", placeholder="예: 센츄리 리버사이드 호텔 후에")
@@ -2500,7 +2489,7 @@ else:
                         time.sleep(0.8); st.rerun()
 
             elif "체크아웃 보증금 환급" in hotel_sub_mode:
-                st.info("💡 체크아웃 시 돌려받은 보증금을 외화 지갑(카드/현금)으로 다시 입금합니다.")
+                st.info("💡 체크아웃 시 돌려받은 보증금을 외화 지갑(카드/현금)으로 다시 입금 복구합니다.")
                 c_r1, c_r2 = st.columns(2)
                 with c_r1:
                     rf_h_name = st.text_input("호텔명", placeholder="예: 센츄리 리버사이드 호텔 후에")
@@ -2531,7 +2520,7 @@ else:
                         time.sleep(0.8); st.rerun()
 
             else:
-                st.info("💡 호텔 체크아웃 시 룸차지(수영장 맥주, 룸서비스 등) 외상을 청산하고, **사이드바의 미결제 외상을 0원으로 즉시 정산**합니다.")
+                st.info("💡 호텔 체크아웃 시 룸차지(수영장 맥주, 룸서비스 등) 외상을 청산하고, 사이드바 미결제 외상을 0원으로 즉시 정산합니다.")
                 c_c1, c_c2 = st.columns(2)
                 with c_c1:
                     clear_curr = st.selectbox("청산할 외상 통화", available_currs, index=available_currs.index(IN_CURR) if IN_CURR in available_currs else 0)
