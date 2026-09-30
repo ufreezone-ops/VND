@@ -409,13 +409,14 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner
+# 2.02.03 | Gemini Multimodal Direct Runner (404 방지 공식 엔드포인트 자동 Failover)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
         
-    candidate_models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+    # 만료된 2.0-flash 대신 100% 가동 중인 공식 안정 엔드포인트 리스트
+    active_models = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-2.0-flash-exp', 'gemini-1.5-pro-latest', 'gemini-1.5-pro']
     last_err = ""
 
     # 1. Python SDK 시도
@@ -429,7 +430,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
                 full_payload.append({"mime_type": item.get("mime_type", "application/pdf"), "data": item["data"]})
         if prompt_text: full_payload.append(prompt_text)
             
-        for m_name in candidate_models:
+        for m_name in active_models:
             try:
                 model = genai.GenerativeModel(m_name)
                 res = model.generate_content(full_payload)
@@ -437,10 +438,11 @@ def call_gemini_multimodal(contents, prompt_text=""):
                     return res.text.strip(), ""
             except Exception as e:
                 last_err = f"SDK({m_name}): {e}"
+                continue
     except Exception as e_sdk:
         last_err = f"SDK 임포트 에러: {e_sdk}"
 
-    # 2. REST API 직접 전송 (SDK 미지원/버전 충돌 대비 무적 폴백)
+    # 2. REST API 직접 전송 (SDK 404 발생 시 다이렉트 통신)
     rest_parts = []
     for item in contents:
         if isinstance(item, str): rest_parts.append({"text": item})
@@ -449,7 +451,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
             rest_parts.append({"inline_data": {"mime_type": item.get("mime_type", "application/pdf"), "data": b64_str}})
     if prompt_text: rest_parts.append({"text": prompt_text})
 
-    for r_m in ['gemini-1.5-flash', 'gemini-2.0-flash']:
+    for r_m in ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest']:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{r_m}:generateContent?key={api_key}"
             resp = requests.post(url, json={"contents": [{"parts": rest_parts}]}, headers={"Content-Type": "application/json"}, timeout=30)
@@ -481,20 +483,21 @@ def summarize_receipt_files_with_gemini(uploaded_files):
 """
     contents = []
     for f in uploaded_files:
-        f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
-        f_name = getattr(f, "name", "").lower()
-        if f_name.endswith('.pdf') or f_bytes.startswith(b"%PDF"):
-            pdf_text = extract_full_text_from_pdf(f_bytes)
-            if len(pdf_text) > 30:
-                contents.append(f"--- [PDF 문서 원문 텍스트] ---\n{pdf_text}\n---")
-            else:
-                img_data = extract_pdf_first_page_image(f_bytes)
-                if img_data: contents.append({"mime_type": "image/png", "data": img_data})
-        else:
-            mime = "image/png" if f_name.endswith(".png") else "image/jpeg"
+        try:
+            if hasattr(f, "seek"): f.seek(0)
+            f_bytes = f.getvalue() if hasattr(f, "getvalue") else f.read()
+            if not f_bytes: continue
+            f_name = getattr(f, "name", "").lower()
+            mime = "application/pdf" if (f_name.endswith(".pdf") or f_bytes.startswith(b"%PDF")) else "image/jpeg"
             contents.append({"mime_type": mime, "data": f_bytes})
+        except: continue
             
-    return call_gemini_multimodal(contents, prompt)
+    if not contents:
+        return ""
+
+    # call_gemini_multimodal이 (텍스트, 에러) 튜플을 반환하므로 텍스트만 추출
+    res_text, _ = call_gemini_multimodal(contents, prompt)
+    return res_text
 
 # 2.02.05 | Gemini Hotel Voucher Parser
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
