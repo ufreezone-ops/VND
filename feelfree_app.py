@@ -968,7 +968,12 @@ def append_new_data(new_rows_df):
     merged_df = pd.concat([latest_df, new_rows_df], ignore_index=True)
     return save_data(merged_df)
         
-ledger_df = load_data(ACTIVE_SHEET)
+# [Optimistic Memory Cache] 구글 시트 재다운로드 병목 방지
+if 'active_ledger_df' not in st.session_state or st.session_state.get('last_loaded_sheet') != ACTIVE_SHEET:
+    st.session_state.active_ledger_df = load_data(ACTIVE_SHEET)
+    st.session_state.last_loaded_sheet = ACTIVE_SHEET
+
+ledger_df = st.session_state.active_ledger_df
 
 # ------------------------------------------------------------------------------
 # 2.05.03 | Cash Inventory Cloud Loader & Saver (지폐 실사 잔고 클라우드 동기화)
@@ -3119,23 +3124,36 @@ else:
                             with c_up:
                                 if st.button("🔼 위로 한 칸 이동", key=f"btn_move_up_{real_idx}", use_container_width=True):
                                     if real_idx > 0:
-                                        with st.spinner("순서 이동 중..."):
-                                            # 원본 원장(ledger_df) 기준으로 고속 스왑
-                                            ledger_df.iloc[real_idx - 1], ledger_df.iloc[real_idx] = ledger_df.iloc[real_idx].copy(), ledger_df.iloc[real_idx - 1].copy()
-                                            if quick_swap_and_save(ledger_df):
-                                                st.toast("🔼 순서가 위로 이동되었습니다!", icon="✅")
-                                                time.sleep(0.3)
-                                                st.rerun()
+                                        # 1. 메모리(세션)에서 0.01초 만에 즉시 교환
+                                        cur_df = st.session_state.active_ledger_df
+                                        idx_above = real_idx - 1
+                                        cur_df.iloc[idx_above], cur_df.iloc[real_idx] = cur_df.iloc[real_idx].copy(), cur_df.iloc[idx_above].copy()
+                                        st.session_state.active_ledger_df = cur_df
+                                        
+                                        # 2. 구글 시트 원장 즉시 직결 반영
+                                        try:
+                                            conn.update(worksheet=ACTIVE_SHEET, data=cur_df.reindex(columns=FINAL_COLUMNS))
+                                        except: pass
+                                        
+                                        # 3. 기다림 없이 즉시 화면 리프레시 (체감 0.1초)
+                                        st.rerun()
+
                             with c_down:
                                 if st.button("🔽 아래로 한 칸 이동", key=f"btn_move_down_{real_idx}", use_container_width=True):
-                                    if real_idx < len(ledger_df) - 1:
-                                        with st.spinner("순서 이동 중..."):
-                                            # 원본 원장(ledger_df) 기준으로 고속 스왑
-                                            ledger_df.iloc[real_idx + 1], ledger_df.iloc[real_idx] = ledger_df.iloc[real_idx].copy(), ledger_df.iloc[real_idx + 1].copy()
-                                            if quick_swap_and_save(ledger_df):
-                                                st.toast("🔽 순서가 아래로 이동되었습니다!", icon="✅")
-                                                time.sleep(0.3)
-                                                st.rerun()
+                                    cur_df = st.session_state.active_ledger_df
+                                    if real_idx < len(cur_df) - 1:
+                                        # 1. 메모리(세션)에서 0.01초 만에 즉시 교환
+                                        idx_below = real_idx + 1
+                                        cur_df.iloc[idx_below], cur_df.iloc[real_idx] = cur_df.iloc[real_idx].copy(), cur_df.iloc[idx_below].copy()
+                                        st.session_state.active_ledger_df = cur_df
+                                        
+                                        # 2. 구글 시트 원장 즉시 직결 반영
+                                        try:
+                                            conn.update(worksheet=ACTIVE_SHEET, data=cur_df.reindex(columns=FINAL_COLUMNS))
+                                        except: pass
+                                        
+                                        # 3. 기다림 없이 즉시 화면 리프레시 (체감 0.1초)
+                                        st.rerun()
 
                             amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
                             krw_equivalent = row_data['Amount'] if row_data['Currency'] == 'KRW' else row_data['Amount'] * row_data['AppliedRate']
