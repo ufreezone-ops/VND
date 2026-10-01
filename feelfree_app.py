@@ -525,20 +525,24 @@ def summarize_receipt_files_with_gemini(uploaded_files):
     res_text, _ = call_gemini_multimodal(contents, prompt)
     return res_text
 
-# 2.02.05 | Gemini Hotel Voucher Parser (import json 내장 완결형)
+# 2.02.05 | Gemini Hotel Voucher Parser (면적/발코니/성급/부분취소율 다차원 분석 완결형)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
-    import json  # 👈 [Fixed] 누락된 json 라이브러리 직접 임포트
-
+    import json
     if not uploaded_files: 
         return {}, "첨부된 파일이 없습니다."
         
     prompt = """너는 아고다(Agoda), 부킹닷컴, 네이버페이 현금영수증 등 호텔 바우처 및 결제 영수증 전문 분석 AI야.
-첨부된 문서들을 종합 분석하여 아래 JSON 포맷으로만 응답해.
+첨부된 문서(PDF/이미지)들을 종합 분석하여 아래 JSON 포맷으로만 응답해:
 
 [응답 JSON 스키마]:
 {
     "platform": "Agoda",
     "hotel_name": "호텔 이름 (예: 사누바 다낭 호텔 / Sanouva Danang Hotel)",
+    "star_rating": "4성급",
+    "room_area": 28,
+    "has_balcony": "유",
+    "cancel_deadline": "2026-09-25",
+    "cancel_rate": 100,
     "payment_date": "2026-08-09",
     "checkin_date": "2026-09-21",
     "checkout_date": "2026-09-23",
@@ -549,13 +553,16 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
     "amount": 118716
 }
 
-[🔥 엄격한 다중 문서 크로스 분석 지침]:
-1. 첨부 문서 중 '예약 확인서(Confirmation)'에는 날짜와 호텔명이 있고, '영수증(Receipt/현금영수증)'에는 금액이 있을 수 있어. 둘을 교차 분석해서 하나의 완성된 정보를 만들어.
-2. 결제일(August 9, 2026 등), 체크인, 체크아웃 날짜는 문서에 영문으로 적혀 있어도 반드시 'YYYY-MM-DD'(예: 2026-08-09) 숫자로 변환해.
-3. 확정 원화 우선: 영수증에 USD(84.32)와 KRW(118,716)가 같이 적혀 있거나 네이버페이 영수증이 있다면, 실제 결제된 확정 원화인 currency: "KRW", amount: 118716 을 최우선 선택해. 만약 문서에 결제 금액이 전혀 없다면 amount: 0, currency: "KRW" 로 처리해.
-4. 호텔명이 여러 개일 경우 영수증(결제내역)이 존재하는 호텔명을 1순위로 선택해.
-5. room_detail: '데일리 애프터눈티', '조식', '룸타입(Deluxe Twin 등)' 특징을 최대한 풍성하게 요약해.
-6. 다른 말은 일절 하지 말고 오직 '{' 로 시작해서 '}' 로 끝나는 순수 JSON 하나만 출력해.
+[🔥 엄격한 다차원 스펙 추출 지침]:
+1. star_rating: 호텔 성급(예: 3성급, 4성급, 5성급, 부티크 등). 명시가 없으면 이름/숙소 특성으로 합리적 추론.
+2. room_area: 객실 면적(㎡ 단위 숫자만. 예: 28㎡ -> 28, 35sqm -> 35). 문서에 없으면 0.
+3. has_balcony: 발코니/테라스 유무 ('유' 또는 '무').
+4. cancel_deadline: 무료 또는 부분 취소 마감 날짜 (반드시 YYYY-MM-DD 형식). 없으면 "".
+5. cancel_rate: 위 마감일까지 취소 시 환불 비율 (숫자만. 100, 50, 60 등. 전액무료취소는 100, 환불불가는 0).
+6. payment_date, checkin_date, checkout_date: 영문 월 표기라도 반드시 'YYYY-MM-DD' 숫자로 변환.
+7. 확정 원화 우선: USD와 KRW가 병기되어 있거나 네이버페이 영수증이 있다면 확정 원화(KRW) 금액을 최우선 선택.
+8. room_detail: '데일리 애프터눈티', '조식', '룸타입' 특징 요약.
+9. 다른 설명 없이 오직 '{' 로 시작해서 '}' 로 끝나는 순수 JSON 하나만 출력해.
 """
     contents = []
     for f in uploaded_files:
@@ -575,7 +582,6 @@ def parse_hotel_voucher_files_with_gemini(uploaded_files):
     if not raw_res:
         return {}, err if err else "AI로부터 응답을 받지 못했습니다."
 
-    # 철벽 JSON 추출 로직
     try:
         cleaned = re.sub(r'```(?:json)?', '', raw_res).strip('` \n')
         first_brace = cleaned.find('{')
@@ -1219,6 +1225,82 @@ def cb_pull_cloud_cash(curr_c, counts_dict, b_list):
         st.session_state[f"cnt_{curr_c}_{b_id}"] = int(loaded_val) if loaded_val > 0 else None
 
 with st.sidebar:
+    # --------------------------------------------------------------------------
+    # [2단계] D-Day 및 취소 마감 지능형 관제탑 렌더러
+    # --------------------------------------------------------------------------
+    def render_dday_control_tower():
+        dep_rows_sb = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
+        korea_dep_sb = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
+        t_dep_sb = korea_dep_sb if not korea_dep_sb.empty else dep_rows_sb
+        
+        sb_dep_dt = None
+        if not t_dep_sb.empty:
+            m_dsb = re.search(r'(\d{4}-\d{2})-(\d{2})', str(t_dep_sb.iloc[0]['Date']))
+            if m_dsb: sb_dep_dt = datetime.strptime(m_dsb.group(0), "%Y-%m-%d").date()
+
+        arr_rows_sb = ledger_df[ledger_df['Category'].str.contains('귀국|입국', na=False)]
+        korea_arr_sb = ledger_df[ledger_df['Category'].str.contains('귀국_한국|귀국.*한국|입국_한국|입국.*한국', na=False)]
+        t_arr_sb = korea_arr_sb if not korea_arr_sb.empty else arr_rows_sb
+        
+        sb_arr_dt = None
+        if not t_arr_sb.empty:
+            m_asb = re.search(r'(\d{4}-\d{2})-(\d{2})', str(t_arr_sb.iloc[-1]['Date']))
+            if m_asb: sb_arr_dt = datetime.strptime(m_asb.group(0), "%Y-%m-%d").date()
+
+        today_sb = datetime.now(TZ_KST).date()
+        
+        # 1. 비행 D-Day 배지 생성
+        if sb_dep_dt:
+            diff_dep = (sb_dep_dt - today_sb).days
+            if diff_dep > 0:
+                flight_badge = f"<span style='background-color:#0284C7; color:white; padding:3px 8px; border-radius:6px; font-weight:bold; font-size:12px;'>🛫 출국 D-{diff_dep}일</span>"
+            elif diff_dep == 0:
+                flight_badge = f"<span style='background-color:#EA580C; color:white; padding:3px 8px; border-radius:6px; font-weight:bold; font-size:12px;'>🔥 오늘 출국! D-Day</span>"
+            else:
+                if sb_arr_dt and today_sb <= sb_arr_dt:
+                    traveling_day = (today_sb - sb_dep_dt).days + 1
+                    flight_badge = f"<span style='background-color:#16A34A; color:white; padding:3px 8px; border-radius:6px; font-weight:bold; font-size:12px;'>📍 여행 {traveling_day}일차</span>"
+                else:
+                    flight_badge = f"<span style='background-color:#475569; color:white; padding:3px 8px; border-radius:6px; font-weight:bold; font-size:12px;'>🏁 여행 완료</span>"
+        else:
+            flight_badge = "<span style='color:#94A3B8; font-size:12px;'>🛫 출국 일정 미정</span>"
+
+        # 2. 호텔 취소 마감 D-Day 탐색
+        hotel_rows = ledger_df[ledger_df['Category'] == '호텔']
+        cancel_alerts = []
+        for _, h_r in hotel_rows.iterrows():
+            desc_h = str(h_r['Description'])
+            m_c = re.search(r'취소마감:(\d{2}/\d{2})\((\d+)%환불\)', desc_h)
+            if m_c:
+                c_mmdd, c_rate = m_c.group(1), m_c.group(2)
+                c_year = sb_dep_dt.year if sb_dep_dt else today_sb.year
+                try:
+                    c_target_dt = datetime.strptime(f"{c_year}/{c_mmdd}", "%Y/%m/%d").date()
+                    diff_c = (c_target_dt - today_sb).days
+                    h_short_name = re.sub(r'\[.*?\]\s*', '', desc_h).split('|')[0].strip()[:9]
+                    
+                    if diff_c > 0:
+                        c_color = "#EF4444" if diff_c <= 3 else "#F59E0B"
+                        cancel_alerts.append(f"<div style='font-size:11.5px; color:{c_color}; margin-top:2px;'>🚨 {h_short_name} 취소 D-{diff_c}일 ({c_rate}%환불)</div>")
+                    elif diff_c == 0:
+                        cancel_alerts.append(f"<div style='font-size:11.5px; color:#EF4444; font-weight:bold; margin-top:2px;'>🚨 {h_short_name} 오늘 취소 마감! ({c_rate}%환불)</div>")
+                except: pass
+
+        alerts_html = "".join(cancel_alerts) if cancel_alerts else "<div style='font-size:11px; color:#64748B;'>예정된 호텔 취소 마감 없음</div>"
+
+        # 관제탑 박스 출력
+        st.markdown(f"""
+            <div style='background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 10px 12px; margin-bottom: 14px;'>
+                <div style='display:flex; justify-content:space-between; align-items:center;'>
+                    <span style='font-size:12px; font-weight:bold; color:#E2E8F0;'>🧭 여정 관제탑</span>
+                    {flight_badge}
+                </div>
+                <div style='margin-top:6px; border-top:1px dashed #475569; padding-top:6px;'>
+                    {alerts_html}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
     # 4.01.01 | SPI / Provisioning Mode Context-Aware Panel
     if st.session_state.get('show_spi', False) or st.session_state.get('show_new_trip', False):
         st.subheader("🧭 GTL 관제탑 모드")
@@ -1233,6 +1315,23 @@ with st.sidebar:
             st.query_params["trip"] = st.session_state.current_trip
             st.rerun()
     else:
+        # [심플한 위치 판정] 오늘이 출국일보다 이전이면 상단, 그렇지 않으면 하단!
+        dep_rows_eval = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
+        korea_dep_eval = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
+        t_dep_eval = korea_dep_eval if not korea_dep_eval.empty else dep_rows_eval
+
+        is_upcoming = False
+        if not t_dep_eval.empty:
+            m_eval = re.search(r'(\d{4}-\d{2})-(\d{2})', str(t_dep_eval.iloc[0]['Date']))
+            if m_eval:
+                dep_dt_val = datetime.strptime(m_eval.group(0), "%Y-%m-%d").date()
+                today_val = datetime.now(TZ_KST).date()
+                is_upcoming = (today_val < dep_dt_val)  # 👈 출국 전이면 True!
+
+        # 출발 전(D-Day 이전)이면 사이드바 최상단에 배치
+        if is_upcoming:
+            render_dday_control_tower()
+
         # ----------------------------------------------------------------------
         # 4.01.02 | Multi-Currency Dynamic Wallet Monitor & K-Unit Physical Counter
         # ----------------------------------------------------------------------
@@ -1245,9 +1344,9 @@ with st.sidebar:
 
         is_trip_active = True
         if not target_arr_row.empty:
-            m_arr = re.search(r'(\d{4}-\d{2}-\d{2})', str(target_arr_row.iloc[-1]['Date']))
+            m_arr = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
             if m_arr:
-                arr_dt = datetime.strptime(m_arr.group(1), "%Y-%m-%d").date()
+                arr_dt = datetime.strptime(m_arr.group(0), "%Y-%m-%d").date()
                 today_dt = datetime.now(TZ_KST).date()
                 is_trip_active = (today_dt <= arr_dt)
 
@@ -1319,14 +1418,11 @@ with st.sidebar:
                             for b in cash_batches:
                                 if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
 
-                # 🪙 [개편] 베트남 현지 K단위 (500K, 200K... 1K) 실물현금 카운터
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
                     with st.expander("🪙 실물현금 카운터", expanded=False):
                         cash_df = load_cash_inventory()
-                        cloud_total = 0.0
-                        cloud_time = ""
-                        cloud_counts = {}
+                        cloud_total, cloud_time, cloud_counts = 0.0, "", {}
                         
                         if not cash_df.empty:
                             m_sync = (cash_df['TripName'] == st.session_state.current_trip) & (cash_df['Currency'] == c)
@@ -1352,27 +1448,18 @@ with st.sidebar:
                                 st.session_state[f"cnt_{c}_{b_key_id}"] = int(val_loaded) if val_loaded > 0 else None
                             st.session_state[init_key] = True
 
-                        total_counted = 0.0
-                        cur_counts = {}
+                        total_counted, cur_counts = 0.0, {}
                         for bill in bills_to_count:
                             b_flt = float(bill)
                             b_key_id = str(bill).replace('.', '_')
                             
-                            # [현지 K단위 및 글로벌 권종 포맷]
-                            if c == "VND":
-                                b_label = f"{int(bill // 1000)}K"  # 👈 50만동 -> 500K, 20만동 -> 200K, 1만동 -> 10K
-                            elif c == "EUR":
-                                b_label = f"{int(bill)} €" if bill >= 1 else f"{int(round(bill * 100))} c"
-                            elif c == "USD":
-                                b_label = f"{int(bill)} $" if bill >= 1 else f"{int(round(bill * 100))} ¢"
-                            elif c == "TRY":
-                                b_label = f"{int(bill)} ₺" if bill >= 1 else f"{int(round(bill * 100))} kr"
-                            elif c == "JPY":
-                                b_label = f"{int(bill)} ¥"
-                            elif c == "PHP":
-                                b_label = f"{int(bill)} ₱"
-                            else:
-                                b_label = f"{bill} {c}"
+                            if c == "VND": b_label = f"{int(bill // 1000)}K"
+                            elif c == "EUR": b_label = f"{int(bill)} €" if bill >= 1 else f"{int(round(bill * 100))} c"
+                            elif c == "USD": b_label = f"{int(bill)} $" if bill >= 1 else f"{int(round(bill * 100))} ¢"
+                            elif c == "TRY": b_label = f"{int(bill)} ₺" if bill >= 1 else f"{int(round(bill * 100))} kr"
+                            elif c == "JPY": b_label = f"{int(bill)} ¥"
+                            elif c == "PHP": b_label = f"{int(bill)} ₱"
+                            else: b_label = f"{bill} {c}"
                                 
                             c_col1, c_col2 = st.columns([1, 1.4])
                             with c_col1:
@@ -1407,9 +1494,7 @@ with st.sidebar:
                             elif diff_val < 0: st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족!")
                             else: st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
 
-                        has_cloud_record = bool(cloud_counts)
-                        has_conflict = has_cloud_record and (cur_counts != cloud_counts)
-
+                        has_conflict = bool(cloud_counts) and (cur_counts != cloud_counts)
                         if has_conflict:
                             st.markdown(f"""
                                 <div style='background-color: rgba(255, 165, 0, 0.12); border-left: 3px solid #FFA500; border-radius: 6px; padding: 8px 10px; margin-top: 10px; margin-bottom: 10px;'>
@@ -1443,6 +1528,11 @@ with st.sidebar:
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
         st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
+
+        # [2단계: 심플한 하단 배치] 출국 당일부터 여행 중/종료 후에는 지갑 아래 최하단에 렌더링!
+        if not is_upcoming:
+            st.divider()
+            render_dday_control_tower()
 
         # 4.01.04 | Master Cloud Refresh (정합성 자동 재계산 일괄 실행)
         st.divider()
@@ -2337,7 +2427,7 @@ else:
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
         # ----------------------------------------------------------------------
-        # 6.01.01 | Sub-Form: General Expense (일반 지출)
+        # 6.01.01 | Sub-Form: General Expense (선물/특산품 🎁 분리 태그 탑재)
         # ----------------------------------------------------------------------
         if mode == "일반 지출":        
             clean_daily_cats = [c for c in EXPENSE_CATS if c not in ['항공권', '호텔', '보증금', '상환', '보험']]
@@ -2350,17 +2440,44 @@ else:
             if st.session_state.get('clear_exp_desc', False):
                 st.session_state.exp_desc_input = ""
                 st.session_state.clear_exp_desc = False
+                st.session_state.gift_items_selected = []
                 
             col_desc, col_receipt = st.columns([3, 1.2])
-            
             with col_receipt: 
                 uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
-                    st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp", on_click=cb_run_ai_exp_scan, use_container_width=True, type="primary")
+                    if st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp", use_container_width=True, type="primary"):
+                        with st.spinner("AI가 품목과 가격을 번역 분석 중..."):
+                            smart_text = summarize_receipt_files_with_gemini(uploaded_files)
+                            if smart_text:
+                                st.session_state['exp_desc_input'] = smart_text
+                                st.toast("🧾 영수증 품목 번역 완료!", icon="🎉")
+                                st.rerun()
                                 
             with col_desc: 
-                desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=120, key="exp_desc_input")
-                
+                desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=130, key="exp_desc_input")
+
+            # 💡 [3단계] 영수증 스캔 후 "선물/특산품(🎁) 분리 선택 인터페이스"
+            gift_sum_amt = 0.0
+            if desc and any(k in desc for k in ["VND", "KRW", "USD", "EUR", "동", "원"]):
+                lines = [line.strip() for line in desc.split("\n") if line.strip()]
+                with st.expander("🎁 선물/특산품 분리 지정 (순수 일일 체류비 왜곡 방지)", expanded=True):
+                    st.caption("💡 아래 품목 중 **선물/기념품/특산품**으로 구매한 항목을 체크하시면, 일일체류비 계산에서 자동 분리 제외됩니다.")
+                    selected_gifts = []
+                    cols_g = st.columns(min(3, max(1, len(lines))))
+                    for idx_l, line_str in enumerate(lines):
+                        # 금액 추출 (마지막 숫자 매칭)
+                        m_amt = re.findall(r'(\d{1,3}(?:,\d{3})*|\d+)', line_str)
+                        c_box = cols_g[idx_l % len(cols_g)].checkbox(f"🎁 {line_str[:22]}..", key=f"chk_gift_{idx_l}")
+                        if c_box:
+                            selected_gifts.append(line_str)
+                            if m_amt:
+                                try: gift_sum_amt += float(m_amt[-1].replace(',', ''))
+                                except: pass
+                    st.session_state.gift_items_selected = selected_gifts
+                    if gift_sum_amt > 0:
+                        st.info(f"선물/특산품 분리 지정액: **{gift_sum_amt:,.0f}** (체류비 차트에서 순수 생활비와 자동 분리됨)")
+
             col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
             with col_m1: 
                 primary_currs = [IN_CURR, "KRW", "USD", "EUR"]
@@ -2370,14 +2487,13 @@ else:
                 if curr != "KRW": met_options = [f"현금({curr})", f"트래블카드({curr})", f"호텔외상({curr})", "원화계좌(한국)", "해외송금(한국계좌)", "원화계좌(현지)"]
                 else: met_options = ["원화계좌(한국)", "원화계좌(현지)"]
                 met = st.selectbox("결제 자산(Asset)", met_options, index=0, key="exp_met")
-                
             with col_m3:
                 harvested_tags = set()
                 if not ledger_df.empty:
                     extracted = ledger_df['Description'].str.extractall(r'\[(.*?)\]')
                     if not extracted.empty: harvested_tags = set(extracted[0].dropna().unique())
-                default_gateways =["선택안함 (기본)", "알리페이", "위챗페이", "네이버페이", "카카오페이", "Apple Pay", "토스페이", "Trip.com", "Agoda", "Booking.com", "Uber", "Bolt", "Revolut"]
-                combined_gateways = sorted(list(set(default_gateways) | harvested_tags)) +["➕ 직접 입력하기"]
+                default_gateways = ["선택안함 (기본)", "알리페이", "위챗페이", "네이버페이", "카카오페이", "Apple Pay", "토스페이", "Trip.com", "Agoda", "Booking.com", "Uber", "Bolt", "Revolut"]
+                combined_gateways = sorted(list(set(default_gateways) | harvested_tags)) + ["➕ 직접 입력하기"]
                 gateway_sel = st.selectbox("결제 플랫폼 (Gateway)", combined_gateways, key="exp_gw")
                 
                 final_gateway = ""
@@ -2405,7 +2521,10 @@ else:
                             if u: url_list.append(u)
                         final_receipt_urls = ",".join(url_list)
                 
-                final_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
+                # 선물 태그 자동 결합
+                gift_note_tag = f" [🎁선물:{gift_sum_amt:,.0f}{curr}]" if gift_sum_amt > 0 else ""
+                final_desc = f"[{final_gateway}] {desc}{gift_note_tag}" if final_gateway else f"{desc}{gift_note_tag}"
+                
                 new_row = pd.DataFrame([{
                     'Date': sel_date.strftime("%Y-%m-%d(%a)"),
                     'Country': sel_node,
@@ -2416,7 +2535,7 @@ else:
                     'PaymentMethod': met,
                     'IsExpense': 1,
                     'AppliedRate': cr_final,
-                    'Note': '',
+                    'Note': f"Gift:{gift_sum_amt}" if gift_sum_amt > 0 else "",
                     'Receipt_URL': final_receipt_urls
                 }])
                 if append_new_data(new_row): 
@@ -2537,7 +2656,7 @@ else:
                     uploaded_hotel_files = st.file_uploader("📸 호텔 바우처/영수증 첨부 (PDF/사진)", type=['png', 'jpg', 'jpeg', 'pdf'], key="hotel_direct_uploader", accept_multiple_files=True)
                     if uploaded_hotel_files:
                         if st.button("🤖 바우처 AI 자동분석 & 폼 채우기", key="btn_ai_hotel_direct", use_container_width=True, type="primary"):
-                            with st.spinner("AI가 호텔 바우처/영수증을 정밀 분석 중..."):
+                            with st.spinner("AI가 호텔 바우처/스펙/취소규정을 정밀 분석 중..."):
                                 parsed, err = parse_hotel_voucher_files_with_gemini(uploaded_hotel_files)
                                 if parsed:
                                     st.session_state['h_gw_input'] = parsed.get('platform', 'Agoda')
@@ -2545,6 +2664,14 @@ else:
                                     st.session_state['h_detail_input'] = parsed.get('room_detail', '')
                                     st.session_state['h_nights_input'] = max(1, int(parsed.get('nights', 1)))
                                     st.session_state['h_amt_input'] = clean_amount_to_float(parsed.get('amount', 0.0))
+                                    
+                                    # 1단계/4단계 추가 스펙 세션 주입
+                                    st.session_state['h_star_select'] = parsed.get('star_rating', '4성급')
+                                    st.session_state['h_area_input'] = int(parsed.get('room_area', 0))
+                                    st.session_state['h_balcony_select'] = "유" if parsed.get('has_balcony') == "유" else "무"
+                                    st.session_state['h_cancel_rate_input'] = int(parsed.get('cancel_rate', 100))
+                                    if parsed.get('cancel_deadline'):
+                                        st.session_state['h_cancel_date_input'] = safe_parse_date_obj(parsed.get('cancel_deadline'), None)
                                     
                                     if parsed.get('currency'):
                                         st.session_state['h_curr_select'] = str(parsed.get('currency')).upper()
@@ -2559,7 +2686,7 @@ else:
                                     if parsed.get('payment_date'):
                                         st.session_state['ai_payment_date'] = safe_parse_date_obj(parsed.get('payment_date'), datetime.now().date())
                                     
-                                    st.toast("🎉 호텔 바우처 및 결제정보 자동 입력 완료!", icon="✅")
+                                    st.toast("🎉 호텔 바우처 스펙 및 결제정보 자동 입력 완료!", icon="✅")
                                     time.sleep(0.5)
                                     st.rerun()
                                 else:
@@ -2569,7 +2696,7 @@ else:
                     c1, c2 = st.columns(2)
                     with c1:
                         h_gw = st.text_input("1. 결제 플랫폼 (필수)", placeholder="예: Agoda, Booking.com", key="h_gw_input")
-                        h_name = st.text_input("2. 호텔명", placeholder="예: 센츄리 리버사이드 호텔 후에", key="h_name_input")
+                        h_name = st.text_input("2. 호텔명", placeholder="예: 사누바 다낭 호텔", key="h_name_input")
                         if 'h_checkin_input' not in st.session_state: st.session_state['h_checkin_input'] = sel_date
                         h_checkin = st.date_input("3. 체크인 날짜", key="h_checkin_input")
                         hotel_assets = ["네이버페이(원화고정)", "원화계좌(한국)", "해외송금(한국계좌)", "트래블카드(외화)", "신용카드(원화결제)", "기타"]
@@ -2580,10 +2707,28 @@ else:
                         h_nights = st.number_input("5. 숙박 일수", min_value=1, step=1, key="h_nights_input")
                         h_checkout_calc = h_checkin + timedelta(days=int(h_nights))
                         st.info(f"📅 체크아웃 예정일: **{h_checkout_calc.strftime('%Y-%m-%d')}** ({h_nights}박)")
-                        h_detail = st.text_area("6. 내용 (룸타입/애프터눈티/특징)", placeholder="예: 디럭스 리버뷰 트윈, 조식포함, 데일리 애프터눈티", height=68, key="h_detail_input")
+                        h_detail = st.text_area("6. 내용 (룸타입/애프터눈티/특징)", placeholder="예: 디럭스 트윈 시티뷰, 데일리 애프터눈티", height=68, key="h_detail_input")
                         h_curr_opts = ["KRW", "USD", "EUR", "VND", "PHP", "CNY", "TRY"]
                         if 'h_curr_select' not in st.session_state: st.session_state['h_curr_select'] = "KRW"
                         h_curr = st.selectbox("7. 결제 통화", h_curr_opts, key="h_curr_select")
+
+                # 💡 [1단계 & 4단계] 호텔 고급 스펙 & 취소 마감 모니터링 수동 보정란
+                st.markdown("<div style='margin-top: 5px; margin-bottom: 5px; font-size: 13px; font-weight: bold; color: #38BDF8;'>🏷️ 호텔 상세 스펙 및 취소 정책 (자동추출/수동보정)</div>", unsafe_allow_html=True)
+                cs1, cs2, cs3, cs4, cs5 = st.columns([1.2, 1, 1, 1.4, 1.2])
+                with cs1:
+                    star_opts = ["5성급", "4성급", "3성급", "2성급 이하", "리조트/풀빌라", "기타"]
+                    cur_star = st.session_state.get('h_star_select', '4성급')
+                    h_star = st.selectbox("성급(Star)", star_opts, index=star_opts.index(cur_star) if cur_star in star_opts else 1, key="h_star_select")
+                with cs2:
+                    h_area = st.number_input("면적(㎡)", min_value=0, max_value=500, value=int(st.session_state.get('h_area_input', 0)), step=1, key="h_area_input", help="0이면 미입력")
+                with cs3:
+                    balcony_opts = ["유", "무"]
+                    cur_bal = st.session_state.get('h_balcony_select', '무')
+                    h_balcony = st.selectbox("발코니", balcony_opts, index=balcony_opts.index(cur_bal) if cur_bal in balcony_opts else 1, key="h_balcony_select")
+                with cs4:
+                    h_cancel_date = st.date_input("무료/부분 취소 마감일", value=st.session_state.get('h_cancel_date_input', None), key="h_cancel_date_input")
+                with cs5:
+                    h_cancel_rate = st.number_input("마감전 환불율(%)", min_value=0, max_value=100, value=int(st.session_state.get('h_cancel_rate_input', 100)), step=10, key="h_cancel_rate_input")
 
                 c3, c4, c5 = st.columns(3)
                 with c3: 
@@ -2606,19 +2751,25 @@ else:
                                 if u: u_list.append(u)
                             final_hotel_receipts = ",".join(u_list)
                         
-                    full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout_calc.strftime('%m/%d')}) | {h_detail.replace(chr(10), ' ')}"
+                    # 스펙 메타데이터 태그 생성
+                    spec_tags = []
+                    if h_star: spec_tags.append(f"{h_star}")
+                    if h_area > 0: spec_tags.append(f"{h_area}㎡")
+                    if h_balcony == "유": spec_tags.append("발코니")
+                    if h_cancel_date: spec_tags.append(f"취소마감:{h_cancel_date.strftime('%m/%d')}({h_cancel_rate}%환불)")
+                    spec_str = f" | [{' · '.join(spec_tags)}]" if spec_tags else ""
+
+                    full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout_calc.strftime('%m/%d')}) | {h_detail.replace(chr(10), ' ')}{spec_str}"
                     
                     hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
-                    # [Modified] 핵심 일정 키워드(체크인/체크아웃)를 맨 앞으로 배치하여 가독성 극대화
                     checkin_desc = f"체크인 🏨 {h_name} ({h_nights}박)"
                     checkin_row = pd.DataFrame([{'Date': h_checkin.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크인', 'Description': checkin_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkin', 'Receipt_URL': ''}])
-                    
                     checkout_desc = f"체크아웃 🏨 {h_name}"
                     checkout_row = pd.DataFrame([{'Date': h_checkout_calc.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크아웃', 'Description': checkout_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkout', 'Receipt_URL': ''}])
                     
                     if append_new_data(pd.concat([hotel_pay_row, checkin_row, checkout_row], ignore_index=True)):
                         st.toast(f"🎉 '{h_name}' 예약 및 체크인/아웃 일정이 자동 생성되었습니다!", icon="✅")
-                        for k in ['h_gw_input', 'h_name_input', 'h_checkin_input', 'h_nights_input', 'h_detail_input', 'h_amt_input']:
+                        for k in ['h_gw_input', 'h_name_input', 'h_checkin_input', 'h_nights_input', 'h_detail_input', 'h_amt_input', 'h_star_select', 'h_area_input', 'h_balcony_select', 'h_cancel_date_input', 'h_cancel_rate_input']:
                             if k in st.session_state: del st.session_state[k]
                         time.sleep(0.8); st.rerun()
 
