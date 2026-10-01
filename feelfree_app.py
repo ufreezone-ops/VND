@@ -488,19 +488,21 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     return "", "AI 서버 응답 실패"
 
-# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (실물 영수증 배치 100% 매칭형)
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (호텔 엔진과 100% 동일 규격 완결형)
 def summarize_receipt_files_with_gemini(uploaded_files):
-    if not uploaded_files: return "", "", 0.0
-    prompt = """너는 다국어 영수증 전문 분석가야. 첨부된 영수증 사진을 분석하여 아래 세 항목을 정확히 추출해줘.
+    if not uploaded_files: 
+        return "", "", 0.0
 
-지침:
-1. 맨 첫 줄에 영수증에 인쇄된 결제일자(예: Ngày: 28/09/2026 -> 2026-09-28)를 반드시 '[결제일: YYYY-MM-DD]' 형식으로 출력해.
-2. 맨 둘째 줄에 영수증 맨 아래 실제 총 결제 금액(예: Tổng tiền: 155,000 đ -> 155000)을 반드시 '[총액: 155,000 VND]' 형식으로 출력해.
-3. 셋째 줄부터 구매한 품목들을 한 줄씩 번역해서 나열해:
-   - 한국어 품목명(영문/원문) (특징) 가격 통화 형태로 출력 (예: 핀홀릭 블랙커피(PHINHOLIC 1 đen) 32,000 VND).
-   - 깨강정(Kẹo mè xửng (hộp 12 cái)) 32,000 VND
+    prompt = """너는 다국어 영수증 전문 분석 AI야. 첨부된 영수증 사진/문서를 분석하여 아래 규칙대로 정확히 출력해줘.
+
+[출력 형식 지침]:
+1. 첫 번째 줄에는 영수증에 인쇄된 결제일(승인일시)을 반드시 '[결제일: YYYY-MM-DD]' 형식으로 적어줘. (예: Ngày: 28/09/2026 -> [결제일: 2026-09-28]). 없으면 적지 마.
+2. 두 번째 줄에는 영수증 맨 아래 실제 총 결제 금액을 반드시 '[총액: 155,000 VND]' 형식으로 적어줘. (예: Tổng tiền: 155,000 đ -> [총액: 155,000 VND]). 없으면 적지 마.
+3. 세 번째 줄부터는 소비한 품목들을 한 줄씩 번역해서 나열해줘:
+   - 한국어 품목명(원문) (특징) 가격 통화 형태로 출력 (예: 핀홀릭 블랙커피(PHINHOLIC 1 đen) 32,000 VND).
+   - 깨강정(Kẹo mè xửng) 32,000 VND
    - 오색 디저트(Ngũ Sắc) 59,000 VND
-4. 인사말이나 마크다운 백틱 없이 있는 그대로 출력해.
+4. 인사말이나 마크다운 백틱 없이 위 내용만 있는 그대로 출력해.
 """
     contents = []
     for f in uploaded_files:
@@ -540,7 +542,7 @@ def summarize_receipt_files_with_gemini(uploaded_files):
         except Exception:
             pass
 
-    # 3. 총액 태그 누락 시 각 행 금액 자동 합산
+    # 3. 총액 태그 누락 시 각 행 금액 합산
     if extracted_total <= 0:
         sum_calc = 0.0
         for line in cleaned.split("\n"):
@@ -2455,7 +2457,7 @@ else:
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
         # ----------------------------------------------------------------------
-        # 6.01.01 | Sub-Form: General Expense (원문 복원 & 100% 안전 동기화 완결형)
+        # 6.01.01 | Sub-Form: General Expense (호텔과 100% 동일한 직결 파이프라인 완결형)
         # ----------------------------------------------------------------------
         if mode == "일반 지출":        
             clean_daily_cats = [c for c in EXPENSE_CATS if c not in ['항공권', '호텔', '보증금', '상환', '보험']]
@@ -2472,30 +2474,32 @@ else:
                 
             col_desc, col_receipt = st.columns([3, 1.2])
             with col_receipt: 
-                uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
+                # [호텔과 동일 방식] 고정된 키로 업로더 선언
+                uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key="exp_direct_uploader", accept_multiple_files=True)
                 if uploaded_files:
-                    if st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp", use_container_width=True, type="primary"):
-                        with st.spinner("AI가 영수증 품목과 금액을 정밀 분석 중..."):
+                    # [호텔과 동일 방식] on_click 콜백 제거하고 직결 실행
+                    if st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp_direct", use_container_width=True, type="primary"):
+                        with st.spinner("AI가 영수증 품목, 총금액, 결제일자를 분석 중..."):
                             smart_text, pay_date, total_amt = summarize_receipt_files_with_gemini(uploaded_files)
                             if smart_text:
                                 st.session_state['exp_desc_input'] = smart_text
                                 
-                                # 총금액 자동 입력 세션 주입
+                                # 총금액 세션 주입
                                 if total_amt > 0:
                                     st.session_state['exp_amt_int'] = int(total_amt)
                                     st.session_state['exp_amt_float'] = float(total_amt)
                                 
-                                # 결제일자 상단 달력 동기화
+                                # 결제일자 세션 주입
                                 if pay_date:
                                     parsed_dt = safe_parse_date_obj(pay_date, None)
                                     if parsed_dt:
                                         st.session_state['ai_payment_date'] = parsed_dt
                                         
-                                st.toast(f"🧾 분석 완료! 금액: {total_amt:,.0f} 자동 계산", icon="🎉")
+                                st.toast(f"🧾 분석 완료! 금액: {total_amt:,.0f} 자동 입력", icon="🎉")
                                 time.sleep(0.3)
                                 st.rerun()
                             else:
-                                st.error("🚨 영수증 이미지를 인식하지 못했습니다. 파일 상태를 확인해 주세요.")
+                                st.error("🚨 영수증 인식을 완료하지 못했습니다. 파일 상태를 확인해 주세요.")
                                 
             with col_desc: 
                 desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=130, key="exp_desc_input")
@@ -2588,11 +2592,10 @@ else:
                 if append_new_data(new_row): 
                     st.toast("🎉 지출이 성공적으로 기록되었습니다!", icon="✅")
                     st.session_state.clear_exp_desc = True
-                    st.session_state.rcpt_key_idx += 1
+                    # 초기화
                     if 'exp_amt_int' in st.session_state: st.session_state['exp_amt_int'] = 0
                     if 'exp_amt_float' in st.session_state: st.session_state['exp_amt_float'] = 0.0
                     time.sleep(0.6); st.rerun()
-
         # ----------------------------------------------------------------------
         # 6.01.02 | Sub-Form: Flight Integrated Scheduler
         # ----------------------------------------------------------------------
