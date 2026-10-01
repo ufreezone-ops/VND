@@ -494,26 +494,28 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     return "", last_err
 
-# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (결제일자 동시 추출 완결형)
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (결제일자 & 총금액 동시 추출 완결형)
 def summarize_receipt_files_with_gemini(uploaded_files):
     import json
-    if not uploaded_files: return "", ""
+    if not uploaded_files: return "", "", 0.0
     prompt = """너는 다국어 영수증 전문 분석가야. 첨부된 영수증 문서(사진/PDF)를 정밀 분석하여 아래 JSON 포맷으로만 응답해:
 
 [응답 JSON 스키마]:
 {
-    "payment_date": "2026-09-23",
+    "payment_date": "2026-09-28",
+    "total_amount": 155000,
     "items_text": "핀홀릭 블랙커피(Phinholic 1 đen) (블랙 커피) 32,000 VND\\n핀홀릭 연유커피(Phinholic 1 sữa) (연유 커피) 32,000 VND\\n깨강정(Kẹo mè xửng) (12개입 상자) 32,000 VND\\n오색 디저트(Ngũ Sắc) (디저트) 59,000 VND"
 }
 
 [지침]:
-1. payment_date: 영수증 상단/하단에 적힌 실제 결제일(발행일시, 승인일시)을 찾아 반드시 'YYYY-MM-DD'(예: 2026-09-23) 형식으로 추출해. 영수증에 날짜가 전혀 안 보이면 "" 로 비워둬.
-2. items_text:
+1. payment_date: 영수증 상단/하단에 적힌 실제 결제일(발행일시, 승인일시)을 찾아 반드시 'YYYY-MM-DD'(예: 2026-09-28) 형식으로 추출해. 없으면 "".
+2. total_amount: 영수증 맨 아래 실제 지불한 '총 결제 금액(합계, TOTAL)'을 콤마 없는 순수 숫자로 추출해 (예: 155000). 못 찾으면 0.
+3. items_text:
    - 상호명, 주소, 세금 등 잡다한 정보는 버리고 오직 '소비한 품목'과 '가격'만 추출해.
    - 품목명은 한국어로 자연스럽게 번역하고 영문/현지어 명칭을 괄호 안에 병기해줘.
    - 수량이 2개 이상일 때만 품목명 뒤에 '(X개)' 표기.
    - 각 품목은 '품목명(원문) (특징) 가격 통화' 형태로 줄바꿈(\\n)하여 한 줄씩 나열해.
-3. 다른 인사말이나 마크다운 백틱 없이 오직 '{' 로 시작해서 '}' 로 끝나는 순수 JSON 텍스트 하나만 출력해.
+4. 다른 인사말이나 마크다운 백틱 없이 오직 '{' 로 시작해서 '}' 로 끝나는 순수 JSON 텍스트 하나만 출력해.
 """
     contents = []
     for f in uploaded_files:
@@ -527,11 +529,11 @@ def summarize_receipt_files_with_gemini(uploaded_files):
         except: continue
             
     if not contents:
-        return "", ""
+        return "", "", 0.0
 
     raw_res, _ = call_gemini_multimodal(contents, prompt)
     if not raw_res:
-        return "", ""
+        return "", "", 0.0
 
     try:
         cleaned = re.sub(r'```(?:json)?', '', raw_res).strip('` \n')
@@ -539,12 +541,12 @@ def summarize_receipt_files_with_gemini(uploaded_files):
         last_brace = cleaned.rfind('}')
         if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
             data = json.loads(cleaned[first_brace:last_brace + 1])
-            return str(data.get("items_text", "")).strip(), str(data.get("payment_date", "")).strip()
+            tot = float(data.get("total_amount", 0.0))
+            return str(data.get("items_text", "")).strip(), str(data.get("payment_date", "")).strip(), tot
     except Exception:
         pass
 
-    # JSON 형식이 아닐 경우 텍스트 전체를 품목으로 fallback 처리
-    return raw_res.strip(), ""
+    return raw_res.strip(), "", 0.0
 
 # 2.02.05 | Gemini Hotel Voucher Parser (면적/발코니/성급/부분취소율 다차원 분석 완결형)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
@@ -2448,7 +2450,7 @@ else:
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
         # ----------------------------------------------------------------------
-        # 6.01.01 | Sub-Form: General Expense (영수증 결제일자 상단 달력 자동 동기화 탑재)
+        # 6.01.01 | Sub-Form: General Expense (영수증 총액 자동입력 & 플랫폼 기본값 완결형)
         # ----------------------------------------------------------------------
         if mode == "일반 지출":        
             clean_daily_cats = [c for c in EXPENSE_CATS if c not in ['항공권', '호텔', '보증금', '상환', '보험']]
@@ -2468,28 +2470,31 @@ else:
                 uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
                     if st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp", use_container_width=True, type="primary"):
-                        with st.spinner("AI가 품목, 가격 및 영수증 결제일자를 분석 중..."):
-                            smart_text, pay_date = summarize_receipt_files_with_gemini(uploaded_files)
+                        with st.spinner("AI가 품목, 총금액 및 결제일자를 분석 중..."):
+                            smart_text, pay_date, total_amt = summarize_receipt_files_with_gemini(uploaded_files)
                             if smart_text:
                                 st.session_state['exp_desc_input'] = smart_text
-                                # [Fixed] 영수증에 적힌 결제일자로 상단 달력 동기화
+                                # [Fixed 1] 영수증 총액을 금액 입력란에 자동 주입
+                                if total_amt > 0:
+                                    st.session_state['exp_amt_auto_filled'] = total_amt
+                                # [Fixed 2] 결제일자 달력 동기화
                                 if pay_date:
                                     parsed_dt = safe_parse_date_obj(pay_date, None)
                                     if parsed_dt:
                                         st.session_state['ai_payment_date'] = parsed_dt
-                                st.toast("🧾 영수증 품목 번역 및 결제일자 설정 완료!", icon="🎉")
+                                st.toast("🧾 영수증 품목 번역, 총금액 및 결제일자 설정 완료!", icon="🎉")
                                 time.sleep(0.3)
                                 st.rerun()
                                 
             with col_desc: 
                 desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=130, key="exp_desc_input")
 
-            # 💡 [3단계] 영수증 스캔 후 "선물/특산품(🎁) 분리 선택 인터페이스"
+            # 💡 [선물/특산품 분리 선택 인터페이스]
             gift_sum_amt = 0.0
             if desc and any(k in desc for k in ["VND", "KRW", "USD", "EUR", "동", "원"]):
                 lines = [line.strip() for line in desc.split("\n") if line.strip()]
                 with st.expander("🎁 선물/특산품 분리 지정 (순수 일일 체류비 왜곡 방지)", expanded=True):
-                    st.caption("💡 아래 품목 중 **선물/기념품/특산품**으로 구매한 항목을 체크하시면, 일일체류비 계산에서 자동 분리 제외됩니다.")
+                    st.caption("💡 아래 품목 중 **선물/기념품/특산품**으로 구매한 항목을 체크하시면, 지갑 잔고는 총액대로 차감되되 일일체류비 통계에서만 자동 분리 제외됩니다.")
                     selected_gifts = []
                     cols_g = st.columns(min(3, max(1, len(lines))))
                     for idx_l, line_str in enumerate(lines):
@@ -2518,18 +2523,26 @@ else:
                 if not ledger_df.empty:
                     extracted = ledger_df['Description'].str.extractall(r'\[(.*?)\]')
                     if not extracted.empty: harvested_tags = set(extracted[0].dropna().unique())
-                default_gateways = ["선택안함 (기본)", "알리페이", "위챗페이", "네이버페이", "카카오페이", "Apple Pay", "토스페이", "Trip.com", "Agoda", "Booking.com", "Uber", "Bolt", "Revolut"]
-                combined_gateways = sorted(list(set(default_gateways) | harvested_tags)) + ["➕ 직접 입력하기"]
-                gateway_sel = st.selectbox("결제 플랫폼 (Gateway)", combined_gateways, key="exp_gw")
+                
+                # 💡 [Fixed] '선택안함 (기본)'을 맨 앞 0번 인덱스로 무조건 고정!
+                raw_gateways = ["알리페이", "위챗페이", "네이버페이", "카카오페이", "Apple Pay", "토스페이", "Trip.com", "Agoda", "Booking.com", "Uber", "Bolt", "Revolut"]
+                other_gateways = sorted(list((set(raw_gateways) | harvested_tags) - {"선택안함 (기본)"}))
+                combined_gateways = ["선택안함 (기본)"] + other_gateways + ["➕ 직접 입력하기"]
+                gateway_sel = st.selectbox("결제 플랫폼 (Gateway)", combined_gateways, index=0, key="exp_gw")
                 
                 final_gateway = ""
                 if gateway_sel == "➕ 직접 입력하기": final_gateway = st.text_input("새로운 플랫폼 이름 입력", placeholder="예: 마이리얼트립")
                 elif gateway_sel != "선택안함 (기본)": final_gateway = gateway_sel
 
+            # AI 스캔으로 읽은 총금액 기본값 바인딩
+            auto_amt_val = st.session_state.pop('exp_amt_auto_filled', 0.0)
+
             col_a1, col_a2 = st.columns(2)
             with col_a1:
-                if curr == "KRW" or (curr == IN_CURR and IN_MULTI == 100): amt = st.number_input(f"금액 ({curr})", min_value=0, step=1000 if curr != "KRW" else 1, format="%d", key="exp_amt_int")
-                else: amt = st.number_input(f"금액 ({curr})", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
+                if curr == "KRW" or (curr == IN_CURR and IN_MULTI == 100): 
+                    amt = st.number_input(f"금액 ({curr})", min_value=0, value=int(auto_amt_val), step=1000 if curr != "KRW" else 1, format="%d", key="exp_amt_int")
+                else: 
+                    amt = st.number_input(f"금액 ({curr})", min_value=0.0, value=float(auto_amt_val), step=1.0, format="%.2f", key="exp_amt_float")
             with col_a2:
                 if curr != "KRW" and amt > 0:
                     calc_rate = auto_calc_fifo_rate(amt, met, curr)
