@@ -3914,16 +3914,36 @@ else:
             dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum()
             ovr_total_krw = total_trip_krw - dom_total_krw
             ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
+
+            # [순서 재배치] 출국일/귀국일 파싱 로직을 KPI 박스 생성 전으로 선행 배치하여 NameError 원천 차단
+            korea_dep_rows = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
+            dep_rows_all = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
+            t_dep = korea_dep_rows if not korea_dep_rows.empty else (dep_rows_all[~dep_rows_all['Category'].str.contains('_', na=False)] if not dep_rows_all.empty else dep_rows_all)
             
-            # 실제 현지 체류 일수(cal_days_f 또는 total_calendar_days) 산출
+            dep_dt_f = None
+            if not t_dep.empty:
+                m_df = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_dep.iloc[0]['Date']))
+                if m_df: dep_dt_f = datetime.strptime(m_df.group(0), "%Y-%m-%d").date()
+
+            korea_arr_rows = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
+            arr_rows_all = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False)]
+            t_arr = korea_arr_rows if not korea_arr_rows.empty else (arr_rows_all[~arr_rows_all['Category'].str.contains('_', na=False)] if not arr_rows_all.empty else arr_rows_all)
+            
+            arr_dt_f = None
+            if not t_arr.empty:
+                m_af = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_arr.iloc[-1]['Date']))
+                if m_af: arr_dt_f = datetime.strptime(m_af.group(0), "%Y-%m-%d").date()
+
+            # [정합성 동기화] 일일Data 탭과 동일하게 실제 여행 일수(9일) 기준으로 1일 평균 산출
             if dep_dt_f and arr_dt_f:
                 trip_days_count = max(1, (arr_dt_f - dep_dt_f).days + 1)
             else:
-                trip_days_count = max(1, total_nights)
+                trip_days_count = max(1, int(total_nights))
 
-            # 현지 총지출(ovr_total_krw)을 실제 여행일수로 나누어 일일Data(41,990원)와 완벽 일치시킴
             avg_local_krw = ovr_total_krw / trip_days_count if trip_days_count > 0 else 0
             avg_local_loc = ovr_total_loc / trip_days_count if trip_days_count > 0 else 0
+            
+            fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
             def kpi_box(title, krw, loc=None):
                 loc_str = f"<div class='kpi-value-vnd'>({fmt_local.format(loc)} {LOCAL_SYM})</div>" if loc is not None else ""
                 return f"<div class='kpi-box'><div class='kpi-title'>{title}</div><div class='kpi-value-krw'>{krw:,.0f} 원</div>{loc_str}</div>"
@@ -3934,7 +3954,6 @@ else:
             with k2: st.markdown(kpi_box("국내 지출", dom_total_krw), unsafe_allow_html=True)
             with k3: st.markdown(kpi_box("현지 지출", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
             with k4: st.markdown(kpi_box("여행중 1일 평균지출", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
-            
             # ------------------------------------------------------------------
             # 6.04.02 | Comprehensive Expense Treemap Matrix
             # ------------------------------------------------------------------
