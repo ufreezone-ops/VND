@@ -3272,27 +3272,46 @@ else:
                             new_desc = st.text_area("4. 세부 내역 (수정/추가)", height=100, key=desc_key)
                             
                             if st.button("💾 이 내역 전체 업데이트 (항목/수단/내용 동시저장)", use_container_width=True, type="primary"):
-                                display_df.at[real_idx, 'Category'] = edit_cat
-                                display_df.at[real_idx, 'Amount'] = edit_amt
-                                display_df.at[real_idx, 'PaymentMethod'] = edit_method
-                                display_df.at[real_idx, 'Description'] = new_desc
-                                
+                                # 1. 영수증 이미지 추가 처리
+                                updated_rcpt_url = str(row_data.get('Receipt_URL', '')).strip()
                                 if new_receipts:
                                     with st.spinner("📸 영수증 클라우드 전송 중..."):
                                         new_urls = []
                                         for f in new_receipts:
                                             u = upload_image_to_imgbb(f)
                                             if u: new_urls.append(u)
-                                        
                                         if new_urls:
-                                            existing_raw = str(row_data['Receipt_URL']).strip()
-                                            existing_urls = [x.strip() for x in existing_raw.split(',') if x.strip().startswith('http')]
-                                            merged_urls = existing_urls + new_urls
-                                            display_df.at[real_idx, 'Receipt_URL'] = ",".join(merged_urls)
-                                            
-                                if save_data(display_df): 
+                                            existing_urls = [x.strip() for x in updated_rcpt_url.split(',') if x.strip().startswith('http')]
+                                            updated_rcpt_url = ",".join(existing_urls + new_urls)
+
+                                # 2. display_df 사본 수정
+                                display_df.at[real_idx, 'Category'] = edit_cat
+                                display_df.at[real_idx, 'Amount'] = edit_amt
+                                display_df.at[real_idx, 'PaymentMethod'] = edit_method
+                                display_df.at[real_idx, 'Description'] = new_desc
+                                display_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
+
+                                # 3. [핵심] 원본 세션 메모리(active_ledger_df) 동시 갱신
+                                if 'active_ledger_df' in st.session_state:
+                                    target_df = st.session_state.active_ledger_df
+                                    if real_idx in target_df.index:
+                                        target_df.at[real_idx, 'Category'] = edit_cat
+                                        target_df.at[real_idx, 'Amount'] = edit_amt
+                                        target_df.at[real_idx, 'PaymentMethod'] = edit_method
+                                        target_df.at[real_idx, 'Description'] = new_desc
+                                        target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
+                                        save_target = target_df
+                                    else:
+                                        save_target = display_df
+                                else:
+                                    save_target = display_df
+
+                                # 4. 구글 시트 저장 및 캐시 동기화
+                                if save_data(save_target):
+                                    st.session_state.active_ledger_df = load_data(ACTIVE_SHEET)
                                     st.toast("🎉 수정사항이 완벽하게 저장되었습니다!", icon="✅")
-                                    time.sleep(0.8); st.rerun()
+                                    time.sleep(0.5)
+                                    st.rerun()
                         st.markdown("---")
 
     # --------------------------------------------------------------------------
