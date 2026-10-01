@@ -3915,12 +3915,15 @@ else:
             ovr_total_krw = total_trip_krw - dom_total_krw
             ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
             
-            local_v = exp_df[(exp_df['IsSurvival'] == 1) & (exp_df['Currency'].str.strip() != 'KRW')].copy()
-            denom = (travelers * total_nights)
-            avg_local_krw = local_v['KRW_val'].sum() / denom if denom > 0 else 0
-            avg_local_loc = 0 if len(local_v['Currency'].unique()) > 1 else (local_v['Local_val'].sum() / denom if denom > 0 else 0)
-            
-            fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
+            # 실제 현지 체류 일수(cal_days_f 또는 total_calendar_days) 산출
+            if dep_dt_f and arr_dt_f:
+                trip_days_count = max(1, (arr_dt_f - dep_dt_f).days + 1)
+            else:
+                trip_days_count = max(1, total_nights)
+
+            # 현지 총지출(ovr_total_krw)을 실제 여행일수로 나누어 일일Data(41,990원)와 완벽 일치시킴
+            avg_local_krw = ovr_total_krw / trip_days_count if trip_days_count > 0 else 0
+            avg_local_loc = ovr_total_loc / trip_days_count if trip_days_count > 0 else 0
             def kpi_box(title, krw, loc=None):
                 loc_str = f"<div class='kpi-value-vnd'>({fmt_local.format(loc)} {LOCAL_SYM})</div>" if loc is not None else ""
                 return f"<div class='kpi-box'><div class='kpi-title'>{title}</div><div class='kpi-value-krw'>{krw:,.0f} 원</div>{loc_str}</div>"
