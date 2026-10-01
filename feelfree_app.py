@@ -409,20 +409,61 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (성공 검증된 무결점 복원 엔진)
+# 2.02.03 | Gemini Multimodal Direct Runner (실시간 가용 모델 자동 조회 & 404 원천 차단 복원 엔진)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # REST 파트 빌드 (순수 바이너리 직결)
+    # 1단계: 구글 서버에서 내 API 키로 실제 호출 가능한 모델 목록을 실시간 자동 조회
+    available_models = []
+    for ver in ['v1', 'v1beta']:
+        try:
+            list_url = f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}"
+            l_resp = requests.get(list_url, timeout=5)
+            if l_resp.status_code == 200:
+                m_list = l_resp.json().get('models', [])
+                for m in m_list:
+                    methods = m.get('supportedGenerationMethods', [])
+                    if 'generateContent' in methods:
+                        clean_name = m['name'].replace('models/', '')
+                        if (ver, clean_name) not in available_models:
+                            available_models.append((ver, clean_name))
+        except Exception:
+            pass
+
+    # 내 계정에서 가용한 모델 중 flash 계열을 최우선 정렬
+    def model_priority(item):
+        v, name = item
+        if '2.5-flash' in name: return 1
+        if '2.0-flash' in name: return 2
+        if '1.5-flash' in name: return 3
+        if 'flash' in name: return 4
+        if 'pro' in name: return 5
+        return 6
+
+    available_models.sort(key=model_priority)
+
+    # 만약 목록 조회가 실패했을 때의 대비용 기본 후보군
+    if not available_models:
+        available_models = [
+            ('v1', 'gemini-1.5-flash'),
+            ('v1beta', 'gemini-1.5-flash'),
+            ('v1beta', 'gemini-2.0-flash-exp'),
+            ('v1', 'gemini-2.5-flash'),
+            ('v1beta', 'gemini-2.5-flash'),
+            ('v1', 'gemini-1.5-pro'),
+            ('v1beta', 'gemini-1.5-pro')
+        ]
+
+    # 전송 페이로드 구성
     rest_parts = []
     for item in contents:
         if isinstance(item, str):
             rest_parts.append({"text": item})
         elif isinstance(item, dict) and "data" in item:
             b64_str = base64.b64encode(item["data"]).decode("utf-8")
-            m_type = item.get("mime_type", "image/jpeg")
+            m_type = item.get("mime_type", "application/pdf")
             rest_parts.append({
                 "inline_data": {
                     "mime_type": m_type,
@@ -435,34 +476,11 @@ def call_gemini_multimodal(contents, prompt_text=""):
     payload = {"contents": [{"parts": rest_parts}]}
     last_err = ""
 
-    # 1. SDK 직결 시도
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        sdk_payload = []
-        for item in contents:
-            if isinstance(item, str): sdk_payload.append(item)
-            elif isinstance(item, dict) and "data" in item:
-                sdk_payload.append({"mime_type": item.get("mime_type", "image/jpeg"), "data": item["data"]})
-        if prompt_text: sdk_payload.append(prompt_text)
-
-        for m_name in ['gemini-1.5-flash', 'gemini-1.5-pro']:
-            try:
-                model = genai.GenerativeModel(m_name)
-                res = model.generate_content(sdk_payload)
-                if res and res.text:
-                    return res.text.strip(), ""
-            except Exception as e_sdk_m:
-                last_err = f"SDK({m_name}): {e_sdk_m}"
-                continue
-    except Exception as e_sdk:
-        last_err = f"SDK load: {e_sdk}"
-
-    # 2. REST API 직결 시도 (v1 / v1beta 순차 폴백)
-    for api_ver, m_name in [('v1', 'gemini-1.5-flash'), ('v1beta', 'gemini-1.5-flash'), ('v1beta', 'gemini-1.5-pro')]:
+    # 2단계: 실제 가용 모델로 순차 호출
+    for api_ver, m_name in available_models:
         try:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 cand = data.get("candidates", [])
@@ -471,12 +489,12 @@ def call_gemini_multimodal(contents, prompt_text=""):
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip(), ""
             else:
-                last_err = f"REST({api_ver}/{m_name}) {resp.status_code}: {resp.text[:100]}"
-        except Exception as e_rest:
-            last_err = f"REST({m_name}) 통신에러: {e_rest}"
+                last_err = f"[{api_ver}/{m_name}] {resp.status_code}: {resp.text[:120]}"
+        except Exception as e:
+            last_err = f"[{api_ver}/{m_name}] 통신에러: {e}"
             continue
 
-    return "", last_err if last_err else "AI 서버 응답 실패"
+    return "", last_err
 
 # 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (호텔 엔진과 100% 동일 규격 완결형)
 def summarize_receipt_files_with_gemini(uploaded_files):
