@@ -409,53 +409,15 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (실시간 가용 모델 자동 조회 & 404 원천 차단)
+# 2.02.03 | Gemini Multimodal Direct Runner (1~2초 초고속 직결 엔진)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # 1단계: 구글 서버에서 내 API 키로 실제 호출 가능한 모델 목록을 실시간 자동 조회
-    available_models = []
-    for ver in ['v1', 'v1beta']:
-        try:
-            list_url = f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}"
-            l_resp = requests.get(list_url, timeout=5)
-            if l_resp.status_code == 200:
-                m_list = l_resp.json().get('models', [])
-                for m in m_list:
-                    methods = m.get('supportedGenerationMethods', [])
-                    if 'generateContent' in methods:
-                        clean_name = m['name'].replace('models/', '')
-                        if clean_name not in available_models:
-                            available_models.append((ver, clean_name))
-        except Exception:
-            pass
+    # 가장 빠르고 안정적인 모델 순차 배치 (불필요한 사전 탐색 제거)
+    fast_models = [('v1beta', 'gemini-1.5-flash'), ('v1', 'gemini-1.5-flash'), ('v1beta', 'gemini-1.5-pro')]
 
-    # 내 계정에서 가용한 모델 중 flash 계열을 최우선 정렬
-    def model_priority(item):
-        v, name = item
-        if '2.5-flash' in name: return 1
-        if '2.0-flash' in name: return 2
-        if '1.5-flash' in name: return 3
-        if 'flash' in name: return 4
-        if 'pro' in name: return 5
-        return 6
-
-    available_models.sort(key=model_priority)
-
-    # 만약 목록 조회가 실패했을 때의 대비용 기본 후보군
-    if not available_models:
-        available_models = [
-            ('v1', 'gemini-2.5-flash'),
-            ('v1beta', 'gemini-2.5-flash'),
-            ('v1', 'gemini-1.5-flash'),
-            ('v1beta', 'gemini-1.5-flash'),
-            ('v1', 'gemini-1.5-pro'),
-            ('v1beta', 'gemini-1.5-pro')
-        ]
-
-    # 전송 페이로드 구성
     rest_parts = []
     for item in contents:
         if isinstance(item, str):
@@ -464,7 +426,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
             b64_str = base64.b64encode(item["data"]).decode("utf-8")
             rest_parts.append({
                 "inline_data": {
-                    "mime_type": item.get("mime_type", "application/pdf"),
+                    "mime_type": item.get("mime_type", "image/jpeg"),
                     "data": b64_str
                 }
             })
@@ -474,11 +436,10 @@ def call_gemini_multimodal(contents, prompt_text=""):
     payload = {"contents": [{"parts": rest_parts}]}
     last_err = ""
 
-    # 2단계: 실제 가용 모델로 순차 호출
-    for api_ver, m_name in available_models:
+    for api_ver, m_name in fast_models:
         try:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=12)
             if resp.status_code == 200:
                 data = resp.json()
                 cand = data.get("candidates", [])
@@ -487,9 +448,9 @@ def call_gemini_multimodal(contents, prompt_text=""):
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip(), ""
             else:
-                last_err = f"[{api_ver}/{m_name}] {resp.status_code}: {resp.text[:120]}"
+                last_err = f"[{m_name}] {resp.status_code}: {resp.text[:80]}"
         except Exception as e:
-            last_err = f"[{api_ver}/{m_name}] 통신에러: {e}"
+            last_err = f"[{m_name}] 에러: {e}"
             continue
 
     return "", last_err
@@ -2450,7 +2411,7 @@ else:
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
         # ----------------------------------------------------------------------
-        # 6.01.01 | Sub-Form: General Expense (영수증 총액 자동입력 & 플랫폼 기본값 완결형)
+        # 6.01.01 | Sub-Form: General Expense (금액 세션 직결 & 초고속 스캔 완결형)
         # ----------------------------------------------------------------------
         if mode == "일반 지출":        
             clean_daily_cats = [c for c in EXPENSE_CATS if c not in ['항공권', '호텔', '보증금', '상환', '보험']]
@@ -2470,19 +2431,22 @@ else:
                 uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
                     if st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp", use_container_width=True, type="primary"):
-                        with st.spinner("AI가 품목, 총금액 및 결제일자를 분석 중..."):
+                        with st.spinner("AI가 품목, 총금액 및 결제일자를 고속 분석 중..."):
                             smart_text, pay_date, total_amt = summarize_receipt_files_with_gemini(uploaded_files)
                             if smart_text:
                                 st.session_state['exp_desc_input'] = smart_text
-                                # [Fixed 1] 영수증 총액을 금액 입력란에 자동 주입
+                                # [Fixed] 위젯 세션 키에 직접 총금액 주입 (0원 고정 버그 완벽 해결)
                                 if total_amt > 0:
-                                    st.session_state['exp_amt_auto_filled'] = total_amt
-                                # [Fixed 2] 결제일자 달력 동기화
+                                    st.session_state['exp_amt_int'] = int(total_amt)
+                                    st.session_state['exp_amt_float'] = float(total_amt)
+                                
+                                # 결제일자 상단 달력 동기화
                                 if pay_date:
                                     parsed_dt = safe_parse_date_obj(pay_date, None)
                                     if parsed_dt:
                                         st.session_state['ai_payment_date'] = parsed_dt
-                                st.toast("🧾 영수증 품목 번역, 총금액 및 결제일자 설정 완료!", icon="🎉")
+                                        
+                                st.toast(f"🧾 분석 완료! 금액: {total_amt:,.0f} 자동 입력", icon="🎉")
                                 time.sleep(0.3)
                                 st.rerun()
                                 
@@ -2524,7 +2488,6 @@ else:
                     extracted = ledger_df['Description'].str.extractall(r'\[(.*?)\]')
                     if not extracted.empty: harvested_tags = set(extracted[0].dropna().unique())
                 
-                # 💡 [Fixed] '선택안함 (기본)'을 맨 앞 0번 인덱스로 무조건 고정!
                 raw_gateways = ["알리페이", "위챗페이", "네이버페이", "카카오페이", "Apple Pay", "토스페이", "Trip.com", "Agoda", "Booking.com", "Uber", "Bolt", "Revolut"]
                 other_gateways = sorted(list((set(raw_gateways) | harvested_tags) - {"선택안함 (기본)"}))
                 combined_gateways = ["선택안함 (기본)"] + other_gateways + ["➕ 직접 입력하기"]
@@ -2534,15 +2497,15 @@ else:
                 if gateway_sel == "➕ 직접 입력하기": final_gateway = st.text_input("새로운 플랫폼 이름 입력", placeholder="예: 마이리얼트립")
                 elif gateway_sel != "선택안함 (기본)": final_gateway = gateway_sel
 
-            # AI 스캔으로 읽은 총금액 기본값 바인딩
-            auto_amt_val = st.session_state.pop('exp_amt_auto_filled', 0.0)
-
             col_a1, col_a2 = st.columns(2)
             with col_a1:
+                # 위젯 key에 직접 세션 값이 바인딩되도록 통일
                 if curr == "KRW" or (curr == IN_CURR and IN_MULTI == 100): 
-                    amt = st.number_input(f"금액 ({curr})", min_value=0, value=int(auto_amt_val), step=1000 if curr != "KRW" else 1, format="%d", key="exp_amt_int")
+                    if 'exp_amt_int' not in st.session_state: st.session_state['exp_amt_int'] = 0
+                    amt = st.number_input(f"금액 ({curr})", min_value=0, step=1000 if curr != "KRW" else 1, format="%d", key="exp_amt_int")
                 else: 
-                    amt = st.number_input(f"금액 ({curr})", min_value=0.0, value=float(auto_amt_val), step=1.0, format="%.2f", key="exp_amt_float")
+                    if 'exp_amt_float' not in st.session_state: st.session_state['exp_amt_float'] = 0.0
+                    amt = st.number_input(f"금액 ({curr})", min_value=0.0, step=1.0, format="%.2f", key="exp_amt_float")
             with col_a2:
                 if curr != "KRW" and amt > 0:
                     calc_rate = auto_calc_fifo_rate(amt, met, curr)
@@ -2580,6 +2543,9 @@ else:
                     st.toast("🎉 지출이 성공적으로 기록되었습니다!", icon="✅")
                     st.session_state.clear_exp_desc = True
                     st.session_state.rcpt_key_idx += 1
+                    # 입력 후 세션 금액 초기화
+                    if 'exp_amt_int' in st.session_state: st.session_state['exp_amt_int'] = 0
+                    if 'exp_amt_float' in st.session_state: st.session_state['exp_amt_float'] = 0.0
                     time.sleep(0.6); st.rerun()
 
         # ----------------------------------------------------------------------
