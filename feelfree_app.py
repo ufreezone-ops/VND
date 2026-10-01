@@ -494,18 +494,26 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     return "", last_err
 
-# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (일반 영수증)
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (결제일자 동시 추출 완결형)
 def summarize_receipt_files_with_gemini(uploaded_files):
-    if not uploaded_files: return ""
-    prompt = """너는 다국어 영수증 전문 분석가야. 첨부된 문서에서 상호명, 주소, 전화번호, 세금, 날짜, 카드번호, 총액 등 불필요한 정보는 버리고 오직 '소비한 품목'과 '가격'만 추출해.
-지침:
-1. 품목 이름은 무조건 '한국어'로 자연스럽게 번역해.
-2. 한국어 품목 이름 다음에 영문 품목이름을 넣어줘 (예: 후시코르트(Fucicort) 연고).
-3. 품목의 주요특징(용량, 규격 등)을 요약해서 넣어줘.
-4. 수량이 2개 이상일 때만 품목 이름 뒤에 '(X개)'라고 표시해.
-5. 가격 숫자는 소수점 정리하고 화폐단위(VND, KRW, USD 등)를 표기해.
-6. 각 항목은 '품목명(영문) (특징) 가격' 형태로 한 줄씩 출력해.
-7. 부연 설명 없이 결과만 한 줄씩 출력해.
+    import json
+    if not uploaded_files: return "", ""
+    prompt = """너는 다국어 영수증 전문 분석가야. 첨부된 영수증 문서(사진/PDF)를 정밀 분석하여 아래 JSON 포맷으로만 응답해:
+
+[응답 JSON 스키마]:
+{
+    "payment_date": "2026-09-23",
+    "items_text": "핀홀릭 블랙커피(Phinholic 1 đen) (블랙 커피) 32,000 VND\\n핀홀릭 연유커피(Phinholic 1 sữa) (연유 커피) 32,000 VND\\n깨강정(Kẹo mè xửng) (12개입 상자) 32,000 VND\\n오색 디저트(Ngũ Sắc) (디저트) 59,000 VND"
+}
+
+[지침]:
+1. payment_date: 영수증 상단/하단에 적힌 실제 결제일(발행일시, 승인일시)을 찾아 반드시 'YYYY-MM-DD'(예: 2026-09-23) 형식으로 추출해. 영수증에 날짜가 전혀 안 보이면 "" 로 비워둬.
+2. items_text:
+   - 상호명, 주소, 세금 등 잡다한 정보는 버리고 오직 '소비한 품목'과 '가격'만 추출해.
+   - 품목명은 한국어로 자연스럽게 번역하고 영문/현지어 명칭을 괄호 안에 병기해줘.
+   - 수량이 2개 이상일 때만 품목명 뒤에 '(X개)' 표기.
+   - 각 품목은 '품목명(원문) (특징) 가격 통화' 형태로 줄바꿈(\\n)하여 한 줄씩 나열해.
+3. 다른 인사말이나 마크다운 백틱 없이 오직 '{' 로 시작해서 '}' 로 끝나는 순수 JSON 텍스트 하나만 출력해.
 """
     contents = []
     for f in uploaded_files:
@@ -519,11 +527,24 @@ def summarize_receipt_files_with_gemini(uploaded_files):
         except: continue
             
     if not contents:
-        return ""
+        return "", ""
 
-    # call_gemini_multimodal이 (텍스트, 에러) 튜플을 반환하므로 텍스트만 추출
-    res_text, _ = call_gemini_multimodal(contents, prompt)
-    return res_text
+    raw_res, _ = call_gemini_multimodal(contents, prompt)
+    if not raw_res:
+        return "", ""
+
+    try:
+        cleaned = re.sub(r'```(?:json)?', '', raw_res).strip('` \n')
+        first_brace = cleaned.find('{')
+        last_brace = cleaned.rfind('}')
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            data = json.loads(cleaned[first_brace:last_brace + 1])
+            return str(data.get("items_text", "")).strip(), str(data.get("payment_date", "")).strip()
+    except Exception:
+        pass
+
+    # JSON 형식이 아닐 경우 텍스트 전체를 품목으로 fallback 처리
+    return raw_res.strip(), ""
 
 # 2.02.05 | Gemini Hotel Voucher Parser (면적/발코니/성급/부분취소율 다차원 분석 완결형)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
@@ -2427,7 +2448,7 @@ else:
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
         # ----------------------------------------------------------------------
-        # 6.01.01 | Sub-Form: General Expense (선물/특산품 🎁 분리 태그 탑재)
+        # 6.01.01 | Sub-Form: General Expense (영수증 결제일자 상단 달력 자동 동기화 탑재)
         # ----------------------------------------------------------------------
         if mode == "일반 지출":        
             clean_daily_cats = [c for c in EXPENSE_CATS if c not in ['항공권', '호텔', '보증금', '상환', '보험']]
@@ -2447,11 +2468,17 @@ else:
                 uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
                     if st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp", use_container_width=True, type="primary"):
-                        with st.spinner("AI가 품목과 가격을 번역 분석 중..."):
-                            smart_text = summarize_receipt_files_with_gemini(uploaded_files)
+                        with st.spinner("AI가 품목, 가격 및 영수증 결제일자를 분석 중..."):
+                            smart_text, pay_date = summarize_receipt_files_with_gemini(uploaded_files)
                             if smart_text:
                                 st.session_state['exp_desc_input'] = smart_text
-                                st.toast("🧾 영수증 품목 번역 완료!", icon="🎉")
+                                # [Fixed] 영수증에 적힌 결제일자로 상단 달력 동기화
+                                if pay_date:
+                                    parsed_dt = safe_parse_date_obj(pay_date, None)
+                                    if parsed_dt:
+                                        st.session_state['ai_payment_date'] = parsed_dt
+                                st.toast("🧾 영수증 품목 번역 및 결제일자 설정 완료!", icon="🎉")
+                                time.sleep(0.3)
                                 st.rerun()
                                 
             with col_desc: 
@@ -2466,7 +2493,6 @@ else:
                     selected_gifts = []
                     cols_g = st.columns(min(3, max(1, len(lines))))
                     for idx_l, line_str in enumerate(lines):
-                        # 금액 추출 (마지막 숫자 매칭)
                         m_amt = re.findall(r'(\d{1,3}(?:,\d{3})*|\d+)', line_str)
                         c_box = cols_g[idx_l % len(cols_g)].checkbox(f"🎁 {line_str[:22]}..", key=f"chk_gift_{idx_l}")
                         if c_box:
@@ -2521,7 +2547,6 @@ else:
                             if u: url_list.append(u)
                         final_receipt_urls = ",".join(url_list)
                 
-                # 선물 태그 자동 결합
                 gift_note_tag = f" [🎁선물:{gift_sum_amt:,.0f}{curr}]" if gift_sum_amt > 0 else ""
                 final_desc = f"[{final_gateway}] {desc}{gift_note_tag}" if final_gateway else f"{desc}{gift_note_tag}"
                 
