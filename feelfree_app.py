@@ -455,28 +455,24 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     return "", last_err
 
-# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (결제일자 & 총금액 동시 추출 완결형)
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (검증된 텍스트 추출 + 안전 메타데이터 파서)
 def summarize_receipt_files_with_gemini(uploaded_files):
-    import json
     if not uploaded_files: return "", "", 0.0
-    prompt = """너는 다국어 영수증 전문 분석가야. 첨부된 영수증 문서(사진/PDF)를 정밀 분석하여 아래 JSON 포맷으로만 응답해:
+    
+    # [이전 성공 프롬프트 완벽 복원]
+    prompt = """너는 다국어 영수증 전문 분석가야. 첨부된 영수증 문서(사진/PDF)에서 상호명, 주소, 전화번호, 세금 등 불필요한 정보는 버리고 오직 '소비한 품목'과 '가격'을 정확하게 추출해.
 
-[응답 JSON 스키마]:
-{
-    "payment_date": "2026-09-28",
-    "total_amount": 155000,
-    "items_text": "핀홀릭 블랙커피(Phinholic 1 đen) (블랙 커피) 32,000 VND\\n핀홀릭 연유커피(Phinholic 1 sữa) (연유 커피) 32,000 VND\\n깨강정(Kẹo mè xửng) (12개입 상자) 32,000 VND\\n오색 디저트(Ngũ Sắc) (디저트) 59,000 VND"
-}
-
-[지침]:
-1. payment_date: 영수증 상단/하단에 적힌 실제 결제일(발행일시, 승인일시)을 찾아 반드시 'YYYY-MM-DD'(예: 2026-09-28) 형식으로 추출해. 없으면 "".
-2. total_amount: 영수증 맨 아래 실제 지불한 '총 결제 금액(합계, TOTAL)'을 콤마 없는 순수 숫자로 추출해 (예: 155000). 못 찾으면 0.
-3. items_text:
-   - 상호명, 주소, 세금 등 잡다한 정보는 버리고 오직 '소비한 품목'과 '가격'만 추출해.
-   - 품목명은 한국어로 자연스럽게 번역하고 영문/현지어 명칭을 괄호 안에 병기해줘.
-   - 수량이 2개 이상일 때만 품목명 뒤에 '(X개)' 표기.
-   - 각 품목은 '품목명(원문) (특징) 가격 통화' 형태로 줄바꿈(\\n)하여 한 줄씩 나열해.
-4. 다른 인사말이나 마크다운 백틱 없이 오직 '{' 로 시작해서 '}' 로 끝나는 순수 JSON 텍스트 하나만 출력해.
+지침:
+1. 맨 첫 줄에 영수증에 인쇄된 결제일(승인일시)이 있다면 '[결제일: YYYY-MM-DD]' 형식으로 적어줘. 없으면 적지 마.
+2. 맨 둘째 줄에 영수증 맨 아래 실제 지불한 총 결제 금액이 있다면 '[총액: 155,000 VND]' 형식으로 적어줘. 없으면 적지 마.
+3. 그 다음 줄부터 소비한 품목들을 한 줄씩 적어줘:
+   - 품목 이름은 무조건 '한국어'로 자연스럽게 번역해.
+   - 한국어 품목 이름 다음에 영문/현지어 이름을 괄호 안에 넣어줘 (예: 핀홀릭 블랙커피(Phinholic 1 đen)).
+   - 품목의 주요특징을 요약해서 넣어줘.
+   - 수량이 2개 이상일 때만 품목 이름 뒤에 '(X개)'라고 표시해.
+   - 가격 숫자는 소수점 정리하고 화폐단위(VND, KRW, USD 등)를 표기해.
+   - 각 항목은 '품목명(원문) (특징) 가격 통화' 형태로 한 줄씩 출력해.
+4. 인사말이나 마크다운 백틱 없이 결과만 출력해.
 """
     contents = []
     for f in uploaded_files:
@@ -496,18 +492,36 @@ def summarize_receipt_files_with_gemini(uploaded_files):
     if not raw_res:
         return "", "", 0.0
 
-    try:
-        cleaned = re.sub(r'```(?:json)?', '', raw_res).strip('` \n')
-        first_brace = cleaned.find('{')
-        last_brace = cleaned.rfind('}')
-        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
-            data = json.loads(cleaned[first_brace:last_brace + 1])
-            tot = float(data.get("total_amount", 0.0))
-            return str(data.get("items_text", "")).strip(), str(data.get("payment_date", "")).strip(), tot
-    except Exception:
-        pass
+    cleaned = raw_res.strip()
+    extracted_date = ""
+    extracted_total = 0.0
 
-    return raw_res.strip(), "", 0.0
+    # 1. 텍스트에서 결제일 추출 [결제일: 2026-09-28]
+    m_date = re.search(r'\[결제일:\s*(\d{4}-\d{2}-\d{2})\]', cleaned)
+    if m_date:
+        extracted_date = m_date.group(1)
+        cleaned = re.sub(r'\[결제일:[^\]]+\]\s*', '', cleaned).strip()
+
+    # 2. 텍스트에서 총액 추출 [총액: 155,000 VND]
+    m_tot = re.search(r'\[총액:\s*([\d,]+)', cleaned)
+    if m_tot:
+        try:
+            extracted_total = float(m_tot.group(1).replace(',', ''))
+            cleaned = re.sub(r'\[총액:[^\]]+\]\s*', '', cleaned).strip()
+        except: pass
+
+    # 3. 만약 총액 태그가 없으면 각 행의 금액들을 합산하여 총액 계산 (Fallback)
+    if extracted_total <= 0:
+        sum_calc = 0.0
+        for line in cleaned.split("\n"):
+            nums = re.findall(r'(\d{1,3}(?:,\d{3})+|\d+)', line)
+            if nums:
+                try: sum_calc += float(nums[-1].replace(',', ''))
+                except: pass
+        if sum_calc > 0:
+            extracted_total = sum_calc
+
+    return cleaned, extracted_date, extracted_total
 
 # 2.02.05 | Gemini Hotel Voucher Parser (면적/발코니/성급/부분취소율 다차원 분석 완결형)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
@@ -2411,7 +2425,7 @@ else:
         available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
         # ----------------------------------------------------------------------
-        # 6.01.01 | Sub-Form: General Expense (금액 세션 직결 & 초고속 스캔 완결형)
+        # 6.01.01 | Sub-Form: General Expense (원문 복원 & 100% 안전 동기화 완결형)
         # ----------------------------------------------------------------------
         if mode == "일반 지출":        
             clean_daily_cats = [c for c in EXPENSE_CATS if c not in ['항공권', '호텔', '보증금', '상환', '보험']]
@@ -2431,11 +2445,12 @@ else:
                 uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"exp_receipt_{st.session_state.rcpt_key_idx}", accept_multiple_files=True)
                 if uploaded_files:
                     if st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp", use_container_width=True, type="primary"):
-                        with st.spinner("AI가 품목, 총금액 및 결제일자를 고속 분석 중..."):
+                        with st.spinner("AI가 영수증 품목과 금액을 정밀 분석 중..."):
                             smart_text, pay_date, total_amt = summarize_receipt_files_with_gemini(uploaded_files)
                             if smart_text:
                                 st.session_state['exp_desc_input'] = smart_text
-                                # [Fixed] 위젯 세션 키에 직접 총금액 주입 (0원 고정 버그 완벽 해결)
+                                
+                                # 총금액 자동 입력 세션 주입
                                 if total_amt > 0:
                                     st.session_state['exp_amt_int'] = int(total_amt)
                                     st.session_state['exp_amt_float'] = float(total_amt)
@@ -2446,9 +2461,11 @@ else:
                                     if parsed_dt:
                                         st.session_state['ai_payment_date'] = parsed_dt
                                         
-                                st.toast(f"🧾 분석 완료! 금액: {total_amt:,.0f} 자동 입력", icon="🎉")
+                                st.toast(f"🧾 분석 완료! 금액: {total_amt:,.0f} 자동 계산", icon="🎉")
                                 time.sleep(0.3)
                                 st.rerun()
+                            else:
+                                st.error("🚨 영수증 이미지를 인식하지 못했습니다. 파일 상태를 확인해 주세요.")
                                 
             with col_desc: 
                 desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=130, key="exp_desc_input")
@@ -2462,7 +2479,7 @@ else:
                     selected_gifts = []
                     cols_g = st.columns(min(3, max(1, len(lines))))
                     for idx_l, line_str in enumerate(lines):
-                        m_amt = re.findall(r'(\d{1,3}(?:,\d{3})*|\d+)', line_str)
+                        m_amt = re.findall(r'(\d{1,3}(?:,\d{3})+|\d+)', line_str)
                         c_box = cols_g[idx_l % len(cols_g)].checkbox(f"🎁 {line_str[:22]}..", key=f"chk_gift_{idx_l}")
                         if c_box:
                             selected_gifts.append(line_str)
@@ -2499,7 +2516,6 @@ else:
 
             col_a1, col_a2 = st.columns(2)
             with col_a1:
-                # 위젯 key에 직접 세션 값이 바인딩되도록 통일
                 if curr == "KRW" or (curr == IN_CURR and IN_MULTI == 100): 
                     if 'exp_amt_int' not in st.session_state: st.session_state['exp_amt_int'] = 0
                     amt = st.number_input(f"금액 ({curr})", min_value=0, step=1000 if curr != "KRW" else 1, format="%d", key="exp_amt_int")
@@ -2543,7 +2559,6 @@ else:
                     st.toast("🎉 지출이 성공적으로 기록되었습니다!", icon="✅")
                     st.session_state.clear_exp_desc = True
                     st.session_state.rcpt_key_idx += 1
-                    # 입력 후 세션 금액 초기화
                     if 'exp_amt_int' in st.session_state: st.session_state['exp_amt_int'] = 0
                     if 'exp_amt_float' in st.session_state: st.session_state['exp_amt_float'] = 0.0
                     time.sleep(0.6); st.rerun()
