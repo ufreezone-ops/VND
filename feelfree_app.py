@@ -973,6 +973,20 @@ ledger_df = load_data(ACTIVE_SHEET)
 # ------------------------------------------------------------------------------
 # 2.05.03 | Cash Inventory Cloud Loader & Saver (지폐 실사 잔고 클라우드 동기화)
 # ------------------------------------------------------------------------------
+
+def quick_swap_and_save(df):
+    try:
+        # 안전 검사: 최소 건수 체크
+        if df is None or len(df) < 3:
+            return False
+        # 사전 읽기와 금융 재계산을 건너뛰고 곧바로 구글 시트에 직결 반영
+        conn.update(worksheet=ACTIVE_SHEET, data=df.reindex(columns=FINAL_COLUMNS))
+        smart_cache_clear()
+        return True
+    except Exception as e:
+        st.error(f"🚨 순서 변경 저장 실패: {e}")
+        return False
+
 CASH_SHEET = "_CASH_INVENTORY_"
 
 def load_cash_inventory():
@@ -3105,17 +3119,23 @@ else:
                             with c_up:
                                 if st.button("🔼 위로 한 칸 이동", key=f"btn_move_up_{real_idx}", use_container_width=True):
                                     if real_idx > 0:
-                                        display_df.iloc[real_idx - 1], display_df.iloc[real_idx] = display_df.iloc[real_idx].copy(), display_df.iloc[real_idx - 1].copy()
-                                        if save_data(display_df):
-                                            st.toast("🔼 순서가 위로 이동되었습니다!", icon="✅")
-                                            st.rerun()
+                                        with st.spinner("순서 이동 중..."):
+                                            # 원본 원장(ledger_df) 기준으로 고속 스왑
+                                            ledger_df.iloc[real_idx - 1], ledger_df.iloc[real_idx] = ledger_df.iloc[real_idx].copy(), ledger_df.iloc[real_idx - 1].copy()
+                                            if quick_swap_and_save(ledger_df):
+                                                st.toast("🔼 순서가 위로 이동되었습니다!", icon="✅")
+                                                time.sleep(0.3)
+                                                st.rerun()
                             with c_down:
                                 if st.button("🔽 아래로 한 칸 이동", key=f"btn_move_down_{real_idx}", use_container_width=True):
-                                    if real_idx < len(display_df) - 1:
-                                        display_df.iloc[real_idx + 1], display_df.iloc[real_idx] = display_df.iloc[real_idx].copy(), display_df.iloc[real_idx + 1].copy()
-                                        if save_data(display_df):
-                                            st.toast("🔽 순서가 아래로 이동되었습니다!", icon="✅")
-                                            st.rerun()
+                                    if real_idx < len(ledger_df) - 1:
+                                        with st.spinner("순서 이동 중..."):
+                                            # 원본 원장(ledger_df) 기준으로 고속 스왑
+                                            ledger_df.iloc[real_idx + 1], ledger_df.iloc[real_idx] = ledger_df.iloc[real_idx].copy(), ledger_df.iloc[real_idx + 1].copy()
+                                            if quick_swap_and_save(ledger_df):
+                                                st.toast("🔽 순서가 아래로 이동되었습니다!", icon="✅")
+                                                time.sleep(0.3)
+                                                st.rerun()
 
                             amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
                             krw_equivalent = row_data['Amount'] if row_data['Currency'] == 'KRW' else row_data['Amount'] * row_data['AppliedRate']
