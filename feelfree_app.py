@@ -2609,9 +2609,11 @@ else:
                     full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout_calc.strftime('%m/%d')}) | {h_detail.replace(chr(10), ' ')}"
                     
                     hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{h_fee}원" if h_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
-                    checkin_desc = f"🏨 {h_name} 체크인 ({h_nights}박)"
+                    # [Modified] 핵심 일정 키워드(체크인/체크아웃)를 맨 앞으로 배치하여 가독성 극대화
+                    checkin_desc = f"체크인 🏨 {h_name} ({h_nights}박)"
                     checkin_row = pd.DataFrame([{'Date': h_checkin.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크인', 'Description': checkin_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkin', 'Receipt_URL': ''}])
-                    checkout_desc = f"🏨 {h_name} 체크아웃"
+                    
+                    checkout_desc = f"체크아웃 🏨 {h_name}"
                     checkout_row = pd.DataFrame([{'Date': h_checkout_calc.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크아웃', 'Description': checkout_desc, 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkout', 'Receipt_URL': ''}])
                     
                     if append_new_data(pd.concat([hotel_pay_row, checkin_row, checkout_row], ignore_index=True)):
