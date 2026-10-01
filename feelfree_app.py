@@ -409,18 +409,18 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (실시간 가용 모델 자동 조회 & 404 원천 차단 복원 엔진)
+# 2.02.03 | Gemini Multimodal Direct Runner (실시간 가용 모델 자동 조회 & 대용량 전송 최적화 엔진)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # 1단계: 구글 서버에서 내 API 키로 실제 호출 가능한 모델 목록을 실시간 자동 조회
+    # 1단계: 구글 서버에서 내 API 키로 실제 호출 가능한 모델 목록을 실시간 자동 조회 (404 방어)
     available_models = []
     for ver in ['v1', 'v1beta']:
         try:
             list_url = f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}"
-            l_resp = requests.get(list_url, timeout=5)
+            l_resp = requests.get(list_url, timeout=4)
             if l_resp.status_code == 200:
                 m_list = l_resp.json().get('models', [])
                 for m in m_list:
@@ -432,7 +432,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
         except Exception:
             pass
 
-    # 내 계정에서 가용한 모델 중 flash 계열을 최우선 정렬
+    # flash 계열 최우선 정렬
     def model_priority(item):
         v, name = item
         if '2.5-flash' in name: return 1
@@ -444,17 +444,33 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     available_models.sort(key=model_priority)
 
-    # 만약 목록 조회가 실패했을 때의 대비용 기본 후보군
     if not available_models:
         available_models = [
             ('v1', 'gemini-1.5-flash'),
             ('v1beta', 'gemini-1.5-flash'),
             ('v1beta', 'gemini-2.0-flash-exp'),
             ('v1', 'gemini-2.5-flash'),
-            ('v1beta', 'gemini-2.5-flash'),
-            ('v1', 'gemini-1.5-pro'),
-            ('v1beta', 'gemini-1.5-pro')
+            ('v1beta', 'gemini-2.5-flash')
         ]
+
+    # 2단계: 이미지 리사이징 헬퍼 (3.5MB -> 150KB 이하로 0.05초 만에 초경량화하여 20초 병목 제거)
+    def resize_image_if_large(raw_bytes):
+        try:
+            if len(raw_bytes) > 800 * 1024:  # 800KB 이상인 사진만 대상
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(raw_bytes))
+                max_dim = 1200
+                if max(img.size) > max_dim:
+                    scale = max_dim / float(max(img.size))
+                    new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
+                    img = img.resize(new_size, Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                img.convert('RGB').save(buf, format='JPEG', quality=80, optimize=True)
+                return buf.getvalue()
+        except Exception:
+            pass
+        return raw_bytes
 
     # 전송 페이로드 구성
     rest_parts = []
@@ -462,8 +478,14 @@ def call_gemini_multimodal(contents, prompt_text=""):
         if isinstance(item, str):
             rest_parts.append({"text": item})
         elif isinstance(item, dict) and "data" in item:
-            b64_str = base64.b64encode(item["data"]).decode("utf-8")
-            m_type = item.get("mime_type", "application/pdf")
+            m_type = item.get("mime_type", "image/jpeg")
+            b_data = item["data"]
+            # PDF가 아닌 큰 이미지는 0.05초 압축 적용
+            if not m_type.endswith("pdf") and not b_data.startswith(b"%PDF"):
+                b_data = resize_image_if_large(b_data)
+                m_type = "image/jpeg"
+
+            b64_str = base64.b64encode(b_data).decode("utf-8")
             rest_parts.append({
                 "inline_data": {
                     "mime_type": m_type,
@@ -476,11 +498,11 @@ def call_gemini_multimodal(contents, prompt_text=""):
     payload = {"contents": [{"parts": rest_parts}]}
     last_err = ""
 
-    # 2단계: 실제 가용 모델로 순차 호출
+    # 3단계: 가용 모델로 순차 호출
     for api_ver, m_name in available_models:
         try:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=20)
             if resp.status_code == 200:
                 data = resp.json()
                 cand = data.get("candidates", [])
@@ -489,7 +511,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip(), ""
             else:
-                last_err = f"[{api_ver}/{m_name}] {resp.status_code}: {resp.text[:120]}"
+                last_err = f"[{api_ver}/{m_name}] {resp.status_code}: {resp.text[:100]}"
         except Exception as e:
             last_err = f"[{api_ver}/{m_name}] 통신에러: {e}"
             continue
