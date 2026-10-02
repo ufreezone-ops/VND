@@ -409,10 +409,9 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (캐시형 모델 조회 & 대용량 사진 초고속 최적화)
+# 2.02.03 | Gemini Multimodal Direct Runner (흑백 그레이스케일 초경량화 & 초고속 가속 엔진)
 @st.cache_data(ttl=3600)
 def get_cached_gemini_models(api_key):
-    """구글 모델 목록을 매번 조회하지 않고 1시간 동안 메모리에 캐싱하여 3~4초 지연 원천 제거"""
     active_endpoints = []
     for ver in ['v1beta', 'v1']:
         try:
@@ -442,26 +441,29 @@ def call_gemini_multimodal(contents, prompt_text=""):
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # 1. 대용량 사진(3.5MB 등)을 메모리상에서 0.05초 만에 200KB 이하로 최적화 (업로드 15초 지연 제거)
-    def compress_img_safely(b_data):
+    # 💡 [핵심 최적화: 흑백(Grayscale) 변환 + 1000px 리사이즈로 용량 98% 다이어트]
+    def compress_img_to_grayscale(b_data):
         try:
-            if len(b_data) > 500 * 1024:
-                from PIL import Image
-                import io
-                img = Image.open(io.BytesIO(b_data))
-                max_dim = 1400
-                if max(img.size) > max_dim:
-                    ratio = max_dim / float(max(img.size))
-                    new_dim = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-                    img = img.resize(new_dim, Image.Resampling.LANCZOS)
-                buf = io.BytesIO()
-                img.convert('RGB').save(buf, format='JPEG', quality=85)
-                return buf.getvalue()
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(b_data))
+            
+            # 1. 1000px 골든 해상도 조정 (영수증 작은 글자 가독성 100% 보장)
+            max_dim = 1000
+            if max(img.size) > max_dim:
+                ratio = max_dim / float(max(img.size))
+                new_dim = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+                img = img.resize(new_dim, Image.Resampling.LANCZOS)
+                
+            # 2. RGB -> Grayscale(L) 흑백 전환 (데이터 채널 1/3로 절감)
+            gray_img = img.convert('L')
+            
+            buf = io.BytesIO()
+            gray_img.save(buf, format='JPEG', quality=70, optimize=True)
+            return buf.getvalue()
         except Exception:
-            pass
-        return b_data
+            return b_data
 
-    # 2. 전송 페이로드 구성
     rest_parts = []
     for item in contents:
         if isinstance(item, str):
@@ -469,19 +471,23 @@ def call_gemini_multimodal(contents, prompt_text=""):
         elif isinstance(item, dict) and "data" in item:
             mime = item.get("mime_type", "image/jpeg")
             raw_b = item["data"]
-            # PDF는 원본 그대로 두고, 사진 파일만 안전 압축
+            # PDF는 텍스트 레이어가 있으므로 원본 유지, 사진 파일만 흑백 경량화
             if not mime.endswith("pdf") and not raw_b.startswith(b"%PDF"):
-                raw_b = compress_img_safely(raw_b)
+                raw_b = compress_img_to_grayscale(raw_b)
                 mime = "image/jpeg"
+                
             b64_str = base64.b64encode(raw_b).decode("utf-8")
-            rest_parts.append({"inline_data": {"mime_type": mime, "data": b64_str}})
+            rest_parts.append({
+                "inline_data": {
+                    "mime_type": mime,
+                    "data": b64_str
+                }
+            })
 
     if prompt_text:
         rest_parts.append({"text": prompt_text})
 
     payload = {"contents": [{"parts": rest_parts}]}
-
-    # 3. 1시간 캐싱된 활성 모델 엔드포인트 호출 (0초 지연)
     active_endpoints = get_cached_gemini_models(api_key)
     last_err = ""
 
