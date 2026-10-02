@@ -2540,9 +2540,9 @@ else:
 
                     st.toast("🎉 지출이 성공적으로 기록되었습니다!", icon="✅")
                     st.session_state.clear_exp_desc = True
-                    if 'exp_amt_int' in st.session_state: st.session_state['exp_amt_int'] = 0
-                    if 'exp_amt_float' in st.session_state: st.session_state['exp_amt_float'] = 0.0
-                    time.sleep(0.5); st.rerun()
+                    # [Fixed: StreamlitWidgetAlreadyInstantiatedError 원천 방어 - 세션 직접 수정 제거]
+                    time.sleep(0.4)
+                    st.rerun()
 
             # --- 2. 항공권(특수) 등록 폼 ---
             elif mode == "🛫 항공권(특수)":
