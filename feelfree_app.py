@@ -518,21 +518,27 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     return "", last_err
 
-# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (호텔 엔진과 100% 동일 규격 완결형)
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (상호명 우선 추출 & 완결형 파서)
 def summarize_receipt_files_with_gemini(uploaded_files):
-    if not uploaded_files: 
-        return "", "", 0.0
+    if not uploaded_files: return "", "", 0.0
 
     prompt = """너는 다국어 영수증 전문 분석 AI야. 첨부된 영수증 사진/문서를 분석하여 아래 규칙대로 정확히 출력해줘.
 
 [출력 형식 지침]:
-1. 첫 번째 줄에는 영수증에 인쇄된 결제일(승인일시)을 반드시 '[결제일: YYYY-MM-DD]' 형식으로 적어줘. (예: Ngày: 28/09/2026 -> [결제일: 2026-09-28]). 없으면 적지 마.
-2. 두 번째 줄에는 영수증 맨 아래 실제 총 결제 금액을 반드시 '[총액: 155,000 VND]' 형식으로 적어줘. (예: Tổng tiền: 155,000 đ -> [총액: 155,000 VND]). 없으면 적지 마.
-3. 세 번째 줄부터는 소비한 품목들을 한 줄씩 번역해서 나열해줘:
-   - 한국어 품목명(원문) (특징) 가격 통화 형태로 출력 (예: 핀홀릭 블랙커피(PHINHOLIC 1 đen) 32,000 VND).
-   - 깨강정(Kẹo mè xửng) 32,000 VND
-   - 오색 디저트(Ngũ Sắc) 59,000 VND
-4. 인사말이나 마크다운 백틱 없이 위 내용만 있는 그대로 출력해.
+1. 첫 번째 줄: 영수증에 인쇄된 결제일자(예: Ngày: 22/09/2026 -> [결제일: 2026-09-22]). 없으면 생략.
+2. 두 번째 줄: 영수증 맨 아래 실제 총 결제 금액(예: Tổng cộng: 90,000 đ -> [총액: 90,000 VND]). 없으면 생략.
+3. 세 번째 줄부터:
+   - 영수증 최상단의 매장 이름(상호명)을 한국어 친화적 발음과 원문으로 적고 뒤에 ' - '를 붙여줘. (예: 카페 웃띡(Út Tịch Bạch Đằng) - )
+   - 그 뒤로 소비한 품목들을 한 줄씩 번역해서 나열해줘:
+     * 한국어 품목명(원문) (특징) 가격 통화 (예: 카카오 무디(Cacao Muối) (음료) 55,000 VND)
+     * 아이스 밀크 커피(Cà Phê Sữa Đá - Iced Milk Coffee) 35,000 VND
+4. 출력 예시:
+[결제일: 2026-09-22]
+[총액: 90,000 VND]
+카페 웃띡(Út Tịch Bạch Đằng) - 카카오 무디(Cacao Muối) (음료) 55,000 VND
+아이스 밀크 커피(Cà Phê Sữa Đá - Iced Milk Coffee) 35,000 VND
+
+5. 인사말이나 마크다운 백틱 없이 위 내용만 정확하게 출력해.
 """
     contents = []
     for f in uploaded_files:
@@ -572,7 +578,7 @@ def summarize_receipt_files_with_gemini(uploaded_files):
         except Exception:
             pass
 
-    # 3. 총액 태그 누락 시 각 행 금액 합산
+    # 3. 총액 태그 누락 시 품목 금액 합산
     if extracted_total <= 0:
         sum_calc = 0.0
         for line in cleaned.split("\n"):
