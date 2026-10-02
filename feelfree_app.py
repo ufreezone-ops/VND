@@ -2310,14 +2310,16 @@ else:
     tab_main, tab_stats, tab_final = st.tabs(["가계부", "일일Data", "전체요약"])
 
     # --------------------------------------------------------------------------
-    # 6.01.00 & 6.02.00 | Console Tab: Unified Ledger (가계부 통합 원장 & 선물 항목 신설 & 수동입력 분할)
+    # 6.01.00 | Unified Ledger Console (가계부 통합 콘솔)
     # --------------------------------------------------------------------------
     with tab_main:
+        # ----------------------------------------------------------------------
+        # 6.01.01 | Context & Date Orchestrator (국가·시차·공통 달력 초기화)
+        # ----------------------------------------------------------------------
         trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
         node_keys = list(trip_nodes.keys())
         is_single_country = len(node_keys) <= 1
 
-        # 시차 및 날짜 컨텍스트 산출
         dep_rows_tz = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
         korea_dep_tz = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
         t_dep_tz = korea_dep_tz if not korea_dep_tz.empty else dep_rows_tz
@@ -2367,9 +2369,9 @@ else:
 
         if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
 
-        # ======================================================================
-        # [상단부] 🚀 새 지출 / 일정 / 바우처 등록기
-        # ======================================================================
+        # ----------------------------------------------------------------------
+        # 6.01.02 | Top Registration Console (상단 ➕ 지출/일정 등록기)
+        # ----------------------------------------------------------------------
         with st.expander("➕ 새 지출 / 일정 / 바우처 등록하기", expanded=False):
             if is_single_country:
                 sel_node = node_keys[0] if node_keys else FIRST_NODE_NAME
@@ -2397,12 +2399,10 @@ else:
             node_currs = [node["currency"] for node in trip_nodes.values()]
             available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
-            # --- 1. 일반 지출 등록 폼 (선물 카테고리 신설) ---
+            # --- 6.01.02-A | 일반 지출 등록 서브모듈 ---
             if mode == "일반 지출":
-                # 💡 [개선 1: 새 지출 라디오 버튼에 '선물' 카테고리 기본 포함]
                 base_daily_cats = [c for c in EXPENSE_CATS if c not in ['항공권', '호텔', '보증금', '상환', '보험']]
                 if "선물" not in base_daily_cats:
-                    # 마트 바로 뒤 또는 적절한 위치에 '선물' 추가
                     if "마트" in base_daily_cats:
                         idx_m = base_daily_cats.index("마트")
                         clean_daily_cats = base_daily_cats[:idx_m+1] + ["선물"] + base_daily_cats[idx_m+1:]
@@ -2442,15 +2442,11 @@ else:
                                     st.error("🚨 영수증 인식을 완료하지 못했습니다.")
                                     
                 with col_desc: 
-                    desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식\n또는 재래시장 쇼핑 품목과 가격을 한 줄씩 입력", height=120, key="exp_desc_input")
+                    desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=120, key="exp_desc_input")
 
-                # 💡 [개선 2: 수동 입력 텍스트에서도 'K' 단위 및 금액 자동 인식 선물 분리]
                 def parse_amount_from_line(line_text):
-                    # 1. 210K, 300k 형태 매칭
                     m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]', line_text)
-                    if m_k:
-                        return float(m_k.group(1)) * 1000
-                    # 2. 일반 콤마 숫자 매칭
+                    if m_k: return float(m_k.group(1)) * 1000
                     nums = re.findall(r'(\d{1,3}(?:,\d{3})+|\d+)', line_text)
                     if nums:
                         try: return float(nums[-1].replace(',', ''))
@@ -2458,21 +2454,36 @@ else:
                     return 0.0
 
                 gift_sum_amt = 0.0
+                candidate_item_lines = []
+                store_header_in = ""
+                
                 if desc and any(ch.isdigit() for ch in desc):
-                    lines = [line.strip() for line in desc.split("\n") if line.strip()]
-                    with st.expander("🎁 선물/특산품 분리 지정 (순수 일일 체류비 왜곡 방지)", expanded=True):
-                        st.caption("💡 영수증이 없어도 손으로 적은 품목 중 **선물/기념품**을 체크하시면 일일 체류비에서 자동 분리됩니다.")
-                        selected_gifts = []
-                        cols_g = st.columns(min(3, max(1, len(lines))))
-                        for idx_l, line_str in enumerate(lines):
-                            val_l = parse_amount_from_line(line_str)
-                            c_box = cols_g[idx_l % len(cols_g)].checkbox(f"🎁 {line_str[:22]}..", key=f"chk_gift_{idx_l}")
-                            if c_box:
-                                selected_gifts.append(line_str)
-                                gift_sum_amt += val_l
-                        st.session_state.gift_items_selected = selected_gifts
-                        if gift_sum_amt > 0:
-                            st.info(f"선물/특산품 분리 지정액: **{gift_sum_amt:,.0f}**")
+                    raw_lines = [l.strip() for l in desc.split("\n") if l.strip()]
+                    for idx_l, l_text in enumerate(raw_lines):
+                        if l_text.startswith("[결제일") or l_text.startswith("[총액"): continue
+                        val_chk = parse_amount_from_line(l_text)
+                        if idx_l <= 1 and val_chk == 0 and not l_text.startswith("-"):
+                            store_header_in = l_text
+                        elif val_chk > 0 or l_text.startswith("-"):
+                            candidate_item_lines.append(l_text)
+
+                    if cat != "선물" and candidate_item_lines:
+                        with st.expander("🎁 선물/특산품 분리 지정 (순수 일일 체류비 왜곡 방지)", expanded=True):
+                            st.caption("💡 마트/간식 중 **선물/기념품**을 체크하시면 해당 품목만 '선물' 항목으로 자동 분리됩니다.")
+                            selected_gifts = []
+                            cols_g = st.columns(min(3, max(1, len(candidate_item_lines))))
+                            for idx_l, line_str in enumerate(candidate_item_lines):
+                                val_l = parse_amount_from_line(line_str)
+                                disp_l = re.sub(r'^[\-\*•\s]+', '', line_str)
+                                c_box = cols_g[idx_l % len(cols_g)].checkbox(f"🎁 {disp_l[:20]}..", key=f"chk_gift_new_{idx_l}")
+                                if c_box:
+                                    selected_gifts.append(line_str)
+                                    gift_sum_amt += val_l
+                            st.session_state.gift_items_selected = selected_gifts
+                            if gift_sum_amt > 0:
+                                st.info(f"선물/특산품 분리 지정액: **{gift_sum_amt:,.0f}**")
+                    elif cat == "선물":
+                        st.caption("✨ 현재 선택된 카테고리가 **'선물'**이므로, 전체 금액이 선물 지출로 자동 기록됩니다.")
 
                 col_m1, col_m2, col_m3 = st.columns([1, 1, 1])
                 with col_m1: 
@@ -2511,40 +2522,91 @@ else:
                         cr_final = st.number_input("확정 환율", value=float(calc_rate), format="%.5f", key=f"exp_cr_auto_{met}_{amt}")
                     else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else get_default_rate(curr)), format="%.5f", key=f"exp_cr_man_{curr}")
                     
+                # 지출 기록 버튼 (원장 직결 추가 & 증발 완벽 방어)
                 if st.button("🚀 지출 기록하기", use_container_width=True, type="primary"):
+                    if amt <= 0:
+                        st.warning("결제 금액을 0원보다 크게 입력해 주세요.")
+                        st.stop()
+
                     final_receipt_urls = ""
                     if uploaded_files:
                         with st.spinner("📸 영수증 클라우드 보관 중..."):
                             u_list = [upload_image_to_imgbb(f) for f in uploaded_files if upload_image_to_imgbb(f)]
                             final_receipt_urls = ",".join(u_list)
                     
-                    # 수동 입력에서도 선물 자동 분할 2개 행 생성 지원
                     total_amt_val = float(amt)
-                    if gift_sum_amt >= total_amt_val and total_amt_val > 0:
-                        # 100% 선물인 경우 카테고리를 바로 '선물'로 기록
-                        final_cat = "선물"
-                        new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': final_cat, 'Description': f"[{final_gateway}] {desc}" if final_gateway else desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '100% Gift Purchase', 'Receipt_URL': final_receipt_urls}])
-                        append_new_data(new_row)
+                    new_rows_to_add = []
+                    
+                    if cat == "선물" or (gift_sum_amt >= total_amt_val and total_amt_val > 0):
+                        f_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
+                        new_rows_to_add.append({
+                            'Date': sel_date.strftime("%Y-%m-%d(%a)"),
+                            'Country': sel_node,
+                            'Category': '선물',
+                            'Description': f_desc.strip(),
+                            'Currency': curr,
+                            'Amount': total_amt_val,
+                            'PaymentMethod': met,
+                            'IsExpense': 1,
+                            'AppliedRate': cr_final,
+                            'Note': '100% Gift',
+                            'Receipt_URL': final_receipt_urls
+                        })
                     elif gift_sum_amt > 0 and (total_amt_val - gift_sum_amt) > 0:
-                        # 2개 행 분할 생성
                         rem_amt = total_amt_val - gift_sum_amt
-                        normal_lines = [l for l in desc.split("\n") if l.strip() and l.strip() not in st.session_state.gift_items_selected]
+                        norm_lines = [l for l in candidate_item_lines if l not in st.session_state.gift_items_selected]
                         gift_lines = st.session_state.gift_items_selected
                         
-                        row_norm = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': cat, 'Description': f"[{final_gateway}] " + "\n".join(normal_lines) if final_gateway else "\n".join(normal_lines), 'Currency': curr, 'Amount': rem_amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Normal Split', 'Receipt_URL': final_receipt_urls}])
-                        row_gift = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '선물', 'Description': f"[{final_gateway}] [선물분리] " + "\n".join(gift_lines) if final_gateway else "[선물분리] " + "\n".join(gift_lines), 'Currency': curr, 'Amount': gift_sum_amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Gift Split', 'Receipt_URL': final_receipt_urls}])
-                        append_new_data(pd.concat([row_norm, row_gift], ignore_index=True))
+                        prefix = f"{store_header_in}\n" if store_header_in else ""
+                        d_norm = prefix + "\n".join(norm_lines)
+                        d_gift = prefix + "\n".join(gift_lines)
+                        
+                        f_d_norm = f"[{final_gateway}] {d_norm}" if final_gateway else d_norm
+                        f_d_gift = f"[{final_gateway}] [선물분리] {d_gift}" if final_gateway else f"[선물분리] {d_gift}"
+                        
+                        new_rows_to_add.append({
+                            'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': cat,
+                            'Description': f_d_norm.strip(), 'Currency': curr, 'Amount': rem_amt,
+                            'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Normal Split', 'Receipt_URL': final_receipt_urls
+                        })
+                        new_rows_to_add.append({
+                            'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '선물',
+                            'Description': f_d_gift.strip(), 'Currency': curr, 'Amount': gift_sum_amt,
+                            'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Gift Split', 'Receipt_URL': final_receipt_urls
+                        })
                     else:
-                        new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': cat, 'Description': f"[{final_gateway}] {desc}" if final_gateway else desc, 'Currency': curr, 'Amount': amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '', 'Receipt_URL': final_receipt_urls}])
-                        append_new_data(new_row)
+                        f_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
+                        new_rows_to_add.append({
+                            'Date': sel_date.strftime("%Y-%m-%d(%a)"),
+                            'Country': sel_node,
+                            'Category': cat,
+                            'Description': f_desc.strip(),
+                            'Currency': curr,
+                            'Amount': total_amt_val,
+                            'PaymentMethod': met,
+                            'IsExpense': 1,
+                            'AppliedRate': cr_final,
+                            'Note': '',
+                            'Receipt_URL': final_receipt_urls
+                        })
+
+                    base_ledger = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state and not st.session_state.active_ledger_df.empty else load_data(ACTIVE_SHEET)
+                    combined_df = pd.concat([base_ledger, pd.DataFrame(new_rows_to_add)], ignore_index=True)
+                    final_saved_df = recalculate_entire_ledger(combined_df)
+                    st.session_state.active_ledger_df = final_saved_df
+                    
+                    try:
+                        conn.update(worksheet=ACTIVE_SHEET, data=final_saved_df.reindex(columns=FINAL_COLUMNS))
+                    except Exception as e_s:
+                        st.error(f"구글 시트 저장 실패: {e_s}")
+                        st.stop()
 
                     st.toast("🎉 지출이 성공적으로 기록되었습니다!", icon="✅")
                     st.session_state.clear_exp_desc = True
-                    # [Fixed: StreamlitWidgetAlreadyInstantiatedError 원천 방어 - 세션 직접 수정 제거]
                     time.sleep(0.4)
                     st.rerun()
 
-            # --- 2. 항공권(특수) 등록 폼 ---
+            # --- 6.01.02-B | 항공권(특수) 등록 서브모듈 ---
             elif mode == "🛫 항공권(특수)":
                 st.subheader("✈️ 항공권 및 스케줄 통합 기록")
                 col_f_input, col_f_rcpt = st.columns([3, 1.2])
@@ -2633,7 +2695,7 @@ else:
                             if k in st.session_state: del st.session_state[k]
                         time.sleep(0.5); st.rerun()
 
-            # --- 3. 호텔(특수) 등록 폼 ---
+            # --- 6.01.02-C | 호텔(특수) 4대 통합 관리 서브모듈 ---
             elif mode == "🏨 호텔(특수)":
                 st.subheader("🏨 호텔 4대 통합 관리")
                 hotel_sub_mode = st.radio("호텔 업무 선택", ["🏨 호텔 예약/결제 (체크인·아웃 자동생성)", "🏷️ 체크인 보증금 결제 (Deposit)", "🔙 체크아웃 보증금 환급 (Deposit Return)", "💳 체크아웃 외상 청산"], horizontal=True, key="hotel_sub_mode_radio")
@@ -2774,7 +2836,7 @@ else:
                         new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '상환', 'Description': clear_desc, 'Currency': clear_curr, 'Amount': clear_amt, 'PaymentMethod': clear_pay_source, 'IsExpense': 0, 'AppliedRate': clear_rate, 'Note': 'Hotel Credit Cleared', 'Receipt_URL': ''}])
                         if append_new_data(new_row): st.toast(f"✅ 호텔 외상 청산 완료!", icon="🎉"); st.rerun()
 
-            # --- 4. 자산 이동 등록 폼 ---
+            # --- 6.01.02-D | 자산 이동 및 환전 등록 서브모듈 ---
             elif mode == "자산 이동":
                 ty = st.selectbox("유형", ["충전 (원화계좌 -> 트래블카드)", "직접환전 (원화계좌 -> 로컬현금)", "이종환전 (외화 -> 타국 외화)", "ATM출금 (카드 -> 로컬현금)", "재환전 (외화 -> 원화계좌)", "이월잔액 (지난여행 -> 현금잔액)", "개인지출 (외화잔액 -> 여행외 소비)"], key="tr_type")
                 c1, c2 = st.columns(2)
@@ -2825,7 +2887,7 @@ else:
                             new_rows.append(fee_row)
                         if append_new_data(pd.concat(new_rows, ignore_index=True)): st.toast("이동 완료!", icon="✅"); st.rerun()
 
-            # --- 5. 환불(취소) 등록 폼 ---
+            # --- 6.01.02-E | 환불(취소) 등록 서브모듈 ---
             elif mode == "환불(취소)":
                 col_r1, col_r2 = st.columns(2)
                 with col_r1:
@@ -2839,9 +2901,9 @@ else:
                     new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
                     if append_new_data(new_row): st.toast("환불 롤백 완료!", icon="✅"); st.rerun()
 
-        # ======================================================================
-        # [하단부] 📋 가계부 원장 조회 & 수동입력/영수증 통합 인라인 상세 수정기
-        # ======================================================================
+        # ----------------------------------------------------------------------
+        # 6.01.03 | Filter & Ledger Table Engine (필터 바 및 메인 원장 테이블)
+        # ----------------------------------------------------------------------
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
         viewer_placeholder = st.empty()
 
@@ -2853,7 +2915,6 @@ else:
         
         cat_options = ["모든 카테고리"] + sorted(list(temp_display_df['Category'].dropna().unique())) if not temp_display_df.empty else ["모든 카테고리"]
 
-        # [직접수정 토글 제거 & 3열 와이드 필터]
         c_filter, c_cat, c_search = st.columns([3, 3, 5])
         with c_filter:
             filter_options = ["모든 여행가계부", "이번 여행가계부"] + list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())
@@ -2954,7 +3015,9 @@ else:
             elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
                 selected_idx = df_event.selection.rows[0]
 
-            # --- [인라인 상세 뷰어 & 수동입력/영수증 선물 자동 분할기] ---
+            # ------------------------------------------------------------------
+            # 6.01.04 & 6.01.05 | Detail Voucher Viewer & Unified In-line Editor
+            # ------------------------------------------------------------------
             if selected_idx is not None:
                 real_idx = render_df.index[selected_idx] 
                 row_data = display_df.loc[real_idx]
@@ -2962,6 +3025,8 @@ else:
                 with viewer_placeholder.container():
                     st.markdown("---")
                     c_info, c_edit = st.columns([1, 1.2])
+                    
+                    # --- 6.01.04 | Interactive Voucher Viewer ---
                     with c_info:
                         st.subheader("🧾 상세 내역 및 영수증 뷰어")
                         c_up, c_down = st.columns(2)
@@ -3039,6 +3104,7 @@ else:
                                         st.toast(f"사진 #{idx+1} 삭제 완료!", icon="✅"); time.sleep(0.4); st.rerun()
                         else: st.info("첨부된 영수증 사진이 없습니다.")
                             
+                    # --- 6.01.05 | Unified In-line Editor (인라인 수정 & 선물 분할) ---
                     with c_edit:
                         st.subheader("✏️ 상세 내역 & 결제정보 수정")
                         all_cats_avail = list(dict.fromkeys(EXPENSE_CATS + ['선물', '상환', '충전', '환전', '입금', '직접환전', '이월잔액', '환불', '개인지출', '재환전', '출국', '귀국', '체크인', '체크아웃']))
@@ -3075,58 +3141,57 @@ else:
                             if urls:
                                 if st.button("🔄 기존 영수증 AI 재스캔", key=f"btn_ai_rescan_existing_{real_idx}", use_container_width=True):
                                     with st.spinner("기존 영수증 사진을 AI 재분석 중..."):
-                                        try:
-                                            img_resp = requests.get(urls[0], timeout=15)
-                                            if img_resp.status_code == 200:
-                                                class TempFileObj:
-                                                    def __init__(self, b): self.b = b; self.name = "rescan.jpg"
-                                                    def seek(self, pos): pass
-                                                    def read(self): return self.b
-                                                    def getvalue(self): return self.b
-                                                mock_file = TempFileObj(img_resp.content)
-                                                smart_text, _, tot_amt = summarize_receipt_files_with_gemini([mock_file])
-                                                if smart_text:
-                                                    st.session_state[desc_key] = smart_text
-                                                    st.toast(f"기존 영수증 재스캔 완료! (총액: {tot_amt:,.0f})", icon="🎉")
-                                                    st.rerun()
-                                        except Exception as e_rescan:
-                                            st.error(f"재스캔 실패: {e_rescan}")
+                                        img_bytes = None
+                                        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                                        for attempt in range(2):
+                                            try:
+                                                img_resp = requests.get(urls[0], headers=headers, timeout=25)
+                                                if img_resp.status_code == 200 and len(img_resp.content) > 1000:
+                                                    img_bytes = img_resp.content
+                                                    break
+                                            except Exception:
+                                                time.sleep(1)
+
+                                        if img_bytes:
+                                            class TempFileObj:
+                                                def __init__(self, b): self.b = b; self.name = "rescan.jpg"
+                                                def seek(self, pos): pass
+                                                def read(self): return self.b
+                                                def getvalue(self): return self.b
+                                            mock_file = TempFileObj(img_bytes)
+                                            smart_text, _, tot_amt = summarize_receipt_files_with_gemini([mock_file])
+                                            if smart_text:
+                                                st.session_state[desc_key] = smart_text
+                                                st.toast(f"기존 영수증 재스캔 완료! (총액: {tot_amt:,.0f})", icon="🎉")
+                                                st.rerun()
 
                         new_desc = st.text_area("4. 세부 내역 (수정/추가)", height=110, key=desc_key)
 
-                        # 💡 [개선: 상호명 제외 & 순수 소비 품목만 선물 체크박스 생성]
                         gift_items_split = []
                         normal_items_split = []
                         gift_amt_split = 0.0
                         
                         if new_desc and any(ch.isdigit() for ch in new_desc):
                             all_lines = [l.strip() for l in re.sub(r'\[🎁선물:[^\]]+\]', '', new_desc).split("\n") if l.strip()]
-                            
-                            # 1. 상호명과 순수 품목 라인 분리
                             store_header = ""
                             candidate_item_lines = []
                             for idx_l, l_text in enumerate(all_lines):
                                 val_chk = parse_amount_from_line(l_text)
-                                # 첫 줄이면서 가격이 없거나 하이픈이 없으면 상호명으로 간주
                                 if idx_l == 0 and val_chk == 0 and not l_text.startswith("-"):
                                     store_header = l_text
                                 else:
-                                    # 가격이 있는 실제 품목 라인만 선물 후보로 등록
                                     if val_chk > 0 or l_text.startswith("-"):
                                         candidate_item_lines.append(l_text)
                                     else:
                                         if not store_header: store_header = l_text
 
-                            # 2. 순수 품목 라인만 체크박스 생성 (상호명 완전 배제)
                             if candidate_item_lines:
                                 with st.expander("🎁 선물/특산품 분리 및 '선물' 항목 신설", expanded=True):
                                     st.caption("💡 아래 품목 중 **선물/특산품**을 체크하시면 해당 품목만 '선물' 항목으로 분리됩니다.")
                                     cols_ge = st.columns(min(3, max(1, len(candidate_item_lines))))
                                     for idx_e, line_e in enumerate(candidate_item_lines):
                                         val_e = parse_amount_from_line(line_e)
-                                        # 라벨 표시용 깔끔한 이름 (- 기호 제거)
                                         disp_name = re.sub(r'^[\-\*•\s]+', '', line_e)
-                                        
                                         is_already_gift = any(k in line_e for k in ["선물", "기념품", "마그넷", "팔찌", "목걸이", "자석", "캔디", "선물용", "옷", "원피스", "스카프"]) or (cur_cat == "선물")
                                         c_box_e = cols_ge[idx_e % len(cols_ge)].checkbox(f"🎁 {disp_name[:18]}..", value=is_already_gift, key=f"chk_gift_edit_{real_idx}_{idx_e}")
                                         
@@ -3144,6 +3209,7 @@ else:
                                     elif gift_amt_split > 0 and remaining_normal_amt > 0:
                                         st.success(f"✂️ **2개 행 분할**:\n• 기존 (`{edit_cat}`): **{remaining_normal_amt:,.0f}** {row_data['Currency']}\n• 신설 (`선물`): **{gift_amt_split:,.0f}** {row_data['Currency']}")
 
+                        # 분할 및 수정 완료 버튼
                         if st.button("💾 이 내역 전체 업데이트 (선물 자동분할 동시적용)", use_container_width=True, type="primary"):
                             updated_rcpt_url = str(row_data.get('Receipt_URL', '')).strip()
                             if new_receipts:
@@ -3156,7 +3222,7 @@ else:
                             target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else ledger_df
                             total_receipt_amt = float(edit_amt)
                             
-                            # [100% 선물인 경우: 핑크성당 기념품 등]
+                            # [100% 선물]
                             if (gift_amt_split >= total_receipt_amt and total_receipt_amt > 0) or (len(gift_items_split) > 0 and len(normal_items_split) == 0):
                                 target_df.at[real_idx, 'Category'] = "선물"
                                 target_df.at[real_idx, 'Amount'] = total_receipt_amt
@@ -3165,18 +3231,15 @@ else:
                                 target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
                                 target_df.at[real_idx, 'Note'] = "100% Gift Purchase"
                                 
-                            # [일부만 선물인 경우: 2개 행 분할 Split - 상호명 및 카테고리 완벽 보존]
+                            # [일부만 선물: 2개 행 분할 Split]
                             elif gift_amt_split > 0 and len(normal_items_split) > 0:
                                 rem_amt = max(0.0, total_receipt_amt - gift_amt_split)
-                                
-                                # 상호명 헤더(store_header) 보존 결합
                                 prefix = f"{store_header}\n" if store_header else ""
                                 norm_desc = prefix + "\n".join(normal_items_split)
                                 gift_desc = prefix + "\n".join(gift_items_split)
                                 
-                                # 1. 기존 행 -> 일반 카테고리(마트 등) 유지 및 남은 금액 할당
                                 base_cat = edit_cat if edit_cat != "선물" else row_data.get('Category', '마트')
-                                if base_cat == "선물": base_cat = "마트"  # 둘 다 선물이 되는 현상 방지
+                                if base_cat == "선물": base_cat = "마트"
                                 
                                 target_df.at[real_idx, 'Category'] = base_cat
                                 target_df.at[real_idx, 'Amount'] = rem_amt
@@ -3184,7 +3247,6 @@ else:
                                 target_df.at[real_idx, 'Description'] = norm_desc.strip()
                                 target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
                                 
-                                # 2. 신설 행 -> 오직 선물 품목들만 모아서 '선물' 카테고리로 생성
                                 new_gift_row = pd.DataFrame([{
                                     'Date': row_data['Date'],
                                     'Country': row_data['Country'],
@@ -3207,22 +3269,20 @@ else:
                                 target_df.at[real_idx, 'Description'] = new_desc.strip()
                                 target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
 
-                            # [핵심 최적화: 재계산 후 즉시 세션 주입하여 2차 딜레이 원천 제거]
                             final_calc_df = recalculate_entire_ledger(target_df)
                             st.session_state.active_ledger_df = final_calc_df
                             
-                            # 구글 시트 백그라운드 직결 반영
                             try:
                                 conn.update(worksheet=ACTIVE_SHEET, data=final_calc_df.reindex(columns=FINAL_COLUMNS))
                             except: pass
 
                             st.toast("🎉 선물 분할 및 정합성 원샷 업데이트 완료!", icon="✅")
-                            # 기다림 없이 0.05초 만에 화면 즉시 리로드
+                            time.sleep(0.3)
                             st.rerun()
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | Console Tab 3: Daily Statistics & Tree Visualizer (통계 및 일별 시각화)
+    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭)
     # --------------------------------------------------------------------------
     with tab_stats:
         if not ledger_df.empty:
@@ -3251,8 +3311,8 @@ else:
                     for _, r_row in r_df.iterrows():
                         desc = str(r_row['Description']).replace(" ", "")
                         t_cat = "기타"
-                        if any(k in desc for k in["호텔", "숙박", "인페라", "라이온", "스플랜디도"]): t_cat = "호텔"
-                        elif any(k in desc for k in["항공", "귁첸", "소피아", "베오그라드", "부다페스트"]): t_cat = "항공권"
+                        if any(k in desc for k in ["호텔", "숙박", "인페라", "라이온", "스플랜디도"]): t_cat = "호텔"
+                        elif any(k in desc for k in ["항공", "귁첸", "소피아", "베오그라드", "부다페스트"]): t_cat = "항공권"
                         
                         r_val = r_row['Amount'] if str(r_row['Currency']).strip() == 'KRW' else r_row['Amount'] * r_row['AppliedRate']
                         while r_val > 0.5:
@@ -3265,15 +3325,13 @@ else:
                             exp_df.at[m_idx, 'KRW_val'] -= take
                             r_val -= take
 
-                color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "마트": "#E91E63", "Grab": "#00897B", "VinBus": "#00ACC1", "DiDi": "#00897B", "지하철": "#00ACC1", "택시": "#009688", "교통": "#009688", "렌트카": "#009688", "마사지": "#0288D1", "투어": "#673AB7", "입장료": "#3F51B5", "선물": "#9C27B0", "통신": "#FF9800", "수수료": "#795548", "팁": "#03A9F4", "항공권": "#D32F2F", "호텔": "#1976D2", "보험": "#FBC02D"}
+                color_map = {"식사": "#2E7D32", "간식": "#4CAF50", "마트": "#E91E63", "선물": "#9C27B0", "Grab": "#00897B", "VinBus": "#00ACC1", "DiDi": "#00897B", "지하철": "#00ACC1", "택시": "#009688", "교통": "#009688", "렌트카": "#009688", "마사지": "#0288D1", "투어": "#673AB7", "입장료": "#3F51B5", "통신": "#FF9800", "수수료": "#795548", "팁": "#03A9F4", "항공권": "#D32F2F", "호텔": "#1976D2", "보험": "#FBC02D"}
                 macro_color_map = {"🍔 식음료": "#4CAF50", "🚗 교통": "#00ACC1", "🏄 액티비티": "#0288D1", "🎁 쇼핑": "#9C27B0", "📱 통신/기타": "#FF9800", "✈️ 항공권": "#D32F2F", "🏨 숙박": "#1976D2", "🛡️ 보험": "#FBC02D", "기타": "#9E9E9E"}
 
-                c_mode = st.radio("📊 통화 선택",["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
+                c_mode = st.radio("📊 통화 선택", ["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
-                # --------------------------------------------------------------
-                # 6.03.00-A | 여행 라이프사이클(예정->X일차->N일간) 정밀 판별 엔진
-                # --------------------------------------------------------------
+                # --- 6.02.01 | 출귀국일 및 사전결제 분리 엔진 ---
                 import math
 
                 def is_korea_port(text):
@@ -3284,38 +3342,29 @@ else:
                     cat = str(cat_str).strip()
                     if "_" in cat:
                         sub_port = cat.split("_")[-1].strip()
-                        if not is_korea_port(sub_port):
-                            return True
+                        if not is_korea_port(sub_port): return True
                     return False
 
-                # 출국일 정밀 탐색
-                dep_candidates = ledger_df[
-                    ledger_df['Category'].str.contains('출국', na=False) & 
-                    ~ledger_df['Category'].apply(is_foreign_transit)
-                ]
+                dep_candidates = ledger_df[ledger_df['Category'].str.contains('출국', na=False) & ~ledger_df['Category'].apply(is_foreign_transit)]
                 korea_dep = ledger_df[ledger_df['Category'].apply(is_korea_port)]
                 target_dep_row = korea_dep if not korea_dep.empty else dep_candidates
 
                 dep_date_str = ""
                 dep_dt = None
                 if not target_dep_row.empty:
-                    m_dep = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(target_dep_row.iloc[0]['Date']))
+                    m_dep = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_dep_row.iloc[0]['Date']))
                     if m_dep: 
                         dep_date_str = m_dep.group(0)
                         dep_dt = datetime.strptime(dep_date_str, "%Y-%m-%d").date()
 
-                # 귀국일 정밀 탐색 (한국 귀국 행 고정)
                 korea_arr = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False) & ledger_df['Category'].apply(is_korea_port)]
-                arr_candidates = ledger_df[
-                    ledger_df['Category'].str.contains('입국|귀국', na=False) & 
-                    ~ledger_df['Category'].apply(is_foreign_transit)
-                ]
+                arr_candidates = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False) & ~ledger_df['Category'].apply(is_foreign_transit)]
                 target_arr_row = korea_arr if not korea_arr.empty else arr_candidates
 
                 arr_date_str = ""
                 arr_dt = None
                 if not target_arr_row.empty:
-                    m_arr = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
+                    m_arr = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
                     if m_arr: 
                         arr_date_str = m_arr.group(0)
                         arr_dt = datetime.strptime(arr_date_str, "%Y-%m-%d").date()
@@ -3324,8 +3373,7 @@ else:
                     orig_d = str(row['Date']).strip()
                     m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
                     pure_d = m_row.group(0) if m_row else ""
-                    if dep_date_str and pure_d and pure_d < dep_date_str:
-                        return True
+                    if dep_date_str and pure_d and pure_d < dep_date_str: return True
                     cat = str(row['Category']).strip()
                     met = str(row['PaymentMethod']).strip()
                     return (met == '원화계좌(한국)') or (cat in FIXED_COST_CATS)
@@ -3333,7 +3381,6 @@ else:
                 exp_df['IsFixedCost'] = exp_df.apply(check_is_fixed_cost, axis=1)
                 is_fixed_cost = exp_df['IsFixedCost']
 
-                # 출국일 <= 날짜 <= 귀국일 사이의 지출 추출
                 def is_in_trip_period(row):
                     orig_d = str(row['Date']).strip()
                     m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
@@ -3346,7 +3393,6 @@ else:
                 in_period_mask = exp_df.apply(is_in_trip_period, axis=1) if (dep_date_str or arr_date_str) else True
                 ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국'])) & in_period_mask].copy()
 
-                # [달력 기반 전체 여정 100% 보존] 출국일부터 귀국일까지 모든 날짜 생성 (이동일 0원 대기)
                 day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
                 if dep_dt and arr_dt and dep_dt <= arr_dt:
                     total_calendar_days = (arr_dt - dep_dt).days + 1
@@ -3363,40 +3409,25 @@ else:
                         for md in missing_dates:
                             prev_part = ovr_df[ovr_df['Date_Clean'] < md]
                             last_country = prev_part.iloc[-1]['Country'] if not prev_part.empty else (list(TRIP_CONFIGS[st.session_state.current_trip]["nodes"].keys())[0])
-                            
                             try:
                                 dt_md = datetime.strptime(md, "%Y-%m-%d").date()
                                 w_kr = day_kr_names[dt_md.weekday()]
                                 d_str = f"{md}({w_kr})"
-                            except:
-                                d_str = md
+                            except: d_str = md
 
                             dummy_rows.append({
-                                'Date': d_str,
-                                'Date_Clean': md,
-                                'Country': last_country,
-                                'Category': '기타',
-                                'Description': '이동일 (지출 0원)',
-                                'Currency': TRAVEL_CURRENCY,
-                                'Amount': 0.0,
-                                'PaymentMethod': '정보',
-                                'IsExpense': 1,
-                                'AppliedRate': 1.0,
-                                'KRW_val': 0.0,
-                                'Local_val': 0.0,
-                                'IsSurvival': 0,
-                                'IsFixedCost': False
+                                'Date': d_str, 'Date_Clean': md, 'Country': last_country, 'Category': '기타',
+                                'Description': '이동일 (지출 0원)', 'Currency': TRAVEL_CURRENCY, 'Amount': 0.0,
+                                'PaymentMethod': '정보', 'IsExpense': 1, 'AppliedRate': 1.0, 'KRW_val': 0.0,
+                                'Local_val': 0.0, 'IsSurvival': 0, 'IsFixedCost': False
                             })
                         ovr_df = pd.concat([ovr_df, pd.DataFrame(dummy_rows)], ignore_index=True)
                 else:
                     total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0].nunique()
 
-                # --------------------------------------------------------------
-                # 6.03.01 | Daily Local Spending Chart (4단계 라이프사이클 타이틀 적용)
-                # --------------------------------------------------------------
+                # --- 6.02.02 | 일별 현지 지출 스택 바 차트 ---
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
-                    
                     trip_nodes = TRIP_CONFIGS.get(st.session_state.current_trip, {}).get("nodes", {})
                     is_single_country = (len(trip_nodes) <= 1) or (ovr_df['Country'].dropna().nunique() <= 1)
 
@@ -3412,19 +3443,14 @@ else:
                         sub_c = ovr_df[ovr_df['Date_Clean'] == d]['Country'].dropna().unique()
                         date_country_map[d] = " / ".join(sub_c) if len(sub_c) > 0 else ""
 
-                    prev_c = None
-                    lane1_free_idx = -1
-                    lane2_free_idx = -1
-                    date_label_map = {}
-                    
+                    prev_c, lane1_free_idx, lane2_free_idx, date_label_map = None, -1, -1, {}
                     for idx, d in enumerate(unique_clean_dates):
                         m_d = re.search(r'\d{4}-(\d{2})-(\d{2})', d)
                         mm, dd = int(m_d.group(1)), int(m_d.group(2))
                         try:
                             dt_obj = datetime.strptime(d, "%Y-%m-%d").date()
                             day_kr = day_kr_names[dt_obj.weekday()]
-                        except:
-                            day_kr = ""
+                        except: day_kr = ""
                             
                         c_val = date_country_map.get(d, "")
                         is_new_country = (not is_single_country) and bool(c_val) and (c_val != prev_c)
@@ -3435,7 +3461,6 @@ else:
                             c_display = c_val.replace(" / ", "<br>").replace("/", "<br>")
                             clean_len = max(len(s) for s in c_display.split("<br>"))
                             slots_needed = max(1, math.ceil(clean_len / 2.6))
-                            
                             if idx >= lane1_free_idx:
                                 lane1_free_idx = idx + slots_needed
                                 country_html = f"<span style='font-size:10px; color:#A5B4FC; font-weight:600;'>{c_display}</span>"
@@ -3450,46 +3475,27 @@ else:
                         date_label_map[d] = f"{mm}/{dd}<br>({day_kr}){c_part}"
 
                     ovr_df['Date_Display'] = ovr_df['Date_Clean'].map(date_label_map)
-                    
-                    # [사용자 정의 4단계 라이프사이클 타이틀 공식]
                     today_dt_c = datetime.now(st.session_state.current_tz).date()
                     
                     if dep_dt and arr_dt:
                         if today_dt_c < dep_dt:
-                            # 1. 출발 전: 'N일예정'
-                            day_label_suffix = f"{total_calendar_days}일예정"
-                            is_active_chart = False
-                            div_days = max(1, total_calendar_days)
-                            avg_text_prefix = "1일 평균"
+                            day_label_suffix = f"{total_calendar_days}일예정"; div_days = max(1, total_calendar_days); avg_text_prefix = "1일 평균"
                         elif dep_dt <= today_dt_c <= arr_dt:
-                            # 2. 여행 중: 출국 당일(1일차) ~ 귀국 당일(N일차)
                             curr_day = (today_dt_c - dep_dt).days + 1
-                            day_label_suffix = f"{curr_day}일차"
-                            is_active_chart = True
-                            div_days = max(1, curr_day)
-                            avg_text_prefix = "현재 1일 평균"
+                            day_label_suffix = f"{curr_day}일차"; div_days = max(1, curr_day); avg_text_prefix = "현재 1일 평균"
                         else:
-                            # 3. 귀국일 이후: 'N일간'
-                            day_label_suffix = f"{total_calendar_days}일간"
-                            is_active_chart = False
-                            div_days = max(1, total_calendar_days)
-                            avg_text_prefix = "1일 평균"
+                            day_label_suffix = f"{total_calendar_days}일간"; div_days = max(1, total_calendar_days); avg_text_prefix = "1일 평균"
                     else:
-                        day_label_suffix = f"{total_calendar_days}일간"
-                        is_active_chart = False
-                        div_days = max(1, total_calendar_days)
-                        avg_text_prefix = "1일 평균"
+                        day_label_suffix = f"{total_calendar_days}일간"; div_days = max(1, total_calendar_days); avg_text_prefix = "1일 평균"
 
                     st.markdown(f"<h4 style='text-align: center;'>🗺️ 여행지 일별지출({day_label_suffix})</h4>", unsafe_allow_html=True)
 
-                    # 1일 평균선 계산
                     total_spent_val = ovr_df[y_col].sum()
                     avg_daily_val = total_spent_val / div_days if div_days > 0 else 0
                     y_unit = "원" if "원화" in c_mode else f" {LOCAL_SYM}"
                     fmt_avg = f"{avg_daily_val:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_val:,.2f}"
                     avg_benchmark_label = f"{avg_text_prefix} {fmt_avg}{y_unit}"
 
-                    # '전체보기' 맨 앞 배치 & 10일 구간 생성 (취소선 버그 없는 안전 기호 사용)
                     chunk_size = 10
                     chunk_options = ["🗺️ 전체보기"]
                     if num_total_days > chunk_size:
@@ -3497,77 +3503,35 @@ else:
                         for c_idx in range(num_chunks):
                             start_num = c_idx * chunk_size + 1
                             end_num = min((c_idx + 1) * chunk_size, num_total_days)
-                            
-                            d_start_raw = unique_clean_dates[start_num - 1]
-                            d_end_raw = unique_clean_dates[end_num - 1]
-                            
-                            m1 = re.search(r'\d{4}-(\d{2})-(\d{2})', d_start_raw)
-                            m2 = re.search(r'\d{4}-(\d{2})-(\d{2})', d_end_raw)
+                            d_start_raw, d_end_raw = unique_clean_dates[start_num - 1], unique_clean_dates[end_num - 1]
+                            m1, m2 = re.search(r'\d{4}-(\d{2})-(\d{2})', d_start_raw), re.search(r'\d{4}-(\d{2})-(\d{2})', d_end_raw)
                             s_lbl = f"{int(m1.group(1))}/{int(m1.group(2))}" if m1 else d_start_raw
                             e_lbl = f"{int(m2.group(1))}/{int(m2.group(2))}" if m2 else d_end_raw
-                            
-                            if start_num == end_num:
-                                chunk_options.append(f"{c_idx+1}구간 ({start_num}일 | {s_lbl})")
-                            else:
-                                chunk_options.append(f"{c_idx+1}구간 ({start_num}-{end_num}일 | {s_lbl} - {e_lbl})")
+                            if start_num == end_num: chunk_options.append(f"{c_idx+1}구간 ({start_num}일 | {s_lbl})")
+                            else: chunk_options.append(f"{c_idx+1}구간 ({start_num}-{end_num}일 | {s_lbl} - {e_lbl})")
                         
                         sel_chunk = st.radio("📅 일정 구간 선택", chunk_options, index=0, horizontal=True, key="daily_chunk_sel", label_visibility="collapsed")
-                        
                         if sel_chunk != "🗺️ 전체보기":
                             sel_idx = chunk_options.index(sel_chunk) - 1
                             view_dates = unique_clean_dates[sel_idx * chunk_size : min((sel_idx + 1) * chunk_size, num_total_days)]
                             chart_df = ovr_df[ovr_df['Date_Clean'].isin(view_dates)].copy()
                         else:
-                            view_dates = unique_clean_dates
-                            chart_df = ovr_df.copy()
+                            view_dates = unique_clean_dates; chart_df = ovr_df.copy()
                     else:
-                        view_dates = unique_clean_dates
-                        chart_df = ovr_df.copy()
+                        view_dates = unique_clean_dates; chart_df = ovr_df.copy()
 
                     fig2 = px.bar(chart_df, x='Date_Display', y=y_col, color='Category', title=None, color_discrete_map=color_map)
-                    
                     if avg_daily_val > 0:
-                        fig2.add_hline(
-                            y=avg_daily_val,
-                            line_dash="dash",
-                            line_color="#FFA500",
-                            line_width=1.5,
-                            annotation_text=avg_benchmark_label,
-                            annotation_position="top right",
-                            annotation_font=dict(size=11, color="#FFA500")
-                        )
+                        fig2.add_hline(y=avg_daily_val, line_dash="dash", line_color="#FFA500", line_width=1.5, annotation_text=avg_benchmark_label, annotation_position="top right", annotation_font=dict(size=11, color="#FFA500"))
 
-                    fig2.update_layout(
-                        barmode='stack', 
-                        margin=dict(l=10, r=10, t=15, b=60),
-                        xaxis_title=None,
-                        yaxis_title=None,
-                        legend_title_text="",
-                        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5)
-                    )
-                    
-                    fig2.update_xaxes(
-                        categoryorder='array', 
-                        categoryarray=[date_label_map[d] for d in view_dates if d in date_label_map], 
-                        tickangle=0,
-                        tickfont=dict(size=11),
-                        fixedrange=True
-                    )
-                    fig2.update_yaxes(
-                        fixedrange=True
-                    )
-
-                    st.plotly_chart(
-                        fig2, 
-                        use_container_width=True, 
-                        config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False}
-                    )
+                    fig2.update_layout(barmode='stack', margin=dict(l=10, r=10, t=15, b=60), xaxis_title=None, yaxis_title=None, legend_title_text="", legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5))
+                    fig2.update_xaxes(categoryorder='array', categoryarray=[date_label_map[d] for d in view_dates if d in date_label_map], tickangle=0, tickfont=dict(size=11), fixedrange=True)
+                    fig2.update_yaxes(fixedrange=True)
+                    st.plotly_chart(fig2, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
 
                 st.divider()
                 
-                # --------------------------------------------------------------
-                # 6.03.02 | Daily Living vs Total Spent Pivot Table (전체 여정 완벽 보존)
-                # --------------------------------------------------------------
+                # --- 6.02.03 | 일별 총액 vs 일상(생존비) 피벗 테이블 ---
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
                 daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3578,66 +3542,45 @@ else:
                         d_str = str(d_str).strip()
                         m = re.search(r'(\d{4})-(\d{2})-(\d{2})', d_str)
                         if m:
-                            pure_date = m.group(0)
-                            mm, dd = int(m.group(2)), int(m.group(3))
+                            pure_date, mm, dd = m.group(0), int(m.group(2)), int(m.group(3))
                             try:
                                 dt_obj = datetime.strptime(pure_date, "%Y-%m-%d").date()
                                 day_kr = day_kr_names[dt_obj.weekday()]
                                 return f"{mm:02d}/{dd:02d}({day_kr})"
-                            except:
-                                return f"{mm:02d}/{dd:02d}"
+                            except: return f"{mm:02d}/{dd:02d}"
                         return d_str
 
                     daily_table['Date_Short'] = daily_table['Date'].apply(shorten_table_date)
-                    
                     daily_table['Sort_Key'] = daily_table['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
                     daily_table = daily_table.sort_values(by='Sort_Key').drop(columns=['Sort_Key'])
 
                     if is_single_country:
-                        display_table = daily_table[['Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(
-                            columns={'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'}
-                        )
+                        display_table = daily_table[['Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(columns={'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'})
                     else:
-                        display_table = daily_table[['Country', 'Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(
-                            columns={'Country':'국가', 'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'}
-                        )
+                        display_table = daily_table[['Country', 'Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(columns={'Country':'국가', 'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'일상(원)', 'S_Loc':f'일상({LOCAL_SYM})'})
 
-                    col_cfg_daily = {
-                        "날짜": st.column_config.TextColumn("날짜", width="small")
-                    }
-                    st.dataframe(
-                        display_table.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}),
-                        use_container_width=True, 
-                        hide_index=True,
-                        column_config=col_cfg_daily
-                    )
+                    col_cfg_daily = {"날짜": st.column_config.TextColumn("날짜", width="small")}
+                    st.dataframe(display_table.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '일상(원)': '{:,.0f}', f'일상({LOCAL_SYM})': fmt_local}), use_container_width=True, hide_index=True, column_config=col_cfg_daily)
                 else: 
                     st.info("현지 지출 데이터가 없습니다.")
 
-                # --------------------------------------------------------------
-                # 6.03.03 | Pre-Departure Domestic Cost Treemap (0원 결측치 완전방어형 트리맵)
-                # --------------------------------------------------------------
+                # --- 6.02.04 | 사전결제(항공/호텔/보험 등) 스마트 트리맵 ---
                 dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
                 if not dom_df.empty:
-                    # [핵심 버그 해결] 금액이 0원보다 큰 유효 지출(y_col > 0)만 추출하여 Plotly 백지 렌더링 오류 원천 차단
                     dom_chart_df = dom_df[dom_df[y_col] > 0].copy()
-                    
                     if not dom_chart_df.empty:
                         st.divider()
                         st.markdown("<h4 style='text-align: center;'>🛫 사전결제 분석 (스마트 트리맵)</h4>", unsafe_allow_html=True)
-                        
                         total_dom_sum = dom_chart_df[y_col].sum() if dom_chart_df[y_col].sum() > 0 else 1
                         
                         smart_macro_list = []
                         smart_tile_list = []
                         
-                        # 호텔명 친화적 한글 정제 헬퍼
                         def clean_hotel_label(desc):
                             h_clean = re.sub(r'\[.*?\]\s*', '', desc)
                             h_clean = re.split(r'[,|]', h_clean)[0].strip()
                             m_nights = re.search(r'(\d+)\s*박', desc)
                             n_str = f" ({m_nights.group(1)}박)" if m_nights else ""
-                            
                             low = h_clean.lower()
                             if 'saigon' in low or 'morin' in low: short_name = "사이공 모린"
                             elif 'sanouva' in low: short_name = "사누바 다낭"
@@ -3650,28 +3593,22 @@ else:
                                 if len(short_name) > 11: short_name = short_name[:10] + ".."
                             return f"{short_name}{n_str}"
 
-                        # 1. 금액 크기(비중)에 따른 절대 폰트 계층 부여
                         for idx, r in dom_chart_df.iterrows():
                             cat = str(r['Category']).strip()
                             desc = str(r['Description']).strip()
                             amt = float(r[y_col])
                             pct = (amt / total_dom_sum) * 100
                             
-                            # (1) 분류 및 명칭 정리
                             if cat == '항공권':
-                                if any(k in desc for k in ['부산', '인천', '김포', '대구', '제주', '청주', '왕복', '출국', '귀국', 'BX', 'VJ']):
-                                    macro_lbl = "🛫 IN/OUT 항공권"
-                                else:
-                                    macro_lbl = "✈️ 구간/국내선"
+                                if any(k in desc for k in ['부산', '인천', '김포', '대구', '제주', '청주', '왕복', '출국', '귀국', 'BX', 'VJ']): macro_lbl = "🛫 IN/OUT 항공권"
+                                else: macro_lbl = "✈️ 구간/국내선"
                                 clean_d = re.sub(r'\[.*?\]\s*', '', desc).split('|')[0].strip()
                                 name_lbl = clean_d if len(clean_d) <= 16 else clean_d[:15] + ".."
                                 is_small = False
-                                
                             elif cat in ['호텔', '숙박']:
                                 macro_lbl = "🏨 숙박"
                                 name_lbl = clean_hotel_label(desc)
                                 is_small = False
-                                
                             elif cat == '보험':
                                 macro_lbl = "🛡️ 보험"
                                 name_lbl = "여행자보험"
@@ -3685,100 +3622,43 @@ else:
                                 name_lbl = desc[:10].strip()
                                 is_small = True
 
-                            # (2) 비중에 따른 절대 폰트 크기 계산
-                            if is_small or pct < 5.5:
-                                tile_html = f"<span style='font-size:11.5px; font-weight:bold;'>{name_lbl} ({amt:,.0f}원)</span>"
-                            elif pct >= 35.0:
-                                tile_html = f"<span style='font-size:18.5px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:15.5px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:12px; opacity:0.85;'>({pct:.1f}%)</span>"
-                            elif pct >= 18.0:
-                                tile_html = f"<span style='font-size:15.5px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:13px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:11px; opacity:0.85;'>({pct:.1f}%)</span>"
-                            elif pct >= 11.0:
-                                tile_html = f"<span style='font-size:13.5px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:11.5px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:10px; opacity:0.85;'>({pct:.1f}%)</span>"
-                            else:
-                                tile_html = f"<span style='font-size:12px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:10.5px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:9.5px; opacity:0.85;'>({pct:.1f}%)</span>"
+                            if is_small or pct < 5.5: tile_html = f"<span style='font-size:11.5px; font-weight:bold;'>{name_lbl} ({amt:,.0f}원)</span>"
+                            elif pct >= 35.0: tile_html = f"<span style='font-size:18.5px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:15.5px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:12px; opacity:0.85;'>({pct:.1f}%)</span>"
+                            elif pct >= 18.0: tile_html = f"<span style='font-size:15.5px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:13px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:11px; opacity:0.85;'>({pct:.1f}%)</span>"
+                            elif pct >= 11.0: tile_html = f"<span style='font-size:13.5px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:11.5px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:10px; opacity:0.85;'>({pct:.1f}%)</span>"
+                            else: tile_html = f"<span style='font-size:12px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:10.5px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:9.5px; opacity:0.85;'>({pct:.1f}%)</span>"
                                 
                             smart_macro_list.append(macro_lbl)
                             smart_tile_list.append(tile_html)
                             
                         dom_chart_df['Smart_Macro'] = smart_macro_list
                         dom_chart_df['Smart_Tile'] = smart_tile_list
+                        treemap_color_map = {"🛫 IN/OUT 항공권": "#C62828", "✈️ 구간/국내선": "#E53935", "🏨 숙박": "#1565C0", "🛡️ 보험": "#F9A825", "🚗 현지교통(사전)": "#00838F", "📱 기타/통신": "#6A1B9A"}
 
-                        # 컬러 팔레트
-                        treemap_color_map = {
-                            "🛫 IN/OUT 항공권": "#C62828",
-                            "✈️ 구간/국내선": "#E53935",
-                            "🏨 숙박": "#1565C0",
-                            "🛡️ 보험": "#F9A825",
-                            "🚗 현지교통(사전)": "#00838F",
-                            "📱 기타/통신": "#6A1B9A"
-                        }
-
-                        # 2. 트리맵 렌더링
-                        fig1 = px.treemap(
-                            dom_chart_df, 
-                            path=['Smart_Macro', 'Smart_Tile'], 
-                            values=y_col, 
-                            color='Smart_Macro', 
-                            color_discrete_map=treemap_color_map
-                        )
-                        
-                        # 3. HTML 인라인 폰트 그대로 표출 (%{label} 호출)
-                        fig1.update_traces(
-                            texttemplate="%{label}",
-                            hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<extra></extra>",
-                            textposition='middle center',
-                            tiling=dict(packing='squarify', pad=4)
-                        )
-                        
-                        fig1.update_layout(
-                            margin=dict(l=10, r=10, t=10, b=10), 
-                            height=560
-                        )
-                        
+                        fig1 = px.treemap(dom_chart_df, path=['Smart_Macro', 'Smart_Tile'], values=y_col, color='Smart_Macro', color_discrete_map=treemap_color_map)
+                        fig1.update_traces(texttemplate="%{label}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<extra></extra>", textposition='middle center', tiling=dict(packing='squarify', pad=4))
+                        fig1.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=560)
                         st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
 
-                # --------------------------------------------------------------
-                # 6.03.04 | Multi-Node Local Expense Treemap (결측치 & 0원 완전 방어형)
-                # --------------------------------------------------------------
+                # --- 6.02.05 | 다중 국가 현지 지출 트리맵 ---
                 if len(TRIP_CONFIGS[st.session_state.current_trip]["nodes"]) > 1 and not ovr_df.empty:
-                    # [핵심] 실제 지출(y_col > 0)만 추출하고 결측치를 완벽히 메워 ValueError 원천 차단
                     country_chart_df = ovr_df[ovr_df[y_col] > 0].copy()
-                    
                     if not country_chart_df.empty:
                         st.divider()
                         st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지지출(Treemap)</h4>", unsafe_allow_html=True)
-                        
                         country_chart_df['Macro_Category'] = country_chart_df['Category'].map(MACRO_MAP).fillna("기타")
                         country_chart_df['Country'] = country_chart_df['Country'].fillna("기타")
                         country_chart_df['Category'] = country_chart_df['Category'].fillna("기타")
-                        
-                        fig_country = px.treemap(
-                            country_chart_df, 
-                            path=['Country', 'Macro_Category', 'Category'], 
-                            values=y_col, 
-                            color='Country', 
-                            color_discrete_sequence=px.colors.qualitative.Pastel
-                        )
-                        fig_country.update_traces(
-                            texttemplate="<b>%{label}</b><br>%{value:,.0f}", 
-                            hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}<extra></extra>",
-                            textposition='middle center'
-                        )
-                        fig_country.update_layout(
-                            margin=dict(l=10, r=10, t=10, b=20), 
-                            height=520
-                        )
+                        fig_country = px.treemap(country_chart_df, path=['Country', 'Macro_Category', 'Category'], values=y_col, color='Country', color_discrete_sequence=px.colors.qualitative.Pastel)
+                        fig_country.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}<extra></extra>", textposition='middle center')
+                        fig_country.update_layout(margin=dict(l=10, r=10, t=10, b=20), height=520)
                         st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
 
-                # 6.03.05 | Net Settlement & Refund Breakdown Card
+                # --- 6.02.06 | 환불/보상 분석 요약 ---
                 st.divider()
                 st.subheader("🏁 여행 비용 요약 (Net)")
                 c1, c2 = st.columns(2)
-                
                 refund_df = ledger_df[ledger_df['Category'] == '환불']
-                dom_refunds = refund_df[refund_df['PaymentMethod'].apply(get_asset_class) == 'DOMESTIC']
-                dom_refund_total = dom_refunds.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum() if not dom_refunds.empty else 0
-                
                 with c1:
                     st.info("🇰🇷 사전 결제")
                     st.metric("순지출액", f"{dom_df['KRW_val'].sum():,.0f} 원")
@@ -3801,11 +3681,11 @@ else:
                         st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
     # --------------------------------------------------------------------------
-    # 6.04.00 | Console Tab 4: Final Settlement Dashboard (최종 정산 대시보드)
+    # 6.03.00 | Final Settlement Dashboard (전체요약 탭)
     # --------------------------------------------------------------------------
     with tab_final:
         if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
-            # 6.04.01 | Executive Macro KPI Summary Cards
+            # 6.03.01 | Executive Macro KPI Summary Cards (출귀국일 기반 1일 평균 완결)
             total_trip_krw = exp_df['KRW_val'].sum()
             total_trip_loc = exp_df['Local_val'].sum()
             
@@ -3816,13 +3696,11 @@ else:
             total_nights = sum(float(n) for n in nights_match) if nights_match else 7
             if total_nights == 0: total_nights = 7 
 
-            # 6.04.00-A | 스마트 사전결제 판별 플래그 상속
             is_fixed_cost_final = exp_df['IsFixedCost'] if 'IsFixedCost' in exp_df.columns else exp_df.apply(check_is_fixed_cost, axis=1)
             dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum()
             ovr_total_krw = total_trip_krw - dom_total_krw
             ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
 
-            # [순서 재배치] 출국일/귀국일 파싱 로직을 KPI 박스 생성 전으로 선행 배치하여 NameError 원천 차단
             korea_dep_rows = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
             dep_rows_all = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
             t_dep = korea_dep_rows if not korea_dep_rows.empty else (dep_rows_all[~dep_rows_all['Category'].str.contains('_', na=False)] if not dep_rows_all.empty else dep_rows_all)
@@ -3841,11 +3719,8 @@ else:
                 m_af = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_arr.iloc[-1]['Date']))
                 if m_af: arr_dt_f = datetime.strptime(m_af.group(0), "%Y-%m-%d").date()
 
-            # [정합성 동기화] 일일Data 탭과 동일하게 실제 여행 일수(9일) 기준으로 1일 평균 산출
-            if dep_dt_f and arr_dt_f:
-                trip_days_count = max(1, (arr_dt_f - dep_dt_f).days + 1)
-            else:
-                trip_days_count = max(1, int(total_nights))
+            if dep_dt_f and arr_dt_f: trip_days_count = max(1, (arr_dt_f - dep_dt_f).days + 1)
+            else: trip_days_count = max(1, int(total_nights))
 
             avg_local_krw = ovr_total_krw / trip_days_count if trip_days_count > 0 else 0
             avg_local_loc = ovr_total_loc / trip_days_count if trip_days_count > 0 else 0
@@ -3861,104 +3736,38 @@ else:
             with k2: st.markdown(kpi_box("국내 지출", dom_total_krw), unsafe_allow_html=True)
             with k3: st.markdown(kpi_box("현지 지출", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
             with k4: st.markdown(kpi_box("여행중 1일 평균지출", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
-            # ------------------------------------------------------------------
-            # 6.04.02 | Comprehensive Expense Treemap Matrix
-            # ------------------------------------------------------------------
+            
+            # --- 6.03.02 | Comprehensive Expense Treemap Matrix ---
             st.markdown("<h4 style='margin-top: 15px; margin-bottom: 5px;'>🌳 지출분석 (Treemap)</h4>", unsafe_allow_html=True)
             chart_df = exp_df[exp_df['KRW_val'] > 0].copy()
             if not chart_df.empty:
                 chart_df['Short_Desc'] = chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
                 chart_df['Macro_Category'] = chart_df['Category'].map(MACRO_MAP).fillna("기타")
                 
-                fig_tree = px.treemap(
-                    chart_df, 
-                    path=['Macro_Category', 'Category', 'Short_Desc'], 
-                    values='KRW_val', 
-                    color='KRW_val', 
-                    color_continuous_scale='Greens'
-                )
-                fig_tree.update_traces(
-                    texttemplate="<b>%{label}</b><br>%{value:,.0f}원", 
-                    hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", 
-                    textposition='middle center', 
-                    insidetextfont=dict(size=16)
-                )
-                fig_tree.update_layout(
-                    margin=dict(l=0, r=0, t=10, b=10), 
-                    height=580,
-                    coloraxis_showscale=False
-                )
+                fig_tree = px.treemap(chart_df, path=['Macro_Category', 'Category', 'Short_Desc'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
+                fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16))
+                fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=580, coloraxis_showscale=False)
                 st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
             
-            # ------------------------------------------------------------------
-            # 6.04.03 | Donut Category Distribution Chart
-            # ------------------------------------------------------------------
+            # --- 6.03.03 | Donut Category Distribution Chart ---
             st.markdown("<h4 style='margin-top: 12px; margin-bottom: 0px;'>🍕 지출비중</h4>", unsafe_allow_html=True)
             cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
             
-            fig_donut = px.pie(
-                cat_pie, 
-                values='KRW_val', 
-                names='Macro_Category', 
-                hole=0.35, 
-                color_discrete_sequence=px.colors.qualitative.Set3
-            )
-            
-            fig_donut.update_traces(
-                textposition='inside', 
-                textinfo='label+value+percent', 
-                texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>(%{percent:.1%})",
-                insidetextfont=dict(size=13.5)
-            )
-
-            # 여행 상태 연동 중앙 텍스트 산출
-            korea_dep_rows = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
-            dep_rows_all = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
-            t_dep = korea_dep_rows if not korea_dep_rows.empty else (dep_rows_all[~dep_rows_all['Category'].str.contains('_', na=False)] if not dep_rows_all.empty else dep_rows_all)
-            
-            dep_dt_f = None
-            if not t_dep.empty:
-                m_df = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_dep.iloc[0]['Date']))
-                if m_df: dep_dt_f = datetime.strptime(m_df.group(0), "%Y-%m-%d").date()
-
-            korea_arr_rows = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
-            arr_rows_all = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False)]
-            t_arr = korea_arr_rows if not korea_arr_rows.empty else (arr_rows_all[~arr_rows_all['Category'].str.contains('_', na=False)] if not arr_rows_all.empty else arr_rows_all)
-            
-            arr_dt_f = None
-            if not t_arr.empty:
-                m_af = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_arr.iloc[-1]['Date']))
-                if m_af: arr_dt_f = datetime.strptime(m_af.group(0), "%Y-%m-%d").date()
+            fig_donut = px.pie(cat_pie, values='KRW_val', names='Macro_Category', hole=0.35, color_discrete_sequence=px.colors.qualitative.Set3)
+            fig_donut.update_traces(textposition='inside', textinfo='label+value+percent', texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>(%{percent:.1%})", insidetextfont=dict(size=13.5))
 
             today_f = datetime.now(TZ_KST).date()
-
             if dep_dt_f and arr_dt_f:
                 cal_days_f = (arr_dt_f - dep_dt_f).days + 1
-                if today_f < dep_dt_f:
-                    center_sub_text = f"({cal_days_f}일예정)"
-                elif dep_dt_f <= today_f <= arr_dt_f:
-                    curr_k = (today_f - dep_dt_f).days + 1
-                    center_sub_text = f"({curr_k}일차)"
-                else:
-                    center_sub_text = f"({cal_days_f}일간)"
+                if today_f < dep_dt_f: center_sub_text = f"({cal_days_f}일예정)"
+                elif dep_dt_f <= today_f <= arr_dt_f: center_sub_text = f"({(today_f - dep_dt_f).days + 1}일차)"
+                else: center_sub_text = f"({cal_days_f}일간)"
             else:
                 center_sub_text = f"({total_nights}일간)"
 
-            center_annotation_html = f"<b>{total_trip_krw:,.0f}원</b><br><span style='font-size:12px; color:#A0AEC0;'>{center_sub_text}</span>"
-            
-            fig_donut.add_annotation(
-                text=center_annotation_html, 
-                showarrow=False, 
-                align="center",
-                font=dict(size=16)
-            )
-            
-            fig_donut.update_layout(
-                height=440, 
-                margin=dict(l=10, r=10, t=5, b=20), 
-                legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5)
-            )
+            fig_donut.add_annotation(text=f"<b>{total_trip_krw:,.0f}원</b><br><span style='font-size:12px; color:#A0AEC0;'>{center_sub_text}</span>", showarrow=False, align="center", font=dict(size=16))
+            fig_donut.update_layout(height=440, margin=dict(l=10, r=10, t=5, b=20), legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5))
             st.plotly_chart(fig_donut, use_container_width=True)
 
-# 6.04.04 | Build Version & Sync Timestamp Footer
+# 6.04.00 | Build Version & Sync Timestamp Footer
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(TZ_KST).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
