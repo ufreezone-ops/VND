@@ -822,15 +822,18 @@ def smart_cache_clear():
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
 # ------------------------------------------------------------------------------
-# 2.04.01 | Full Ledger FIFO / Rate / Cumulative Engine
+# 2.04.01 | Full Ledger FIFO / Rate / Cumulative Engine (선물 카테고리 정규 지출 완벽 보장)
 def recalculate_entire_ledger(df):
     temp_df = df.copy()
     temp_df = temp_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
     
+    # 선물 카테고리를 항상 유효 지출 항목 목록에 포함
+    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물']))
+
     for i, row in temp_df.iterrows():
         cat = str(row['Category']).strip()
         asset_cls = get_asset_class(row['PaymentMethod'])
-        if cat in EXPENSE_CATS and cat != '보증금' and asset_cls != "DOMESTIC":
+        if cat in clean_expense_cats and cat != '보증금' and asset_cls != "DOMESTIC":
             temp_df.at[i, 'AppliedRate'] = 0.0
         temp_df.at[i, 'Note'] = ""; temp_df.at[i, 'Cum_Budget_KRW'] = 0.0; temp_df.at[i, 'Cum_Card_Local'] = 0.0; temp_df.at[i, 'Cum_Cash_Local'] = 0.0
     
@@ -842,26 +845,24 @@ def recalculate_entire_ledger(df):
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
         
-        # ➔ 🚀 [Modified] 아래와 같이 수정 ('개인지출' 예외 및 계산식 일괄 바인딩)
-        clean_expense_cats = [c.strip() for c in EXPENSE_CATS]
-        # [Modified] 지출 대상에서 개인지출(IsExpense = 0) 완벽 제외
-        is_exp = 1 if cat in clean_expense_cats and cat not in['환불', '보증금', '재환전', '상환', '개인지출'] else 0
+        # [Fixed] '선물' 카테고리가 100% 정상 지출(IsExpense = 1)로 정확히 집계되도록 보장
+        is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
         
         is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
         rate = temp_df.at[i, 'AppliedRate'] 
         asset_cls = get_asset_class(method)
         
-        if cat in['충전', '환전', '입금', '직접환전', '이월잔액']: # [Modified] 이월잔액 추가
+        if cat in ['충전', '환전', '입금', '직접환전', '이월잔액']:
             if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
-            if cat == '이월잔액': final_dest_cls = "CASH" # [Added] 이월잔액은 현금유입으로 처리
+            if cat == '이월잔액': final_dest_cls = "CASH"
             elif cat == '충전': final_dest_cls = "PREPAID"
             elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
             else: final_dest_cls = get_asset_class(desc + method)
 
-            target = f"트래블카드({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})" # [Modified]
+            target = f"트래블카드({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})"
             if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
-            if asset_cls == "DOMESTIC" or cat == '충전' or cat == '이월잔액': c_budget += qty if curr == 'KRW' else qty * rate # [Modified]
+            if asset_cls == "DOMESTIC" or cat == '충전' or cat == '이월잔액': c_budget += qty if curr == 'KRW' else qty * rate
         
         elif cat == '환불':
             if curr != 'KRW' and (pd.isna(rate) or rate <= 1.0):
@@ -877,26 +878,22 @@ def recalculate_entire_ledger(df):
                     temp_df.at[i, 'Note'] = f"Inherited Deposit Rate: {rate:.9f}"
                 else: rate = get_default_rate(curr)
             
-            # ➔ 🚀 [Modified] 환불 자산 성격에 따라 예산 정합성 분기 수정
             is_dep = str(row['Description']).replace(" ", "").lower()
             is_deposit_refund = any(k in is_dep for k in ["보증금", "deposit"])
             
             if not is_deposit_refund:
-                # 1. 일반 지출 환불(항공/호텔 취소)은 카드/현금 가리지 않고 무조건 전체 여행 예산(c_budget) 감액 (Net 정합성 반영)
                 c_budget -= qty if curr == 'KRW' else qty * rate
-                # 2. 외화 카드/현금 지갑으로 환불된 경우 해당 외화 지갑 인벤토리(inv_batches)에 충전 처리
                 if asset_cls != "DOMESTIC":
                     target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                     if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
             else:
-                # 3. 보증금 환불은 최초 결제 시 DOMESTIC(원화신용카드 등)이었던 경우만 예산 차감 (PREPAID 보증금은 예산 변동 없음)
                 if asset_cls == "DOMESTIC":
                     c_budget -= qty if curr == 'KRW' else qty * rate
                 else:
                     target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                     if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
                 
-        elif cat in ['재환전', '개인지출']: # [Modified] 개인지출 시에도 동일하게 잔고 차감 및 c_budget(총예산)에서 취득원가만큼 자동 감액 처리
+        elif cat in ['재환전', '개인지출']:
             if curr != 'KRW':
                 target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
@@ -907,7 +904,6 @@ def recalculate_entire_ledger(df):
                         take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                 if pd.notna(rate) and rate > 0: c_budget -= qty * rate
                 
-        # [Added] 이종환전 시 외화 지갑(소스)에서 정확히 차감 (누적 예산은 변동 없음)
         elif cat == '이종환전':
             if curr != 'KRW':
                 target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
@@ -920,7 +916,7 @@ def recalculate_entire_ledger(df):
         
         elif cat == 'ATM출금':
             temp_qty = qty; total_inherited_krw = 0.0
-            target_from = f"트래블카드({curr})"; target_to = f"현금({curr})" # [Modified]
+            target_from = f"트래블카드({curr})"; target_to = f"현금({curr})"
             if target_from in inv_batches:
                 for batch in inv_batches[target_from]:
                     if temp_qty <= 0: break
@@ -946,8 +942,8 @@ def recalculate_entire_ledger(df):
                     rate = get_WAR(curr)
                     temp_df.at[i, 'Note'] = "Credit (Debt Generated)"
                 else:
-                    target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})" # [Modified]
-                    temp_qty = qty; total_cost_krw = 0.0; decomposed =[]
+                    target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                    temp_qty = qty; total_cost_krw = 0.0; decomposed = []
                     
                     if target in inv_batches:
                         for batch in inv_batches[target]:
@@ -980,7 +976,6 @@ def recalculate_entire_ledger(df):
         
         temp_df.at[i, 'AppliedRate'] = rate
         temp_df.at[i, 'Cum_Budget_KRW'] = round(c_budget, 2)
-        # [Modified] 동적으로 매핑된 active_curr를 기준으로 각 지갑 인벤토리 잔량 실시간 집계
         temp_df.at[i, 'Cum_Card_Local'] = round(sum([b['qty'] for b in inv_batches[f"트래블카드({active_curr})"]]), rnd_dec)
         temp_df.at[i, 'Cum_Cash_Local'] = round(sum([b['qty'] for b in inv_batches[f"현금({active_curr})"]]), rnd_dec)
         
@@ -3126,7 +3121,7 @@ else:
                             target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else ledger_df
                             total_receipt_amt = float(edit_amt)
                             
-                            # [100% 선물인 경우]
+                            # [100% 선물인 경우: 핑크성당 기념품 등]
                             if (gift_amt_split >= total_receipt_amt and total_receipt_amt > 0) or (len(gift_items_split) > 0 and len(normal_items_split) == 0):
                                 target_df.at[real_idx, 'Category'] = "선물"
                                 target_df.at[real_idx, 'Amount'] = total_receipt_amt
@@ -3141,14 +3136,12 @@ else:
                                 norm_desc = "\n".join(normal_items_split)
                                 gift_desc = "\n".join(gift_items_split)
                                 
-                                # 기존 행 -> 일반 품목(마트 등)으로 축소
                                 target_df.at[real_idx, 'Category'] = edit_cat
                                 target_df.at[real_idx, 'Amount'] = rem_amt
                                 target_df.at[real_idx, 'PaymentMethod'] = edit_method
                                 target_df.at[real_idx, 'Description'] = norm_desc
                                 target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
                                 
-                                # 신설 행 -> 선물 카테고리로 생성하여 바로 아래 삽입
                                 new_gift_row = pd.DataFrame([{
                                     'Date': row_data['Date'],
                                     'Country': row_data['Country'],
@@ -3171,10 +3164,18 @@ else:
                                 target_df.at[real_idx, 'Description'] = new_desc.strip()
                                 target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
 
-                            if save_data(target_df):
-                                st.session_state.active_ledger_df = load_data(ACTIVE_SHEET)
-                                st.toast("🎉 선물 자동분할 및 업데이트 완료!", icon="✅")
-                                time.sleep(0.4); st.rerun()
+                            # [핵심 최적화: 재계산 후 즉시 세션 주입하여 2차 딜레이 원천 제거]
+                            final_calc_df = recalculate_entire_ledger(target_df)
+                            st.session_state.active_ledger_df = final_calc_df
+                            
+                            # 구글 시트 백그라운드 직결 반영
+                            try:
+                                conn.update(worksheet=ACTIVE_SHEET, data=final_calc_df.reindex(columns=FINAL_COLUMNS))
+                            except: pass
+
+                            st.toast("🎉 선물 분할 및 정합성 원샷 업데이트 완료!", icon="✅")
+                            # 기다림 없이 0.05초 만에 화면 즉시 리로드
+                            st.rerun()
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
