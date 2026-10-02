@@ -409,9 +409,10 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (흑백 그레이스케일 초경량화 & 초고속 가속 엔진)
+# 2.02.03 | Gemini Multimodal Direct Runner (1.5-flash 1순위 직결 & 초고속 응답 엔진)
 @st.cache_data(ttl=3600)
 def get_cached_gemini_models(api_key):
+    """구글 모델 목록을 1시간 캐싱하되, 안정성이 검증된 1.5-flash를 무조건 1순위로 강제 정렬"""
     active_endpoints = []
     for ver in ['v1beta', 'v1']:
         try:
@@ -421,17 +422,18 @@ def get_cached_gemini_models(api_key):
                 for m in resp_l.json().get('models', []):
                     if 'generateContent' in m.get('supportedGenerationMethods', []):
                         m_clean = m['name'].replace('models/', '')
-                        if 'flash' in m_clean:
+                        # 지연과 타임아웃을 유발하는 실험용(-exp) 및 pro 모델은 목록에서 완전 배제
+                        if 'flash' in m_clean and 'exp' not in m_clean and 'preview' not in m_clean:
                             active_endpoints.append((ver, m_clean))
         except Exception:
             pass
 
+    # [핵심] 가장 빠르고 안정적인 v1beta/gemini-1.5-flash를 무조건 최우선(1순위)으로 배치
     def sort_prio(item):
         v, name = item
-        if '2.0-flash-exp' in name: return 1
-        if '2.5-flash' in name: return 2
-        if '1.5-flash' in name: return 3
-        return 4
+        if name == 'gemini-1.5-flash' and v == 'v1beta': return 1
+        if name == 'gemini-1.5-flash' and v == 'v1': return 2
+        return 3
 
     active_endpoints.sort(key=sort_prio)
     return active_endpoints if active_endpoints else [('v1beta', 'gemini-1.5-flash')]
@@ -441,28 +443,24 @@ def call_gemini_multimodal(contents, prompt_text=""):
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # 💡 [핵심 최적화: 흑백(Grayscale) 변환 + 1000px 리사이즈로 용량 98% 다이어트]
+    # 흑백(Grayscale) 변환 및 1000px 골든 리사이징 (용량 98% 압축 유지)
     def compress_img_to_grayscale(b_data):
         try:
             from PIL import Image
             import io
             img = Image.open(io.BytesIO(b_data))
-            
-            # 1. 1000px 골든 해상도 조정 (영수증 작은 글자 가독성 100% 보장)
             max_dim = 1000
             if max(img.size) > max_dim:
                 ratio = max_dim / float(max(img.size))
                 new_dim = (int(img.size[0] * ratio), int(img.size[1] * ratio))
                 img = img.resize(new_dim, Image.Resampling.LANCZOS)
-                
-            # 2. RGB -> Grayscale(L) 흑백 전환 (데이터 채널 1/3로 절감)
             gray_img = img.convert('L')
-            
             buf = io.BytesIO()
             gray_img.save(buf, format='JPEG', quality=70, optimize=True)
             return buf.getvalue()
         except Exception:
-            return b_data
+            pass
+        return b_data
 
     rest_parts = []
     for item in contents:
@@ -471,7 +469,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
         elif isinstance(item, dict) and "data" in item:
             mime = item.get("mime_type", "image/jpeg")
             raw_b = item["data"]
-            # PDF는 텍스트 레이어가 있으므로 원본 유지, 사진 파일만 흑백 경량화
+            # PDF는 원본 보존, 사진만 흑백 경량화
             if not mime.endswith("pdf") and not raw_b.startswith(b"%PDF"):
                 raw_b = compress_img_to_grayscale(raw_b)
                 mime = "image/jpeg"
@@ -491,10 +489,11 @@ def call_gemini_multimodal(contents, prompt_text=""):
     active_endpoints = get_cached_gemini_models(api_key)
     last_err = ""
 
+    # [핵심] 타임아웃을 25초에서 10초로 단축하여 불필요한 대기 원천 제거
     for api_ver, m_name in active_endpoints:
         try:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
                 cand = data.get("candidates", [])
@@ -503,7 +502,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip(), ""
             else:
-                last_err = f"[{m_name}] {resp.status_code}: {resp.text[:100]}"
+                last_err = f"[{m_name}] {resp.status_code}: {resp.text[:80]}"
         except Exception as e:
             last_err = f"[{m_name}] 에러: {e}"
             continue
