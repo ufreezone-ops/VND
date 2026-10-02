@@ -822,12 +822,12 @@ def smart_cache_clear():
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
 # ------------------------------------------------------------------------------
-# 2.04.01 | Full Ledger FIFO / Rate / Cumulative Engine (선물 카테고리 정규 지출 완벽 보장)
+# 2.04.01 | Full Ledger FIFO / Rate / Cumulative Engine (선물 카테고리 영구 지출 및 잔고 차감 보장)
 def recalculate_entire_ledger(df):
     temp_df = df.copy()
     temp_df = temp_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
     
-    # 선물 카테고리를 항상 유효 지출 항목 목록에 포함
+    # 💡 [Fixed] 관제탑 시트 설정과 무관하게 '선물'을 무조건 기본 지출 카테고리로 강제 영구 바인딩
     clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물']))
 
     for i, row in temp_df.iterrows():
@@ -845,7 +845,7 @@ def recalculate_entire_ledger(df):
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
         
-        # [Fixed] '선물' 카테고리가 100% 정상 지출(IsExpense = 1)로 정확히 집계되도록 보장
+        # [Fixed] 선물은 무조건 100% 정상 지출(IsExpense = 1)
         is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
         
@@ -1107,15 +1107,12 @@ def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
 # ------------------------------------------------------------------------------
 # 3.01.00 | Real-time Inventory Audit (실시간 인벤토리 차감 및 상태 평가)
 # ------------------------------------------------------------------------------
-# 3.01.01 | Batch-level Multi-Wallet Inventory Evaluator
-### ⚙️[Logic: URDI Engine] 인벤토리 잔고 추적
-# [Modified] Data Engine과 구조적으로 100% 동일하게 동기화하여 차감 무결성 보장
+# 3.01.01 | Batch-level Multi-Wallet Inventory Evaluator (선물 카테고리 실시간 지갑 차감 완결형)
 def get_inventory_status(df):
     from collections import defaultdict
     temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True) if not df.empty else df
     inv_batches = defaultdict(list)
     
-    # 3.01.02 | Internal Weighted Average Rate Resolver (배치 평가용 WAR)
     def get_WAR(currency_account):
         sw_df = df[(df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (df['Currency'].str.strip() == currency_account)]
         if not sw_df.empty and sw_df['Amount'].sum() > 0: return (sw_df['Amount'] * sw_df['AppliedRate']).sum() / sw_df['Amount'].sum()
@@ -1123,7 +1120,8 @@ def get_inventory_status(df):
 
     if temp_df.empty: return dict(inv_batches)
     
-    clean_expense_cats = [c.strip() for c in EXPENSE_CATS]
+    # 💡 [Fixed] 실시간 지갑 잔고 추적에서도 '선물'을 정규 지출 카테고리에 기본 포함!
+    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물']))
     
     for _, row in temp_df.iterrows():
         qty, curr = row['Amount'], row['Currency']
@@ -1132,15 +1130,13 @@ def get_inventory_status(df):
         desc = str(row['Description']).strip()
         rate = row['AppliedRate']
         
-        # [Added] 데이터 타입 오류 방지를 위한 동적 평가 로직 (recalculate_entire_ledger와 완전 동일)
-        # [Modified] 개인지출 제외 추가
         is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출'] else 0
         is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
         
         asset_cls = get_asset_class(method)
         
-        if cat in ['충전', '환전', '입금', '직접환전', '이월잔액']: # [Modified] 이월잔액 추가
-            if cat == '이월잔액': final_dest_cls = "CASH" # [Added]
+        if cat in ['충전', '환전', '입금', '직접환전', '이월잔액']:
+            if cat == '이월잔액': final_dest_cls = "CASH"
             elif cat == '충전': final_dest_cls = "PREPAID"
             elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
             else: final_dest_cls = get_asset_class(desc + method)
@@ -1164,7 +1160,7 @@ def get_inventory_status(df):
             if temp_qty > 0:
                 inv_batches[target_to].append({'rate': get_WAR(curr), 'qty': temp_qty, 'initial': temp_qty})
                 
-        elif cat in ['재환전', '개인지출']: # [Modified] 실시간 사이드바 잔량 계산에도 개인지출에 따른 차감 반영
+        elif cat in ['재환전', '개인지출']:
             if curr != 'KRW':
                 target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
                 temp_qty = qty
@@ -1184,6 +1180,7 @@ def get_inventory_status(df):
                         if batch['qty'] <= 0: continue
                         take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
                         
+        # 💡 [Fixed: is_deductible == 1 이므로 '선물'도 여기서 현금/카드 지갑 잔고를 정상 차감!]
         elif is_deductible == 1:
             if asset_cls != "DOMESTIC" and asset_cls != "CREDIT" and curr != 'KRW':
                 target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
