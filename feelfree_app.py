@@ -518,7 +518,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     return "", last_err
 
-# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (상호명 우선 추출 & 완결형 파서)
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (상호명 첫줄 단독 분리 & 품목 줄바꿈 완결형)
 def summarize_receipt_files_with_gemini(uploaded_files):
     if not uploaded_files: return "", "", 0.0
 
@@ -527,16 +527,20 @@ def summarize_receipt_files_with_gemini(uploaded_files):
 [출력 형식 지침]:
 1. 첫 번째 줄: 영수증에 인쇄된 결제일자(예: Ngày: 22/09/2026 -> [결제일: 2026-09-22]). 없으면 생략.
 2. 두 번째 줄: 영수증 맨 아래 실제 총 결제 금액(예: Tổng cộng: 90,000 đ -> [총액: 90,000 VND]). 없으면 생략.
-3. 세 번째 줄부터:
-   - 영수증 최상단의 매장 이름(상호명)을 한국어 친화적 발음과 원문으로 적고 뒤에 ' - '를 붙여줘. (예: 카페 웃띡(Út Tịch Bạch Đằng) - )
-   - 그 뒤로 소비한 품목들을 한 줄씩 번역해서 나열해줘:
-     * 한국어 품목명(원문) (특징) 가격 통화 (예: 카카오 무디(Cacao Muối) (음료) 55,000 VND)
-     * 아이스 밀크 커피(Cà Phê Sữa Đá - Iced Milk Coffee) 35,000 VND
-4. 출력 예시:
+3. 세 번째 줄: 영수증 최상단의 매장 이름(상호명)을 한국어 친화적 발음과 원문으로 적어줘. 뒤에 하이픈(-)이나 품목을 붙이지 말고 반드시 단독으로 한 줄을 차지해야 해.
+   (예: 카페 웃띡(Út Tịch Bạch Đằng))
+4. 네 번째 줄부터: 소비한 개별 품목들을 반드시 한 줄에 하나씩 '- ' 기호로 시작해서 나열해줘:
+   - '- 한국어 품목명(원문) (특징) 가격 통화' 형식
+   - 예시:
+     - 카카오 무디(Cacao Muối) (음료) 55,000 VND
+     - 아이스 밀크 커피(Cà Phê Sữa Đá - Iced Milk Coffee) 35,000 VND
+
+[출력 최종 예시]:
 [결제일: 2026-09-22]
 [총액: 90,000 VND]
-카페 웃띡(Út Tịch Bạch Đằng) - 카카오 무디(Cacao Muối) (음료) 55,000 VND
-아이스 밀크 커피(Cà Phê Sữa Đá - Iced Milk Coffee) 35,000 VND
+카페 웃띡(Út Tịch Bạch Đằng)
+ - 카카오 무디(Cacao Muối) (음료) 55,000 VND
+ - 아이스 밀크 커피(Cà Phê Sữa Đá - Iced Milk Coffee) 35,000 VND
 
 5. 인사말이나 마크다운 백틱 없이 위 내용만 정확하게 출력해.
 """
@@ -578,7 +582,7 @@ def summarize_receipt_files_with_gemini(uploaded_files):
         except Exception:
             pass
 
-    # 3. 총액 태그 누락 시 품목 금액 합산
+    # 3. 총액 태그 누락 시 각 품목 금액 합산
     if extracted_total <= 0:
         sum_calc = 0.0
         for line in cleaned.split("\n"):
