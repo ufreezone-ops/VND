@@ -409,16 +409,16 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (다중 이미지 무결점 듀얼 엔진)
+# 2.02.03 | Gemini Multimodal Direct Runner (공식 v1beta 직결 단일화 엔진)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # 1. 고화질 대용량 사진 가벼운 압축 (용량 병목 방지)
-    def safe_compress_image(b_data):
+    # 1. 고화질 사진 용량 최적화 (1400px 초경량화로 업로드 지연 차단)
+    def compress_img_safely(b_data):
         try:
-            if len(b_data) > 600 * 1024:
+            if len(b_data) > 500 * 1024:
                 from PIL import Image
                 import io
                 img = Image.open(io.BytesIO(b_data))
@@ -434,6 +434,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
             pass
         return b_data
 
+    # 2. 전송 페이로드 빌드
     sdk_payload = []
     rest_parts = []
 
@@ -444,8 +445,9 @@ def call_gemini_multimodal(contents, prompt_text=""):
         elif isinstance(item, dict) and "data" in item:
             mime = item.get("mime_type", "image/jpeg")
             raw_b = item["data"]
+            # PDF가 아닌 사진만 안전 리사이징
             if not mime.endswith("pdf") and not raw_b.startswith(b"%PDF"):
-                raw_b = safe_compress_image(raw_b)
+                raw_b = compress_img_safely(raw_b)
                 mime = "image/jpeg"
 
             sdk_payload.append({"mime_type": mime, "data": raw_b})
@@ -458,7 +460,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     last_err = ""
 
-    # 1단계: Python SDK 우선 시도 (다중 파일 처리에 가장 안정적)
+    # 3. 1차 시도: Google 공식 Python SDK
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
@@ -472,14 +474,14 @@ def call_gemini_multimodal(contents, prompt_text=""):
                 last_err = f"SDK({m_name}): {e_sdk}"
                 continue
     except Exception as e_init:
-        last_err = f"SDK Load: {e_init}"
+        last_err = f"SDK Init: {e_init}"
 
-    # 2단계: REST API 폴백 (v1beta 우선 전송)
+    # 4. 2차 시도: 공식 v1beta REST API (v1의 404 원천 배제)
     payload = {"contents": [{"parts": rest_parts}]}
-    for api_ver, m_name in [('v1beta', 'gemini-1.5-flash'), ('v1', 'gemini-1.5-flash')]:
+    for m_name in ['gemini-1.5-flash', 'gemini-1.5-pro']:
         try:
-            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_name}:generateContent?key={api_key}"
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 cand = data.get("candidates", [])
@@ -488,12 +490,12 @@ def call_gemini_multimodal(contents, prompt_text=""):
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip(), ""
             else:
-                last_err = f"REST({api_ver}/{m_name}) {resp.status_code}: {resp.text[:120]}"
+                last_err = f"REST({m_name}) {resp.status_code}: {resp.text[:120]}"
         except Exception as e_rest:
-            last_err = f"REST 에러: {e_rest}"
+            last_err = f"REST 통신에러: {e_rest}"
             continue
 
-    return "", last_err if last_err else "AI 서버 응답 실패"
+    return "", last_err if last_err else "AI 서버 응답 없음"
 
 # 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (다중 분할촬영 중복제거 & 한국어 번역 완결형)
 def summarize_receipt_files_with_gemini(uploaded_files):
