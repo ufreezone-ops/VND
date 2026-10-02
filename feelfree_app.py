@@ -409,59 +409,77 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (다중 대용량 사진 초고속 리사이징 & 직결 가속 엔진)
+# 2.02.03 | Gemini Multimodal Direct Runner (다중 이미지 무결점 듀얼 엔진)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # 💡 [핵심 가속] 3MB 이상 사진을 150KB 수준으로 0.05초 만에 압축하여 30초 업로드 병목 원천 차단
-    def fast_shrink_image(raw_b):
+    # 1. 고화질 대용량 사진 가벼운 압축 (용량 병목 방지)
+    def safe_compress_image(b_data):
         try:
-            from PIL import Image
-            import io
-            img = Image.open(io.BytesIO(raw_b))
-            max_d = 1200
-            if max(img.size) > max_d:
-                ratio = max_d / float(max(img.size))
-                new_dim = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-                img = img.resize(new_dim, Image.Resampling.LANCZOS)
-            out_buf = io.BytesIO()
-            img.convert('RGB').save(out_buf, format='JPEG', quality=80, optimize=True)
-            return out_buf.getvalue()
+            if len(b_data) > 600 * 1024:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(b_data))
+                max_dim = 1400
+                if max(img.size) > max_dim:
+                    ratio = max_dim / float(max(img.size))
+                    new_dim = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+                    img = img.resize(new_dim, Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                img.convert('RGB').save(buf, format='JPEG', quality=85)
+                return buf.getvalue()
         except Exception:
-            return raw_b
+            pass
+        return b_data
 
+    sdk_payload = []
     rest_parts = []
+
     for item in contents:
         if isinstance(item, str):
+            sdk_payload.append(item)
             rest_parts.append({"text": item})
         elif isinstance(item, dict) and "data" in item:
-            m_type = item.get("mime_type", "image/jpeg")
+            mime = item.get("mime_type", "image/jpeg")
             raw_b = item["data"]
-            # PDF가 아닌 사진 파일은 즉시 경량화
-            if not m_type.endswith("pdf") and not raw_b.startswith(b"%PDF"):
-                raw_b = fast_shrink_image(raw_b)
-                m_type = "image/jpeg"
-                
+            if not mime.endswith("pdf") and not raw_b.startswith(b"%PDF"):
+                raw_b = safe_compress_image(raw_b)
+                mime = "image/jpeg"
+
+            sdk_payload.append({"mime_type": mime, "data": raw_b})
             b64_str = base64.b64encode(raw_b).decode("utf-8")
-            rest_parts.append({
-                "inline_data": {
-                    "mime_type": m_type,
-                    "data": b64_str
-                }
-            })
+            rest_parts.append({"inline_data": {"mime_type": mime, "data": b64_str}})
+
     if prompt_text:
+        sdk_payload.append(prompt_text)
         rest_parts.append({"text": prompt_text})
 
-    payload = {"contents": [{"parts": rest_parts}]}
     last_err = ""
 
-    # 가장 검증되고 빠른 gemini-1.5-flash 직결 (매번 ListModels 조회를 돌지 않아 10배 가속)
-    for api_ver, m_name in [('v1', 'gemini-1.5-flash'), ('v1beta', 'gemini-1.5-flash')]:
+    # 1단계: Python SDK 우선 시도 (다중 파일 처리에 가장 안정적)
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        for m_name in ['gemini-1.5-flash', 'gemini-1.5-pro']:
+            try:
+                model = genai.GenerativeModel(m_name)
+                res = model.generate_content(sdk_payload)
+                if res and res.text:
+                    return res.text.strip(), ""
+            except Exception as e_sdk:
+                last_err = f"SDK({m_name}): {e_sdk}"
+                continue
+    except Exception as e_init:
+        last_err = f"SDK Load: {e_init}"
+
+    # 2단계: REST API 폴백 (v1beta 우선 전송)
+    payload = {"contents": [{"parts": rest_parts}]}
+    for api_ver, m_name in [('v1beta', 'gemini-1.5-flash'), ('v1', 'gemini-1.5-flash')]:
         try:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=20)
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
             if resp.status_code == 200:
                 data = resp.json()
                 cand = data.get("candidates", [])
@@ -470,12 +488,12 @@ def call_gemini_multimodal(contents, prompt_text=""):
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip(), ""
             else:
-                last_err = f"[{m_name}] {resp.status_code}: {resp.text[:80]}"
-        except Exception as e:
-            last_err = f"[{m_name}] 에러: {e}"
+                last_err = f"REST({api_ver}/{m_name}) {resp.status_code}: {resp.text[:120]}"
+        except Exception as e_rest:
+            last_err = f"REST 에러: {e_rest}"
             continue
 
-    return "", last_err
+    return "", last_err if last_err else "AI 서버 응답 실패"
 
 # 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (다중 분할촬영 중복제거 & 한국어 번역 완결형)
 def summarize_receipt_files_with_gemini(uploaded_files):
@@ -2398,7 +2416,9 @@ else:
                                     time.sleep(0.3)
                                     st.rerun()
                                 else:
-                                    st.error("🚨 영수증 인식을 완료하지 못했습니다.")
+                                    # 구글 서버의 실제 에러 메시지를 화면에 명확히 표출
+                                    err_detail = st.session_state.get('last_ai_error', 'AI 서버 응답 없음')
+                                    st.error(f"🚨 영수증 인식 실패: {err_detail}")
                                     
                 with col_desc: 
                     desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=120, key="exp_desc_input")
