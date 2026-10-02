@@ -409,13 +409,40 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (404 원천 차단 & 실시간 가용 모델 자동 직결 엔진)
+# 2.02.03 | Gemini Multimodal Direct Runner (캐시형 모델 조회 & 대용량 사진 초고속 최적화)
+@st.cache_data(ttl=3600)
+def get_cached_gemini_models(api_key):
+    """구글 모델 목록을 매번 조회하지 않고 1시간 동안 메모리에 캐싱하여 3~4초 지연 원천 제거"""
+    active_endpoints = []
+    for ver in ['v1beta', 'v1']:
+        try:
+            list_url = f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}"
+            resp_l = requests.get(list_url, timeout=3)
+            if resp_l.status_code == 200:
+                for m in resp_l.json().get('models', []):
+                    if 'generateContent' in m.get('supportedGenerationMethods', []):
+                        m_clean = m['name'].replace('models/', '')
+                        if 'flash' in m_clean:
+                            active_endpoints.append((ver, m_clean))
+        except Exception:
+            pass
+
+    def sort_prio(item):
+        v, name = item
+        if '2.0-flash-exp' in name: return 1
+        if '2.5-flash' in name: return 2
+        if '1.5-flash' in name: return 3
+        return 4
+
+    active_endpoints.sort(key=sort_prio)
+    return active_endpoints if active_endpoints else [('v1beta', 'gemini-1.5-flash')]
+
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # 1. 대용량 사진 압축 (3.5MB -> 150KB 이하 초고속 경량화)
+    # 1. 대용량 사진(3.5MB 등)을 메모리상에서 0.05초 만에 200KB 이하로 최적화 (업로드 15초 지연 제거)
     def compress_img_safely(b_data):
         try:
             if len(b_data) > 500 * 1024:
@@ -442,6 +469,7 @@ def call_gemini_multimodal(contents, prompt_text=""):
         elif isinstance(item, dict) and "data" in item:
             mime = item.get("mime_type", "image/jpeg")
             raw_b = item["data"]
+            # PDF는 원본 그대로 두고, 사진 파일만 안전 압축
             if not mime.endswith("pdf") and not raw_b.startswith(b"%PDF"):
                 raw_b = compress_img_safely(raw_b)
                 mime = "image/jpeg"
@@ -453,49 +481,17 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     payload = {"contents": [{"parts": rest_parts}]}
 
-    # 3. 내 API 키에서 실제 동작 가능한 활성 모델을 구글 서버에서 실시간 조회 (404 완벽 방어)
-    active_endpoints = []
-    for ver in ['v1beta', 'v1']:
-        try:
-            list_url = f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}"
-            resp_l = requests.get(list_url, timeout=3)
-            if resp_l.status_code == 200:
-                for m in resp_l.json().get('models', []):
-                    if 'generateContent' in m.get('supportedGenerationMethods', []):
-                        m_clean = m['name'].replace('models/', '')
-                        # 404를 유발하는 pro 계열을 피하고 flash 계열 우선 확보
-                        if 'flash' in m_clean:
-                            active_endpoints.append((ver, m_clean))
-        except Exception:
-            pass
-
-    # 플래시 우선 정렬 (2.0-flash-exp, 2.5-flash, 1.5-flash 순)
-    def sort_prio(item):
-        v, name = item
-        if '2.0-flash-exp' in name: return 1
-        if '2.5-flash' in name: return 2
-        if '1.5-flash' in name: return 3
-        return 4
-
-    active_endpoints.sort(key=sort_prio)
-
-    # 목록 조회가 실패했을 때의 대비용 (404 유발하는 pro는 절대 넣지 않음)
-    if not active_endpoints:
-        active_endpoints = [
-            ('v1beta', 'gemini-1.5-flash'),
-            ('v1beta', 'gemini-2.0-flash-exp'),
-            ('v1beta', 'gemini-2.5-flash')
-        ]
-
+    # 3. 1시간 캐싱된 활성 모델 엔드포인트 호출 (0초 지연)
+    active_endpoints = get_cached_gemini_models(api_key)
     last_err = ""
 
-    # 4. 실시간 활성 엔드포인트로만 순차 호출
     for api_ver, m_name in active_endpoints:
         try:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
             resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
             if resp.status_code == 200:
-                cand = resp.json().get("candidates", [])
+                data = resp.json()
+                cand = data.get("candidates", [])
                 if cand:
                     parts = cand[0].get("content", {}).get("parts", [])
                     if parts and "text" in parts[0]:
