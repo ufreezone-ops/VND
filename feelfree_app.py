@@ -508,29 +508,30 @@ def call_gemini_multimodal(contents, prompt_text=""):
 
     return "", last_err if last_err else "AI 서버 응답 없음"
 
-# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (다중 분할촬영 중복제거 & 한국어 번역 완결형)
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (호텔 구조 100% 복제형 JSON 파서)
 def summarize_receipt_files_with_gemini(uploaded_files):
+    import json
     if not uploaded_files: return "", "", 0.0
 
-    prompt = """너는 다국어 영수증 전문 번역 및 분석 AI야. 첨부된 영수증 사진/문서들을 종합 분석하여 아래 규칙대로 정확히 출력해줘.
+    prompt = """너는 다국어 영수증 전문 분석 AI야. 첨부된 영수증 사진/문서들을 분석하여 아래 JSON 포맷으로만 응답해.
 
-[🔥 다중 분할 촬영 중복 제거 필수 원칙]:
-- 사용자가 긴 영수증을 2장 이상 나누어 연속 촬영했을 수 있어.
-- 첫 번째 사진의 하단부와 두 번째 사진의 상단부에 중복으로 찍힌 겹치는 품목(예: 동일한 마카다미아, 동일한 밀리켓 라면 등)은 영수증 번호나 순번(STT)을 확인하여 절대로 두 번 출력하지 말고 반드시 1번만 합쳐서 출력해!
+[응답 JSON 스키마]:
+{
+    "store_name": "졸리마트 (Jolymart)",
+    "payment_date": "2026-09-22",
+    "total_amount": 478000,
+    "items_text": "- 아치카페 연유 커피(Cà Phê Sữa Đặc Archcafe) 216g (1개) 76,000 VND\\n- 밀리케 쌀국수 면(Mì Giấy Miliket) 60g (1개) 5,000 VND\\n- 두리안 녹두 케이크(Bánh Đậu Xanh Sầu Riêng) 150g (1개) 52,000 VND"
+}
 
-[출력 형식 지침]:
-1. 첫 번째 줄: 영수증에 인쇄된 결제일자(예: Ngày: 22/09/2026 -> [결제일: 2026-09-22]). 없으면 생략.
-2. 두 번째 줄: 영수증 맨 아래 실제 최종 총 결제 금액(예: Tổng cộng: 478,000 đ -> [총액: 478,000 VND]). 없으면 생략.
-3. 세 번째 줄: 영수증 최상단의 매장 이름(상호명)을 한국어 친화적 명칭과 원문으로 단독 한 줄 출력 (예: 졸리마트(Jolymart)).
-4. 네 번째 줄부터: 소비한 품목들을 중복 없이 한 줄에 하나씩 '- '로 나열 (한국어가 무조건 맨 앞):
-   - 형식: - 한국어 품목명(현지어 원문) 용량/수량 가격 통화
-   - 예시:
-     - 아치카페 연유 커피(Cà Phê Sữa Đặc Archcafe) 216g (1개) 76,000 VND
-     - 두리안 녹두 케이크(Bánh Đậu Xanh Sầu Riêng) 150g (1개) 52,000 VND
-     - 마카다미아 너트(Nhân Macadamia Oaky) 100g (1개) 119,000 VND
-     - 밀리켓 검은 봉지 라면(Mì Giấy Đen Miliket) 60g (1개) 5,000 VND
-
-5. 인사말이나 마크다운 백틱(```) 없이 위 내용만 정확하게 출력해.
+[🔥 엄격한 추출 지침]:
+1. store_name: 영수증 맨 위 상호명을 한글발음(원문) 형태로 추출해. (예: 졸리마트 (Jolymart), 카페 웃띡 (Út Tịch))
+2. payment_date: 영수증의 실제 결제일/승인일자를 찾아 반드시 'YYYY-MM-DD'(예: 2026-09-22) 형식으로 출력해. 없으면 "".
+3. total_amount: 영수증 맨 아래 실제 지불한 '최종 총 결제 금액(합계, Tổng cộng)'을 콤마 없는 순수 숫자로 추출해 (예: 478000). 품목들을 절대 임의로 더하지 말고 영수증에 인쇄된 총액 숫자를 그대로 적어.
+4. items_text:
+   - 영수증을 여러 장 나눠 찍어 겹치는 중복 품목은 1개만 남기고 중복을 반드시 제거해.
+   - 품목명은 무조건 '자연스러운 한국어'가 맨 앞이어야 해. (예: - 한국어품목명(원문) 규격 수량 가격 통화)
+   - 품목들을 줄바꿈(\\n)하여 나열해.
+5. 다른 부연 설명이나 마크다운 백틱 없이 오직 '{' 로 시작해서 '}' 로 끝나는 순수 JSON 하나만 출력해.
 """
     contents = []
     for f in uploaded_files:
@@ -547,41 +548,27 @@ def summarize_receipt_files_with_gemini(uploaded_files):
     if not contents:
         return "", "", 0.0
 
-    raw_res, _ = call_gemini_multimodal(contents, prompt)
+    raw_res, err = call_gemini_multimodal(contents, prompt)
     if not raw_res:
         return "", "", 0.0
 
-    cleaned = raw_res.strip()
-    extracted_date = ""
-    extracted_total = 0.0
+    try:
+        cleaned = re.sub(r'```(?:json)?', '', raw_res).strip('` \n')
+        first_brace = cleaned.find('{')
+        last_brace = cleaned.rfind('}')
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            data = json.loads(cleaned[first_brace:last_brace + 1])
+            store = data.get("store_name", "").strip()
+            items = data.get("items_text", "").strip()
+            full_desc = f"{store}\n{items}".strip() if store else items
+            
+            p_date = str(data.get("payment_date", "")).strip()
+            tot_amt = clean_amount_to_float(data.get("total_amount", 0.0))
+            return full_desc, p_date, tot_amt
+    except Exception:
+        pass
 
-    # 1. 결제일 추출
-    m_date = re.search(r'\[결제일:\s*(\d{4}-\d{2}-\d{2})\]', cleaned)
-    if m_date:
-        extracted_date = m_date.group(1)
-        cleaned = re.sub(r'\[결제일:[^\]]+\]\s*', '', cleaned).strip()
-
-    # 2. 총액 추출
-    m_tot = re.search(r'\[총액:\s*([\d,]+)', cleaned)
-    if m_tot:
-        try:
-            extracted_total = float(m_tot.group(1).replace(',', ''))
-            cleaned = re.sub(r'\[총액:[^\]]+\]\s*', '', cleaned).strip()
-        except Exception:
-            pass
-
-    # 3. 총액 태그 누락 시 각 품목 금액 합산
-    if extracted_total <= 0:
-        sum_calc = 0.0
-        for line in cleaned.split("\n"):
-            nums = re.findall(r'(\d{1,3}(?:,\d{3})+|\d+)', line)
-            if nums:
-                try: sum_calc += float(nums[-1].replace(',', ''))
-                except Exception: pass
-        if sum_calc > 0:
-            extracted_total = sum_calc
-
-    return cleaned, extracted_date, extracted_total
+    return raw_res.strip(), "", 0.0
 
 # 2.02.05 | Gemini Hotel Voucher Parser (면적/발코니/성급/부분취소율 다차원 분석 완결형)
 def parse_hotel_voucher_files_with_gemini(uploaded_files):
@@ -2389,7 +2376,7 @@ else:
             node_currs = [node["currency"] for node in trip_nodes.values()]
             available_currs = sorted(list(set(node_currs + ["KRW", "USD", "EUR"])))
 
-            # --- 6.01.02-A | 일반 지출 등록 서브모듈 ---
+            # --- 6.01.02-A | 일반 지출 등록 서브모듈 (호텔 바인딩 100% 복제형) ---
             if mode == "일반 지출":
                 base_daily_cats = [c for c in EXPENSE_CATS if c not in ['항공권', '호텔', '보증금', '상환', '보험']]
                 if "선물" not in base_daily_cats:
@@ -2415,23 +2402,27 @@ else:
                     uploaded_files = st.file_uploader("📸 영수증 첨부 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key="exp_direct_uploader", accept_multiple_files=True)
                     if uploaded_files:
                         if st.button("🤖 영수증 AI 스캔 (통합 번역)", key="btn_ai_exp_direct", use_container_width=True, type="primary"):
-                            with st.spinner("AI가 영수증 품목, 총금액, 결제일자를 분석 중..."):
+                            with st.spinner("AI가 영수증 품목, 총금액, 결제일자를 정밀 분석 중..."):
                                 smart_text, pay_date, total_amt = summarize_receipt_files_with_gemini(uploaded_files)
                                 if smart_text:
                                     st.session_state['exp_desc_input'] = smart_text
+                                    
+                                    # [호텔과 100% 동일] 총금액을 세션 키에 다이렉트 주입
                                     if total_amt > 0:
                                         st.session_state['exp_amt_int'] = int(total_amt)
                                         st.session_state['exp_amt_float'] = float(total_amt)
+                                        
+                                    # [호텔과 100% 동일] 결제일자를 상단 달력에 다이렉트 주입
                                     if pay_date:
                                         parsed_dt = safe_parse_date_obj(pay_date, None)
-                                        if parsed_dt: st.session_state['ai_payment_date'] = parsed_dt
-                                    st.toast(f"🧾 분석 완료! 금액: {total_amt:,.0f} 자동 입력", icon="🎉")
+                                        if parsed_dt: 
+                                            st.session_state['ai_payment_date'] = parsed_dt
+                                            
+                                    st.toast(f"🎉 영수증 분석 완료! 금액: {total_amt:,.0f} 자동 입력", icon="✅")
                                     time.sleep(0.3)
                                     st.rerun()
                                 else:
-                                    # 구글 서버의 실제 에러 메시지를 화면에 명확히 표출
-                                    err_detail = st.session_state.get('last_ai_error', 'AI 서버 응답 없음')
-                                    st.error(f"🚨 영수증 인식 실패: {err_detail}")
+                                    st.error("🚨 영수증 인식을 완료하지 못했습니다.")
                                     
                 with col_desc: 
                     desc = st.text_area("📝 내용 (상호명 및 다중 내역)", placeholder="예: 안바카페 - 소고기버거\n반미정식", height=120, key="exp_desc_input")
@@ -2452,9 +2443,8 @@ else:
                 if desc and any(ch.isdigit() for ch in desc):
                     raw_lines = [l.strip() for l in desc.split("\n") if l.strip()]
                     for idx_l, l_text in enumerate(raw_lines):
-                        if l_text.startswith("[결제일") or l_text.startswith("[총액"): continue
                         val_chk = parse_amount_from_line(l_text)
-                        if idx_l <= 1 and val_chk == 0 and not l_text.startswith("-"):
+                        if idx_l == 0 and val_chk == 0 and not l_text.startswith("-"):
                             store_header_in = l_text
                         elif val_chk > 0 or l_text.startswith("-"):
                             candidate_item_lines.append(l_text)
@@ -2514,7 +2504,6 @@ else:
                         cr_final = st.number_input("확정 환율", value=float(calc_rate), format="%.5f", key=f"exp_cr_auto_{met}_{amt}")
                     else: cr_final = st.number_input("확정 환율", value=(1.0 if curr=="KRW" else get_default_rate(curr)), format="%.5f", key=f"exp_cr_man_{curr}")
                     
-                # 지출 기록 버튼 (원장 직결 추가 & 증발 완벽 방어)
                 if st.button("🚀 지출 기록하기", use_container_width=True, type="primary"):
                     if amt <= 0:
                         st.warning("결제 금액을 0원보다 크게 입력해 주세요.")
@@ -2548,39 +2537,17 @@ else:
                         rem_amt = total_amt_val - gift_sum_amt
                         norm_lines = [l for l in candidate_item_lines if l not in st.session_state.gift_items_selected]
                         gift_lines = st.session_state.gift_items_selected
-                        
                         prefix = f"{store_header_in}\n" if store_header_in else ""
                         d_norm = prefix + "\n".join(norm_lines)
                         d_gift = prefix + "\n".join(gift_lines)
-                        
                         f_d_norm = f"[{final_gateway}] {d_norm}" if final_gateway else d_norm
                         f_d_gift = f"[{final_gateway}] [선물분리] {d_gift}" if final_gateway else f"[선물분리] {d_gift}"
                         
-                        new_rows_to_add.append({
-                            'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': cat,
-                            'Description': f_d_norm.strip(), 'Currency': curr, 'Amount': rem_amt,
-                            'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Normal Split', 'Receipt_URL': final_receipt_urls
-                        })
-                        new_rows_to_add.append({
-                            'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '선물',
-                            'Description': f_d_gift.strip(), 'Currency': curr, 'Amount': gift_sum_amt,
-                            'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Gift Split', 'Receipt_URL': final_receipt_urls
-                        })
+                        new_rows_to_add.append({'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': cat, 'Description': f_d_norm.strip(), 'Currency': curr, 'Amount': rem_amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Normal Split', 'Receipt_URL': final_receipt_urls})
+                        new_rows_to_add.append({'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '선물', 'Description': f_d_gift.strip(), 'Currency': curr, 'Amount': gift_sum_amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Gift Split', 'Receipt_URL': final_receipt_urls})
                     else:
                         f_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
-                        new_rows_to_add.append({
-                            'Date': sel_date.strftime("%Y-%m-%d(%a)"),
-                            'Country': sel_node,
-                            'Category': cat,
-                            'Description': f_desc.strip(),
-                            'Currency': curr,
-                            'Amount': total_amt_val,
-                            'PaymentMethod': met,
-                            'IsExpense': 1,
-                            'AppliedRate': cr_final,
-                            'Note': '',
-                            'Receipt_URL': final_receipt_urls
-                        })
+                        new_rows_to_add.append({'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': cat, 'Description': f_desc.strip(), 'Currency': curr, 'Amount': total_amt_val, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '', 'Receipt_URL': final_receipt_urls})
 
                     base_ledger = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state and not st.session_state.active_ledger_df.empty else load_data(ACTIVE_SHEET)
                     combined_df = pd.concat([base_ledger, pd.DataFrame(new_rows_to_add)], ignore_index=True)
