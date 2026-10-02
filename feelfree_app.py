@@ -3354,40 +3354,28 @@ else:
                         
                         with c_info:
                             st.subheader("🧾 상세 내역 및 영수증 뷰어")
-                            
                             c_up, c_down = st.columns(2)
                             with c_up:
                                 if st.button("🔼 위로 한 칸 이동", key=f"btn_move_up_{real_idx}", use_container_width=True):
+                                    cur_df = st.session_state.active_ledger_df
                                     if real_idx > 0:
-                                        # 1. 메모리(세션)에서 0.01초 만에 즉시 교환
-                                        cur_df = st.session_state.active_ledger_df
                                         idx_above = real_idx - 1
                                         cur_df.iloc[idx_above], cur_df.iloc[real_idx] = cur_df.iloc[real_idx].copy(), cur_df.iloc[idx_above].copy()
                                         st.session_state.active_ledger_df = cur_df
-                                        
-                                        # 2. 구글 시트 원장 즉시 직결 반영
                                         try:
                                             conn.update(worksheet=ACTIVE_SHEET, data=cur_df.reindex(columns=FINAL_COLUMNS))
                                         except: pass
-                                        
-                                        # 3. 기다림 없이 즉시 화면 리프레시 (체감 0.1초)
                                         st.rerun()
-
                             with c_down:
                                 if st.button("🔽 아래로 한 칸 이동", key=f"btn_move_down_{real_idx}", use_container_width=True):
                                     cur_df = st.session_state.active_ledger_df
                                     if real_idx < len(cur_df) - 1:
-                                        # 1. 메모리(세션)에서 0.01초 만에 즉시 교환
                                         idx_below = real_idx + 1
                                         cur_df.iloc[idx_below], cur_df.iloc[real_idx] = cur_df.iloc[real_idx].copy(), cur_df.iloc[idx_below].copy()
                                         st.session_state.active_ledger_df = cur_df
-                                        
-                                        # 2. 구글 시트 원장 즉시 직결 반영
                                         try:
                                             conn.update(worksheet=ACTIVE_SHEET, data=cur_df.reindex(columns=FINAL_COLUMNS))
                                         except: pass
-                                        
-                                        # 3. 기다림 없이 즉시 화면 리프레시 (체감 0.1초)
                                         st.rerun()
 
                             amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
@@ -3404,8 +3392,8 @@ else:
                                     suffix = match.group(2).lower() if match.group(2) else ""
                                     try:
                                         v = float(num_str)
-                                        is_currency = any(c in suffix for c in['vnd', 'usd', 'eur', 'cny', 'try', 'rsd', 'huf', 'krw', '원', '동', '달러'])
-                                        is_unit = any(u in suffix for u in['ml', 'g', 'kg', 'cm', 'mm', '개', 'x', '입', '장', '명', '박스'])
+                                        is_currency = any(c in suffix for c in ['vnd', 'usd', 'eur', 'cny', 'try', 'rsd', 'huf', 'krw', '원', '동', '달러'])
+                                        is_unit = any(u in suffix for u in ['ml', 'g', 'kg', 'cm', 'mm', '개', 'x', '입', '장', '명', '박스'])
                                         if is_unit and not is_currency: return match.group(0)
                                         if is_currency or (curr in ['VND', 'HUF'] and v >= 1000) or ('.' in num_str) or (v > 100):
                                             krw_val = v * rate
@@ -3445,19 +3433,27 @@ else:
                                 urls = [u.strip() for u in receipt_data.split(",") if u.strip().startswith("http")]
                                 for idx, url in enumerate(urls):
                                     st.image(url, use_container_width=True, caption=f"영수증 사진 #{idx+1}")
+                                    # [Fixed: 사진 삭제 시 세션 캐시 및 원장 동시 반영]
                                     if st.button(f"🗑️ 사진 #{idx+1} 삭제", key=f"btn_del_rcpt_{real_idx}_{idx}", use_container_width=True):
                                         remaining_urls = [u for i, u in enumerate(urls) if i != idx]
-                                        display_df.at[real_idx, 'Receipt_URL'] = ",".join(remaining_urls)
-                                        if save_data(display_df):
+                                        new_urls_str = ",".join(remaining_urls)
+                                        display_df.at[real_idx, 'Receipt_URL'] = new_urls_str
+                                        
+                                        target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else display_df
+                                        if real_idx in target_df.index:
+                                            target_df.at[real_idx, 'Receipt_URL'] = new_urls_str
+                                            
+                                        if save_data(target_df):
+                                            st.session_state.active_ledger_df = load_data(ACTIVE_SHEET)
                                             st.toast(f"사진 #{idx+1} 삭제 완료!", icon="✅")
-                                            time.sleep(0.6); st.rerun()
+                                            time.sleep(0.4)
+                                            st.rerun()
                             else:
                                 st.info("첨부된 영수증 사진이 없습니다.")
                                 
-                        # 6.02.05 | 인라인 수정기 (사후 PDF/사진 영수증 업로드 & AI 분석)
+                        # 6.02.05 | 인라인 수정기 (사후 영수증 업로드 & AI 분석 완전 연동)
                         with c_edit:
                             st.subheader("✏️ 상세 내역 & 결제정보 수정")
-                            
                             all_cats_avail = list(dict.fromkeys(EXPENSE_CATS + ['상환', '충전', '환전', '입금', '직접환전', '이월잔액', '환불', '개인지출', '재환전', '출국', '귀국', '체크인', '체크아웃']))
                             cur_cat = str(row_data['Category']).strip()
                             cat_idx_sel = all_cats_avail.index(cur_cat) if cur_cat in all_cats_avail else 0
@@ -3470,13 +3466,8 @@ else:
                                 
                             cur_method = str(row_data['PaymentMethod']).strip()
                             avail_methods = list(dict.fromkeys([
-                                cur_method,
-                                f"트래블카드({row_data['Currency']})",
-                                f"현금({row_data['Currency']})",
-                                f"호텔외상({row_data['Currency']})",
-                                "원화계좌(한국)",
-                                "해외송금(한국계좌)",
-                                "정보"
+                                cur_method, f"트래블카드({row_data['Currency']})", f"현금({row_data['Currency']})",
+                                f"호텔외상({row_data['Currency']})", "원화계좌(한국)", "해외송금(한국계좌)", "정보"
                             ]))
                             method_idx_sel = avail_methods.index(cur_method) if cur_method in avail_methods else 0
                             edit_method = st.selectbox("3. 결제 수단(자산)", avail_methods, index=method_idx_sel, key=f"edit_met_sel_{real_idx}")
@@ -3486,26 +3477,22 @@ else:
                                 st.session_state[desc_key] = str(row_data['Description'])
                                 st.session_state['current_edit_idx'] = real_idx
                                 
-                            # 👈 PDF 파일 업로드 지원
                             new_receipts = st.file_uploader("📸 영수증 사후 업로드 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
+                            
+                            # [Fixed: 삭제된 구버전 함수 대신 검증된 summarize_receipt_files_with_gemini 직결 호출]
                             if new_receipts:
                                 if st.button("🤖 첨부된 문서 AI 스캔 & 내용에 자동 추가", key=f"btn_ai_scan_inline_{real_idx}", use_container_width=True, type="primary"):
-                                    with st.spinner(f"AI가 {len(new_receipts)}개의 문서를 분석 중..."):
-                                        all_raw_texts = []
-                                        for f in new_receipts:
-                                            ext_text = extract_text_from_file_or_image(f.getvalue(), getattr(f, 'name', ''))
-                                            all_raw_texts.append(ext_text)
-                                        combined_text = "\n---\n".join(all_raw_texts)
-                                        smart_text = summarize_receipt_with_gemini(combined_text)
+                                    with st.spinner("AI가 추가 영수증을 분석 중..."):
+                                        smart_text, _, _ = summarize_receipt_files_with_gemini(new_receipts)
                                         if smart_text:
-                                            st.session_state[desc_key] = (st.session_state.get(desc_key, '') + "\n" + smart_text).strip()
-                                            st.toast("영수증 품목 분석 완료!", icon="🤖")
+                                            cur_val = st.session_state.get(desc_key, '').strip()
+                                            st.session_state[desc_key] = f"{cur_val}\n{smart_text}".strip() if cur_val else smart_text
+                                            st.toast("영수증 품목 분석 및 내용 추가 완료!", icon="🤖")
                                             st.rerun()
 
                             new_desc = st.text_area("4. 세부 내역 (수정/추가)", height=100, key=desc_key)
                             
                             if st.button("💾 이 내역 전체 업데이트 (항목/수단/내용 동시저장)", use_container_width=True, type="primary"):
-                                # 1. 영수증 이미지 추가 처리
                                 updated_rcpt_url = str(row_data.get('Receipt_URL', '')).strip()
                                 if new_receipts:
                                     with st.spinner("📸 영수증 클라우드 전송 중..."):
@@ -3517,33 +3504,24 @@ else:
                                             existing_urls = [x.strip() for x in updated_rcpt_url.split(',') if x.strip().startswith('http')]
                                             updated_rcpt_url = ",".join(existing_urls + new_urls)
 
-                                # 2. display_df 사본 수정
                                 display_df.at[real_idx, 'Category'] = edit_cat
                                 display_df.at[real_idx, 'Amount'] = edit_amt
                                 display_df.at[real_idx, 'PaymentMethod'] = edit_method
                                 display_df.at[real_idx, 'Description'] = new_desc
                                 display_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
 
-                                # 3. [핵심] 원본 세션 메모리(active_ledger_df) 동시 갱신
-                                if 'active_ledger_df' in st.session_state:
-                                    target_df = st.session_state.active_ledger_df
-                                    if real_idx in target_df.index:
-                                        target_df.at[real_idx, 'Category'] = edit_cat
-                                        target_df.at[real_idx, 'Amount'] = edit_amt
-                                        target_df.at[real_idx, 'PaymentMethod'] = edit_method
-                                        target_df.at[real_idx, 'Description'] = new_desc
-                                        target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
-                                        save_target = target_df
-                                    else:
-                                        save_target = display_df
-                                else:
-                                    save_target = display_df
+                                target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else display_df
+                                if real_idx in target_df.index:
+                                    target_df.at[real_idx, 'Category'] = edit_cat
+                                    target_df.at[real_idx, 'Amount'] = edit_amt
+                                    target_df.at[real_idx, 'PaymentMethod'] = edit_method
+                                    target_df.at[real_idx, 'Description'] = new_desc
+                                    target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
 
-                                # 4. 구글 시트 저장 및 캐시 동기화
-                                if save_data(save_target):
+                                if save_data(target_df):
                                     st.session_state.active_ledger_df = load_data(ACTIVE_SHEET)
                                     st.toast("🎉 수정사항이 완벽하게 저장되었습니다!", icon="✅")
-                                    time.sleep(0.5)
+                                    time.sleep(0.4)
                                     st.rerun()
                         st.markdown("---")
 
