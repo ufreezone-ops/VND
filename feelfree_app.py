@@ -3096,35 +3096,55 @@ else:
 
                         new_desc = st.text_area("4. 세부 내역 (수정/추가)", height=110, key=desc_key)
 
-                        # 💡 [개선: 영수증 유무와 무관하게 수동 입력 텍스트에서도 선물 분리 칩 상시 표출!]
+                        # 💡 [개선: 상호명 제외 & 순수 소비 품목만 선물 체크박스 생성]
                         gift_items_split = []
                         normal_items_split = []
                         gift_amt_split = 0.0
                         
-                        # 텍스트에 숫자가 한 줄이라도 있으면 즉시 분리 선택창 렌더링
                         if new_desc and any(ch.isdigit() for ch in new_desc):
-                            clean_lines = [l.strip() for l in re.sub(r'\[🎁선물:[^\]]+\]', '', new_desc).split("\n") if l.strip()]
-                            with st.expander("🎁 선물/특산품 분리 및 '선물' 항목 신설 (영수증 없는 수동입력도 지원)", expanded=True):
-                                st.caption("💡 영수증이 없는 재래시장 쇼핑도 품목을 체크하시면 해당 품목들만 **'선물' 카테고리의 독립 행**으로 자동 분리됩니다.")
-                                cols_ge = st.columns(min(3, max(1, len(clean_lines))))
-                                for idx_e, line_e in enumerate(clean_lines):
-                                    val_e = parse_amount_from_line(line_e)
-                                    is_already_gift = any(k in line_e for k in ["선물", "기념품", "마그넷", "팔찌", "목걸이", "자석", "캔디", "선물용", "옷", "원피스", "스카프"]) or (cur_cat == "선물")
-                                    c_box_e = cols_ge[idx_e % len(cols_ge)].checkbox(f"🎁 {line_e[:20]}..", value=is_already_gift, key=f"chk_gift_edit_{real_idx}_{idx_e}")
-                                    
-                                    if c_box_e:
-                                        gift_items_split.append(line_e)
-                                        gift_amt_split += val_e
+                            all_lines = [l.strip() for l in re.sub(r'\[🎁선물:[^\]]+\]', '', new_desc).split("\n") if l.strip()]
+                            
+                            # 1. 상호명과 순수 품목 라인 분리
+                            store_header = ""
+                            candidate_item_lines = []
+                            for idx_l, l_text in enumerate(all_lines):
+                                val_chk = parse_amount_from_line(l_text)
+                                # 첫 줄이면서 가격이 없거나 하이픈이 없으면 상호명으로 간주
+                                if idx_l == 0 and val_chk == 0 and not l_text.startswith("-"):
+                                    store_header = l_text
+                                else:
+                                    # 가격이 있는 실제 품목 라인만 선물 후보로 등록
+                                    if val_chk > 0 or l_text.startswith("-"):
+                                        candidate_item_lines.append(l_text)
                                     else:
-                                        normal_items_split.append(line_e)
-                                
-                                total_receipt_amt = float(edit_amt)
-                                remaining_normal_amt = max(0.0, total_receipt_amt - gift_amt_split)
-                                
-                                if gift_amt_split >= total_receipt_amt and total_receipt_amt > 0:
-                                    st.info(f"✨ **100% 선물/기념품 지출**: 카테고리가 자동으로 **`선물` ({total_receipt_amt:,.0f} {row_data['Currency']})** 로 전환됩니다.")
-                                elif gift_amt_split > 0 and remaining_normal_amt > 0:
-                                    st.success(f"✂️ **2개 행으로 자동 분할 저장됩니다**:\n• 행 1 (`{edit_cat}`): **{remaining_normal_amt:,.0f}** {row_data['Currency']} (순수 체류비)\n• 행 2 (`선물`): **{gift_amt_split:,.0f}** {row_data['Currency']} (선물/쇼핑 분리 신설)")
+                                        if not store_header: store_header = l_text
+
+                            # 2. 순수 품목 라인만 체크박스 생성 (상호명 완전 배제)
+                            if candidate_item_lines:
+                                with st.expander("🎁 선물/특산품 분리 및 '선물' 항목 신설", expanded=True):
+                                    st.caption("💡 아래 품목 중 **선물/특산품**을 체크하시면 해당 품목만 '선물' 항목으로 분리됩니다.")
+                                    cols_ge = st.columns(min(3, max(1, len(candidate_item_lines))))
+                                    for idx_e, line_e in enumerate(candidate_item_lines):
+                                        val_e = parse_amount_from_line(line_e)
+                                        # 라벨 표시용 깔끔한 이름 (- 기호 제거)
+                                        disp_name = re.sub(r'^[\-\*•\s]+', '', line_e)
+                                        
+                                        is_already_gift = any(k in line_e for k in ["선물", "기념품", "마그넷", "팔찌", "목걸이", "자석", "캔디", "선물용", "옷", "원피스", "스카프"]) or (cur_cat == "선물")
+                                        c_box_e = cols_ge[idx_e % len(cols_ge)].checkbox(f"🎁 {disp_name[:18]}..", value=is_already_gift, key=f"chk_gift_edit_{real_idx}_{idx_e}")
+                                        
+                                        if c_box_e:
+                                            gift_items_split.append(line_e)
+                                            gift_amt_split += val_e
+                                        else:
+                                            normal_items_split.append(line_e)
+                                    
+                                    total_receipt_amt = float(edit_amt)
+                                    remaining_normal_amt = max(0.0, total_receipt_amt - gift_amt_split)
+                                    
+                                    if gift_amt_split >= total_receipt_amt and total_receipt_amt > 0:
+                                        st.info(f"✨ **100% 선물 지출**: 카테고리가 **`선물` ({total_receipt_amt:,.0f} {row_data['Currency']})** 로 전환됩니다.")
+                                    elif gift_amt_split > 0 and remaining_normal_amt > 0:
+                                        st.success(f"✂️ **2개 행 분할**:\n• 기존 (`{edit_cat}`): **{remaining_normal_amt:,.0f}** {row_data['Currency']}\n• 신설 (`선물`): **{gift_amt_split:,.0f}** {row_data['Currency']}")
 
                         if st.button("💾 이 내역 전체 업데이트 (선물 자동분할 동시적용)", use_container_width=True, type="primary"):
                             updated_rcpt_url = str(row_data.get('Receipt_URL', '')).strip()
