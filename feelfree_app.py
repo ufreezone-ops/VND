@@ -723,8 +723,7 @@ def normalize_date(d_str):
         return dt_obj.strftime("%Y-%m-%d(%a)")
     return d_str
 
-# 2.03.02 | Active Trip Ledger Loader & Normalizer
-### ⚙️ [Logic: DB Load] GSheet 데이터 로드 및 클리닝
+# 2.03.02 | Active Trip Ledger Loader & Normalizer (선물 카테고리 로딩 즉시 정합성 자동 복구)
 @st.cache_data(ttl=120)
 def load_data(sheet_name):
     df = None
@@ -759,10 +758,7 @@ def load_data(sheet_name):
         
     df = df.dropna(subset=['Date', 'Category'], how='any')
     df['Category'] = df['Category'].astype(str).str.strip()
-    
-    # [Modified] 하위 호환성 보장: 과거 '트래블로그'로 기록된 명칭을 '트래블카드'로 일괄 자동 치환
     df['PaymentMethod'] = df['PaymentMethod'].astype(str).str.strip().str.replace('트래블로그', '트래블카드')
-    
     df['Currency'] = df['Currency'].astype(str).str.strip().str.upper() 
     
     def fix_legacy_date(d):
@@ -772,7 +768,6 @@ def load_data(sheet_name):
 
     df['Date'] = df['Date'].apply(fix_legacy_date)
     df['Date'] = df['Date'].apply(normalize_date)
-    
     df = df.reindex(columns=FINAL_COLUMNS)
     
     numeric_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
@@ -780,9 +775,18 @@ def load_data(sheet_name):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
     
-    df['IsExpense'] = pd.to_numeric(df['IsExpense'], errors='coerce').fillna(0).astype(int)
+    # 💡 [핵심] 구글 시트에 과거 0으로 잘못 저장되어 있던 IsExpense를 실시간 재평가
+    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물']))
+    def evaluate_is_expense(r):
+        cat = str(r['Category']).strip()
+        if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출']:
+            return 1
+        return 0
+
+    df['IsExpense'] = df.apply(evaluate_is_expense, axis=1)
     df['Note'] = df['Note'].fillna("").astype(str)
     df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
+    
     return df
 
 # 2.03.03 | Multi-Trip Global Ledger Consolidator
@@ -1586,15 +1590,21 @@ with st.sidebar:
             st.divider()
             render_dday_control_tower()
 
-        # 4.01.04 | Master Cloud Refresh (정합성 자동 재계산 일괄 실행)
+        # 4.01.04 | Master Cloud Refresh (정합성 자동 재계산 일괄 실행 및 IsExpense 강제 동기화)
         st.divider()
         st.markdown("<div style='margin-top:15px;'></div>", unsafe_allow_html=True)
         if st.button("🔄 Cloud Refresh (데이터 동기화)", use_container_width=True, type="primary"): 
             st.cache_data.clear()
-            st.query_params["trip"] = st.session_state.current_trip
-            if save_data(ledger_df):
-                st.toast("✅ 클라우드 동기화 및 가계부 정합성 재계산 완료!", icon="🎉")
-                time.sleep(0.5)
+            # 1. 최신 원장 재계산
+            re_calc_df = recalculate_entire_ledger(ledger_df)
+            st.session_state.active_ledger_df = re_calc_df
+            # 2. 구글 시트에 100% 덮어쓰기 커밋
+            try:
+                conn.update(worksheet=ACTIVE_SHEET, data=re_calc_df.reindex(columns=FINAL_COLUMNS))
+                st.toast("✅ 클라우드 동기화 및 지출 정합성 복구 완료!", icon="🎉")
+            except Exception as e_cr:
+                st.error(f"동기화 에러: {e_cr}")
+            time.sleep(0.5)
             st.rerun()
 
 # ------------------------------------------------------------------------------
