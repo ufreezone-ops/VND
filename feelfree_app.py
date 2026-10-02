@@ -3165,29 +3165,37 @@ else:
                                 target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
                                 target_df.at[real_idx, 'Note'] = "100% Gift Purchase"
                                 
-                            # [일부만 선물인 경우: 2개 행 분할 Split]
+                            # [일부만 선물인 경우: 2개 행 분할 Split - 상호명 및 카테고리 완벽 보존]
                             elif gift_amt_split > 0 and len(normal_items_split) > 0:
                                 rem_amt = max(0.0, total_receipt_amt - gift_amt_split)
-                                norm_desc = "\n".join(normal_items_split)
-                                gift_desc = "\n".join(gift_items_split)
                                 
-                                target_df.at[real_idx, 'Category'] = edit_cat
+                                # 상호명 헤더(store_header) 보존 결합
+                                prefix = f"{store_header}\n" if store_header else ""
+                                norm_desc = prefix + "\n".join(normal_items_split)
+                                gift_desc = prefix + "\n".join(gift_items_split)
+                                
+                                # 1. 기존 행 -> 일반 카테고리(마트 등) 유지 및 남은 금액 할당
+                                base_cat = edit_cat if edit_cat != "선물" else row_data.get('Category', '마트')
+                                if base_cat == "선물": base_cat = "마트"  # 둘 다 선물이 되는 현상 방지
+                                
+                                target_df.at[real_idx, 'Category'] = base_cat
                                 target_df.at[real_idx, 'Amount'] = rem_amt
                                 target_df.at[real_idx, 'PaymentMethod'] = edit_method
-                                target_df.at[real_idx, 'Description'] = norm_desc
+                                target_df.at[real_idx, 'Description'] = norm_desc.strip()
                                 target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
                                 
+                                # 2. 신설 행 -> 오직 선물 품목들만 모아서 '선물' 카테고리로 생성
                                 new_gift_row = pd.DataFrame([{
                                     'Date': row_data['Date'],
                                     'Country': row_data['Country'],
                                     'Category': '선물',
-                                    'Description': f"[수동분리] {gift_desc}",
+                                    'Description': gift_desc.strip(),
                                     'Currency': row_data['Currency'],
                                     'Amount': gift_amt_split,
                                     'PaymentMethod': edit_method,
                                     'IsExpense': 1,
                                     'AppliedRate': row_data['AppliedRate'],
-                                    'Note': f"Split from row {real_idx}",
+                                    'Note': 'Gift Split',
                                     'Receipt_URL': updated_rcpt_url
                                 }])
                                 target_df = pd.concat([target_df.iloc[:real_idx + 1], new_gift_row, target_df.iloc[real_idx + 1:]], ignore_index=True)
