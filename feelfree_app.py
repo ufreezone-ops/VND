@@ -409,13 +409,13 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (공식 v1beta 직결 단일화 엔진)
+# 2.02.03 | Gemini Multimodal Direct Runner (404 원천 차단 & 실시간 가용 모델 자동 직결 엔진)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # 1. 고화질 사진 용량 최적화 (1400px 초경량화로 업로드 지연 차단)
+    # 1. 대용량 사진 압축 (3.5MB -> 150KB 이하 초고속 경량화)
     def compress_img_safely(b_data):
         try:
             if len(b_data) > 500 * 1024:
@@ -434,65 +434,76 @@ def call_gemini_multimodal(contents, prompt_text=""):
             pass
         return b_data
 
-    # 2. 전송 페이로드 빌드
-    sdk_payload = []
+    # 2. 전송 페이로드 구성
     rest_parts = []
-
     for item in contents:
         if isinstance(item, str):
-            sdk_payload.append(item)
             rest_parts.append({"text": item})
         elif isinstance(item, dict) and "data" in item:
             mime = item.get("mime_type", "image/jpeg")
             raw_b = item["data"]
-            # PDF가 아닌 사진만 안전 리사이징
             if not mime.endswith("pdf") and not raw_b.startswith(b"%PDF"):
                 raw_b = compress_img_safely(raw_b)
                 mime = "image/jpeg"
-
-            sdk_payload.append({"mime_type": mime, "data": raw_b})
             b64_str = base64.b64encode(raw_b).decode("utf-8")
             rest_parts.append({"inline_data": {"mime_type": mime, "data": b64_str}})
 
     if prompt_text:
-        sdk_payload.append(prompt_text)
         rest_parts.append({"text": prompt_text})
+
+    payload = {"contents": [{"parts": rest_parts}]}
+
+    # 3. 내 API 키에서 실제 동작 가능한 활성 모델을 구글 서버에서 실시간 조회 (404 완벽 방어)
+    active_endpoints = []
+    for ver in ['v1beta', 'v1']:
+        try:
+            list_url = f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}"
+            resp_l = requests.get(list_url, timeout=3)
+            if resp_l.status_code == 200:
+                for m in resp_l.json().get('models', []):
+                    if 'generateContent' in m.get('supportedGenerationMethods', []):
+                        m_clean = m['name'].replace('models/', '')
+                        # 404를 유발하는 pro 계열을 피하고 flash 계열 우선 확보
+                        if 'flash' in m_clean:
+                            active_endpoints.append((ver, m_clean))
+        except Exception:
+            pass
+
+    # 플래시 우선 정렬 (2.0-flash-exp, 2.5-flash, 1.5-flash 순)
+    def sort_prio(item):
+        v, name = item
+        if '2.0-flash-exp' in name: return 1
+        if '2.5-flash' in name: return 2
+        if '1.5-flash' in name: return 3
+        return 4
+
+    active_endpoints.sort(key=sort_prio)
+
+    # 목록 조회가 실패했을 때의 대비용 (404 유발하는 pro는 절대 넣지 않음)
+    if not active_endpoints:
+        active_endpoints = [
+            ('v1beta', 'gemini-1.5-flash'),
+            ('v1beta', 'gemini-2.0-flash-exp'),
+            ('v1beta', 'gemini-2.5-flash')
+        ]
 
     last_err = ""
 
-    # 3. 1차 시도: Google 공식 Python SDK
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        for m_name in ['gemini-1.5-flash', 'gemini-1.5-pro']:
-            try:
-                model = genai.GenerativeModel(m_name)
-                res = model.generate_content(sdk_payload)
-                if res and res.text:
-                    return res.text.strip(), ""
-            except Exception as e_sdk:
-                last_err = f"SDK({m_name}): {e_sdk}"
-                continue
-    except Exception as e_init:
-        last_err = f"SDK Init: {e_init}"
-
-    # 4. 2차 시도: 공식 v1beta REST API (v1의 404 원천 배제)
-    payload = {"contents": [{"parts": rest_parts}]}
-    for m_name in ['gemini-1.5-flash', 'gemini-1.5-pro']:
+    # 4. 실시간 활성 엔드포인트로만 순차 호출
+    for api_ver, m_name in active_endpoints:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_name}:generateContent?key={api_key}"
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
             if resp.status_code == 200:
-                data = resp.json()
-                cand = data.get("candidates", [])
+                cand = resp.json().get("candidates", [])
                 if cand:
                     parts = cand[0].get("content", {}).get("parts", [])
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip(), ""
             else:
-                last_err = f"REST({m_name}) {resp.status_code}: {resp.text[:120]}"
-        except Exception as e_rest:
-            last_err = f"REST 통신에러: {e_rest}"
+                last_err = f"[{m_name}] {resp.status_code}: {resp.text[:100]}"
+        except Exception as e:
+            last_err = f"[{m_name}] 에러: {e}"
             continue
 
     return "", last_err if last_err else "AI 서버 응답 없음"
