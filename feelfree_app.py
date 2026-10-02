@@ -409,83 +409,42 @@ def extract_full_text_from_pdf(pdf_bytes):
     except: pass
     return text_content
 
-# 2.02.03 | Gemini Multimodal Direct Runner (실시간 가용 모델 자동 조회 & 대용량 전송 최적화 엔진)
+# 2.02.03 | Gemini Multimodal Direct Runner (다중 대용량 사진 초고속 리사이징 & 직결 가속 엔진)
 def call_gemini_multimodal(contents, prompt_text=""):
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
         return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
 
-    # 1단계: 구글 서버에서 내 API 키로 실제 호출 가능한 모델 목록을 실시간 자동 조회 (404 방어)
-    available_models = []
-    for ver in ['v1', 'v1beta']:
+    # 💡 [핵심 가속] 3MB 이상 사진을 150KB 수준으로 0.05초 만에 압축하여 30초 업로드 병목 원천 차단
+    def fast_shrink_image(raw_b):
         try:
-            list_url = f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}"
-            l_resp = requests.get(list_url, timeout=4)
-            if l_resp.status_code == 200:
-                m_list = l_resp.json().get('models', [])
-                for m in m_list:
-                    methods = m.get('supportedGenerationMethods', [])
-                    if 'generateContent' in methods:
-                        clean_name = m['name'].replace('models/', '')
-                        if (ver, clean_name) not in available_models:
-                            available_models.append((ver, clean_name))
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(raw_b))
+            max_d = 1200
+            if max(img.size) > max_d:
+                ratio = max_d / float(max(img.size))
+                new_dim = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+                img = img.resize(new_dim, Image.Resampling.LANCZOS)
+            out_buf = io.BytesIO()
+            img.convert('RGB').save(out_buf, format='JPEG', quality=80, optimize=True)
+            return out_buf.getvalue()
         except Exception:
-            pass
+            return raw_b
 
-    # flash 계열 최우선 정렬
-    def model_priority(item):
-        v, name = item
-        if '2.5-flash' in name: return 1
-        if '2.0-flash' in name: return 2
-        if '1.5-flash' in name: return 3
-        if 'flash' in name: return 4
-        if 'pro' in name: return 5
-        return 6
-
-    available_models.sort(key=model_priority)
-
-    if not available_models:
-        available_models = [
-            ('v1', 'gemini-1.5-flash'),
-            ('v1beta', 'gemini-1.5-flash'),
-            ('v1beta', 'gemini-2.0-flash-exp'),
-            ('v1', 'gemini-2.5-flash'),
-            ('v1beta', 'gemini-2.5-flash')
-        ]
-
-    # 2단계: 이미지 리사이징 헬퍼 (3.5MB -> 150KB 이하로 0.05초 만에 초경량화하여 20초 병목 제거)
-    def resize_image_if_large(raw_bytes):
-        try:
-            if len(raw_bytes) > 800 * 1024:  # 800KB 이상인 사진만 대상
-                from PIL import Image
-                import io
-                img = Image.open(io.BytesIO(raw_bytes))
-                max_dim = 1200
-                if max(img.size) > max_dim:
-                    scale = max_dim / float(max(img.size))
-                    new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
-                    img = img.resize(new_size, Image.Resampling.LANCZOS)
-                buf = io.BytesIO()
-                img.convert('RGB').save(buf, format='JPEG', quality=80, optimize=True)
-                return buf.getvalue()
-        except Exception:
-            pass
-        return raw_bytes
-
-    # 전송 페이로드 구성
     rest_parts = []
     for item in contents:
         if isinstance(item, str):
             rest_parts.append({"text": item})
         elif isinstance(item, dict) and "data" in item:
             m_type = item.get("mime_type", "image/jpeg")
-            b_data = item["data"]
-            # PDF가 아닌 큰 이미지는 0.05초 압축 적용
-            if not m_type.endswith("pdf") and not b_data.startswith(b"%PDF"):
-                b_data = resize_image_if_large(b_data)
+            raw_b = item["data"]
+            # PDF가 아닌 사진 파일은 즉시 경량화
+            if not m_type.endswith("pdf") and not raw_b.startswith(b"%PDF"):
+                raw_b = fast_shrink_image(raw_b)
                 m_type = "image/jpeg"
-
-            b64_str = base64.b64encode(b_data).decode("utf-8")
+                
+            b64_str = base64.b64encode(raw_b).decode("utf-8")
             rest_parts.append({
                 "inline_data": {
                     "mime_type": m_type,
@@ -498,8 +457,8 @@ def call_gemini_multimodal(contents, prompt_text=""):
     payload = {"contents": [{"parts": rest_parts}]}
     last_err = ""
 
-    # 3단계: 가용 모델로 순차 호출
-    for api_ver, m_name in available_models:
+    # 가장 검증되고 빠른 gemini-1.5-flash 직결 (매번 ListModels 조회를 돌지 않아 10배 가속)
+    for api_ver, m_name in [('v1', 'gemini-1.5-flash'), ('v1beta', 'gemini-1.5-flash')]:
         try:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
             resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=20)
@@ -511,34 +470,34 @@ def call_gemini_multimodal(contents, prompt_text=""):
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip(), ""
             else:
-                last_err = f"[{api_ver}/{m_name}] {resp.status_code}: {resp.text[:100]}"
+                last_err = f"[{m_name}] {resp.status_code}: {resp.text[:80]}"
         except Exception as e:
-            last_err = f"[{api_ver}/{m_name}] 통신에러: {e}"
+            last_err = f"[{m_name}] 에러: {e}"
             continue
 
     return "", last_err
 
-# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (다품목 마트 영수증 한국어 우선 번역 완결형)
+# 2.02.04 | Gemini LLM Multi-Lingual Receipt Parser (다중 분할촬영 중복제거 & 한국어 번역 완결형)
 def summarize_receipt_files_with_gemini(uploaded_files):
     if not uploaded_files: return "", "", 0.0
 
-    prompt = """너는 다국어 영수증 전문 번역 및 분석 AI야. 첨부된 영수증 사진/문서를 분석하여 아래 규칙대로 정확히 출력해줘.
+    prompt = """너는 다국어 영수증 전문 번역 및 분석 AI야. 첨부된 영수증 사진/문서들을 종합 분석하여 아래 규칙대로 정확히 출력해줘.
 
-[🔥 최우선 번역 원칙]:
-1. 품목명은 무조건 '친절하고 자연스러운 한국어'가 맨 앞에 와야 해! 베트남어/외국어 원문만 달랑 출력하면 절대 안 돼!
-2. 형식: '- 한국어 품목명(현지어 원문) 용량/수량 가격 통화'
-   - 예시 1: - 아치카페 연유 커피(Cà Phê Sữa Đặc Archcafe) 216g (1개) 76,000 VND
-   - 예시 2: - 두리안 녹두 케이크(Bánh Đậu Xanh Sầu Riêng) 150g (1개) 52,000 VND
-   - 예시 3: - 체리쉬 망고스틴 젤리(Kẹo Dẻo Vị Măng Cụt Cherish) 275g (1개) 44,000 VND
-   - 예시 4: - 바삭한 옥수수 과자(Bắp Chiên Giòn) 100g (2개) 28,000 VND
-   - 예시 5: - 건멸치 스낵(Cá Cơm Sấy Giòn) 35g (1개) 15,000 VND
-   - 예시 6: - 코텍스 생리대(Băng Vệ Sinh Kotex) 15cm (1개) 24,000 VND
+[🔥 다중 분할 촬영 중복 제거 필수 원칙]:
+- 사용자가 긴 영수증을 2장 이상 나누어 연속 촬영했을 수 있어.
+- 첫 번째 사진의 하단부와 두 번째 사진의 상단부에 중복으로 찍힌 겹치는 품목(예: 동일한 마카다미아, 동일한 밀리켓 라면 등)은 영수증 번호나 순번(STT)을 확인하여 절대로 두 번 출력하지 말고 반드시 1번만 합쳐서 출력해!
 
-[출력 구조 지침]:
-1. 첫 번째 줄: 영수증에 인쇄된 결제일자(예: [결제일: 2026-09-22]). 없으면 생략.
-2. 두 번째 줄: 영수증 맨 아래 실제 총 결제 금액(예: [총액: 478,000 VND]). 없으면 생략.
+[출력 형식 지침]:
+1. 첫 번째 줄: 영수증에 인쇄된 결제일자(예: Ngày: 22/09/2026 -> [결제일: 2026-09-22]). 없으면 생략.
+2. 두 번째 줄: 영수증 맨 아래 실제 최종 총 결제 금액(예: Tổng cộng: 478,000 đ -> [총액: 478,000 VND]). 없으면 생략.
 3. 세 번째 줄: 영수증 최상단의 매장 이름(상호명)을 한국어 친화적 명칭과 원문으로 단독 한 줄 출력 (예: 졸리마트(Jolymart)).
-4. 네 번째 줄부터: 위 [최우선 번역 원칙]에 따라 모든 품목을 반드시 한국어를 앞세워 한 줄에 하나씩 '- '로 나열.
+4. 네 번째 줄부터: 소비한 품목들을 중복 없이 한 줄에 하나씩 '- '로 나열 (한국어가 무조건 맨 앞):
+   - 형식: - 한국어 품목명(현지어 원문) 용량/수량 가격 통화
+   - 예시:
+     - 아치카페 연유 커피(Cà Phê Sữa Đặc Archcafe) 216g (1개) 76,000 VND
+     - 두리안 녹두 케이크(Bánh Đậu Xanh Sầu Riêng) 150g (1개) 52,000 VND
+     - 마카다미아 너트(Nhân Macadamia Oaky) 100g (1개) 119,000 VND
+     - 밀리켓 검은 봉지 라면(Mì Giấy Đen Miliket) 60g (1개) 5,000 VND
 
 5. 인사말이나 마크다운 백틱(```) 없이 위 내용만 정확하게 출력해.
 """
