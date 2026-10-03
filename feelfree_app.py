@@ -3750,7 +3750,7 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 비례 스케일링 보정 적용)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 수량 숫자 보존 패치)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
@@ -3786,6 +3786,7 @@ else:
                             continue
                             
                         price_val = 0.0
+                        # 💡 [가격 분리] 맨 뒤에 붙은 k 단위 가격 포착 (예: 300k, 210K)
                         m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
                         if m_k:
                             price_val = float(m_k.group(1)) * 1000
@@ -3798,8 +3799,11 @@ else:
                                         price_val = potential_price
                                 except: pass
                                 
-                        clean_name = re.sub(r'[\d,\.]+\s*[kK]?\s*(?:vnd|동|원|\$)?', '', il).strip(' -*•()[]/_')
-                        clean_name = re.sub(r'(?:개씩개|->|=>|[:;])+', '', clean_name).strip()
+                        # 💡 [핵심 보존] '10개', '3개', '5장' 같은 수량 숫자는 절대 지우지 않고 오직 가격 부분과 불필요한 기호만 제거
+                        # 1. 맨 뒤에 붙은 가격 텍스트(예: ' 300k', ' 52,000') 제거
+                        clean_name = re.sub(r'[\d,\.]+\s*[kK]\b', '', il)
+                        # 2. 비정상 특수기호만 정리하되, '10개', '3개' 등의 수량은 보호
+                        clean_name = re.sub(r'(?:->|=>|[:;])+', '', clean_name).strip(' -*•()[]/_')
                         clean_name = re.sub(r'\s+', ' ', clean_name)
                         
                         if clean_name and len(clean_name) >= 2 and not clean_name.startswith('로 잘못'):
@@ -3820,7 +3824,7 @@ else:
                     else:
                         sum_detected_prices = sum(it['price'] for it in valid_items_in_receipt if it['price'] > 0)
                         
-                        # 💡 [핵심 알고리즘] 흥정이나 할인으로 인해 개별 품목 합계와 총액이 다를 때 적용하는 비례 스케일링 계수
+                        # 흥정/할인 오차가 있을 때 원래 적어둔 가격 비율을 유지하되 정수형태로 깔끔하게 반올림
                         scale_factor = 1.0
                         if sum_detected_prices > 0 and r_amt > 0 and abs(sum_detected_prices - r_amt) > 1.0:
                             scale_factor = r_amt / sum_detected_prices
@@ -3830,7 +3834,7 @@ else:
                             if final_item_price <= 0:
                                 final_item_price = r_amt / max(1, len(valid_items_in_receipt))
                             else:
-                                final_item_price = final_item_price * scale_factor
+                                final_item_price = round(final_item_price * scale_factor, -2) # 백원 단위 반올림으로 깔끔하게 정돈
                                 
                             parsed_items.append({
                                 'Store': store_clean[:20],
