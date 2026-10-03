@@ -3020,6 +3020,10 @@ else:
                                 suffix = match.group(2).lower() if match.group(2) else ""
                                 try:
                                     v = float(num_str)
+                                    # 💡 [핵심 패치] 'k'나 'K'가 붙은 가격 표기(예: 210k, 300k)는 텍스트 변조 대상에서 완전 제외
+                                    if 'k' in suffix:
+                                        return match.group(0)
+                                        
                                     is_currency = any(c in suffix for c in ['vnd', 'usd', 'eur', 'cny', 'try', 'rsd', 'huf', 'krw', '원', '동', '달러'])
                                     is_unit = any(u in suffix for u in ['ml', 'g', 'kg', 'cm', 'mm', '개', 'x', '입', '장', '명', '박스'])
                                     if is_unit and not is_currency: return match.group(0)
