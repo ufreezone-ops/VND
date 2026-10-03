@@ -3277,7 +3277,7 @@ else:
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 정렬 완벽 고정 & 테이블 요약명 정상화)
+    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 코드 노출 원천 차단 및 통화별 일수 연산 정밀화)
     # --------------------------------------------------------------------------
     with tab_stats:
         if not ledger_df.empty:
@@ -3300,7 +3300,7 @@ else:
                     return krw_v / war_t if war_t > 0 else 0
                 exp_df['Local_val'] = exp_df.apply(get_local_val, axis=1)
 
-                # 💡 [필수지출 판정 정밀 함수: 투어/기차 현금·현지결제 포함, 렌트카/사전결제 제외]
+                # 💡 [필수지출 판정 정밀 함수: 백그라운드 파이썬 로직 (UI 노출 원천 차단)]
                 def evaluate_survival_status(r):
                     cat = str(r['Category']).strip()
                     desc = str(r['Description']).strip().lower()
@@ -3444,7 +3444,6 @@ else:
                     if 'Date_Clean' not in ovr_df.columns:
                         ovr_df['Date_Clean'] = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
                         
-                    # 💡 [핵심] 날짜 기준 완벽한 오름차순(시계열) 정렬 고정
                     ovr_df = ovr_df.sort_values(by='Date_Clean', kind='mergesort')
                     unique_clean_dates = sorted([d for d in ovr_df['Date_Clean'].dropna().unique()])
                     num_total_days = len(unique_clean_dates)
@@ -3481,13 +3480,23 @@ else:
                     fmt_tot = f"{avg_daily_total:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_total:,.2f}"
                     fmt_surv = f"{avg_daily_surv:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_surv:,.2f}"
 
-                    # 💡 [현금 잔고 2일치 집중 모니터링 관제탑 카드]
-                    rem_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블카드({TRAVEL_CURRENCY})", [])])
+                    # 💡 [핵심 교정] 원화/현지화 선택에 따른 환율 기반 일관된 '현금 2일치 수명 관제' 연산
                     rem_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({TRAVEL_CURRENCY})", [])])
                     war_curr = get_WAR(TRAVEL_CURRENCY)
-                    total_rem_krw = (rem_card + rem_cash) * war_curr if war_curr > 0 else 0
                     
-                    days_survivable = (total_rem_krw / avg_daily_surv) if avg_daily_surv > 0 else 999.0
+                    # 현지화 모드일 때는 현금 잔고 그대로, 원화 모드일 때는 원화 환산액 기준 비교
+                    if "원화" in c_mode:
+                        rem_cash_val = rem_cash * war_curr if war_curr > 0 else 0
+                        avg_surv_val_for_calc = avg_daily_total if avg_daily_total > 0 else 1 # 방어
+                        # KRW 기준 필수지출 평균 산출
+                        surv_krw_sum = ovr_df[ovr_df['IsSurvival'] == 1]['KRW_val'].sum()
+                        avg_surv_val_for_calc = (surv_krw_sum / div_days) if div_days > 0 else 1
+                    else:
+                        rem_cash_val = rem_cash
+                        surv_loc_sum = ovr_df[ovr_df['IsSurvival'] == 1]['Local_val'].sum()
+                        avg_surv_val_for_calc = (surv_loc_sum / div_days) if div_days > 0 else 1
+
+                    days_survivable = (rem_cash_val / avg_surv_val_for_calc) if avg_surv_val_for_calc > 0 else 999.0
                     remaining_trip_days = max(0, (arr_dt - today_dt_c).days) if arr_dt and today_dt_c <= arr_dt else 0
                     
                     if remaining_trip_days > 0:
@@ -3515,7 +3524,7 @@ else:
                     """, unsafe_allow_html=True)
 
                     # ----------------------------------------------------------
-                    # [차트 1] 일일 총지출 누적 막대 그래프 (날짜 순서 고정)
+                    # [차트 1] 일일 총지출 누적 막대 그래프
                     # ----------------------------------------------------------
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:2px;'>📊 [차트 1] 일일 총지출 누적 추이 ({day_label_suffix})</h4>", unsafe_allow_html=True)
                     st.caption(f"💡 점선: 일일 총지출 평균 ({fmt_tot}{y_unit})")
@@ -3545,7 +3554,7 @@ else:
                     st.markdown("<div style='margin: 25px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
                     # ----------------------------------------------------------
-                    # [차트 2] 일일 필수지출 전용 누적 막대 그래프 (날짜 순서 고정)
+                    # [차트 2] 일일 필수지출 전용 누적 막대 그래프
                     # ----------------------------------------------------------
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:2px;'>🛡️ [차트 2] 일일 필수지출 누적 추이 (선물/쇼핑/렌트카 제외)</h4>", unsafe_allow_html=True)
                     st.caption(f"💡 점선: 일일 필수지출 평균 ({fmt_surv}{y_unit})")
@@ -3576,7 +3585,7 @@ else:
 
                 st.divider()
                 
-                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 (합계/평균 행 이름표 정상화) ---
+                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 ---
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
                 daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3599,7 +3608,6 @@ else:
                     daily_table['Sort_Key'] = daily_table['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
                     daily_table = daily_table.sort_values(by='Sort_Key', kind='mergesort').drop(columns=['Sort_Key'])
 
-                    # 💡 [합계 및 평균 행 요약 라벨 정상화]
                     sum_tot_krw = daily_table['KRW_val'].sum()
                     sum_tot_loc = daily_table['Local_val'].sum()
                     sum_surv_krw = daily_table['S_KRW'].sum()
