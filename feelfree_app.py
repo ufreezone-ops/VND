@@ -3746,7 +3746,7 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 정밀 파싱 및 현지 통화 기준)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 텍스트 정제 및 면적 일치 보장)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
@@ -3770,8 +3770,6 @@ else:
                     store_clean = re.sub(r'\[.*?\]\s*', '', store_name).split('|')[0].strip()
                     
                     item_lines = lines[1:] if len(lines) > 1 else lines
-                    
-                    # 쓰레기 메타 데이터 필터링 키워드 (주소, TID, 성분명, 날짜 등 차단)
                     trash_keywords = ['địa chỉ', 'hdon', 'ngay', 'gio', 'hdban', 'mastercard', 'vietcombank', 'tid', 'mid', 'cls', 'toan', 'so lo', 'tên', 'đại lý', 'tổng cộng', 'tổng', 'tiền', 'mã', 'hóa đơn', 'đt:', 'mst:', 'tp.', 'đường', 'phường', 'quận']
                     
                     valid_items_in_receipt = []
@@ -3783,59 +3781,54 @@ else:
                         if len(il) < 2 or '---' in il or '===' in il:
                             continue
                             
-                        # 💡 [K-단위 및 가격 정밀 추출 정규식] (예: 76k -> 76000, 52,000 -> 52000)
-                        # 품목명 뒤에 붙은 가격이나 '76k' 형태 포착
                         price_val = 0.0
-                        
-                        # 1. '76k' 또는 '80K' 형태 탐색
                         m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
                         if m_k:
                             price_val = float(m_k.group(1)) * 1000
                         else:
-                            # 2. 일반 숫자 가격 탐색 (단, 날짜나 바코드 일련번호 형태 제외)
                             nums = re.findall(r'(\d{1,3}(?:,\d{3})+|\d{3,})', il)
                             if nums:
                                 try:
                                     potential_price = float(nums[-1].replace(',', ''))
-                                    # 너무 터무니없는 바코드 번호(6자리 이상 중 우편번호/바코드)가 아니면 가격으로 인정
                                     if potential_price < 100000000:
                                         price_val = potential_price
                                 except: pass
                                 
-                        # 품목명 정제 (가격 숫자 및 단위 제거)
+                        # 💡 [핵심 정제] 글자 깨짐 방지 및 특수문자('->', '개씩개' 등 비정상 패턴) 자동 클렌징
                         clean_name = re.sub(r'[\d,\.]+\s*[kK]?\s*(?:vnd|동|원|\$)?', '', il).strip(' -*•()[]/_')
+                        clean_name = re.sub(r'(?:개씩개|->|=>|[:;])+', '', clean_name).strip()
+                        clean_name = re.sub(r'\s+', ' ', clean_name) # 다중 공백 압축
                         
-                        if clean_name and len(clean_name) >= 2:
+                        # 만약 정제 후 글자가 너무 짧거나 깨졌다면 스킵하거나 상호명으로 대체
+                        if clean_name and len(clean_name) >= 2 and not clean_name.startswith('로 잘못'):
                             valid_items_in_receipt.append({
                                 'raw_line': il,
                                 'name': clean_name,
                                 'price': price_val
                             })
                             
-                    # 만약 유효 품목을 제대로 건지지 못했거나 단품인 경우, 행 전체 금액을 활용
                     if not valid_items_in_receipt or len(valid_items_in_receipt) == 1 and valid_items_in_receipt[0]['price'] == 0:
+                        # 통째로 입력된 경우, 비정상 텍스트 제거 후 추가
+                        valid_store_name = re.sub(r'[\s\-:–—]+', ' ', store_clean).strip()
                         parsed_items.append({
-                            'Store': store_clean,
-                            'Item': store_clean,
+                            'Store': valid_store_name[:20],
+                            'Item': valid_store_name[:25],
                             'Local_val': r_amt,
                             'Curr': r_curr
                         })
                     else:
-                        # 추출된 유효 아이템들의 가격 합계 계산
                         sum_detected_prices = sum(it['price'] for it in valid_items_in_receipt if it['price'] > 0)
                         
                         for it in valid_items_in_receipt:
                             final_item_price = it['price']
-                            # 만약 개별 가격을 못 건졌는데 아이템은 여러개라면 총액을 균등 배분하거나 기본값 부여
                             if final_item_price <= 0:
                                 final_item_price = r_amt / max(1, len(valid_items_in_receipt))
                             elif sum_detected_prices > 0 and abs(sum_detected_prices - r_amt) > (r_amt * 0.3):
-                                # 영수증 총액과 파싱된 합계 오차가 크면 영수증 총액 기준으로 비율 스케일링
                                 scale = r_amt / sum_detected_prices if sum_detected_prices > 0 else 1.0
                                 final_item_price = it['price'] * scale
                                 
                             parsed_items.append({
-                                'Store': store_clean,
+                                'Store': store_clean[:20],
                                 'Item': it['name'][:25],
                                 'Local_val': final_item_price,
                                 'Curr': r_curr
@@ -3844,14 +3837,15 @@ else:
                 if parsed_items:
                     item_df = pd.DataFrame(parsed_items)
                     
-                    # 대표 통화 추출
+                    # 💡 [면적 정확성 보장] 0원이거나 음수인 비정상 데이터 필터링
+                    item_df = item_df[item_df['Local_val'] > 0].copy()
+                    
                     base_curr = item_df['Curr'].iloc[0] if not item_df.empty else TRAVEL_CURRENCY
                     tot_market_local = item_df['Local_val'].sum()
                     
                     fmt_local_sum = f"{tot_market_local:,.0f}" if base_curr in ["VND", "HUF", "KRW"] else f"{tot_market_local:,.2f}"
                     st.metric(f"🛒 장바구니 총 지출액 ({base_curr} 기준)", f"{fmt_local_sum} {base_curr}")
                     
-                    # 돋보기 트리맵 시각화 (현지 통화 기준)
                     st.markdown(f"<h4 style='text-align: center; margin-top: 20px;'>🔍 마트/시장 구매 품목별 비중 ({base_curr} 기준 Treemap)</h4>", unsafe_allow_html=True)
                     
                     fig_market = px.treemap(
@@ -3872,7 +3866,6 @@ else:
                     fig_market.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=540, coloraxis_showscale=False)
                     st.plotly_chart(fig_market, use_container_width=True, config={'displaylogo': False})
                     
-                    # 품목별 랭킹 테이블
                     st.markdown("#### 📋 품목별 상세 구매 내역 랭킹")
                     ranking_df = item_df.groupby('Item')['Local_val'].sum().reset_index().sort_values(by='Local_val', ascending=False)
                     ranking_df['비중(%)'] = (ranking_df['Local_val'] / ranking_df['Local_val'].sum()) * 100
