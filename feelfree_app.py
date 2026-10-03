@@ -3043,7 +3043,12 @@ else:
                             st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
                             items = parts[1].strip().split("\n") if "\n" in parts[1] else parts[1].strip().split(",")
                             for item in items: 
-                                if item.strip(): st.markdown(f"- {smart_krw_translator(item.strip(), rate_for_calc, curr_for_calc)}", unsafe_allow_html=True)
+                                item_clean = item.strip()
+                                if item_clean:
+                                    # 💡 [핵심 패치] 문장 맨 앞에 붙어 있는 하이픈(-)이나 별표(*) 등 중첩 마크다운 기호를 깨끗이 제거
+                                    item_clean = re.sub(r'^[\-\*•\s]+', '', item_clean)
+                                    translated_item = smart_krw_translator(item_clean, rate_for_calc, curr_for_calc)
+                                    st.markdown(f"- {translated_item}", unsafe_allow_html=True)
                         else:
                             trans_item = smart_krw_translator(desc_full, rate_for_calc, curr_for_calc)
                             st.markdown(f"**📝 내역:** {trans_item}", unsafe_allow_html=True)
