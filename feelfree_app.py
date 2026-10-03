@@ -3882,11 +3882,11 @@ else:
     
     
     # --------------------------------------------------------------------------
-    # 6.04.00 | Final Settlement Dashboard (전체요약 탭)
+    # 6.04.00 | Final Settlement Dashboard (전체요약 탭 - 트레이맵 계층 충돌 방지 패치 적용)
     # --------------------------------------------------------------------------
     with tab_final:
         if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
-            # 6.04.01 | Executive Macro KPI Summary Cards (출귀국일 기반 1일 평균 완결)
+            # 6.03.01 | Executive Macro KPI Summary Cards
             total_trip_krw = exp_df['KRW_val'].sum()
             total_trip_loc = exp_df['Local_val'].sum()
             
@@ -3938,19 +3938,30 @@ else:
             with k3: st.markdown(kpi_box("현지 지출", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
             with k4: st.markdown(kpi_box("여행중 1일 평균지출", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
             
-            # --- 6.04.02 | Comprehensive Expense Treemap Matrix ---
+            # --- 6.03.02 | Comprehensive Expense Treemap Matrix (계층 충돌 원천 방지 정제 로직 적용) ---
             st.markdown("<h4 style='margin-top: 15px; margin-bottom: 5px;'>🌳 지출분석 (Treemap)</h4>", unsafe_allow_html=True)
             chart_df = exp_df[exp_df['KRW_val'] > 0].copy()
             if not chart_df.empty:
-                chart_df['Short_Desc'] = chart_df['Description'].apply(lambda x: str(x)[:15] + ".." if len(str(x)) > 15 else x)
-                chart_df['Macro_Category'] = chart_df['Category'].map(MACRO_MAP).fillna("기타")
+                # 💡 [핵심 방어] 상위 카테고리명과 하위 설명이 중복되거나 빌 때 발생하는 ValueError 원천 차단
+                chart_df['Macro_Category'] = chart_df['Category'].map(MACRO_MAP).fillna("기타").astype(str)
+                chart_df['Category'] = chart_df['Category'].astype(str)
+                
+                def sanitize_desc(row):
+                    d = str(row['Description']).strip()
+                    if not d or d.lower() == 'nan': d = row['Category']
+                    # 상위 카테고리 이름과 정확히 겹치면 뒤에 공백이나 식별자 추가
+                    if d == row['Macro_Category'] or d == row['Category']:
+                        d = f"{d} (상세)"
+                    return d[:15] + ".." if len(d) > 15 else d
+
+                chart_df['Short_Desc'] = chart_df.apply(sanitize_desc, axis=1)
                 
                 fig_tree = px.treemap(chart_df, path=['Macro_Category', 'Category', 'Short_Desc'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
                 fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16))
                 fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=580, coloraxis_showscale=False)
                 st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
             
-            # --- 6.04.03 | Donut Category Distribution Chart ---
+            # --- 6.03.03 | Donut Category Distribution Chart ---
             st.markdown("<h4 style='margin-top: 12px; margin-bottom: 0px;'>🍕 지출비중</h4>", unsafe_allow_html=True)
             cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
             
