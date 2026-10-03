@@ -3755,15 +3755,19 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 수량 숫자 보존 패치)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - '선물' 카테고리 통합 수집)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
-        st.caption(f"💡 마트와 시장에서 구매한 개별 품목들의 세부 지출 내역을 현지 통화({TRAVEL_CURRENCY}) 기준으로 정밀하게 들여다봅니다.")
+        st.caption(f"💡 마트, 시장, 그리고 선물(기념품/특산품)로 구매한 개별 품목들의 세부 지출 내역을 현지 통화({TRAVEL_CURRENCY}) 기준으로 정밀하게 들여다봅니다.")
         
         if not ledger_df.empty:
-            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '졸리']
-            market_mask = ledger_df['Category'].str.contains('마트|시장', na=False) | ledger_df['Description'].str.contains('|'.join(market_keywords), case=False, na=False)
+            # 💡 [핵심 패치] '마트', '시장' 키워드뿐만 아니라 '선물' 카테고리 내역까지 장바구니 수집 범위에 전격 포함
+            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '졸리', '성물', '기념품']
+            market_mask = (
+                ledger_df['Category'].str.contains('마트|시장|선물', na=False) | 
+                ledger_df['Description'].str.contains('|'.join(market_keywords), case=False, na=False)
+            )
             market_df = ledger_df[market_mask & (ledger_df['IsExpense'] == 1)].copy()
             
             if not market_df.empty:
@@ -3775,7 +3779,7 @@ else:
                     r_amt = float(r['Amount'])
                     
                     lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
-                    store_name = lines[0] if lines else "기타 마트"
+                    store_name = lines[0] if lines else "기타 마트/선물"
                     store_clean = re.sub(r'\[.*?\]\s*', '', store_name).split('|')[0].strip()
                     
                     item_lines = lines[1:] if len(lines) > 1 else lines
@@ -3791,7 +3795,6 @@ else:
                             continue
                             
                         price_val = 0.0
-                        # 💡 [가격 분리] 맨 뒤에 붙은 k 단위 가격 포착 (예: 300k, 210K)
                         m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
                         if m_k:
                             price_val = float(m_k.group(1)) * 1000
@@ -3804,10 +3807,7 @@ else:
                                         price_val = potential_price
                                 except: pass
                                 
-                        # 💡 [핵심 보존] '10개', '3개', '5장' 같은 수량 숫자는 절대 지우지 않고 오직 가격 부분과 불필요한 기호만 제거
-                        # 1. 맨 뒤에 붙은 가격 텍스트(예: ' 300k', ' 52,000') 제거
                         clean_name = re.sub(r'[\d,\.]+\s*[kK]\b', '', il)
-                        # 2. 비정상 특수기호만 정리하되, '10개', '3개' 등의 수량은 보호
                         clean_name = re.sub(r'(?:->|=>|[:;])+', '', clean_name).strip(' -*•()[]/_')
                         clean_name = re.sub(r'\s+', ' ', clean_name)
                         
@@ -3829,7 +3829,6 @@ else:
                     else:
                         sum_detected_prices = sum(it['price'] for it in valid_items_in_receipt if it['price'] > 0)
                         
-                        # 흥정/할인 오차가 있을 때 원래 적어둔 가격 비율을 유지하되 정수형태로 깔끔하게 반올림
                         scale_factor = 1.0
                         if sum_detected_prices > 0 and r_amt > 0 and abs(sum_detected_prices - r_amt) > 1.0:
                             scale_factor = r_amt / sum_detected_prices
@@ -3839,7 +3838,7 @@ else:
                             if final_item_price <= 0:
                                 final_item_price = r_amt / max(1, len(valid_items_in_receipt))
                             else:
-                                final_item_price = round(final_item_price * scale_factor, -2) # 백원 단위 반올림으로 깔끔하게 정돈
+                                final_item_price = round(final_item_price * scale_factor, -2)
                                 
                             parsed_items.append({
                                 'Store': store_clean[:20],
@@ -3858,7 +3857,7 @@ else:
                     fmt_local_sum = f"{tot_market_local:,.0f}" if base_curr in ["VND", "HUF", "KRW"] else f"{tot_market_local:,.2f}"
                     st.metric(f"🛒 장바구니 총 지출액 ({base_curr} 기준)", f"{fmt_local_sum} {base_curr}")
                     
-                    st.markdown(f"<h4 style='text-align: center; margin-top: 20px;'>🔍 마트/시장 구매 품목별 비중 ({base_curr} 기준 Treemap)</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='text-align: center; margin-top: 20px;'>🔍 마트/시장/선물 구매 품목별 비중 ({base_curr} 기준 Treemap)</h4>", unsafe_allow_html=True)
                     
                     fig_market = px.treemap(
                         item_df, 
@@ -3888,9 +3887,9 @@ else:
                     
                     st.dataframe(ranking_df, use_container_width=True, hide_index=True)
                 else:
-                    st.info("정제할 수 있는 마트 품목 내역이 없습니다.")
+                    st.info("정제할 수 있는 마트/선물 품목 내역이 없습니다.")
             else:
-                st.info("기록된 마트 또는 시장 지출 내역이 없습니다.")
+                st.info("기록된 마트, 시장 또는 선물 지출 내역이 없습니다.")
     
     
     # --------------------------------------------------------------------------
