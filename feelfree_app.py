@@ -2275,13 +2275,13 @@ elif st.session_state.get('show_new_trip', False):
                     st.rerun()
 
 # ==============================================================================
-# [Module 6.00.00] Individual Trip Manager Views (개별 여행 전용 모듈)
+# [Module 6.00.00] Individual Trip Manager Views (개별 여행 전용 모듈 - 4개 탭 확장)
 # ==============================================================================
 else:
     st.title(f"{st.session_state.current_trip}")
     
-    
-    tab_main, tab_stats, tab_final = st.tabs(["가계부", "일일Data", "전체요약"])
+    # 💡 [핵심] 4개의 탭 구조로 확장 (3번째에 '🛒 마트돋보기' 신설)
+    tab_main, tab_stats, tab_market, tab_final = st.tabs(["가계부", "일일Data", "🛒 마트돋보기", "전체요약"])
 
     # --------------------------------------------------------------------------
     # 6.01.00 | Unified Ledger Console (가계부 통합 콘솔)
@@ -3238,7 +3238,7 @@ else:
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - GUI 대폭 개선 및 화사한 컬러 팔레트)
+    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭)
     # --------------------------------------------------------------------------
     with tab_stats:
         if not ledger_df.empty:
@@ -3746,11 +3746,101 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | Final Settlement Dashboard (전체요약 탭)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (신설 제 4탭: 마트 돋보기)
+    # --------------------------------------------------------------------------
+    with tab_market:
+        st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
+        st.caption("💡 마트와 시장에서 구매한 개별 품목들의 세부 지출 내역을 면적비(Treemap)로 정밀하게 들여다봅니다.")
+        
+        if not ledger_df.empty:
+            # 마트/시장 관련 지출 건 필터링 (카테고리가 '마트'이거나 설명에 마트/시장 키워드 포함)
+            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', ' coop', '야시장', '면세점']
+            market_mask = ledger_df['Category'].str.contains('마트|시장', na=False) | ledger_df['Description'].str.contains('|'.join(market_keywords), case=False, na=False)
+            market_df = ledger_df[market_mask & (ledger_df['IsExpense'] == 1)].copy()
+            
+            if not market_df.empty:
+                # KRW 환산 값 계산
+                market_df['KRW_val'] = market_df.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1)
+                
+                # 메모/설명(Description)에 줄바꿈이나 쉼표로 적힌 개별 품목 라인들을 파싱하여 플랫 데이터프레임으로 변환
+                parsed_items = []
+                for _, r in market_df.iterrows():
+                    desc_raw = str(r['Description'])
+                    # 상호명 라인 분리 시도
+                    lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
+                    store_name = lines[0] if lines else "기타 마트"
+                    
+                    item_lines = lines[1:] if len(lines) > 1 else lines
+                    for il in item_lines:
+                        # 숫자 가격 패턴 추출 시도 (예: 76,000 VND 등)
+                        nums = re.findall(r'(\d{1,3}(?:,\d{3})+|\d+)\s*(?:원|vnd|동|\$)?', il.lower())
+                        item_amt = r['KRW_val'] # 기본값은 행 전체 금액
+                        if nums and len(item_lines) > 1:
+                            try:
+                                # 라인 내에 독립된 금액이 명시된 경우 파싱
+                                clean_num = float(nums[-1].replace(',', ''))
+                                if clean_num < r['KRW_val'] and clean_num > 10:
+                                    item_amt = clean_num if r['Currency'] == 'KRW' else clean_num * r['AppliedRate']
+                            except: pass
+                            
+                        clean_item_name = re.sub(r'[\d,\.]+\s*(?:vnd|동|원|\$)?', '', il).strip(' -*•()[]')
+                        if not clean_item_name or len(clean_item_name) < 2:
+                            clean_item_name = store_name[:15]
+                            
+                        parsed_items.append({
+                            'Store': store_name[:20],
+                            'Item': clean_item_name[:25],
+                            'KRW_val': item_amt,
+                            'Date': r['Date']
+                        })
+                        
+                if parsed_items:
+                    item_df = pd.DataFrame(parsed_items)
+                    
+                    # 상위 요약 지표
+                    tot_market_spend = item_df['KRW_val'].sum()
+                    st.metric("🛒 장바구니 총 지출액 (마트/시장)", f"{tot_market_spend:,.0f} 원")
+                    
+                    # 돋보기 트리맵 시각화
+                    st.markdown("<h4 style='text-align: center; margin-top: 20px;'>🔍 마트/시장 구매 품목별 비중 (Treemap)</h4>", unsafe_allow_html=True)
+                    
+                    fig_market = px.treemap(
+                        item_df, 
+                        path=['Store', 'Item'], 
+                        values='KRW_val', 
+                        color='KRW_val',
+                        color_continuous_scale='Tealgrn',
+                        title=None
+                    )
+                    fig_market.update_traces(
+                        texttemplate="<b>%{label}</b><br>%{value:,.0f}원", 
+                        hovertemplate="<b>상호/품목:</b> %{label}<br><b>지출액:</b> %{value:,.0f}원<br><b>비중:</b> %{percentRoot:.1%}<extra></extra>", 
+                        textposition='middle center'
+                    )
+                    fig_market.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=520, coloraxis_showscale=False)
+                    st.plotly_chart(fig_market, use_container_width=True, config={'displaylogo': False})
+                    
+                    # 품목별 랭킹 테이블
+                    st.markdown("#### 📋 품목별 상세 구매 내역 랭킹")
+                    ranking_df = item_df.groupby('Item')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
+                    ranking_df['비중(%)'] = (ranking_df['KRW_val'] / ranking_df['KRW_val'].sum()) * 100
+                    ranking_df['KRW_val'] = ranking_df['KRW_val'].apply(lambda x: f"{x:,.0f} 원")
+                    ranking_df['비중(%)'] = ranking_df['비중(%)'].apply(lambda x: f"{x:.1f}%")
+                    ranking_df = ranking_df.rename(columns={'Item': '구매 품목', 'KRW_val': '합산 지출액'})
+                    
+                    st.dataframe(ranking_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("파싱할 수 있는 개별 마트 품목 내역이 없습니다. 영수증 AI 스캔 시 줄바꿈 형태로 품목이 입력되면 이 돋보기 코너에서 자동으로 멋지게 분석됩니다!")
+            else:
+                st.info("기록된 마트 또는 시장 지출 내역이 없습니다.")
+    
+    
+    # --------------------------------------------------------------------------
+    # 6.04.00 | Final Settlement Dashboard (전체요약 탭)
     # --------------------------------------------------------------------------
     with tab_final:
         if not ledger_df.empty and 'exp_df' in locals() and not exp_df.empty:
-            # 6.03.01 | Executive Macro KPI Summary Cards (출귀국일 기반 1일 평균 완결)
+            # 6.04.01 | Executive Macro KPI Summary Cards (출귀국일 기반 1일 평균 완결)
             total_trip_krw = exp_df['KRW_val'].sum()
             total_trip_loc = exp_df['Local_val'].sum()
             
@@ -3802,7 +3892,7 @@ else:
             with k3: st.markdown(kpi_box("현지 지출", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
             with k4: st.markdown(kpi_box("여행중 1일 평균지출", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
             
-            # --- 6.03.02 | Comprehensive Expense Treemap Matrix ---
+            # --- 6.04.02 | Comprehensive Expense Treemap Matrix ---
             st.markdown("<h4 style='margin-top: 15px; margin-bottom: 5px;'>🌳 지출분석 (Treemap)</h4>", unsafe_allow_html=True)
             chart_df = exp_df[exp_df['KRW_val'] > 0].copy()
             if not chart_df.empty:
@@ -3814,7 +3904,7 @@ else:
                 fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=580, coloraxis_showscale=False)
                 st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
             
-            # --- 6.03.03 | Donut Category Distribution Chart ---
+            # --- 6.04.03 | Donut Category Distribution Chart ---
             st.markdown("<h4 style='margin-top: 12px; margin-bottom: 0px;'>🍕 지출비중</h4>", unsafe_allow_html=True)
             cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
             
@@ -3834,5 +3924,5 @@ else:
             fig_donut.update_layout(height=440, margin=dict(l=10, r=10, t=5, b=20), legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5))
             st.plotly_chart(fig_donut, use_container_width=True)
 
-# 6.04.00 | Build Version & Sync Timestamp Footer
+# 6.05.00 | Build Version & Sync Timestamp Footer
 st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(TZ_KST).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
