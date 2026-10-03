@@ -3755,14 +3755,13 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - '선물' 카테고리 통합 수집)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 하이픈(-) 라인 전용 품목 파싱)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
         st.caption(f"💡 마트, 시장, 그리고 선물(기념품/특산품)로 구매한 개별 품목들의 세부 지출 내역을 현지 통화({TRAVEL_CURRENCY}) 기준으로 정밀하게 들여다봅니다.")
         
         if not ledger_df.empty:
-            # 💡 [핵심 패치] '마트', '시장' 키워드뿐만 아니라 '선물' 카테고리 내역까지 장바구니 수집 범위에 전격 포함
             market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '졸리', '성물', '기념품']
             market_mask = (
                 ledger_df['Category'].str.contains('마트|시장|선물', na=False) | 
@@ -3781,6 +3780,9 @@ else:
                     lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                     store_name = lines[0] if lines else "기타 마트/선물"
                     store_clean = re.sub(r'\[.*?\]\s*', '', store_name).split('|')[0].strip()
+                    # 상호명 줄에 붙은 가격이나 잡다한 설명 텍스트 정제
+                    store_clean = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', store_clean).strip(' -*•()[]/_')
+                    if not store_clean: store_clean = "마트/시장"
                     
                     item_lines = lines[1:] if len(lines) > 1 else lines
                     trash_keywords = ['địa chỉ', 'hdon', 'ngay', 'gio', 'hdban', 'mastercard', 'vietcombank', 'tid', 'mid', 'cls', 'toan', 'so lo', 'tên', 'đại lý', 'tổng cộng', 'tổng', 'tiền', 'mã', 'hóa đơn', 'đt:', 'mst:', 'tp.', 'đường', 'phường', 'quận']
@@ -3793,6 +3795,14 @@ else:
                             continue
                         if len(il) < 2 or '---' in il or '===' in il:
                             continue
+                            
+                        # 💡 [핵심 규칙] 오직 하이픈(-), 별표(*), 불릿(•) 등으로 시작하는 라인들만 정식 품목으로 인정!
+                        is_bullet_line = il.startswith('-') or il.startswith('*') or il.startswith('•')
+                        if not is_bullet_line:
+                            # 하이픈으로 시작하지 않더라도 가격 정보(k 또는 숫자)가 명확히 포함된 라인이라면 예외적으로 허용
+                            has_price_pattern = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il) or re.search(r'\d{2,}', il)
+                            if not has_price_pattern:
+                                continue # 상호명 아래의 일반 설명글(환불 사유 등)은 품목에서 철저히 제외!
                             
                         price_val = 0.0
                         m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
@@ -3808,6 +3818,7 @@ else:
                                 except: pass
                                 
                         clean_name = re.sub(r'[\d,\.]+\s*[kK]\b', '', il)
+                        clean_name = re.sub(r'^(?:[\-\*•\s]+)', '', clean_name) # 맨 앞의 기호 제거
                         clean_name = re.sub(r'(?:->|=>|[:;])+', '', clean_name).strip(' -*•()[]/_')
                         clean_name = re.sub(r'\s+', ' ', clean_name)
                         
@@ -3819,10 +3830,9 @@ else:
                             })
                             
                     if not valid_items_in_receipt or len(valid_items_in_receipt) == 1 and valid_items_in_receipt[0]['price'] == 0:
-                        valid_store_name = re.sub(r'[\s\-:–—]+', ' ', store_clean).strip()
                         parsed_items.append({
-                            'Store': valid_store_name[:20],
-                            'Item': valid_store_name[:25],
+                            'Store': store_clean[:20],
+                            'Item': store_clean[:25],
                             'Local_val': r_amt,
                             'Curr': r_curr
                         })
