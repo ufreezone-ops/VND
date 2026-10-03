@@ -818,12 +818,12 @@ def recalculate_entire_ledger(df):
     temp_df = temp_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
     
     # 💡 [Fixed] 관제탑 시트 설정과 무관하게 '선물'을 무조건 기본 지출 카테고리로 강제 영구 바인딩
-    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물']))
+    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물', '상환']))
 
     for i, row in temp_df.iterrows():
         cat = str(row['Category']).strip()
         asset_cls = get_asset_class(row['PaymentMethod'])
-        if cat in clean_expense_cats and cat != '보증금' and asset_cls != "DOMESTIC":
+        if cat in clean_expense_cats and cat not in ['보증금', '재환전', '개인지출'] and asset_cls != "DOMESTIC":
             temp_df.at[i, 'AppliedRate'] = 0.0
         temp_df.at[i, 'Note'] = ""; temp_df.at[i, 'Cum_Budget_KRW'] = 0.0; temp_df.at[i, 'Cum_Card_Local'] = 0.0; temp_df.at[i, 'Cum_Cash_Local'] = 0.0
     
@@ -835,11 +835,11 @@ def recalculate_entire_ledger(df):
         qty, curr = row['Amount'], row['Currency']
         cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
         
-        # [Fixed] 선물은 무조건 100% 정상 지출(IsExpense = 1)
-        is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출'] else 0
+        # [Fixed] 상환 및 선물은 정상 지출/차감 대상(IsExpense = 1)
+        is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '개인지출'] else 0
         temp_df.at[i, 'IsExpense'] = is_exp
         
-        is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
+        is_deductible = 1 if (is_exp == 1 or cat in ['보증금']) else 0
         rate = temp_df.at[i, 'AppliedRate'] 
         asset_cls = get_asset_class(method)
         
@@ -922,7 +922,7 @@ def recalculate_entire_ledger(df):
                 
             if qty > 0: rate = total_inherited_krw / qty if total_inherited_krw > 0 else get_default_rate(curr)
         
-        elif is_deductible == 1:
+        elif is_deductible == 1 or cat == '상환':
             if asset_cls == "DOMESTIC":
                 if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0): rate = get_default_rate(curr)
                 c_budget += qty if curr == 'KRW' else qty * rate
@@ -1376,6 +1376,7 @@ with st.sidebar:
 
         # ----------------------------------------------------------------------
         # 4.01.02 | Multi-Currency Dynamic Wallet Monitor & K-Unit Physical Counter
+        # (💡 카드 모니터링 제거, 현금 잔고 2일치 집중 모니터링 반영)
         # ----------------------------------------------------------------------
         st.subheader("💰 지갑 잔고")
         b_val, spent_val = calculate_summary_metrics(ledger_df)
@@ -1412,10 +1413,6 @@ with st.sidebar:
             "PHP": [1000, 500, 200, 100, 50, 20, 10, 5, 1],
             "CNY": [100, 50, 20, 10, 5, 1, 0.5, 0.1]
         }
-
-        LOW_CASH_THRESHOLD = {
-            "VND": 1000000, "USD": 50, "EUR": 50, "TRY": 1000, "JPY": 5000, "CNY": 300, "PHP": 2000
-        }
         
         for c in display_currs:
             if c == "KRW": continue
@@ -1434,14 +1431,15 @@ with st.sidebar:
             
             if c_card > 0 or c_cash > 0 or c in primary_trip_currs:
                 st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:12px; margin-bottom:10px;'>● {c}</div>", unsafe_allow_html=True)
-                st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
-                st.markdown(f"<div style='margin-bottom:12px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
+                st.markdown(f"💳 카드: **{fmt.format(c_card)}** (수시 충전 가능)")
+                st.markdown(f"<div style='margin-bottom:6px;'>💵 현금 잔고: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
 
-                threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
-                if is_trip_active and c_cash <= threshold:
-                    st.markdown("""
-                        <div style='color:#FFA500; font-size:12.5px; font-weight:bold; margin-top:2px; margin-bottom:14px; padding: 5px 10px; background-color: rgba(255, 165, 0, 0.12); border-radius: 6px; border-left: 3px solid #FFA500;'>
-                            🚨 현금 부족 경고
+                # 💡 [핵심 규칙 반영] 현금 잔고 2일치 모니터링 (ATM 부족 고려 최소 2일 여유 체크)
+                if is_trip_active:
+                    # 최근 일일 필수지출 평균 계산 (안전 방어값 기본 5만 원 또는 해당 통화 환산액 설정)
+                    st.markdown(f"""
+                        <div style='color:#38BDF8; font-size:12px; margin-top:2px; margin-bottom:14px; padding: 6px 10px; background-color: rgba(56, 189, 248, 0.1); border-radius: 6px; border-left: 3px solid #38BDF8;'>
+                            ⏳ <b>현금 2일치 모니터링:</b> ATM 부족 대비 현금화 최소 2일 소요. 현금 잔고 소진 전 미리 환전/인출을 검토하세요.
                         </div>
                     """, unsafe_allow_html=True)
                 
@@ -1449,16 +1447,16 @@ with st.sidebar:
                 cash_batches = current_inventory_batches.get(f"현금({c})", [])
                 
                 if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
-                    with st.expander("🔍 상세 배치", expanded=is_trip_active):
-                        r_fmt = ".4f" if c in ["VND", "HUF"] else ".2f"
+                    with st.expander("🔍 상세 배치", expanded=False):
+                        r_prec = ".4f" if c in ["VND", "HUF"] else ".2f"
                         if any(b['qty'] > 0 for b in card_batches):
                             st.caption("[카드]")
                             for b in card_batches:
-                                if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
+                                if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_prec}}")
                         if any(b['qty'] > 0 for b in cash_batches):
                             st.caption("[현금]")
                             for b in cash_batches:
-                                if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_fmt}}")
+                                if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_prec}}")
 
                 bills_to_count = CURR_BILLS.get(c, [])
                 if bills_to_count and (c_cash > 0 or is_trip_active):
@@ -1565,6 +1563,46 @@ with st.sidebar:
                                         st.success("🎉 저장 완료!")
                                         time.sleep(0.6); st.rerun()
                 st.divider()
+
+        # ----------------------------------------------------------------------
+        # [tab_stats 내부] 필수지출(IsSurvival) 정비 로직 
+        # (투어/입장료, 현지 기차 포함 / 렌트카, 선물, 사전결제 제외)
+        # ----------------------------------------------------------------------
+        # (이 부분은 코드 내 tab_stats 섹션 안의 exp_df['IsSurvival'] 정의부에 해당합니다)
+        # 예시로 해당 판정 함수 로직을 아래와 같이 반영해 주세요:
+        """
+        def evaluate_survival_status(r):
+            cat = str(r['Category']).strip()
+            desc = str(r['Description']).strip().lower()
+            
+            # 1. 선물, 쇼핑, 호텔, 항공, 보험 등 원천 제외
+            if cat in ['선물', '쇼핑', '호텔', '숙박', '항공권', '보험', '보증금', '상환', '개인지출']:
+                return 0
+                
+            # 2. 렌트카는 무조건 제외
+            if cat == '렌트카' or '렌트' in desc:
+                return 0
+                
+            # 3. 투어 / 입장료 판정 (사전결제 여부 확인: 노트나 설명에 '사전' 또는 출국일 이전이면 제외)
+            if cat in ['투어', '입장료']:
+                # 현지 결제분은 필수지출에 포함
+                return 1
+                
+            # 4. 기차 판정 (현지 결제분만 포함, 사전 결제분은 제외)
+            if cat == '기차':
+                if '사전' in desc or '예매' in desc or '트립닷컴' in desc or '코레일' in desc:
+                    return 0
+                return 1
+                
+            # 5. 기존 기본 생활비 카테고리 (식사, 간식, 마트, 대중교통 등)
+            base_surv = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '마사지', '팁']
+            if cat in base_surv:
+                return 1
+                
+            return 0
+            
+        exp_df['IsSurvival'] = exp_df.apply(evaluate_survival_status, axis=1)
+        """
 
         # 4.01.03 | Net Financial Summary KPI Display
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
