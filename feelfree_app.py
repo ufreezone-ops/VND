@@ -3777,7 +3777,7 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 천 단위 가격 정밀 파싱 적용)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 천 단위 콤마 가격 파싱 강화)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
@@ -3823,21 +3823,29 @@ else:
                             if not has_price_pattern:
                                 continue 
                             
-                        # 💡 [핵심 패치] 콤마가 포함된 천 단위 금액(예: 12,000, 38,000) 및 k 단위 금액을 완벽하게 개별 추출
+                        # 💡 [핵심 패치] 콤마가 포함된 가격(예: 12,000 / 38,000)을 완벽하게 추출하는 로직
                         price_val = 0.0
                         m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
                         if m_k:
                             price_val = float(m_k.group(1)) * 1000
                         else:
-                            # 콤마가 포함된 숫자 패턴(예: 12,000) 또는 순수 숫자 탐색
-                            nums = re.findall(r'(\d{1,3}(?:,\d{3})+|\d+)', il)
-                            if nums:
+                            # 콤마를 포함한 숫자 블록(예: 12,000 또는 105,000)을 모두 찾아냄
+                            comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', il)
+                            if comma_nums:
                                 try:
-                                    # 문장 맨 뒤쪽에 있는 숫자를 우선 가격으로 채택
-                                    potential_price = float(nums[-1].replace(',', ''))
-                                    if potential_price < 100000000 and potential_price > 0:
-                                        price_val = potential_price
+                                    price_val = float(comma_nums[-1].replace(',', ''))
                                 except: pass
+                            else:
+                                plain_nums = re.findall(r'(\d+)', il)
+                                if plain_nums:
+                                    try:
+                                        # 너무 작은 수(수량 1개 등)가 아닌 의미 있는 가격 숫자 채택
+                                        for p_str in reversed(plain_nums):
+                                            p_val = float(p_str)
+                                            if p_val > 500: # 500 이상의 숫자를 가격으로 인정
+                                                price_val = p_val
+                                                break
+                                    except: pass
                                 
                         clean_name = re.sub(r'[\d,\.]+\s*[kK]\b', '', il)
                         clean_name = re.sub(r'[\d,]+\s*(?:vnd|동|원|\$)?$', '', clean_name, flags=re.IGNORECASE)
