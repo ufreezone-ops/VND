@@ -2977,7 +2977,7 @@ else:
                 selected_idx = df_event.selection.rows[0]
 
             # ------------------------------------------------------------------
-            # 6.01.04 & 6.01.05 | Detail Voucher Viewer & Unified In-line Editor
+            # 6.01.04 & 6.01.05 | Detail Viewer & Inline Editor (불릿 정제 및 인라인 삭제 버튼 포함)
             # ------------------------------------------------------------------
             if selected_idx is not None:
                 real_idx = render_df.index[selected_idx] 
@@ -2987,7 +2987,7 @@ else:
                     st.markdown("---")
                     c_info, c_edit = st.columns([1, 1.2])
                     
-                    # --- 6.01.04 | Interactive Voucher Viewer ---
+                    # --- 상세 뷰어 (리스트 불릿 중첩 버그 수정 반영) ---
                     with c_info:
                         st.subheader("🧾 상세 내역 및 영수증 뷰어")
                         c_up, c_down = st.columns(2)
@@ -3025,10 +3025,7 @@ else:
                                 suffix = match.group(2).lower() if match.group(2) else ""
                                 try:
                                     v = float(num_str)
-                                    # 💡 [핵심 패치] 'k'나 'K'가 붙은 가격 표기(예: 210k, 300k)는 텍스트 변조 대상에서 완전 제외
-                                    if 'k' in suffix:
-                                        return match.group(0)
-                                        
+                                    if 'k' in suffix: return match.group(0)
                                     is_currency = any(c in suffix for c in ['vnd', 'usd', 'eur', 'cny', 'try', 'rsd', 'huf', 'krw', '원', '동', '달러'])
                                     is_unit = any(u in suffix for u in ['ml', 'g', 'kg', 'cm', 'mm', '개', 'x', '입', '장', '명', '박스'])
                                     if is_unit and not is_currency: return match.group(0)
@@ -3050,7 +3047,6 @@ else:
                             for item in items: 
                                 item_clean = item.strip()
                                 if item_clean:
-                                    # 💡 [핵심 패치] 문장 맨 앞에 붙어 있는 하이픈(-)이나 별표(*) 등 중첩 마크다운 기호를 깨끗이 제거
                                     item_clean = re.sub(r'^[\-\*•\s]+', '', item_clean)
                                     translated_item = smart_krw_translator(item_clean, rate_for_calc, curr_for_calc)
                                     st.markdown(f"- {translated_item}", unsafe_allow_html=True)
@@ -3074,7 +3070,7 @@ else:
                                         st.toast(f"사진 #{idx+1} 삭제 완료!", icon="✅"); time.sleep(0.4); st.rerun()
                         else: st.info("첨부된 영수증 사진이 없습니다.")
                             
-                    # --- 6.01.05 | Unified In-line Editor (인라인 수정 & 선물 분할) ---
+                    # --- 상세 수정 및 [🚨 영구 삭제 버튼] 포함 ---
                     with c_edit:
                         st.subheader("✏️ 상세 내역 & 결제정보 수정")
                         all_cats_avail = list(dict.fromkeys(EXPENSE_CATS + ['선물', '상환', '충전', '환전', '입금', '직접환전', '이월잔액', '환불', '개인지출', '재환전', '출국', '귀국', '체크인', '체크아웃']))
@@ -3192,7 +3188,6 @@ else:
                             target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else ledger_df
                             total_receipt_amt = float(edit_amt)
                             
-                            # [100% 선물]
                             if (gift_amt_split >= total_receipt_amt and total_receipt_amt > 0) or (len(gift_items_split) > 0 and len(normal_items_split) == 0):
                                 target_df.at[real_idx, 'Category'] = "선물"
                                 target_df.at[real_idx, 'Amount'] = total_receipt_amt
@@ -3201,7 +3196,6 @@ else:
                                 target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
                                 target_df.at[real_idx, 'Note'] = "100% Gift Purchase"
                                 
-                            # [일부만 선물: 2개 행 분할 Split 시 상호명 양쪽 공통 유지]
                             elif gift_amt_split > 0 and len(normal_items_split) > 0:
                                 rem_amt = max(0.0, total_receipt_amt - gift_amt_split)
                                 
@@ -3252,6 +3246,26 @@ else:
                             st.toast("🎉 선물 분할 및 정합성 원샷 업데이트 완료!", icon="✅")
                             time.sleep(0.3)
                             st.rerun()
+
+                        # 영구 삭제 버튼
+                        st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+                        if st.button("🚨 이 지출 내역 영구 삭제하기", key=f"btn_delete_row_{real_idx}", use_container_width=True):
+                            target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else ledger_df
+                            target_df = target_df.drop(real_idx).reset_index(drop=True)
+                            
+                            final_calc_df = recalculate_entire_ledger(target_df)
+                            st.session_state.active_ledger_df = final_calc_df
+                            
+                            try:
+                                conn.update(worksheet=ACTIVE_SHEET, data=final_calc_df.reindex(columns=FINAL_COLUMNS))
+                            except Exception as e_del:
+                                st.error(f"구글 시트 삭제 반영 실패: {e_del}")
+                                st.stop()
+                                
+                            st.toast("🗑️ 해당 지출 내역이 성공적으로 삭제되었습니다!", icon="✅")
+                            time.sleep(0.4)
+                            st.rerun()
+
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
