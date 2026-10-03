@@ -1,8 +1,5 @@
-## [v26.05.20.003]
-## - **Date:** 2026-05-20
-## - **Update Log:**
-## - [Fixed] Data Engine과 URDI Engine 간의 인벤토리 차감 평가 기준 불일치로 인한 '사이드바 잔액 미차감 버그(Phantom Balance)' 완전 해결.
-## - [Modified] `get_inventory_status` 로직을 `recalculate_entire_ledger`와 구조적으로 100% 동일하게 동기화하여, 데이터 타입 강제 변환 오류로부터 독립적인 실시간 평가(Dynamic Evaluation) 구조 적용.     
+## [v26.05.28.004]
+## - **Date:** 2026-10-03
 
 # ==============================================================================
 # [Module 1.00.00] System Core & Configuration Engine (환경 및 관제탑 설정)
@@ -3280,7 +3277,7 @@ else:
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 필수지출 분리 & 차트 분리 & 합계/평균 행)
+    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 정렬 완벽 고정 & 테이블 요약명 정상화)
     # --------------------------------------------------------------------------
     with tab_stats:
         if not ledger_df.empty:
@@ -3441,13 +3438,14 @@ else:
                 else:
                     total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0].nunique()
 
-                # --- 6.02.02 | 일별 지출 차트 2개 분리 렌더링 (차트 1: 총지출 / 차트 2: 필수지출) ---
+                # --- 6.02.02 | 일별 지출 차트 2개 분리 렌더링 (날짜 오름차순 시계열 정렬 엄격 보장) ---
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
                     if 'Date_Clean' not in ovr_df.columns:
                         ovr_df['Date_Clean'] = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
                         
-                    ovr_df = ovr_df.sort_values(by='Date_Clean')
+                    # 💡 [핵심] 날짜 기준 완벽한 오름차순(시계열) 정렬 고정
+                    ovr_df = ovr_df.sort_values(by='Date_Clean', kind='mergesort')
                     unique_clean_dates = sorted([d for d in ovr_df['Date_Clean'].dropna().unique()])
                     num_total_days = len(unique_clean_dates)
                     
@@ -3517,7 +3515,7 @@ else:
                     """, unsafe_allow_html=True)
 
                     # ----------------------------------------------------------
-                    # [차트 1] 일일 총지출 누적 막대 그래프
+                    # [차트 1] 일일 총지출 누적 막대 그래프 (날짜 순서 고정)
                     # ----------------------------------------------------------
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:2px;'>📊 [차트 1] 일일 총지출 누적 추이 ({day_label_suffix})</h4>", unsafe_allow_html=True)
                     st.caption(f"💡 점선: 일일 총지출 평균 ({fmt_tot}{y_unit})")
@@ -3527,7 +3525,8 @@ else:
 
                     fig_tot = px.bar(
                         total_chart_df, x='Date_Display', y=y_col, color='Category',
-                        barmode='stack', color_discrete_map=color_map, title=None
+                        barmode='stack', color_discrete_map=color_map, title=None,
+                        category_orders={"Date_Display": [date_label_map[d] for d in unique_clean_dates]}
                     )
                     if avg_daily_total > 0:
                         fig_tot.add_hline(
@@ -3539,14 +3538,14 @@ else:
                         margin=dict(l=10, r=10, t=15, b=50), xaxis_title=None, yaxis_title=None,
                         legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=380
                     )
-                    fig_tot.update_xaxes(fixedrange=True, tickfont=dict(size=11))
+                    fig_tot.update_xaxes(fixedrange=True, tickfont=dict(size=11), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
                     fig_tot.update_yaxes(fixedrange=True)
                     st.plotly_chart(fig_tot, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
 
                     st.markdown("<div style='margin: 25px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
                     # ----------------------------------------------------------
-                    # [차트 2] 일일 필수지출 전용 누적 막대 그래프
+                    # [차트 2] 일일 필수지출 전용 누적 막대 그래프 (날짜 순서 고정)
                     # ----------------------------------------------------------
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:2px;'>🛡️ [차트 2] 일일 필수지출 누적 추이 (선물/쇼핑/렌트카 제외)</h4>", unsafe_allow_html=True)
                     st.caption(f"💡 점선: 일일 필수지출 평균 ({fmt_surv}{y_unit})")
@@ -3556,7 +3555,8 @@ else:
                         surv_chart_df['Date_Display'] = surv_chart_df['Date_Clean'].map(date_label_map)
                         fig_surv = px.bar(
                             surv_chart_df, x='Date_Display', y=y_col, color='Category',
-                            barmode='stack', color_discrete_map=color_map, title=None
+                            barmode='stack', color_discrete_map=color_map, title=None,
+                            category_orders={"Date_Display": [date_label_map[d] for d in unique_clean_dates]}
                         )
                         if avg_daily_surv > 0:
                             fig_surv.add_hline(
@@ -3568,7 +3568,7 @@ else:
                             margin=dict(l=10, r=10, t=15, b=50), xaxis_title=None, yaxis_title=None,
                             legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=380
                         )
-                        fig_surv.update_xaxes(fixedrange=True, tickfont=dict(size=11))
+                        fig_surv.update_xaxes(fixedrange=True, tickfont=dict(size=11), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
                         fig_surv.update_yaxes(fixedrange=True)
                         st.plotly_chart(fig_surv, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
                     else:
@@ -3576,7 +3576,7 @@ else:
 
                 st.divider()
                 
-                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 (합계 및 평균 행 추가) ---
+                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 (합계/평균 행 이름표 정상화) ---
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
                 daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3597,9 +3597,9 @@ else:
 
                     daily_table['Date_Short'] = daily_table['Date'].apply(shorten_table_date)
                     daily_table['Sort_Key'] = daily_table['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
-                    daily_table = daily_table.sort_values(by='Sort_Key').drop(columns=['Sort_Key'])
+                    daily_table = daily_table.sort_values(by='Sort_Key', kind='mergesort').drop(columns=['Sort_Key'])
 
-                    # 💡 [테이블 하단 합계 및 평균 행(Summary Row) 추가 로직]
+                    # 💡 [합계 및 평균 행 요약 라벨 정상화]
                     sum_tot_krw = daily_table['KRW_val'].sum()
                     sum_tot_loc = daily_table['Local_val'].sum()
                     sum_surv_krw = daily_table['S_KRW'].sum()
@@ -3613,12 +3613,12 @@ else:
 
                     summary_rows = pd.DataFrame([
                         {
-                            'Country': '📊 총합계 (Sum)', 'Date_Short': '-', 
+                            'Country': '📊 총합계', 'Date_Short': '합계(Sum)', 
                             'KRW_val': sum_tot_krw, 'Local_val': sum_tot_loc, 
                             'S_KRW': sum_surv_krw, 'S_Loc': sum_surv_loc
                         },
                         {
-                            'Country': '📈 1일 평균 (Avg)', 'Date_Short': '-', 
+                            'Country': '📈 1일 평균', 'Date_Short': '일평균(Avg)', 
                             'KRW_val': avg_tot_krw, 'Local_val': avg_tot_loc, 
                             'S_KRW': avg_surv_krw, 'S_Loc': avg_surv_loc
                         }
@@ -3633,7 +3633,7 @@ else:
 
                     final_table_with_summary = pd.concat([display_table, summary_display], ignore_index=True)
 
-                    col_cfg_daily = {"날짜": st.column_config.TextColumn("날짜", width="small")}
+                    col_cfg_daily = {"날짜": st.column_config.TextColumn("날짜", width="small"), "국가": st.column_config.TextColumn("국가", width="small")}
                     st.dataframe(final_table_with_summary.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '필수(원)': '{:,.0f}', f'필수({LOCAL_SYM})': fmt_local}), use_container_width=True, hide_index=True, column_config=col_cfg_daily)
                 else: 
                     st.info("현지 지출 데이터가 없습니다.")
@@ -3753,6 +3753,7 @@ else:
                     st.warning(f"**환불총액:** {r_krw:,.0f} 원")
                     with st.expander("상세내역", expanded=False):
                         st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
+                        
     # --------------------------------------------------------------------------
     # 6.03.00 | Final Settlement Dashboard (전체요약 탭)
     # --------------------------------------------------------------------------
