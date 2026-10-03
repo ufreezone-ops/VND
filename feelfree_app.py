@@ -2515,6 +2515,9 @@ else:
                     total_amt_val = float(amt)
                     new_rows_to_add = []
                     
+                    # 💡 [핵심 패치] 상호명(Store Header)과 품목 라인들을 분리하여 양쪽에 상호명 공통 적용
+                    base_store_line = store_header_in if store_header_in else (candidate_item_lines[0] if candidate_item_lines else "상호명미기재")
+                    
                     if cat == "선물" or (gift_sum_amt >= total_amt_val and total_amt_val > 0):
                         f_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
                         new_rows_to_add.append({
@@ -2534,11 +2537,13 @@ else:
                         rem_amt = total_amt_val - gift_sum_amt
                         norm_lines = [l for l in candidate_item_lines if l not in st.session_state.gift_items_selected]
                         gift_lines = st.session_state.gift_items_selected
-                        prefix = f"{store_header_in}\n" if store_header_in else ""
-                        d_norm = prefix + "\n".join(norm_lines)
-                        d_gift = prefix + "\n".join(gift_lines)
+                        
+                        # 일반 행과 선물 행 양쪽 모두에 상호명(base_store_line)이 반드시 들어가도록 구성
+                        d_norm = f"{base_store_line}\n" + "\n".join(norm_lines) if norm_lines else base_store_line
+                        d_gift = f"{base_store_line}\n" + "\n".join(gift_lines) if gift_lines else base_store_line
+                        
                         f_d_norm = f"[{final_gateway}] {d_norm}" if final_gateway else d_norm
-                        f_d_gift = f"[{final_gateway}] [선물분리] {d_gift}" if final_gateway else f"[선물분리] {d_gift}"
+                        f_d_gift = f"[{final_gateway}] {d_gift}" if final_gateway else d_gift
                         
                         new_rows_to_add.append({'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': cat, 'Description': f_d_norm.strip(), 'Currency': curr, 'Amount': rem_amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Normal Split', 'Receipt_URL': final_receipt_urls})
                         new_rows_to_add.append({'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '선물', 'Description': f_d_gift.strip(), 'Currency': curr, 'Amount': gift_sum_amt, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': 'Gift Split', 'Receipt_URL': final_receipt_urls})
@@ -3196,12 +3201,15 @@ else:
                                 target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
                                 target_df.at[real_idx, 'Note'] = "100% Gift Purchase"
                                 
-                            # [일부만 선물: 2개 행 분할 Split]
+                            # [일부만 선물: 2개 행 분할 Split 시 상호명 양쪽 공통 유지]
                             elif gift_amt_split > 0 and len(normal_items_split) > 0:
                                 rem_amt = max(0.0, total_receipt_amt - gift_amt_split)
-                                prefix = f"{store_header}\n" if store_header else ""
-                                norm_desc = prefix + "\n".join(normal_items_split)
-                                gift_desc = prefix + "\n".join(gift_items_split)
+                                
+                                lines_all = [l.strip() for l in new_desc.split('\n') if l.strip()]
+                                store_hdr = lines_all[0] if lines_all else "상호명미기재"
+                                
+                                norm_desc = f"{store_hdr}\n" + "\n".join(normal_items_split)
+                                gift_desc = f"{store_hdr}\n" + "\n".join(gift_items_split)
                                 
                                 base_cat = edit_cat if edit_cat != "선물" else row_data.get('Category', '마트')
                                 if base_cat == "선물": base_cat = "마트"
