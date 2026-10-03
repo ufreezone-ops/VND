@@ -3750,7 +3750,7 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 텍스트 정제 및 면적 일치 보장)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 비례 스케일링 보정 적용)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
@@ -3798,12 +3798,10 @@ else:
                                         price_val = potential_price
                                 except: pass
                                 
-                        # 💡 [핵심 정제] 글자 깨짐 방지 및 특수문자('->', '개씩개' 등 비정상 패턴) 자동 클렌징
                         clean_name = re.sub(r'[\d,\.]+\s*[kK]?\s*(?:vnd|동|원|\$)?', '', il).strip(' -*•()[]/_')
                         clean_name = re.sub(r'(?:개씩개|->|=>|[:;])+', '', clean_name).strip()
-                        clean_name = re.sub(r'\s+', ' ', clean_name) # 다중 공백 압축
+                        clean_name = re.sub(r'\s+', ' ', clean_name)
                         
-                        # 만약 정제 후 글자가 너무 짧거나 깨졌다면 스킵하거나 상호명으로 대체
                         if clean_name and len(clean_name) >= 2 and not clean_name.startswith('로 잘못'):
                             valid_items_in_receipt.append({
                                 'raw_line': il,
@@ -3812,7 +3810,6 @@ else:
                             })
                             
                     if not valid_items_in_receipt or len(valid_items_in_receipt) == 1 and valid_items_in_receipt[0]['price'] == 0:
-                        # 통째로 입력된 경우, 비정상 텍스트 제거 후 추가
                         valid_store_name = re.sub(r'[\s\-:–—]+', ' ', store_clean).strip()
                         parsed_items.append({
                             'Store': valid_store_name[:20],
@@ -3823,13 +3820,17 @@ else:
                     else:
                         sum_detected_prices = sum(it['price'] for it in valid_items_in_receipt if it['price'] > 0)
                         
+                        # 💡 [핵심 알고리즘] 흥정이나 할인으로 인해 개별 품목 합계와 총액이 다를 때 적용하는 비례 스케일링 계수
+                        scale_factor = 1.0
+                        if sum_detected_prices > 0 and r_amt > 0 and abs(sum_detected_prices - r_amt) > 1.0:
+                            scale_factor = r_amt / sum_detected_prices
+                        
                         for it in valid_items_in_receipt:
                             final_item_price = it['price']
                             if final_item_price <= 0:
                                 final_item_price = r_amt / max(1, len(valid_items_in_receipt))
-                            elif sum_detected_prices > 0 and abs(sum_detected_prices - r_amt) > (r_amt * 0.3):
-                                scale = r_amt / sum_detected_prices if sum_detected_prices > 0 else 1.0
-                                final_item_price = it['price'] * scale
+                            else:
+                                final_item_price = final_item_price * scale_factor
                                 
                             parsed_items.append({
                                 'Store': store_clean[:20],
@@ -3840,8 +3841,6 @@ else:
                             
                 if parsed_items:
                     item_df = pd.DataFrame(parsed_items)
-                    
-                    # 💡 [면적 정확성 보장] 0원이거나 음수인 비정상 데이터 필터링
                     item_df = item_df[item_df['Local_val'] > 0].copy()
                     
                     base_curr = item_df['Curr'].iloc[0] if not item_df.empty else TRAVEL_CURRENCY
