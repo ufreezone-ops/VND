@@ -1354,7 +1354,6 @@ with st.sidebar:
             st.query_params["trip"] = st.session_state.current_trip
             st.rerun()
     else:
-        # [심플한 위치 판정] 오늘이 출국일보다 이전이면 상단, 그렇지 않으면 하단!
         dep_rows_eval = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
         korea_dep_eval = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
         t_dep_eval = korea_dep_eval if not korea_dep_eval.empty else dep_rows_eval
@@ -1365,15 +1364,13 @@ with st.sidebar:
             if m_eval:
                 dep_dt_val = datetime.strptime(m_eval.group(0), "%Y-%m-%d").date()
                 today_val = datetime.now(TZ_KST).date()
-                is_upcoming = (today_val < dep_dt_val)  # 👈 출국 전이면 True!
+                is_upcoming = (today_val < dep_dt_val)
 
-        # 출발 전(D-Day 이전)이면 사이드바 최상단에 배치
         if is_upcoming:
             render_dday_control_tower()
 
         # ----------------------------------------------------------------------
         # 4.01.02 | Multi-Currency Dynamic Wallet Monitor & K-Unit Physical Counter
-        # (💡 카드 모니터링 제거, 현금 잔고 2일치 집중 모니터링 반영)
         # ----------------------------------------------------------------------
         st.subheader("💰 지갑 잔고")
         b_val, spent_val = calculate_summary_metrics(ledger_df)
@@ -1410,6 +1407,10 @@ with st.sidebar:
             "PHP": [1000, 500, 200, 100, 50, 20, 10, 5, 1],
             "CNY": [100, 50, 20, 10, 5, 1, 0.5, 0.1]
         }
+
+        LOW_CASH_THRESHOLD = {
+            "VND": 1000000, "USD": 50, "EUR": 50, "TRY": 1000, "JPY": 5000, "CNY": 300, "PHP": 2000
+        }
         
         for c in display_currs:
             if c == "KRW": continue
@@ -1428,15 +1429,14 @@ with st.sidebar:
             
             if c_card > 0 or c_cash > 0 or c in primary_trip_currs:
                 st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:12px; margin-bottom:10px;'>● {c}</div>", unsafe_allow_html=True)
-                st.markdown(f"💳 카드: **{fmt.format(c_card)}** (수시 충전 가능)")
-                st.markdown(f"<div style='margin-bottom:6px;'>💵 현금 잔고: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
+                st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
+                st.markdown(f"<div style='margin-bottom:12px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
 
-                # 💡 [핵심 규칙 반영] 현금 잔고 2일치 모니터링 (ATM 부족 고려 최소 2일 여유 체크)
-                if is_trip_active:
-                    # 최근 일일 필수지출 평균 계산 (안전 방어값 기본 5만 원 또는 해당 통화 환산액 설정)
-                    st.markdown(f"""
-                        <div style='color:#38BDF8; font-size:12px; margin-top:2px; margin-bottom:14px; padding: 6px 10px; background-color: rgba(56, 189, 248, 0.1); border-radius: 6px; border-left: 3px solid #38BDF8;'>
-                            ⏳ <b>현금 2일치 모니터링:</b> ATM 부족 대비 현금화 최소 2일 소요. 현금 잔고 소진 전 미리 환전/인출을 검토하세요.
+                threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
+                if is_trip_active and c_cash <= threshold:
+                    st.markdown("""
+                        <div style='color:#FFA500; font-size:12.5px; font-weight:bold; margin-top:2px; margin-bottom:14px; padding: 5px 10px; background-color: rgba(255, 165, 0, 0.12); border-radius: 6px; border-left: 3px solid #FFA500;'>
+                            🚨 현금 부족 경고
                         </div>
                     """, unsafe_allow_html=True)
                 
@@ -1444,7 +1444,7 @@ with st.sidebar:
                 cash_batches = current_inventory_batches.get(f"현금({c})", [])
                 
                 if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
-                    with st.expander("🔍 상세 배치", expanded=False):
+                    with st.expander("🔍 상세 배치", expanded=is_trip_active):
                         r_prec = ".4f" if c in ["VND", "HUF"] else ".2f"
                         if any(b['qty'] > 0 for b in card_batches):
                             st.caption("[카드]")
@@ -1562,64 +1562,25 @@ with st.sidebar:
                 st.divider()
 
         # ----------------------------------------------------------------------
-        # [tab_stats 내부] 필수지출(IsSurvival) 정비 로직 
-        # (투어/입장료, 현지 기차 포함 / 렌트카, 선물, 사전결제 제외)
-        # ----------------------------------------------------------------------
-        # (이 부분은 코드 내 tab_stats 섹션 안의 exp_df['IsSurvival'] 정의부에 해당합니다)
-        # 예시로 해당 판정 함수 로직을 아래와 같이 반영해 주세요:
-        """
-        def evaluate_survival_status(r):
-            cat = str(r['Category']).strip()
-            desc = str(r['Description']).strip().lower()
-            
-            # 1. 선물, 쇼핑, 호텔, 항공, 보험 등 원천 제외
-            if cat in ['선물', '쇼핑', '호텔', '숙박', '항공권', '보험', '보증금', '상환', '개인지출']:
-                return 0
-                
-            # 2. 렌트카는 무조건 제외
-            if cat == '렌트카' or '렌트' in desc:
-                return 0
-                
-            # 3. 투어 / 입장료 판정 (사전결제 여부 확인: 노트나 설명에 '사전' 또는 출국일 이전이면 제외)
-            if cat in ['투어', '입장료']:
-                # 현지 결제분은 필수지출에 포함
-                return 1
-                
-            # 4. 기차 판정 (현지 결제분만 포함, 사전 결제분은 제외)
-            if cat == '기차':
-                if '사전' in desc or '예매' in desc or '트립닷컴' in desc or '코레일' in desc:
-                    return 0
-                return 1
-                
-            # 5. 기존 기본 생활비 카테고리 (식사, 간식, 마트, 대중교통 등)
-            base_surv = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '마사지', '팁']
-            if cat in base_surv:
-                return 1
-                
-            return 0
-            
-        exp_df['IsSurvival'] = exp_df.apply(evaluate_survival_status, axis=1)
-        """
-
         # 4.01.03 | Net Financial Summary KPI Display
+        # ----------------------------------------------------------------------
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
         st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
 
-        # [2단계: 심플한 하단 배치] 출국 당일부터 여행 중/종료 후에는 지갑 아래 최하단에 렌더링!
         if not is_upcoming:
             st.divider()
             render_dday_control_tower()
 
+        # ----------------------------------------------------------------------
         # 4.01.04 | Master Cloud Refresh (정합성 자동 재계산 일괄 실행 및 IsExpense 강제 동기화)
+        # ----------------------------------------------------------------------
         st.divider()
         st.markdown("<div style='margin-top:15px;'></div>", unsafe_allow_html=True)
         if st.button("🔄 Cloud Refresh (데이터 동기화)", use_container_width=True, type="primary"): 
             st.cache_data.clear()
-            # 1. 최신 원장 재계산
             re_calc_df = recalculate_entire_ledger(ledger_df)
             st.session_state.active_ledger_df = re_calc_df
-            # 2. 구글 시트에 100% 덮어쓰기 커밋
             try:
                 conn.update(worksheet=ACTIVE_SHEET, data=re_calc_df.reindex(columns=FINAL_COLUMNS))
                 st.toast("✅ 클라우드 동기화 및 지출 정합성 복구 완료!", icon="🎉")
