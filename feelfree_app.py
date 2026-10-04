@@ -4003,7 +4003,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (텍스트 쪼개기 파싱 폐기 및 원장 행 1:1 직결 패치)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (1순위 카테고리 최우선 반영 및 억울한 탈락 방지 패치)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
@@ -4011,24 +4011,21 @@ else:
                     desc = str(row['Description']).strip().lower()
                     method = str(row['PaymentMethod']).strip().lower()
                     
-                    if method == '원화계좌(한국)' or '사전' in desc or '예매' in desc:
-                        is_mas = (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
-                        if not is_mas: return False
-                            
-                    if '철도' in desc or ('기차' in desc and '기차역' not in desc and 'to' not in desc):
-                        return False
-
-                    is_massage = (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
-                    local_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '교통']
-                    is_local_traffic = (cat in local_traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '통행료', '기차역'])
-                    
-                    if not is_massage and not is_local_traffic:
-                        return False
+                    # 💡 [핵심 패치] 1순위: 카테고리가 명확한 마사지이거나 교통 수단(택시, Grab, 교통 등)이면 다른 어떤 조건보다 최우선으로 무조건 허용!
+                    explicit_relax_cats = ['마사지', 'Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '교통', '렌트카']
+                    if cat in explicit_relax_cats:
+                        return True
                         
-                    if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료']:
-                        return False
+                    # 2순위: 카테고리가 다른데 설명에 명확한 키워드가 있는 경우
+                    is_massage_desc = ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
+                    is_traffic_desc = ('그랩' in desc) or ('grab' in desc) or ('택시' in desc) or ('미터기' in desc)
+                    if is_massage_desc or is_traffic_desc:
+                        # 단, 명백한 장거리 기차 예매(원화계좌 사전결제 등)인 경우만 제외
+                        if method == '원화계좌(한국)' and ('기차' in desc or '철도' in desc) and '역' not in desc:
+                            return False
+                        return True
                         
-                    return is_massage or is_local_traffic
+                    return False
 
                 relax_df = ledger_df[ledger_df.apply(is_valid_relax_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
@@ -4042,8 +4039,7 @@ else:
                             r_curr = TRAVEL_CURRENCY
                         r_amt = float(r['Amount'])
                         
-                        # 💡 [핵심 패치] 불필요한 텍스트 쪼개기(파싱)를 하지 않고, 행 자체의 상호명/메모와 금액을 1대1 온전하게 반영
-                        clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip() # [Grab] 같은 플랫폼 태그 제거
+                        clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip()
                         if '-' in clean_desc:
                             p_provider = clean_desc.split('-', 1)[0].strip()
                             p_item = clean_desc.split('-', 1)[1].strip()
@@ -4051,7 +4047,6 @@ else:
                             p_provider = clean_desc[:20] if clean_desc else ("마사지" if cat_r == '마사지' else "그랩/택시")
                             p_item = clean_desc[:25] if clean_desc else "이동 서비스"
                             
-                        # 괄호나 환산 텍스트 제거
                         p_provider = re.sub(r'\(약.*?\)', '', p_provider).strip(' -*•()[]/_')
                         p_item = re.sub(r'\(약.*?\)', '', p_item).strip(' -*•()[]/_')
                         if not p_provider: p_provider = "업체명"
