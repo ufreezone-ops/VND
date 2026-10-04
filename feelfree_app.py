@@ -4003,7 +4003,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (스케일링 왜곡 제거 및 추출된 원본 가격 100% 직결 패치)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (원화 환산 치환 오작동 원천 차단 패치)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
@@ -4062,17 +4062,20 @@ else:
                         for si in sub_items:
                             if len(si) < 2: continue
                             
+                            # 💡 [핵심 패치] 텍스트 내에서 '약 xxxx원' 같은 환산 구문이나 오염 텍스트를 사전에 완벽히 제거한 뒤 순수 원본 숫자 추출
+                            si_clean_for_price = re.sub(r'\(약.*?\)', '', si) # '(약 4,682원)' 같은 찌꺼기 원천 소거
+                            
                             price_val = 0.0
-                            m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', si)
+                            m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', si_clean_for_price)
                             if m_k:
                                 price_val = float(m_k.group(1)) * 1000
                             else:
-                                comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', si)
+                                comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', si_clean_for_price)
                                 if comma_nums:
                                     try: price_val = float(comma_nums[-1].replace(',', ''))
                                     except: pass
                                 else:
-                                    plain_nums = re.findall(r'(\d+)', si)
+                                    plain_nums = re.findall(r'(\d+)', si_clean_for_price)
                                     if plain_nums:
                                         try:
                                             for p_str in reversed(plain_nums):
@@ -4082,8 +4085,9 @@ else:
                                                     break
                                         except: pass
 
-                            clean_si = re.sub(r'[\d,\.]+\s*[kK]\b', '', si)
+                            clean_si = re.sub(r'[\d,\.]+\s*[kK]\b', '', si_clean_for_price)
                             clean_si = re.sub(r'[\d,]+\s*(?:vnd|동|원|\$)?$', '', clean_si, flags=re.IGNORECASE)
+                            clean_si = re.sub(r'\(약.*?\)', '', clean_si)
                             clean_si = re.sub(r'^(?:[\-\*•\s]+)', '', clean_si).strip(' -*•()[]/_')
                             if not clean_si: clean_si = p_clean
                             
@@ -4098,7 +4102,6 @@ else:
                                 'Curr': r_curr
                             })
                         else:
-                            # 💡 [핵심 패치] 스케일링 왜곡을 없애고, 추출된 개별 가격이 있으면 그 값을 원본 그대로 100% 반영
                             for it in valid_relax_items:
                                 f_r_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_relax_items)))
                                 parsed_relax.append({
