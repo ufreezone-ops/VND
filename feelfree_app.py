@@ -3781,19 +3781,19 @@ else:
                         st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
 
-    # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒🍔💆 Unified Magnifier Hub ('돋보기' 탭 전체: 장바구니 + 식당/카페 + 마사지/교통 3개 서브탭)
-    # --------------------------------------------------------------------------
+    # ==============================================================================
+    # 6.03.00 | 🛒🍔💆🚗 Unified Magnifier Hub ('돋보기' 탭 전체 통째 교체)
+    # ==============================================================================
     with tab_market:
         st.subheader("🔍 여행 소비 돋보기 인터페이스")
-        st.caption("💡 장바구니, 식당·카페, 그리고 마사지 및 그랩(교통)의 상세 지출 내역을 각각의 돋보기로 정밀하게 들여다봅니다.")
+        st.caption("💡 장바구니, 식당·카페, 힐링(마사지), 그리고 로컬 교통(그랩 등)의 상세 지출 내역을 각각의 돋보기로 정밀하게 들여다봅니다.")
         
-        # 💡 [핵심 패치] 3개의 서브 탭으로 확장 (마사지 & 그랩 돋보기 신설)
-        sub_tab_cart, sub_tab_food, sub_tab_relax = st.tabs(["🛒 장바구니 돋보기", "🍔 식당·카페 돋보기", "💆🚗 마사지 & 교통 돋보기"])
+        # 💡 [요청 반영] 서브탭 이모지 및 '돋보기' 단어 삭제, '&'를 점(·)으로 변경
+        sub_tab_cart, sub_tab_food, sub_tab_relax = st.tabs(["장바구니", "식당·카페", "마사지 · 교통"])
         
         if not ledger_df.empty:
             # ==================================================================
-            # [SUB TAB 1] 장바구니 돋보기 (마트, 시장, 약국, 선물 통합)
+            # [SUB TAB 1] 장바구니 (마트, 시장, 약국, 선물 통합)
             # ==================================================================
             with sub_tab_cart:
                 market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '약국', '졸리', '성물', '기념품', '헬로', '한시장', '동바시장', '편의점']
@@ -3899,7 +3899,7 @@ else:
                 else: st.info("기록된 마트, 시장 또는 선물 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 2] 식당·카페 돋보기
+            # [SUB TAB 2] 식당·카페
             # ==================================================================
             with sub_tab_food:
                 def is_valid_food_row(row):
@@ -4003,13 +4003,13 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (상단: 그랩/교통 트리맵 / 하단: 마사지 트리맵 상하 분리)
+            # [SUB TAB 3] 마사지 & 교통 (상단: 그랩/교통 / 하단: 마사지 상하 분리 & 마사지 1순위 강제 수집)
             # ==================================================================
             with sub_tab_relax:
                 # --------------------------------------------------------------
                 # [PART 1] 상단: 그랩 및 로컬교통 돋보기
                 # --------------------------------------------------------------
-                st.markdown("<h4 style='margin-bottom: 2px;'>🚗 그랩 및 로컬교통 돋보기</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 style='margin-bottom: 2px;'>그랩 및 로컬교통</h4>", unsafe_allow_html=True)
                 
                 def is_valid_traffic_row(row):
                     cat = str(row['Category']).strip()
@@ -4055,7 +4055,7 @@ else:
                         if not p_item: p_item = "요금 및 통행료"
 
                         parsed_traffic.append({
-                            'Traffic_Group': '🚗 그랩 및 로컬교통',
+                            'Traffic_Group': '그랩 및 로컬교통',
                             'Provider': p_provider[:22],
                             'Item': p_item[:28],
                             'Local_val': r_amt,
@@ -4068,7 +4068,7 @@ else:
                         t_base_curr = TRAVEL_CURRENCY
                         tot_traffic_local = traffic_df_final['Local_val'].sum()
                         
-                        st.metric(f"🚗 로컬 교통 총 지출액 ({t_base_curr} 기준)", f"{tot_traffic_local:,.0f} {t_base_curr}")
+                        st.metric(f"{tot_traffic_local:,.0f} {t_base_curr}", label_visibility="collapsed")
                         fig_traffic = px.treemap(traffic_df_final, path=['Traffic_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
                         fig_traffic.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {t_base_curr}", hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
                         fig_traffic.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=440, coloraxis_showscale=False)
@@ -4079,18 +4079,16 @@ else:
                 st.markdown("<div style='margin: 30px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
                 # --------------------------------------------------------------
-                # [PART 2] 하단: 힐링/마사지 돋보기
+                # [PART 2] 하단: 마사지 돋보기 (💡 1순위 마사지 키워드 무조건 100% 수집)
                 # --------------------------------------------------------------
-                st.markdown("<h4 style='margin-bottom: 2px;'>💆 힐링 및 마사지 돋보기</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 style='margin-bottom: 2px;'>마사지</h4>", unsafe_allow_html=True)
 
                 def is_valid_massage_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
-                    if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료']:
-                        return False
-                    if any(k in desc for k in ['마트', '시장', 'market', 'lotte', 'big c', '딸기', '망고', '커피', '과자', '졸리']):
-                        return False
-                    if cat == '마사지' or any(k in desc for k in ['마사지', '스파', 'spa', '발마사지', '풋마사지', 'body massage', 'foot scrub']):
+                    
+                    # 💡 [핵심 패치] 1순위 기준: 카테고리가 '마사지'이거나 설명에 '마사지' 글자가 있으면 무조건 100% 수집 (탈락 원천 봉쇄)
+                    if cat == '마사지' or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc):
                         return True
                     return False
 
@@ -4118,7 +4116,7 @@ else:
                         if not p_item: p_item = "마사지 코스"
 
                         parsed_massage.append({
-                            'Massage_Group': '💆 힐링/마사지',
+                            'Massage_Group': '마사지',
                             'Provider': p_provider[:22],
                             'Item': p_item[:28],
                             'Local_val': r_amt,
@@ -4131,7 +4129,7 @@ else:
                         m_base_curr = TRAVEL_CURRENCY
                         tot_massage_local = massage_df_final['Local_val'].sum()
                         
-                        st.metric(f"💆 마사지 총 지출액 ({m_base_curr} 기준)", f"{tot_massage_local:,.0f} {m_base_curr}")
+                        st.metric(f"{tot_massage_local:,.0f} {m_base_curr}", label_visibility="collapsed")
                         fig_massage = px.treemap(massage_df_final, path=['Massage_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
                         fig_massage.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {m_base_curr}", hovertemplate=f"<b>분류/업체/코스:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {m_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
                         fig_massage.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=440, coloraxis_showscale=False)
