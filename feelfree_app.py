@@ -3782,31 +3782,26 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 마사지/그랩 제외 필터 강화)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (시장 및 유통사 통합 그룹핑 적용)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
         st.caption(f"💡 마트, 시장, 그리고 선물(기념품/특산품)로 구매한 개별 품목들의 세부 지출 내역을 현지 통화({TRAVEL_CURRENCY}) 기준으로 정밀하게 들여다봅니다.")
         
         if not ledger_df.empty:
-            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '면세점', '파마씨티', 'pharmacity', '졸리', '성물', '기념품', '헬로', '한시장']
+            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '졸리', '성물', '기념품', '헬로', '한시장', '동바시장']
             
-            # 💡 [핵심 패치] '시장'이 들어가더라도 마사지나 그랩/교통 관련 건이면 무조건 제외하는 조건 생성
             exclude_keywords = ['마사지', '발마사지', '그랩', 'grab', '미터기', '택시', '교통', '콜택시', '식사', '카페', '레스토랑', '호텔']
             
             def is_valid_market_row(row):
                 cat = str(row['Category']).strip()
                 desc = str(row['Description']).strip().lower()
                 
-                # 1. 명백한 비장바구니 카테고리 원천 차단
                 if cat in ['마사지', '택시', '교통', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료', '통신', '수수료', '팁', '상환', '보증금']:
                     return False
-                    
-                # 2. 설명 내부에 마사지나 그랩/택시/식당 관련 키워드가 있으면 '시장'이라는 단어가 포함되어 있어도 제외
                 if any(ek in desc for ek in exclude_keywords):
                     return False
                     
-                # 3. 마트/시장 카테고리이거나, 관련 키워드가 포함된 경우 허용
                 is_target_cat = cat in ['마트', '시장', '선물']
                 has_keyword = any(mk in desc for mk in market_keywords) or any(mk in cat for mk in market_keywords)
                 
@@ -3827,6 +3822,21 @@ else:
                     store_clean = re.sub(r'\[.*?\]\s*', '', store_name).split('|')[0].strip()
                     store_clean = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', store_clean).strip(' -*•()[]/_')
                     if not store_clean: store_clean = "마트/시장"
+                    
+                    # 💡 [핵심 패치] 상호명을 바탕으로 대분류 시장/유통사 그룹(Bazaar_Group) 자동 통합 분류
+                    store_lower = store_clean.lower()
+                    if '한시장' in store_lower:
+                        bazaar_group = '🧺 한시장 통합'
+                    elif '동바시장' in store_lower:
+                        bazaar_group = '🧺 동바시장 통합'
+                    elif '편의점' in store_lower or '7-eleven' in store_lower or 'circle k' in store_lower:
+                        bazaar_group = '🏪 편의점 통합'
+                    elif '마트' in store_lower or '슈퍼' in store_lower or 'lotte' in store_lower or 'big c' in store_lower:
+                        bazaar_group = '🛒 마트/슈퍼 통합'
+                    elif '시장' in store_lower or '야시장' in store_lower:
+                        bazaar_group = '🛍️ 기타 전통시장'
+                    else:
+                        bazaar_group = '🎁 기타 쇼핑/선물샵'
                     
                     item_lines = lines[1:] if len(lines) > 1 else lines
                     trash_keywords = ['địa chỉ', 'hdon', 'ngay', 'gio', 'hdban', 'mastercard', 'vietcombank', 'tid', 'mid', 'cls', 'toan', 'so lo', 'tên', 'đại lý', 'tổng cộng', 'tổng', 'tiền', 'mã', 'hóa đơn', 'đt:', 'mst:', 'tp.', 'đường', 'phường', 'quận']
@@ -3882,6 +3892,7 @@ else:
                             
                     if not valid_items_in_receipt or len(valid_items_in_receipt) == 1 and valid_items_in_receipt[0]['price'] == 0:
                         parsed_items.append({
+                            'Bazaar_Group': bazaar_group,
                             'Store': store_clean[:20],
                             'Item': store_clean[:25],
                             'Local_val': r_amt,
@@ -3902,6 +3913,7 @@ else:
                                 final_item_price = round(final_item_price * scale_factor, -2)
                                 
                             parsed_items.append({
+                                'Bazaar_Group': bazaar_group,
                                 'Store': store_clean[:20],
                                 'Item': it['name'][:25],
                                 'Local_val': final_item_price,
@@ -3918,11 +3930,12 @@ else:
                     fmt_local_sum = f"{tot_market_local:,.0f}" if base_curr in ["VND", "HUF", "KRW"] else f"{tot_market_local:,.2f}"
                     st.metric(f"🛒 장바구니 총 지출액 ({base_curr} 기준)", f"{fmt_local_sum} {base_curr}")
                     
-                    st.markdown(f"<h4 style='text-align: center; margin-top: 20px;'>🔍 마트/시장/선물 구매 품목별 비중 ({base_curr} 기준 Treemap)</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='text-align: center; margin-top: 20px;'>🔍 마트/시장/선물 통합 구매 비중 ({base_curr} 기준 Treemap)</h4>", unsafe_allow_html=True)
                     
+                    # 💡 [핵심 패치] path를 3계층(대분류 그룹 -> 개별 상호명 -> 세부 품목)으로 확장하여 완벽 통합 렌더링
                     fig_market = px.treemap(
                         item_df, 
-                        path=['Store', 'Item'], 
+                        path=['Bazaar_Group', 'Store', 'Item'], 
                         values='Local_val', 
                         color='Local_val',
                         color_continuous_scale='Tealgrn',
@@ -3932,10 +3945,10 @@ else:
                     val_template = "%{value:,.0f}" if base_curr in ["VND", "HUF", "KRW"] else "%{value:,.2f}"
                     fig_market.update_traces(
                         texttemplate=f"<b>%{{label}}</b><br>{val_template} {base_curr}", 
-                        hovertemplate=f"<b>상호/품목:</b> %{{label}}<br><b>지출액:</b> {val_template} {base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
+                        hovertemplate=f"<b>분류/상호/품목:</b> %{{label}}<br><b>지출액:</b> {val_template} {base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                         textposition='middle center'
                     )
-                    fig_market.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=540, coloraxis_showscale=False)
+                    fig_market.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=560, coloraxis_showscale=False)
                     st.plotly_chart(fig_market, use_container_width=True, config={'displaylogo': False})
                     
                     st.markdown("#### 📋 품목별 상세 구매 내역 랭킹")
