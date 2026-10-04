@@ -3782,7 +3782,7 @@ else:
 
 
     # ==============================================================================
-    # 6.03.00 | 🛒🍔💆🚗 Unified Magnifier Hub ('돋보기' 탭 전체 통째 교체 - 폰트 2배 확대 & 적극적 다단 줄바꿈)
+    # 6.03.00 | 🛒🍔💆🚗 Unified Magnifier Hub ('돋보기' 탭 전체 통째 교체 - 졸리마트 오분류 원천 차단)
     # ==============================================================================
     with tab_market:
         st.subheader("🔍 여행 소비 돋보기")
@@ -3868,7 +3868,6 @@ else:
                             clean_name = re.sub(r'(?:->|=>|[:;])+', '', clean_name).strip(' -*•()[]/_')
                             clean_name = re.sub(r'\s+', ' ', clean_name)
                             
-                            # 💡 [핵심 패치] 품목명을 적극적으로 여러 줄로 쪼개기 (<br> 주입)
                             if '(' in clean_name and ')' in clean_name:
                                 clean_name = re.sub(r'\s*\(', '<br>(', clean_name)
                             else:
@@ -3900,15 +3899,14 @@ else:
                         st.metric(f"🛒 장바구니 총 지출액 ({base_curr} 기준)", f"{tot_market_local:,.0f} {base_curr}")
                         
                         fig_market = px.treemap(item_df, path=['Bazaar_Group', 'Store', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
-                        # 💡 [핵심 패치] 폰트 크기를 대폭 확대하고 텍스트 자동 채우기 모드 활성화
                         fig_market.update_traces(
-                            texttemplate=f"<b>%{{label}}</b><br><span style='font-size:16px;'>%{{value:,.0f}} {base_curr}</span>", 
+                            texttemplate=f"<b>%{{label}}</b><br><span style='font-size:15px;'>%{{value:,.0f}} {base_curr}</span>", 
                             hovertemplate=f"<b>분류/상호/품목:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center'
                         )
                         fig_market.update_layout(
                             margin=dict(l=10, r=10, t=10, b=10), height=580, coloraxis_showscale=False,
-                            uniformtext=dict(minsize=14, mode='show') # 최소 14pt 보장으로 글자 크기 대폭 확대
+                            uniformtext=dict(minsize=13, mode='show')
                         )
                         st.plotly_chart(fig_market, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 장바구니 품목 내역이 없습니다.")
@@ -3979,7 +3977,6 @@ else:
                             clean_iname = re.sub(r'[\d,]+\s*(?:vnd|동|원|\$)?$', '', clean_iname, flags=re.IGNORECASE)
                             clean_iname = re.sub(r'^(?:[\-\*•\s]+)', '', clean_iname).strip(' -*•()[]/_')
                             
-                            # 💡 [핵심 패치] 적극적인 다단 줄바꿈
                             if '(' in clean_iname and ')' in clean_iname:
                                 clean_iname = re.sub(r'\s*\(', '<br>(', clean_iname)
                             elif len(clean_iname) > 12:
@@ -4013,20 +4010,20 @@ else:
                         
                         fig_food = px.treemap(food_df, path=['Food_Group', 'Place', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='YlOrBr', title=None)
                         fig_food.update_traces(
-                            texttemplate=f"<b>%{{label}}</b><br><span style='font-size:16px;'>%{{value:,.0f}} {f_base_curr}</span>", 
+                            texttemplate=f"<b>%{{label}}</b><br><span style='font-size:15px;'>%{{value:,.0f}} {f_base_curr}</span>", 
                             hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center'
                         )
                         fig_food.update_layout(
                             margin=dict(l=10, r=10, t=10, b=10), height=580, coloraxis_showscale=False,
-                            uniformtext=dict(minsize=14, mode='show')
+                            uniformtext=dict(minsize=13, mode='show')
                         )
                         st.plotly_chart(fig_food, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 식당/카페 메뉴 내역이 없습니다.")
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 · 교통 (그랩/교통 상단 + 마사지 하단)
+            # [SUB TAB 3] 마사지 · 교통 (그랩 상단 + 마사지 하단 - 졸리마트 오분류 원천 차단 패치 적용)
             # ==================================================================
             with sub_tab_relax:
                 st.markdown("<h4 style='margin-bottom: 2px;'>그랩 및 로컬교통</h4>", unsafe_allow_html=True)
@@ -4039,7 +4036,7 @@ else:
                     if method == '원화계좌(한국)' or '사전' in desc or '예매' in desc: return False
                     if '철도' in desc or ('기차' in desc and '기차역' not in desc and 'to' not in desc): return False
                     if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료', '마사지']: return False
-                    if any(k in desc for k in ['마트', '시장', '마사지', '스파', 'spa']): return False
+                    if any(k in desc for k in ['마트', '시장', '마사지', '스파', 'spa', '졸리', '파마씨티']): return False
 
                     local_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '교통']
                     return (cat in local_traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '통행료', '기차역'])
@@ -4068,7 +4065,6 @@ else:
                         if not p_provider: p_provider = "이동 수단"
                         if not p_item: p_item = "요금 및 통행료"
 
-                        # 💡 [교통 내역 다단 줄바꿈]
                         if len(p_item) > 12:
                             words = p_item.split(' ')
                             if len(words) > 1:
@@ -4086,13 +4082,13 @@ else:
                         st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_traffic_local:,.0f} {t_base_curr}</div>", unsafe_allow_html=True)
                         fig_traffic = px.treemap(traffic_df_final, path=['Traffic_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
                         fig_traffic.update_traces(
-                            texttemplate=f"<b>%{{label}}</b><br><span style='font-size:16px;'>%{{value:,.0f}} {t_base_curr}</span>", 
+                            texttemplate=f"<b>%{{label}}</b><br><span style='font-size:15px;'>%{{value:,.0f}} {t_base_curr}</span>", 
                             hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center'
                         )
                         fig_traffic.update_layout(
                             margin=dict(l=10, r=10, t=10, b=10), height=460, coloraxis_showscale=False,
-                            uniformtext=dict(minsize=14, mode='show')
+                            uniformtext=dict(minsize=13, mode='show')
                         )
                         st.plotly_chart(fig_traffic, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 교통 내역이 없습니다.")
@@ -4102,9 +4098,15 @@ else:
 
                 st.markdown("<h4 style='margin-bottom: 2px;'>마사지</h4>", unsafe_allow_html=True)
 
+                # 💡 [핵심 패치] 마사지 탭 필터: 카테고리가 '마사지'이면서 동시에 설명에 마트 키워드(졸리, 커피 등)가 있으면 무조건 차단
                 def is_valid_massage_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
+                    if cat != '마사지' and ('마사지' not in desc and '스파' not in desc and 'spa' not in desc):
+                        return False
+                    # 마트/커피/과자 등 마사지와 무관한 단어가 섞여 있으면 오분류로 간주하여 차단
+                    if any(k in desc for k in ['졸리', '마트', '시장', '커피', '과자', '딸기', '망고', '파마씨티']):
+                        return False
                     return (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
 
                 massage_df = ledger_df[ledger_df.apply(is_valid_massage_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
@@ -4130,7 +4132,6 @@ else:
                         if not p_provider: p_provider = "마사지 샵"
                         if not p_item: p_item = "마사지 코스"
 
-                        # 💡 [마사지 메뉴 이름 다단 줄바꿈]
                         if len(p_item) > 12:
                             words = p_item.split(' ')
                             if len(words) > 1:
@@ -4154,7 +4155,7 @@ else:
                         )
                         fig_massage.update_layout(
                             margin=dict(l=10, r=10, t=10, b=10), height=460, coloraxis_showscale=False,
-                            uniformtext=dict(minsize=14, mode='show')
+                            uniformtext=dict(minsize=13, mode='show')
                         )
                         st.plotly_chart(fig_massage, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 마사지 내역이 없습니다.")
