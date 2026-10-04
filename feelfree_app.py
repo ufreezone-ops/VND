@@ -3782,14 +3782,14 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (시장 및 유통사 통합 그룹핑 적용)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (편의점 마트 통합 및 약국 독립 분리)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
-        st.caption(f"💡 마트, 시장, 그리고 선물(기념품/특산품)로 구매한 개별 품목들의 세부 지출 내역을 현지 통화({TRAVEL_CURRENCY}) 기준으로 정밀하게 들여다봅니다.")
+        st.caption(f"💡 마트, 시장, 약국, 그리고 선물(기념품/특산품)로 구매한 개별 품목들의 세부 지출 내역을 현지 통화({TRAVEL_CURRENCY}) 기준으로 정밀하게 들여다봅니다.")
         
         if not ledger_df.empty:
-            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '졸리', '성물', '기념품', '헬로', '한시장', '동바시장']
+            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '약국', '졸리', '성물', '기념품', '헬로', '한시장', '동바시장', '편의점']
             
             exclude_keywords = ['마사지', '발마사지', '그랩', 'grab', '미터기', '택시', '교통', '콜택시', '식사', '카페', '레스토랑', '호텔']
             
@@ -3823,15 +3823,15 @@ else:
                     store_clean = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', store_clean).strip(' -*•()[]/_')
                     if not store_clean: store_clean = "마트/시장"
                     
-                    # 💡 [핵심 패치] 상호명을 바탕으로 대분류 시장/유통사 그룹(Bazaar_Group) 자동 통합 분류
+                    # 💡 [핵심 패치] 편의점을 마트/슈퍼 통합에 묶고, 약국을 독립 대분류로 분리
                     store_lower = store_clean.lower()
                     if '한시장' in store_lower:
                         bazaar_group = '🧺 한시장 통합'
                     elif '동바시장' in store_lower:
                         bazaar_group = '🧺 동바시장 통합'
-                    elif '편의점' in store_lower or '7-eleven' in store_lower or 'circle k' in store_lower:
-                        bazaar_group = '🏪 편의점 통합'
-                    elif '마트' in store_lower or '슈퍼' in store_lower or 'lotte' in store_lower or 'big c' in store_lower:
+                    elif '약국' in store_lower or 'pharmacity' in store_lower or '파마씨티' in store_lower:
+                        bazaar_group = '💊 약국 통합'
+                    elif '마트' in store_lower or '슈퍼' in store_lower or '편의점' in store_lower or 'lotte' in store_lower or 'big c' in store_lower or '7-eleven' in store_lower or 'circle k' in store_lower:
                         bazaar_group = '🛒 마트/슈퍼 통합'
                     elif '시장' in store_lower or '야시장' in store_lower:
                         bazaar_group = '🛍️ 기타 전통시장'
@@ -3932,7 +3932,6 @@ else:
                     
                     st.markdown(f"<h4 style='text-align: center; margin-top: 20px;'>🔍 마트/시장/선물 통합 구매 비중 ({base_curr} 기준 Treemap)</h4>", unsafe_allow_html=True)
                     
-                    # 💡 [핵심 패치] path를 3계층(대분류 그룹 -> 개별 상호명 -> 세부 품목)으로 확장하여 완벽 통합 렌더링
                     fig_market = px.treemap(
                         item_df, 
                         path=['Bazaar_Group', 'Store', 'Item'], 
