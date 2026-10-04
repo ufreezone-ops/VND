@@ -4003,7 +4003,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (장거리 철도 및 사전결제 이동 수단 제외 패치)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (그랩/택시 세부 항목 개별 가격 정밀 파싱 패치)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
@@ -4011,28 +4011,20 @@ else:
                     desc = str(row['Description']).strip().lower()
                     method = str(row['PaymentMethod']).strip().lower()
                     
-                    # 💡 [핵심 패치] 사전 결제된 항목(원화계좌 결제 등)이거나 철도/기차/장거리 성격의 이동은 로컬 교통 돋보기에서 제외
-                    if method == '원화계좌(한국)' or '사전' in desc or '예매' in desc or 'online' in desc:
-                        # 단, 마사지는 사전 결제여도 힐링 항목이므로 예외적으로 허용
+                    if method == '원화계좌(한국)' or '사전' in desc or '예매' in desc:
                         is_mas = (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
-                        if not is_mas:
-                            return False
+                        if not is_mas: return False
                             
-                    # 장거리 철도/기차 명시적 차단 (단, 지하철/트램 같은 시내 철도는 허용)
                     if '철도' in desc or '기차' in desc or 'amtrak' in desc or 'vsn.vn' in desc:
                         return False
 
-                    # 1. 마사지 판정
                     is_massage = (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
-                    
-                    # 2. 로컬 시내 교통 판정 (그랩, DiDi, 택시, 버스, 트램 등)
                     local_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '교통']
-                    is_local_traffic = (cat in local_traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', 'didi', 'vinbus', '지하철', '버스', '트램', '미터기'])
+                    is_local_traffic = (cat in local_traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '통행료'])
                     
                     if not is_massage and not is_local_traffic:
                         return False
                         
-                    # 최종 방어막: 마트, 시장, 선물, 식사 등 차단
                     if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료']:
                         return False
                         
@@ -4065,20 +4057,61 @@ else:
                             relax_group = '🚗 그랩 및 로컬교통'
                             
                         sub_items = lines[1:] if len(lines) > 1 else [p_clean]
+                        valid_relax_items = []
+                        
                         for si in sub_items:
                             if len(si) < 2: continue
+                            
+                            # 💡 [핵심 패치] 그랩 내역의 '미터기요금 88,000' 같은 문장에서 콤마 포함 금액을 정확히 추출
+                            price_val = 0.0
+                            m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', si)
+                            if m_k:
+                                price_val = float(m_k.group(1)) * 1000
+                            else:
+                                comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', si)
+                                if comma_nums:
+                                    try: price_val = float(comma_nums[-1].replace(',', ''))
+                                    except: pass
+                                else:
+                                    plain_nums = re.findall(r'(\d+)', si)
+                                    if plain_nums:
+                                        try:
+                                            for p_str in reversed(plain_nums):
+                                                p_val = float(p_str)
+                                                if p_val > 100: # 100 이상의 의미 있는 금액
+                                                    price_val = p_val
+                                                    break
+                                        except: pass
+
                             clean_si = re.sub(r'[\d,\.]+\s*[kK]\b', '', si)
                             clean_si = re.sub(r'[\d,]+\s*(?:vnd|동|원|\$)?$', '', clean_si, flags=re.IGNORECASE)
                             clean_si = re.sub(r'^(?:[\-\*•\s]+)', '', clean_si).strip(' -*•()[]/_')
                             if not clean_si: clean_si = p_clean
                             
+                            valid_relax_items.append({'name': clean_si, 'price': price_val})
+                            
+                        if not valid_relax_items or len(valid_relax_items) == 1 and valid_relax_items[0]['price'] == 0:
                             parsed_relax.append({
                                 'Relax_Group': relax_group,
                                 'Provider': p_clean[:20],
-                                'Item': clean_si[:25],
-                                'Local_val': r_amt / max(1, len(sub_items)),
+                                'Item': p_clean[:25],
+                                'Local_val': r_amt,
                                 'Curr': r_curr
                             })
+                        else:
+                            sum_r_prices = sum(it['price'] for it in valid_relax_items if it['price'] > 0)
+                            r_scale = (r_amt / sum_r_prices) if (sum_r_prices > 0 and r_amt > 0 and abs(sum_r_prices - r_amt) > 1.0) else 1.0
+                            
+                            for it in valid_relax_items:
+                                f_r_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_relax_items)))
+                                f_r_price = round(f_r_price * r_scale, -2)
+                                parsed_relax.append({
+                                    'Relax_Group': relax_group,
+                                    'Provider': p_clean[:20],
+                                    'Item': it['name'][:25],
+                                    'Local_val': f_r_price,
+                                    'Curr': r_curr
+                                })
                             
                     if parsed_relax:
                         relax_df_final = pd.DataFrame(parsed_relax)
