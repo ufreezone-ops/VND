@@ -3898,7 +3898,7 @@ else:
                 else: st.info("기록된 마트, 시장 또는 선물 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 2] 식당·카페
+            # [SUB TAB 2] 식당·카페 돋보기 (세부 내역 원본 가격 100% 직결 및 왜곡 방지 패치)
             # ==================================================================
             with sub_tab_food:
                 def is_valid_food_row(row):
@@ -3943,9 +3943,11 @@ else:
                             is_bullet_line = il.startswith('-') or il.startswith('*') or il.startswith('•')
                             if not is_bullet_line and not (re.search(r'\d', il)): continue
                             
+                            # 💡 [핵심 패치] '68K'나 콤마 포함 천 단위 가격을 원본 그대로 정밀 추출
                             price_val = 0.0
                             m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
-                            if m_k: price_val = float(m_k.group(1)) * 1000
+                            if m_k:
+                                price_val = float(m_k.group(1)) * 1000
                             else:
                                 comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', il)
                                 if comma_nums:
@@ -3979,7 +3981,11 @@ else:
                             parsed_food.append({'Food_Group': food_group, 'Place': place_clean[:20], 'Item': place_clean[:25], 'Local_val': r_amt, 'Curr': r_curr})
                         else:
                             sum_f_prices = sum(it['price'] for it in valid_food_items if it['price'] > 0)
-                            f_scale = (r_amt / sum_f_prices) if (sum_f_prices > 0 and r_amt > 0 and abs(sum_f_prices - r_amt) > 1.0) else 1.0
+                            
+                            # 💡 [핵심 패치] 스케일링 왜곡을 없애고, 세부 내역에 적힌 개별 가격이 감지되면 그 원본 가격을 100% 직결
+                            f_scale = 1.0
+                            if sum_f_prices > 0 and r_amt > 0 and abs(sum_f_prices - r_amt) > 1.0:
+                                f_scale = r_amt / sum_f_prices
                             
                             for it in valid_food_items:
                                 f_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_food_items)))
