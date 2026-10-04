@@ -4023,9 +4023,12 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 · 교통 (그랩 상단 + 마사지 하단 - 졸리마트 오분류 원천 차단 패치 적용)
+            # [SUB TAB 3] 마사지 · 교통 (상단: 그랩/교통 돋보기 - 12건 누락 원천 방지 최종 패치)
             # ==================================================================
             with sub_tab_relax:
+                # --------------------------------------------------------------
+                # [PART 1] 상단: 그랩 및 로컬교통 돋보기
+                # --------------------------------------------------------------
                 st.markdown("<h4 style='margin-bottom: 2px;'>그랩 및 로컬교통</h4>", unsafe_allow_html=True)
                 
                 def is_valid_traffic_row(row):
@@ -4033,13 +4036,19 @@ else:
                     desc = str(row['Description']).strip().lower()
                     method = str(row['PaymentMethod']).strip().lower()
                     
-                    if method == '원화계좌(한국)' or '사전' in desc or '예매' in desc: return False
-                    if '철도' in desc or ('기차' in desc and '기차역' not in desc and 'to' not in desc): return False
-                    if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료', '마사지']: return False
-                    if any(k in desc for k in ['마트', '시장', '마사지', '스파', 'spa', '졸리', '파마씨티']): return False
-
-                    local_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '교통']
-                    return (cat in local_traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '통행료', '기차역'])
+                    # 💡 [핵심 패치] 1순위: 사용자가 '택시', 'Grab', '교통', '기차' 등 교통 관련 카테고리를 직접 골랐다면 텍스트 검사 불문하고 무조건 100% 허용!
+                    explicit_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '기차', '교통', '렌트카']
+                    if cat in explicit_traffic_cats:
+                        # 예외: 원화계좌로 사전 결제된 명백한 장거리 철도 예매만 차단
+                        if method == '원화계좌(한국)' and ('vsn.vn' in desc or '철도청' in desc or 'online' in desc):
+                            return False
+                        return True
+                        
+                    # 2순위: 카테고리가 다른데 설명에 그랩이나 택시, 미터기 키워드가 있는 경우
+                    if any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '통행료', '기차역']):
+                        return True
+                        
+                    return False
 
                 traffic_df = ledger_df[ledger_df.apply(is_valid_traffic_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
@@ -4065,13 +4074,13 @@ else:
                         if not p_provider: p_provider = "이동 수단"
                         if not p_item: p_item = "요금 및 통행료"
 
-                        if len(p_item) > 12:
-                            words = p_item.split(' ')
-                            if len(words) > 1:
-                                mid = len(words) // 2
-                                p_item = " ".join(words[:mid]) + "<br>" + " ".join(words[mid:])
-
-                        parsed_traffic.append({'Traffic_Group': '그랩 및 로컬교통', 'Provider': p_provider[:22], 'Item': p_item[:28], 'Local_val': r_amt, 'Curr': r_curr})
+                        parsed_traffic.append({
+                            'Traffic_Group': '그랩 및 로컬교통',
+                            'Provider': p_provider[:22],
+                            'Item': p_item[:28],
+                            'Local_val': r_amt,
+                            'Curr': r_curr
+                        })
                             
                     if parsed_traffic:
                         traffic_df_final = pd.DataFrame(parsed_traffic)
@@ -4096,17 +4105,14 @@ else:
 
                 st.markdown("<div style='margin: 30px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
+                # --------------------------------------------------------------
+                # [PART 2] 하단: 마사지 돋보기 (💡 1순위 마사지 키워드 무조건 100% 수집)
+                # --------------------------------------------------------------
                 st.markdown("<h4 style='margin-bottom: 2px;'>마사지</h4>", unsafe_allow_html=True)
 
-                # 💡 [핵심 패치] 마사지 탭 필터: 카테고리가 '마사지'이면서 동시에 설명에 마트 키워드(졸리, 커피 등)가 있으면 무조건 차단
                 def is_valid_massage_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
-                    if cat != '마사지' and ('마사지' not in desc and '스파' not in desc and 'spa' not in desc):
-                        return False
-                    # 마트/커피/과자 등 마사지와 무관한 단어가 섞여 있으면 오분류로 간주하여 차단
-                    if any(k in desc for k in ['졸리', '마트', '시장', '커피', '과자', '딸기', '망고', '파마씨티']):
-                        return False
                     return (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
 
                 massage_df = ledger_df[ledger_df.apply(is_valid_massage_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
