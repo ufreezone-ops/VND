@@ -3782,14 +3782,14 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒🍔 Unified Magnifier Hub ('돋보기' 탭 전체: 장바구니 + 식당/카페 서브탭 통합)
+    # 6.03.00 | 🛒🍔💆 Unified Magnifier Hub ('돋보기' 탭 전체: 장바구니 + 식당/카페 + 마사지/교통 3개 서브탭)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🔍 여행 소비 돋보기 인터페이스")
-        st.caption("💡 마트/시장 장바구니와 식당/카페(호텔 룸차지/외상 포함)의 상세 지출 내역을 각각의 돋보기로 정밀하게 들여다봅니다.")
+        st.caption("💡 장바구니, 식당·카페, 그리고 마사지 및 그랩(교통)의 상세 지출 내역을 각각의 돋보기로 정밀하게 들여다봅니다.")
         
-        # 💡 [핵심 패치] 하나의 '돋보기' 탭 안에 두 개의 서브 탭을 두어 UI 난잡함 원천 방지
-        sub_tab_cart, sub_tab_food = st.tabs(["🛒 장바구니 돋보기", "🍔 식당·카페 돋보기"])
+        # 💡 [핵심 패치] 3개의 서브 탭으로 확장 (마사지 & 그랩 돋보기 신설)
+        sub_tab_cart, sub_tab_food, sub_tab_relax = st.tabs(["🛒 장바구니 돋보기", "🍔 식당·카페 돋보기", "💆🚗 마사지 & 교통 돋보기"])
         
         if not ledger_df.empty:
             # ==================================================================
@@ -3899,7 +3899,7 @@ else:
                 else: st.info("기록된 마트, 시장 또는 선물 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 2] 식당·카페 돋보기 (긴 메뉴 이름 자동 줄바꿈 및 삼단 포맷팅 적용)
+            # [SUB TAB 2] 식당·카페 돋보기
             # ==================================================================
             with sub_tab_food:
                 def is_valid_food_row(row):
@@ -3965,12 +3965,9 @@ else:
                             clean_iname = re.sub(r'[\d,]+\s*(?:vnd|동|원|\$)?$', '', clean_iname, flags=re.IGNORECASE)
                             clean_iname = re.sub(r'^(?:[\-\*•\s]+)', '', clean_iname).strip(' -*•()[]/_')
                             
-                            # 💡 [핵심 패치] 긴 메뉴 이름(예: 한글명과 괄호 안 베트남어 원문)을 보기 좋게 2단(줄바꿈)으로 포맷팅
                             if '(' in clean_iname and ')' in clean_iname:
-                                # 괄호 앞부분(한글 메뉴명)과 괄호 뒷부분(현지어)을 분리하여 줄바꿈 삽입
                                 clean_iname = re.sub(r'\s*\(', '<br>(', clean_iname)
                             elif len(clean_iname) > 16:
-                                # 괄호가 없는데 이름이 길다면 공백 기준으로 적당히 중간 줄바꿈 삽입
                                 words = clean_iname.split(' ')
                                 if len(words) > 2:
                                     mid = len(words) // 2
@@ -3998,26 +3995,77 @@ else:
                         tot_food_local = food_df['Local_val'].sum()
                         
                         st.metric(f"🍔 식당·카페 총 지출액 ({f_base_curr} 기준)", f"{tot_food_local:,.0f} {f_base_curr}")
-                        
-                        fig_food = px.treemap(
-                            food_df, 
-                            path=['Food_Group', 'Place', 'Item'], 
-                            values='Local_val', 
-                            color='Local_val', 
-                            color_continuous_scale='YlOrBr', 
-                            title=None
-                        )
-                        
-                        # 💡 [핵심 패치] 트리맵 내부 텍스트 템플릿에 줄바꿈(<br>) 적용하여 위아래 여백을 알차게 활용
-                        fig_food.update_traces(
-                            texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {f_base_curr}", 
-                            hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
-                            textposition='middle center'
-                        )
-                        fig_food.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=560, coloraxis_showscale=False)
+                        fig_food = px.treemap(food_df, path=['Food_Group', 'Place', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='YlOrBr', title=None)
+                        fig_food.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {f_base_curr}", hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
+                        fig_food.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=540, coloraxis_showscale=False)
                         st.plotly_chart(fig_food, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 식당/카페 메뉴 내역이 없습니다.")
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
+
+            # ==================================================================
+            # [SUB TAB 3] 신설: 마사지 & 교통 돋보기 (마사지 및 그랩/택시/교통 정밀 분석)
+            # ==================================================================
+            with sub_tab_relax:
+                def is_valid_relax_row(row):
+                    cat = str(row['Category']).strip()
+                    desc = str(row['Description']).strip().lower()
+                    if cat in ['마사지', 'Grab', 'DiDi', 'VinBus', '지하철', '택시', '교통']: return True
+                    if any(k in desc for k in ['마사지', '스파', '그랩', 'grab', '택시', '미터기', '공항버스', '리무진', '지하철']):
+                        return True
+                    return False
+
+                relax_df = ledger_df[ledger_df.apply(is_valid_relax_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
+                
+                if not relax_df.empty:
+                    parsed_relax = []
+                    for _, r in relax_df.iterrows():
+                        cat_r = str(r['Category']).strip()
+                        desc_raw = str(r['Description'])
+                        r_curr = str(r['Currency']).strip().upper()
+                        r_amt = float(r['Amount'])
+                        
+                        lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
+                        p_name = lines[0] if lines else ("마사지/스파" if cat_r == '마사지' else "그랩/교통")
+                        p_clean = re.sub(r'\[.*?\]\s*', '', p_name).split('|')[0].strip()
+                        p_clean = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', p_clean).strip(' -*•()[]/_')
+                        if not p_clean: p_clean = "힐링/이동"
+                        
+                        p_lower = p_clean.lower()
+                        if cat_r == '마사지' or '마사지' in p_lower or '스파' in p_lower or 'spa' in p_lower:
+                            relax_group = '💆 힐링/마사지'
+                        else:
+                            relax_group = '🚗 그랩 및 로컬교통'
+                            
+                        # 단일 건이거나 상세 라인이 있는 경우 처리
+                        sub_items = lines[1:] if len(lines) > 1 else [p_clean]
+                        for si in sub_items:
+                            if len(si) < 2: continue
+                            clean_si = re.sub(r'[\d,\.]+\s*[kK]\b', '', si)
+                            clean_si = re.sub(r'[\d,]+\s*(?:vnd|동|원|\$)?$', '', clean_si, flags=re.IGNORECASE)
+                            clean_si = re.sub(r'^(?:[\-\*•\s]+)', '', clean_si).strip(' -*•()[]/_')
+                            if not clean_si: clean_si = p_clean
+                            
+                            parsed_relax.append({
+                                'Relax_Group': relax_group,
+                                'Provider': p_clean[:20],
+                                'Item': clean_si[:25],
+                                'Local_val': r_amt / max(1, len(sub_items)),
+                                'Curr': r_curr
+                            })
+                            
+                    if parsed_relax:
+                        relax_df_final = pd.DataFrame(parsed_relax)
+                        relax_df_final = relax_df_final[relax_df_final['Local_val'] > 0].copy()
+                        r_base_curr = relax_df_final['Curr'].iloc[0] if not relax_df_final.empty else TRAVEL_CURRENCY
+                        tot_relax_local = relax_df_final['Local_val'].sum()
+                        
+                        st.metric(f"💆🚗 마사지 및 교통 총 지출액 ({r_base_curr} 기준)", f"{tot_relax_local:,.0f} {r_base_curr}")
+                        fig_relax = px.treemap(relax_df_final, path=['Relax_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
+                        fig_relax.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {r_base_curr}", hovertemplate=f"<b>분류/업체/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {r_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
+                        fig_relax.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=520, coloraxis_showscale=False)
+                        st.plotly_chart(fig_relax, use_container_width=True, config={'displaylogo': False})
+                    else: st.info("정제할 수 있는 마사지/교통 내역이 없습니다.")
+                else: st.info("기록된 마사지 또는 교통 지출 내역이 없습니다.")
     
     
     # --------------------------------------------------------------------------
