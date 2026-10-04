@@ -4003,22 +4003,28 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (마트/시장/선물 품목 유입 원천 차단 패치 적용)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 ('시장' 포함 마사지 샵 예외 허용 패치 적용)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
                     
-                    # 💡 [핵심 패치] 카테고리가 마트, 시장, 선물이거나 내용에 마트 키워드가 있으면 교통 탭에서 무조건 제외
+                    # 1. 명백한 마사지 카테고리이거나 마사지 관련 키워드가 있으면 '시장' 키워드 방어막을 뚫고 무조건 허용!
+                    if cat == '마사지' or any(k in desc for k in ['마사지', '스파', 'spa', '발마사지', '풋마사지', 'body massage', 'foot scrub']):
+                        return True
+                        
+                    # 2. 교통/그랩 관련 판정
+                    if cat in ['Grab', 'DiDi', 'VinBus', '지하철', '택시', '교통']: return True
+                    if any(k in desc for k in ['그랩', 'grab', '택시', '미터기', '공항버스', '리무진', '지하철']):
+                        return True
+                        
+                    # 3. 그 외 마트/시장 품목 및 비관련 항목 차단
                     if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료']:
                         return False
                     if any(k in desc for k in ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', '졸리', '파마씨티', 'pharmacity', '딸기', '망고', '커피', '과자']):
                         return False
                         
-                    if cat in ['마사지', 'Grab', 'DiDi', 'VinBus', '지하철', '택시', '교통']: return True
-                    if any(k in desc for k in ['마사지', '스파', '그랩', 'grab', '택시', '미터기', '공항버스', '리무진', '지하철', '발마사지', '풋마사지']):
-                        return True
                     return False
 
                 relax_df = ledger_df[ledger_df.apply(is_valid_relax_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
