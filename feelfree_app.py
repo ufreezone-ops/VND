@@ -3899,17 +3899,15 @@ else:
                 else: st.info("기록된 마트, 시장 또는 선물 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 2] 식당·카페 돋보기 (식사, 간식 및 호텔외상/룸차지 맥주 등 완벽 포함)
+            # [SUB TAB 2] 식당·카페 돋보기 (긴 메뉴 이름 자동 줄바꿈 및 삼단 포맷팅 적용)
             # ==================================================================
             with sub_tab_food:
-                # 💡 [핵심 패치] 식사, 간식 카테고리 뿐만 아니라 호텔외상(CREDIT) 등으로 잡힌 룸차지/식음료 건까지 완벽 포섭
                 def is_valid_food_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
                     method = str(row['PaymentMethod']).strip().lower()
                     
                     if cat in ['식사', '간식']: return True
-                    # 호텔외상이나 룸차지 성격의 식음료 소비 포착
                     if '외상' in method or 'credit' in method or '호텔외상' in method:
                         if any(k in desc for k in ['맥주', '와인', '음료', '칵테일', '수영장', '조식', '식사', '룸서비스', '카페', '커피', 'bar', 'pool']):
                             return True
@@ -3967,6 +3965,17 @@ else:
                             clean_iname = re.sub(r'[\d,]+\s*(?:vnd|동|원|\$)?$', '', clean_iname, flags=re.IGNORECASE)
                             clean_iname = re.sub(r'^(?:[\-\*•\s]+)', '', clean_iname).strip(' -*•()[]/_')
                             
+                            # 💡 [핵심 패치] 긴 메뉴 이름(예: 한글명과 괄호 안 베트남어 원문)을 보기 좋게 2단(줄바꿈)으로 포맷팅
+                            if '(' in clean_iname and ')' in clean_iname:
+                                # 괄호 앞부분(한글 메뉴명)과 괄호 뒷부분(현지어)을 분리하여 줄바꿈 삽입
+                                clean_iname = re.sub(r'\s*\(', '<br>(', clean_iname)
+                            elif len(clean_iname) > 16:
+                                # 괄호가 없는데 이름이 길다면 공백 기준으로 적당히 중간 줄바꿈 삽입
+                                words = clean_iname.split(' ')
+                                if len(words) > 2:
+                                    mid = len(words) // 2
+                                    clean_iname = " ".join(words[:mid]) + "<br>" + " ".join(words[mid:])
+                            
                             if clean_iname and len(clean_iname) >= 2:
                                 valid_food_items.append({'name': clean_iname, 'price': price_val})
                                 
@@ -3979,7 +3988,7 @@ else:
                             for it in valid_food_items:
                                 f_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_food_items)))
                                 f_price = round(f_price * f_scale, -2)
-                                parsed_items_box = {'Food_Group': food_group, 'Place': place_clean[:20], 'Item': it['name'][:25], 'Local_val': f_price, 'Curr': r_curr}
+                                parsed_items_box = {'Food_Group': food_group, 'Place': place_clean[:20], 'Item': it['name'], 'Local_val': f_price, 'Curr': r_curr}
                                 parsed_food.append(parsed_items_box)
                                 
                     if parsed_food:
@@ -3989,9 +3998,23 @@ else:
                         tot_food_local = food_df['Local_val'].sum()
                         
                         st.metric(f"🍔 식당·카페 총 지출액 ({f_base_curr} 기준)", f"{tot_food_local:,.0f} {f_base_curr}")
-                        fig_food = px.treemap(food_df, path=['Food_Group', 'Place', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Sunset', title=None)
-                        fig_food.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {f_base_curr}", hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
-                        fig_food.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=520, coloraxis_showscale=False)
+                        
+                        fig_food = px.treemap(
+                            food_df, 
+                            path=['Food_Group', 'Place', 'Item'], 
+                            values='Local_val', 
+                            color='Local_val', 
+                            color_continuous_scale='YlOrBr', 
+                            title=None
+                        )
+                        
+                        # 💡 [핵심 패치] 트리맵 내부 텍스트 템플릿에 줄바꿈(<br>) 적용하여 위아래 여백을 알차게 활용
+                        fig_food.update_traces(
+                            texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {f_base_curr}", 
+                            hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
+                            textposition='middle center'
+                        )
+                        fig_food.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=560, coloraxis_showscale=False)
                         st.plotly_chart(fig_food, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 식당/카페 메뉴 내역이 없습니다.")
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
