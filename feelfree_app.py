@@ -4003,40 +4003,42 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (1순위 카테고리 최우선 반영 및 억울한 탈락 방지 패치)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (상단: 그랩/교통 트리맵 / 하단: 마사지 트리맵 상하 분리)
             # ==================================================================
             with sub_tab_relax:
-                def is_valid_relax_row(row):
+                # --------------------------------------------------------------
+                # [PART 1] 상단: 그랩 및 로컬교통 돋보기
+                # --------------------------------------------------------------
+                st.markdown("<h4 style='margin-bottom: 2px;'>🚗 그랩 및 로컬교통 돋보기</h4>", unsafe_allow_html=True)
+                
+                def is_valid_traffic_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
                     method = str(row['PaymentMethod']).strip().lower()
                     
-                    # 💡 [핵심 패치] 1순위: 카테고리가 명확한 마사지이거나 교통 수단(택시, Grab, 교통 등)이면 다른 어떤 조건보다 최우선으로 무조건 허용!
-                    explicit_relax_cats = ['마사지', 'Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '교통', '렌트카']
-                    if cat in explicit_relax_cats:
-                        return True
-                        
-                    # 2순위: 카테고리가 다른데 설명에 명확한 키워드가 있는 경우
-                    is_massage_desc = ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
-                    is_traffic_desc = ('그랩' in desc) or ('grab' in desc) or ('택시' in desc) or ('미터기' in desc)
-                    if is_massage_desc or is_traffic_desc:
-                        # 단, 명백한 장거리 기차 예매(원화계좌 사전결제 등)인 경우만 제외
-                        if method == '원화계좌(한국)' and ('기차' in desc or '철도' in desc) and '역' not in desc:
-                            return False
-                        return True
-                        
-                    return False
+                    if method == '원화계좌(한국)' or '사전' in desc or '예매' in desc:
+                        return False
+                    if '철도' in desc or ('기차' in desc and '기차역' not in desc and 'to' not in desc):
+                        return False
+                    if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료', '마사지']:
+                        return False
+                    if any(k in desc for k in ['마트', '시장', '마사지', '스파', 'spa']):
+                        return False
 
-                relax_df = ledger_df[ledger_df.apply(is_valid_relax_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
+                    local_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '교통']
+                    is_local_traffic = (cat in local_traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '통행료', '기차역'])
+                    
+                    return is_local_traffic
+
+                traffic_df = ledger_df[ledger_df.apply(is_valid_traffic_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
-                if not relax_df.empty:
-                    parsed_relax = []
-                    for _, r in relax_df.iterrows():
+                if not traffic_df.empty:
+                    parsed_traffic = []
+                    for _, r in traffic_df.iterrows():
                         cat_r = str(r['Category']).strip()
                         desc_raw = str(r['Description'])
                         r_curr = str(r['Currency']).strip().upper()
-                        if not r_curr or r_curr == 'NAN' or len(r_curr) != 3:
-                            r_curr = TRAVEL_CURRENCY
+                        if not r_curr or r_curr == 'NAN' or len(r_curr) != 3: r_curr = TRAVEL_CURRENCY
                         r_amt = float(r['Amount'])
                         
                         clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip()
@@ -4044,41 +4046,98 @@ else:
                             p_provider = clean_desc.split('-', 1)[0].strip()
                             p_item = clean_desc.split('-', 1)[1].strip()
                         else:
-                            p_provider = clean_desc[:20] if clean_desc else ("마사지" if cat_r == '마사지' else "그랩/택시")
-                            p_item = clean_desc[:25] if clean_desc else "이동 서비스"
+                            p_provider = clean_desc[:20] if clean_desc else "그랩/택시"
+                            p_item = clean_desc[:25] if clean_desc else "이동 요금"
                             
                         p_provider = re.sub(r'\(약.*?\)', '', p_provider).strip(' -*•()[]/_')
                         p_item = re.sub(r'\(약.*?\)', '', p_item).strip(' -*•()[]/_')
-                        if not p_provider: p_provider = "업체명"
-                        if not p_item: p_item = "이동 내역"
+                        if not p_provider: p_provider = "이동 수단"
+                        if not p_item: p_item = "요금 및 통행료"
 
-                        if cat_r == '마사지' or '마사지' in desc_raw.lower() or '스파' in desc_raw.lower():
-                            relax_group = '💆 힐링/마사지'
-                        else:
-                            relax_group = '🚗 그랩 및 로컬교통'
-                            
-                        parsed_relax.append({
-                            'Relax_Group': relax_group,
+                        parsed_traffic.append({
+                            'Traffic_Group': '🚗 그랩 및 로컬교통',
                             'Provider': p_provider[:22],
                             'Item': p_item[:28],
                             'Local_val': r_amt,
                             'Curr': r_curr
                         })
                             
-                    if parsed_relax:
-                        relax_df_final = pd.DataFrame(parsed_relax)
-                        relax_df_final = relax_df_final[relax_df_final['Local_val'] > 0].copy()
+                    if parsed_traffic:
+                        traffic_df_final = pd.DataFrame(parsed_traffic)
+                        traffic_df_final = traffic_df_final[traffic_df_final['Local_val'] > 0].copy()
+                        t_base_curr = TRAVEL_CURRENCY
+                        tot_traffic_local = traffic_df_final['Local_val'].sum()
                         
-                        r_base_curr = TRAVEL_CURRENCY
-                        tot_relax_local = relax_df_final['Local_val'].sum()
+                        st.metric(f"🚗 로컬 교통 총 지출액 ({t_base_curr} 기준)", f"{tot_traffic_local:,.0f} {t_base_curr}")
+                        fig_traffic = px.treemap(traffic_df_final, path=['Traffic_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
+                        fig_traffic.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {t_base_curr}", hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
+                        fig_traffic.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=440, coloraxis_showscale=False)
+                        st.plotly_chart(fig_traffic, use_container_width=True, config={'displaylogo': False})
+                    else: st.info("정제할 수 있는 교통 내역이 없습니다.")
+                else: st.info("기록된 로컬 교통 지출 내역이 없습니다.")
+
+                st.markdown("<div style='margin: 30px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
+
+                # --------------------------------------------------------------
+                # [PART 2] 하단: 힐링/마사지 돋보기
+                # --------------------------------------------------------------
+                st.markdown("<h4 style='margin-bottom: 2px;'>💆 힐링 및 마사지 돋보기</h4>", unsafe_allow_html=True)
+
+                def is_valid_massage_row(row):
+                    cat = str(row['Category']).strip()
+                    desc = str(row['Description']).strip().lower()
+                    if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료']:
+                        return False
+                    if any(k in desc for k in ['마트', '시장', 'market', 'lotte', 'big c', '딸기', '망고', '커피', '과자', '졸리']):
+                        return False
+                    if cat == '마사지' or any(k in desc for k in ['마사지', '스파', 'spa', '발마사지', '풋마사지', 'body massage', 'foot scrub']):
+                        return True
+                    return False
+
+                massage_df = ledger_df[ledger_df.apply(is_valid_massage_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
+                
+                if not massage_df.empty:
+                    parsed_massage = []
+                    for _, r in massage_df.iterrows():
+                        desc_raw = str(r['Description'])
+                        r_curr = str(r['Currency']).strip().upper()
+                        if not r_curr or r_curr == 'NAN' or len(r_curr) != 3: r_curr = TRAVEL_CURRENCY
+                        r_amt = float(r['Amount'])
                         
-                        st.metric(f"💆🚗 마사지 및 로컬교통 총 지출액 ({r_base_curr} 기준)", f"{tot_relax_local:,.0f} {r_base_curr}")
-                        fig_relax = px.treemap(relax_df_final, path=['Relax_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
-                        fig_relax.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {r_base_curr}", hovertemplate=f"<b>분류/업체/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {r_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
-                        fig_relax.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=520, coloraxis_showscale=False)
-                        st.plotly_chart(fig_relax, use_container_width=True, config={'displaylogo': False})
-                    else: st.info("정제할 수 있는 마사지/로컬교통 내역이 없습니다.")
-                else: st.info("기록된 마사지 또는 로컬교통 지출 내역이 없습니다.")
+                        clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip()
+                        if '-' in clean_desc:
+                            p_provider = clean_desc.split('-', 1)[0].strip()
+                            p_item = clean_desc.split('-', 1)[1].strip()
+                        else:
+                            p_provider = clean_desc[:20] if clean_desc else "마사지 샵"
+                            p_item = clean_desc[:25] if clean_desc else "힐링 마사지"
+                            
+                        p_provider = re.sub(r'\(약.*?\)', '', p_provider).strip(' -*•()[]/_')
+                        p_item = re.sub(r'\(약.*?\)', '', p_item).strip(' -*•()[]/_')
+                        if not p_provider: p_provider = "마사지 샵"
+                        if not p_item: p_item = "마사지 코스"
+
+                        parsed_massage.append({
+                            'Massage_Group': '💆 힐링/마사지',
+                            'Provider': p_provider[:22],
+                            'Item': p_item[:28],
+                            'Local_val': r_amt,
+                            'Curr': r_curr
+                        })
+                            
+                    if parsed_massage:
+                        massage_df_final = pd.DataFrame(parsed_massage)
+                        massage_df_final = massage_df_final[massage_df_final['Local_val'] > 0].copy()
+                        m_base_curr = TRAVEL_CURRENCY
+                        tot_massage_local = massage_df_final['Local_val'].sum()
+                        
+                        st.metric(f"💆 마사지 총 지출액 ({m_base_curr} 기준)", f"{tot_massage_local:,.0f} {m_base_curr}")
+                        fig_massage = px.treemap(massage_df_final, path=['Massage_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
+                        fig_massage.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {m_base_curr}", hovertemplate=f"<b>분류/업체/코스:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {m_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
+                        fig_massage.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=440, coloraxis_showscale=False)
+                        st.plotly_chart(fig_massage, use_container_width=True, config={'displaylogo': False})
+                    else: st.info("정제할 수 있는 마사지 내역이 없습니다.")
+                else: st.info("기록된 마사지 지출 내역이 없습니다.")
     
     
     # --------------------------------------------------------------------------
