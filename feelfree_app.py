@@ -4081,19 +4081,12 @@ else:
                 st.markdown("<div style='margin: 30px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
                 # --------------------------------------------------------------
-                # [PART 2] 하단: 마사지 돋보기 (💡 1순위 마사지 키워드 무조건 100% 수집)
+                # [PART 2] 하단: 마사지 돋보기 (💡 오직 카테고리 '마사지'인 행만 100% 심플 수집)
                 # --------------------------------------------------------------
                 st.markdown("<h4 style='margin-bottom: 2px;'>마사지</h4>", unsafe_allow_html=True)
 
-                def is_valid_massage_row(row):
-                    cat = str(row['Category']).strip()
-                    desc = str(row['Description']).strip().lower()
-                    
-                    if cat == '마사지' or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc):
-                        return True
-                    return False
-
-                massage_df = ledger_df[ledger_df.apply(is_valid_massage_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
+                # 💡 [핵심 패치] 파싱을 거치지 않고 오직 카테고리가 '마사지'인 항목만 엄격히 필터링
+                massage_df = ledger_df[(ledger_df['Category'].str.strip() == '마사지') & (ledger_df['IsExpense'] == 1)].copy()
                 
                 if not massage_df.empty:
                     parsed_massage = []
@@ -4103,6 +4096,7 @@ else:
                         if not r_curr or r_curr == 'NAN' or len(r_curr) != 3: r_curr = TRAVEL_CURRENCY
                         r_amt = float(r['Amount'])
                         
+                        # 행 메모를 깔끔하게 정제하여 제공
                         clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip()
                         if '-' in clean_desc:
                             p_provider = clean_desc.split('-', 1)[0].strip()
@@ -4130,7 +4124,6 @@ else:
                         m_base_curr = TRAVEL_CURRENCY
                         tot_massage_local = massage_df_final['Local_val'].sum()
                         
-                        # 💡 [핵심 패치] st.metric 대신 깔끔한 HTML 폰트로 총지출 금액 출력 (에러 원천 방지)
                         st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_massage_local:,.0f} {m_base_curr}</div>", unsafe_allow_html=True)
                         
                         fig_massage = px.treemap(massage_df_final, path=['Massage_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
