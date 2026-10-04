@@ -3655,13 +3655,20 @@ else:
                 def is_valid_market_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
+                    
+                    # 💡 [핵심 보정] 마트/시장/선물 카테고리는 영수증 품목명('아치카페' 등)과 무관하게 100% 무조건 수집
+                    if cat in ['마트', '시장', '선물']:
+                        return True
+                        
+                    # 타 정규 카테고리는 장바구니에서 배제
                     if cat in ['마사지', '택시', '교통', 'Grab', 'VinBus', 'DiDi', '지하철', '버스', '트램', '기차', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료', '통신', '수수료', '팁', '상환', '보증금']:
                         return False
+                        
                     if any(ek in desc for ek in exclude_keywords_m):
                         return False
-                    is_target_cat = cat in ['마트', '시장', '선물']
+                        
                     has_keyword = any(mk in desc for mk in market_keywords) or any(mk in cat for mk in market_keywords)
-                    return is_target_cat or has_keyword
+                    return has_keyword
 
                 market_df = ledger_df[ledger_df.apply(is_valid_market_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
@@ -3674,14 +3681,14 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         store_name = lines[0] if lines else "기타 마트/선물"
-                        store_clean = sanitize_desc_store = sanitize_magnifier_label(store_name.split('|')[0], max_len=16)
+                        store_clean = sanitize_magnifier_label(store_name.split('|')[0], max_len=16)
                         if not store_clean: store_clean = "마트/시장"
                         
                         store_lower = store_name.lower()
                         if '한시장' in store_lower: bazaar_group = '🧺 한시장 통합'
                         elif '동바시장' in store_lower: bazaar_group = '🧺 동바시장 통합'
                         elif '약국' in store_lower or 'pharmacity' in store_lower or '파마씨티' in store_lower: bazaar_group = '💊 약국 통합'
-                        elif any(k in store_lower for k in ['마트', '슈퍼', '편의점', 'lotte', 'big c', '7-eleven', 'circle k']): bazaar_group = '🛒 마트/슈퍼 통합'
+                        elif any(k in store_lower for k in ['마트', '슈퍼', '편의점', 'lotte', 'big c', '7-eleven', 'circle k', 'jolymart', '졸리']): bazaar_group = '🛒 마트/슈퍼 통합'
                         elif '시장' in store_lower or '야시장' in store_lower: bazaar_group = '🛍️ 기타 전통시장'
                         else: bazaar_group = '🎁 기타 쇼핑/선물샵'
                         
