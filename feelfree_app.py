@@ -4003,7 +4003,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 (상단: 그랩/교통 / 하단: 마사지 상하 분리 & 마사지 1순위 강제 수집)
+            # [SUB TAB 3] 마사지 & 교통 (상단: 그랩/교통 / 하단: 마사지 상하 분리 & st.metric 에러 패치)
             # ==================================================================
             with sub_tab_relax:
                 # --------------------------------------------------------------
@@ -4068,7 +4068,9 @@ else:
                         t_base_curr = TRAVEL_CURRENCY
                         tot_traffic_local = traffic_df_final['Local_val'].sum()
                         
-                        st.metric(f"{tot_traffic_local:,.0f} {t_base_curr}", label_visibility="collapsed")
+                        # 💡 [핵심 패치] st.metric 대신 깔끔한 HTML 폰트로 총지출 금액 출력 (에러 원천 방지)
+                        st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_traffic_local:,.0f} {t_base_curr}</div>", unsafe_allow_html=True)
+                        
                         fig_traffic = px.treemap(traffic_df_final, path=['Traffic_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
                         fig_traffic.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {t_base_curr}", hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
                         fig_traffic.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=440, coloraxis_showscale=False)
@@ -4087,7 +4089,6 @@ else:
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
                     
-                    # 💡 [핵심 패치] 1순위 기준: 카테고리가 '마사지'이거나 설명에 '마사지' 글자가 있으면 무조건 100% 수집 (탈락 원천 봉쇄)
                     if cat == '마사지' or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc):
                         return True
                     return False
@@ -4129,7 +4130,9 @@ else:
                         m_base_curr = TRAVEL_CURRENCY
                         tot_massage_local = massage_df_final['Local_val'].sum()
                         
-                        st.metric(f"{tot_massage_local:,.0f} {m_base_curr}", label_visibility="collapsed")
+                        # 💡 [핵심 패치] st.metric 대신 깔끔한 HTML 폰트로 총지출 금액 출력 (에러 원천 방지)
+                        st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_massage_local:,.0f} {m_base_curr}</div>", unsafe_allow_html=True)
+                        
                         fig_massage = px.treemap(massage_df_final, path=['Massage_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
                         fig_massage.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {m_base_curr}", hovertemplate=f"<b>분류/업체/코스:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {m_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
                         fig_massage.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=440, coloraxis_showscale=False)
