@@ -4003,7 +4003,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (원화 환산 치환 오작동 원천 차단 패치)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (텍스트 쪼개기 파싱 폐기 및 원장 행 1:1 직결 패치)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
@@ -4015,12 +4015,12 @@ else:
                         is_mas = (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
                         if not is_mas: return False
                             
-                    if '철도' in desc or '기차' in desc or 'amtrak' in desc or 'vsn.vn' in desc:
+                    if '철도' in desc or ('기차' in desc and '기차역' not in desc and 'to' not in desc):
                         return False
 
                     is_massage = (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
                     local_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '교통']
-                    is_local_traffic = (cat in local_traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '통행료'])
+                    is_local_traffic = (cat in local_traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '통행료', '기차역'])
                     
                     if not is_massage and not is_local_traffic:
                         return False
@@ -4037,80 +4037,38 @@ else:
                     for _, r in relax_df.iterrows():
                         cat_r = str(r['Category']).strip()
                         desc_raw = str(r['Description'])
-                        
                         r_curr = str(r['Currency']).strip().upper()
                         if not r_curr or r_curr == 'NAN' or len(r_curr) != 3:
                             r_curr = TRAVEL_CURRENCY
-                            
                         r_amt = float(r['Amount'])
                         
-                        lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
-                        p_name = lines[0] if lines else ("마사지/스파" if cat_r == '마사지' else "그랩/교통")
-                        p_clean = re.sub(r'\[.*?\]\s*', '', p_name).split('|')[0].strip()
-                        p_clean = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', p_clean).strip(' -*•()[]/_')
-                        if not p_clean: p_clean = "힐링/이동"
-                        
-                        p_lower = p_clean.lower()
-                        if cat_r == '마사지' or '마사지' in p_lower or '스파' in p_lower or 'spa' in p_lower:
+                        # 💡 [핵심 패치] 불필요한 텍스트 쪼개기(파싱)를 하지 않고, 행 자체의 상호명/메모와 금액을 1대1 온전하게 반영
+                        clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip() # [Grab] 같은 플랫폼 태그 제거
+                        if '-' in clean_desc:
+                            p_provider = clean_desc.split('-', 1)[0].strip()
+                            p_item = clean_desc.split('-', 1)[1].strip()
+                        else:
+                            p_provider = clean_desc[:20] if clean_desc else ("마사지" if cat_r == '마사지' else "그랩/택시")
+                            p_item = clean_desc[:25] if clean_desc else "이동 서비스"
+                            
+                        # 괄호나 환산 텍스트 제거
+                        p_provider = re.sub(r'\(약.*?\)', '', p_provider).strip(' -*•()[]/_')
+                        p_item = re.sub(r'\(약.*?\)', '', p_item).strip(' -*•()[]/_')
+                        if not p_provider: p_provider = "업체명"
+                        if not p_item: p_item = "이동 내역"
+
+                        if cat_r == '마사지' or '마사지' in desc_raw.lower() or '스파' in desc_raw.lower():
                             relax_group = '💆 힐링/마사지'
                         else:
                             relax_group = '🚗 그랩 및 로컬교통'
                             
-                        sub_items = lines[1:] if len(lines) > 1 else [p_clean]
-                        valid_relax_items = []
-                        
-                        for si in sub_items:
-                            if len(si) < 2: continue
-                            
-                            # 💡 [핵심 패치] 텍스트 내에서 '약 xxxx원' 같은 환산 구문이나 오염 텍스트를 사전에 완벽히 제거한 뒤 순수 원본 숫자 추출
-                            si_clean_for_price = re.sub(r'\(약.*?\)', '', si) # '(약 4,682원)' 같은 찌꺼기 원천 소거
-                            
-                            price_val = 0.0
-                            m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', si_clean_for_price)
-                            if m_k:
-                                price_val = float(m_k.group(1)) * 1000
-                            else:
-                                comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', si_clean_for_price)
-                                if comma_nums:
-                                    try: price_val = float(comma_nums[-1].replace(',', ''))
-                                    except: pass
-                                else:
-                                    plain_nums = re.findall(r'(\d+)', si_clean_for_price)
-                                    if plain_nums:
-                                        try:
-                                            for p_str in reversed(plain_nums):
-                                                p_val = float(p_str)
-                                                if p_val > 100:
-                                                    price_val = p_val
-                                                    break
-                                        except: pass
-
-                            clean_si = re.sub(r'[\d,\.]+\s*[kK]\b', '', si_clean_for_price)
-                            clean_si = re.sub(r'[\d,]+\s*(?:vnd|동|원|\$)?$', '', clean_si, flags=re.IGNORECASE)
-                            clean_si = re.sub(r'\(약.*?\)', '', clean_si)
-                            clean_si = re.sub(r'^(?:[\-\*•\s]+)', '', clean_si).strip(' -*•()[]/_')
-                            if not clean_si: clean_si = p_clean
-                            
-                            valid_relax_items.append({'name': clean_si, 'price': price_val})
-                            
-                        if not valid_relax_items or len(valid_relax_items) == 1 and valid_relax_items[0]['price'] == 0:
-                            parsed_relax.append({
-                                'Relax_Group': relax_group,
-                                'Provider': p_clean[:20],
-                                'Item': p_clean[:25],
-                                'Local_val': r_amt,
-                                'Curr': r_curr
-                            })
-                        else:
-                            for it in valid_relax_items:
-                                f_r_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_relax_items)))
-                                parsed_relax.append({
-                                    'Relax_Group': relax_group,
-                                    'Provider': p_clean[:20],
-                                    'Item': it['name'][:25],
-                                    'Local_val': f_r_price,
-                                    'Curr': r_curr
-                                })
+                        parsed_relax.append({
+                            'Relax_Group': relax_group,
+                            'Provider': p_provider[:22],
+                            'Item': p_item[:28],
+                            'Local_val': r_amt,
+                            'Curr': r_curr
+                        })
                             
                     if parsed_relax:
                         relax_df_final = pd.DataFrame(parsed_relax)
