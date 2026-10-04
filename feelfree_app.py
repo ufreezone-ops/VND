@@ -2281,7 +2281,7 @@ else:
     st.title(f"{st.session_state.current_trip}")
     
     # 💡 [핵심] 4개의 탭 구조로 확장 (3번째에 '🛒 마트돋보기' 신설)
-    tab_main, tab_stats, tab_market, tab_final = st.tabs(["가계부", "일일Data", "🛒 마트돋보기", "전체요약"])
+    tab_main, tab_stats, tab_market, tab_final = st.tabs(["가계부", "일일Data", "마트돋보기", "전체요약"])
 
     # --------------------------------------------------------------------------
     # 6.01.00 | Unified Ledger Console (가계부 통합 콘솔)
@@ -3141,15 +3141,20 @@ else:
                             all_lines = [l.strip() for l in re.sub(r'\[🎁선물:[^\]]+\]', '', new_desc).split("\n") if l.strip()]
                             store_header = ""
                             candidate_item_lines = []
-                            for idx_l, l_text in enumerate(all_lines):
+                            
+                            # 💡 [서브모듈 패치] 첫 번째 줄은 무조건 상호명으로 고정하고, 품목 후보군 수집에서 완벽히 격리
+                            if all_lines:
+                                store_header = all_lines[0]
+                                raw_candidates = all_lines[1:]
+                            else:
+                                raw_candidates = []
+
+                            for l_text in raw_candidates:
                                 val_chk = parse_amount_from_line(l_text)
-                                if idx_l == 0 and val_chk == 0 and not l_text.startswith("-"):
-                                    store_header = l_text
+                                if l_text.startswith("-") or l_text.startswith("*") or l_text.startswith("•") or val_chk > 0:
+                                    candidate_item_lines.append(l_text)
                                 else:
-                                    if val_chk > 0 or l_text.startswith("-"):
-                                        candidate_item_lines.append(l_text)
-                                    else:
-                                        if not store_header: store_header = l_text
+                                    if not store_header: store_header = l_text
 
                             if candidate_item_lines:
                                 with st.expander("🎁 선물/특산품 분리 및 '선물' 항목 신설", expanded=True):
