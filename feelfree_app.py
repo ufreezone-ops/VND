@@ -4003,14 +4003,21 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (통화 표기 오류 원천 차단 및 TRAVEL_CURRENCY 고정)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (마트/시장/선물 품목 유입 원천 차단 패치 적용)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
+                    
+                    # 💡 [핵심 패치] 카테고리가 마트, 시장, 선물이거나 내용에 마트 키워드가 있으면 교통 탭에서 무조건 제외
+                    if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료']:
+                        return False
+                    if any(k in desc for k in ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', '졸리', '파마씨티', 'pharmacity', '딸기', '망고', '커피', '과자']):
+                        return False
+                        
                     if cat in ['마사지', 'Grab', 'DiDi', 'VinBus', '지하철', '택시', '교통']: return True
-                    if any(k in desc for k in ['마사지', '스파', '그랩', 'grab', '택시', '미터기', '공항버스', '리무진', '지하철']):
+                    if any(k in desc for k in ['마사지', '스파', '그랩', 'grab', '택시', '미터기', '공항버스', '리무진', '지하철', '발마사지', '풋마사지']):
                         return True
                     return False
 
@@ -4022,7 +4029,6 @@ else:
                         cat_r = str(r['Category']).strip()
                         desc_raw = str(r['Description'])
                         
-                        # 💡 [핵심 패치] 통화 데이터가 비어있거나 꼬일 경우 현재 여행의 현지 통화(TRAVEL_CURRENCY)로 강제 방어
                         r_curr = str(r['Currency']).strip().upper()
                         if not r_curr or r_curr == 'NAN' or len(r_curr) != 3:
                             r_curr = TRAVEL_CURRENCY
@@ -4036,7 +4042,7 @@ else:
                         if not p_clean: p_clean = "힐링/이동"
                         
                         p_lower = p_clean.lower()
-                        if cat_r == '마사지' or '마사지' in p_lower or '스파' in p_lower or 'spa' in p_lower:
+                        if cat_r == '마사지' or '마사지' in p_lower or '스파' in p_lower or 'spa' in p_lower or '발마사지' in p_lower or '풋마사지' in p_lower:
                             relax_group = '💆 힐링/마사지'
                         else:
                             relax_group = '🚗 그랩 및 로컬교통'
@@ -4061,7 +4067,6 @@ else:
                         relax_df_final = pd.DataFrame(parsed_relax)
                         relax_df_final = relax_df_final[relax_df_final['Local_val'] > 0].copy()
                         
-                        # 💡 [핵심 패치] 지표 및 템플릿에 사용할 기준 통화를 TRAVEL_CURRENCY로 철저히 고정
                         r_base_curr = TRAVEL_CURRENCY
                         tot_relax_local = relax_df_final['Local_val'].sum()
                         
