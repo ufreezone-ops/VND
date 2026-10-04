@@ -3777,19 +3777,37 @@ else:
 
 
     # --------------------------------------------------------------------------
-    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 천 단위 콤마 가격 파싱 강화)
+    # 6.03.00 | 🛒 Smart Market & Bazaar Deep-Dive Magnifier (마트 돋보기 - 마사지/그랩 제외 필터 강화)
     # --------------------------------------------------------------------------
     with tab_market:
         st.subheader("🛒 마트 및 전통시장 장바구니 돋보기")
         st.caption(f"💡 마트, 시장, 그리고 선물(기념품/특산품)로 구매한 개별 품목들의 세부 지출 내역을 현지 통화({TRAVEL_CURRENCY}) 기준으로 정밀하게 들여다봅니다.")
         
         if not ledger_df.empty:
-            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '졸리', '성물', '기념품', '헬로']
-            market_mask = (
-                ledger_df['Category'].str.contains('마트|시장|선물', na=False) | 
-                ledger_df['Description'].str.contains('|'.join(market_keywords), case=False, na=False)
-            )
-            market_df = ledger_df[market_mask & (ledger_df['IsExpense'] == 1)].copy()
+            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '면세점', '파마씨티', 'pharmacity', '졸리', '성물', '기념품', '헬로', '한시장']
+            
+            # 💡 [핵심 패치] '시장'이 들어가더라도 마사지나 그랩/교통 관련 건이면 무조건 제외하는 조건 생성
+            exclude_keywords = ['마사지', '발마사지', '그랩', 'grab', '미터기', '택시', '교통', '콜택시', '식사', '카페', '레스토랑', '호텔']
+            
+            def is_valid_market_row(row):
+                cat = str(row['Category']).strip()
+                desc = str(row['Description']).strip().lower()
+                
+                # 1. 명백한 비장바구니 카테고리 원천 차단
+                if cat in ['마사지', '택시', '교통', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료', '통신', '수수료', '팁', '상환', '보증금']:
+                    return False
+                    
+                # 2. 설명 내부에 마사지나 그랩/택시/식당 관련 키워드가 있으면 '시장'이라는 단어가 포함되어 있어도 제외
+                if any(ek in desc for ek in exclude_keywords):
+                    return False
+                    
+                # 3. 마트/시장 카테고리이거나, 관련 키워드가 포함된 경우 허용
+                is_target_cat = cat in ['마트', '시장', '선물']
+                has_keyword = any(mk in desc for mk in market_keywords) or any(mk in cat for mk in market_keywords)
+                
+                return is_target_cat or has_keyword
+
+            market_df = ledger_df[ledger_df.apply(is_valid_market_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
             
             if not market_df.empty:
                 parsed_items = []
@@ -3823,13 +3841,11 @@ else:
                             if not has_price_pattern:
                                 continue 
                             
-                        # 💡 [핵심 패치] 콤마가 포함된 가격(예: 12,000 / 38,000)을 완벽하게 추출하는 로직
                         price_val = 0.0
                         m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
                         if m_k:
                             price_val = float(m_k.group(1)) * 1000
                         else:
-                            # 콤마를 포함한 숫자 블록(예: 12,000 또는 105,000)을 모두 찾아냄
                             comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', il)
                             if comma_nums:
                                 try:
@@ -3839,10 +3855,9 @@ else:
                                 plain_nums = re.findall(r'(\d+)', il)
                                 if plain_nums:
                                     try:
-                                        # 너무 작은 수(수량 1개 등)가 아닌 의미 있는 가격 숫자 채택
                                         for p_str in reversed(plain_nums):
                                             p_val = float(p_str)
-                                            if p_val > 500: # 500 이상의 숫자를 가격으로 인정
+                                            if p_val > 500:
                                                 price_val = p_val
                                                 break
                                     except: pass
