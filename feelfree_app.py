@@ -4003,29 +4003,29 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (마사지 우선 허용 및 교통 철저 분리 최종 패치)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (제안해주신 명확한 핵심 논리식 적용)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
                     
-                    # 💡 [핵심 패치] 1순위: 마사지 카테고리이거나 마사지 관련 텍스트가 있으면 '시장' 등 어떤 제약조건보다 우선하여 무조건 허용!
-                    if cat == '마사지' or any(k in desc for k in ['마사지', '스파', 'spa', '발마사지', '풋마사지', 'body massage', 'foot scrub']):
-                        return True
+                    # 💡 [핵심 논리식 1] 마사지 판정: 카테고리가 '마사지'이거나 설명에 '마사지' 글자가 포함된 경우
+                    is_massage = (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
+                    
+                    # 💡 [핵심 논리식 2] 교통/택시 판정: 지정된 교통 관련 카테고리이거나 '그랩', '택시', '미터기' 등 키워드 포함
+                    traffic_cats = ['Grab', 'VinBus', 'DiDi', '교통', '렌트카', '택시', '블랙택시', '지하철', '버스', '트램', '기차']
+                    is_traffic = (cat in traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '기차', '렌트카'])
+                    
+                    # 마사지도 교통도 아니라면 무조건 제외
+                    if not is_massage and not is_traffic:
+                        return False
                         
-                    # 2순위: 비교통/비마사지 카테고리(마트, 시장, 선물 등)는 철저히 차단
+                    # 최종 방어막: 만약 마트, 시장, 선물, 식사 등 엉뚱한 카테고리가 섞여 들어왔다면 강제 차단
                     if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료']:
                         return False
-                    if any(k in desc for k in ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', '졸리', '파마씨티', 'pharmacity', '딸기', '망고', '커피', '과자']):
-                        return False
                         
-                    # 3순위: 그랩 및 로컬 교통 판정
-                    if cat in ['Grab', 'DiDi', 'VinBus', '지하철', '택시', '교통']: return True
-                    if any(k in desc for k in ['그랩', 'grab', '택시', '미터기', '공항버스', '리무진', '지하철', '택시요금']):
-                        return True
-                        
-                    return False
+                    return is_massage or is_traffic
 
                 relax_df = ledger_df[ledger_df.apply(is_valid_relax_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
@@ -4048,7 +4048,7 @@ else:
                         if not p_clean: p_clean = "힐링/이동"
                         
                         p_lower = p_clean.lower()
-                        if cat_r == '마사지' or '마사지' in p_lower or '스파' in p_lower or 'spa' in p_lower or '발마사지' in p_lower or '풋마사지' in p_lower:
+                        if cat_r == '마사지' or '마사지' in p_lower or '스파' in p_lower or 'spa' in p_lower:
                             relax_group = '💆 힐링/마사지'
                         else:
                             relax_group = '🚗 그랩 및 로컬교통'
