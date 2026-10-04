@@ -4003,7 +4003,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (그랩/택시 세부 항목 개별 가격 정밀 파싱 패치)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (스케일링 왜곡 제거 및 추출된 원본 가격 100% 직결 패치)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
@@ -4062,7 +4062,6 @@ else:
                         for si in sub_items:
                             if len(si) < 2: continue
                             
-                            # 💡 [핵심 패치] 그랩 내역의 '미터기요금 88,000' 같은 문장에서 콤마 포함 금액을 정확히 추출
                             price_val = 0.0
                             m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', si)
                             if m_k:
@@ -4078,7 +4077,7 @@ else:
                                         try:
                                             for p_str in reversed(plain_nums):
                                                 p_val = float(p_str)
-                                                if p_val > 100: # 100 이상의 의미 있는 금액
+                                                if p_val > 100:
                                                     price_val = p_val
                                                     break
                                         except: pass
@@ -4099,12 +4098,9 @@ else:
                                 'Curr': r_curr
                             })
                         else:
-                            sum_r_prices = sum(it['price'] for it in valid_relax_items if it['price'] > 0)
-                            r_scale = (r_amt / sum_r_prices) if (sum_r_prices > 0 and r_amt > 0 and abs(sum_r_prices - r_amt) > 1.0) else 1.0
-                            
+                            # 💡 [핵심 패치] 스케일링 왜곡을 없애고, 추출된 개별 가격이 있으면 그 값을 원본 그대로 100% 반영
                             for it in valid_relax_items:
                                 f_r_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_relax_items)))
-                                f_r_price = round(f_r_price * r_scale, -2)
                                 parsed_relax.append({
                                     'Relax_Group': relax_group,
                                     'Provider': p_clean[:20],
