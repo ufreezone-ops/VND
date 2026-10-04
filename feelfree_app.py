@@ -2281,7 +2281,7 @@ else:
     st.title(f"{st.session_state.current_trip}")
     
     # 💡 [핵심] 4개의 탭 구조로 확장 (3번째에 '🛒 마트돋보기' 신설)
-    tab_main, tab_stats, tab_market, tab_final = st.tabs(["가계부", "일일Data", "마트돋보기", "전체요약"])
+    tab_main, tab_stats, tab_market, tab_final = st.tabs(["가계부", "일일Data", "돋보기", "전체요약"])
 
     # --------------------------------------------------------------------------
     # 6.01.00 | Unified Ledger Console (가계부 통합 콘솔)
