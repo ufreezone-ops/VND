@@ -4003,29 +4003,40 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 마사지 & 교통 돋보기 (제안해주신 명확한 핵심 논리식 적용)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (장거리 철도 및 사전결제 이동 수단 제외 패치)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
+                    method = str(row['PaymentMethod']).strip().lower()
                     
-                    # 💡 [핵심 논리식 1] 마사지 판정: 카테고리가 '마사지'이거나 설명에 '마사지' 글자가 포함된 경우
+                    # 💡 [핵심 패치] 사전 결제된 항목(원화계좌 결제 등)이거나 철도/기차/장거리 성격의 이동은 로컬 교통 돋보기에서 제외
+                    if method == '원화계좌(한국)' or '사전' in desc or '예매' in desc or 'online' in desc:
+                        # 단, 마사지는 사전 결제여도 힐링 항목이므로 예외적으로 허용
+                        is_mas = (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
+                        if not is_mas:
+                            return False
+                            
+                    # 장거리 철도/기차 명시적 차단 (단, 지하철/트램 같은 시내 철도는 허용)
+                    if '철도' in desc or '기차' in desc or 'amtrak' in desc or 'vsn.vn' in desc:
+                        return False
+
+                    # 1. 마사지 판정
                     is_massage = (cat == '마사지') or ('마사지' in desc) or ('스파' in desc) or ('spa' in desc)
                     
-                    # 💡 [핵심 논리식 2] 교통/택시 판정: 지정된 교통 관련 카테고리이거나 '그랩', '택시', '미터기' 등 키워드 포함
-                    traffic_cats = ['Grab', 'VinBus', 'DiDi', '교통', '렌트카', '택시', '블랙택시', '지하철', '버스', '트램', '기차']
-                    is_traffic = (cat in traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', '미터기', 'didi', 'vinbus', '지하철', '버스', '트램', '기차', '렌트카'])
+                    # 2. 로컬 시내 교통 판정 (그랩, DiDi, 택시, 버스, 트램 등)
+                    local_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '지하철', '버스', '트램', '교통']
+                    is_local_traffic = (cat in local_traffic_cats) or any(k in desc for k in ['그랩', 'grab', '택시', 'didi', 'vinbus', '지하철', '버스', '트램', '미터기'])
                     
-                    # 마사지도 교통도 아니라면 무조건 제외
-                    if not is_massage and not is_traffic:
+                    if not is_massage and not is_local_traffic:
                         return False
                         
-                    # 최종 방어막: 만약 마트, 시장, 선물, 식사 등 엉뚱한 카테고리가 섞여 들어왔다면 강제 차단
+                    # 최종 방어막: 마트, 시장, 선물, 식사 등 차단
                     if cat in ['마트', '시장', '선물', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료']:
                         return False
                         
-                    return is_massage or is_traffic
+                    return is_massage or is_local_traffic
 
                 relax_df = ledger_df[ledger_df.apply(is_valid_relax_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
@@ -4076,13 +4087,13 @@ else:
                         r_base_curr = TRAVEL_CURRENCY
                         tot_relax_local = relax_df_final['Local_val'].sum()
                         
-                        st.metric(f"💆🚗 마사지 및 교통 총 지출액 ({r_base_curr} 기준)", f"{tot_relax_local:,.0f} {r_base_curr}")
+                        st.metric(f"💆🚗 마사지 및 로컬교통 총 지출액 ({r_base_curr} 기준)", f"{tot_relax_local:,.0f} {r_base_curr}")
                         fig_relax = px.treemap(relax_df_final, path=['Relax_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
                         fig_relax.update_traces(texttemplate=f"<b>%{{label}}</b><br>%{{value:,.0f}} {r_base_curr}", hovertemplate=f"<b>분류/업체/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {r_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center')
                         fig_relax.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=520, coloraxis_showscale=False)
                         st.plotly_chart(fig_relax, use_container_width=True, config={'displaylogo': False})
-                    else: st.info("정제할 수 있는 마사지/교통 내역이 없습니다.")
-                else: st.info("기록된 마사지 또는 교통 지출 내역이 없습니다.")
+                    else: st.info("정제할 수 있는 마사지/로컬교통 내역이 없습니다.")
+                else: st.info("기록된 마사지 또는 로컬교통 지출 내역이 없습니다.")
     
     
     # --------------------------------------------------------------------------
