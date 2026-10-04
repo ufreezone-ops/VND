@@ -3627,39 +3627,20 @@ else:
                         st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
     # ==============================================================================
-    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 3대 서브탭 전면 고도화)
+    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 전체요약 스타일 완전 일원화)
     # ==============================================================================
     with tab_market:
         st.subheader("🔍 여행 소비 돋보기")
         
-        # 6.03.00-H | 텍스트 다단 지능형 줄바꿈 헬퍼
-        def wrap_treemap_text(text, max_chars=12):
+        # 6.03.00-H | 전체요약 스타일 라벨 정제 헬퍼 (15자 초과 시 말줄임표 처리)
+        def sanitize_magnifier_label(text, max_len=15):
             if not text: return ""
             s = str(text).strip()
             s = re.sub(r'\[.*?\]\s*', '', s)
             s = re.sub(r'\s+to\s+', ' ➔ ', s, flags=re.IGNORECASE)
             s = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', s).strip(' -*•()[]/_')
-            
-            # 괄호(...)가 포함된 경우 괄호 앞뒤로 줄바꿈 분리
-            if '(' in s and ')' in s:
-                s = re.sub(r'\s*\(', '<br>(', s)
-                return s.strip()
-            
-            # 긴 문자열 띄어쓰기 기준 다단 분절
-            if len(s) > max_chars:
-                words = s.split(' ')
-                if len(words) > 1:
-                    lines = []
-                    cur_line = ""
-                    for w in words:
-                        if len(cur_line + " " + w) <= max_chars:
-                            cur_line = (cur_line + " " + w).strip()
-                        else:
-                            if cur_line: lines.append(cur_line)
-                            cur_line = w
-                    if cur_line: lines.append(cur_line)
-                    return "<br>".join(lines)
-            return s
+            if not s: return ""
+            return s[:max_len] + ".." if len(s) > max_len else s
 
         sub_tab_cart, sub_tab_food, sub_tab_relax = st.tabs(["장바구니", "식당·카페", "마사지 · 교통"])
         
@@ -3693,7 +3674,7 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         store_name = lines[0] if lines else "기타 마트/선물"
-                        store_clean = wrap_treemap_text(store_name.split('|')[0], max_chars=14)
+                        store_clean = sanitize_desc_store = sanitize_magnifier_label(store_name.split('|')[0], max_len=16)
                         if not store_clean: store_clean = "마트/시장"
                         
                         store_lower = store_name.lower()
@@ -3735,7 +3716,7 @@ else:
                                                 if p_val > 500: price_val = p_val; break
                                         except: pass
                                     
-                            clean_name = wrap_treemap_text(il, max_chars=12)
+                            clean_name = sanitize_magnifier_label(il, max_len=15)
                             if clean_name and len(clean_name) >= 2 and not clean_name.startswith('로 잘못'):
                                 valid_items_in_receipt.append({'raw_line': il, 'name': clean_name, 'price': price_val})
                                 
@@ -3758,15 +3739,24 @@ else:
                         
                         st.metric(f"🛒 장바구니 총 지출액 ({base_curr} 기준)", f"{tot_market_local:,.0f} {base_curr}")
                         
-                        fig_market = px.treemap(item_df, path=['Bazaar_Group', 'Store', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
+                        fig_market = px.treemap(
+                            item_df, 
+                            path=['Bazaar_Group', 'Store', 'Item'], 
+                            values='Local_val', 
+                            color='Local_val', 
+                            color_continuous_scale='Tealgrn', 
+                            title=None
+                        )
                         fig_market.update_traces(
-                            texttemplate="<b>%{label}</b><br><span style='font-size:13px;'>%{value:,.0f} " + base_curr + "</span>", 
+                            texttemplate="<b>%{label}</b><br>%{value:,.0f} " + base_curr, 
                             hovertemplate=f"<b>분류/상호/품목:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
-                            textposition='middle center'
+                            textposition='middle center',
+                            insidetextfont=dict(size=16)
                         )
                         fig_market.update_layout(
-                            margin=dict(l=10, r=10, t=10, b=10), height=580, coloraxis_showscale=False,
-                            uniformtext=dict(minsize=10, mode='hide')
+                            margin=dict(l=0, r=0, t=10, b=10), 
+                            height=580, 
+                            coloraxis_showscale=False
                         )
                         st.plotly_chart(fig_market, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 장바구니 품목 내역이 없습니다.")
@@ -3797,7 +3787,7 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         place_name = lines[0] if lines else "기타 식당/카페"
-                        place_clean = wrap_treemap_text(place_name.split('|')[0], max_chars=14)
+                        place_clean = sanitize_magnifier_label(place_name.split('|')[0], max_len=16)
                         if not place_clean: place_clean = "식당/카페"
                         
                         place_lower = place_name.lower()
@@ -3831,7 +3821,7 @@ else:
                                                 if p_val > 500: price_val = p_val; break
                                         except: pass
                                         
-                            clean_iname = wrap_treemap_text(il, max_chars=12)
+                            clean_iname = sanitize_magnifier_label(il, max_len=15)
                             if clean_iname and (len(clean_iname) >= 1 or price_val > 0):
                                 valid_food_items.append({'name': clean_iname, 'price': price_val})
                                 
@@ -3854,15 +3844,24 @@ else:
                         
                         st.metric(f"🍔 식당·카페 총 지출액 ({f_base_curr} 기준)", f"{tot_food_local:,.0f} {f_base_curr}")
                         
-                        fig_food = px.treemap(food_df, path=['Food_Group', 'Place', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='YlOrBr', title=None)
+                        fig_food = px.treemap(
+                            food_df, 
+                            path=['Food_Group', 'Place', 'Item'], 
+                            values='Local_val', 
+                            color='Local_val', 
+                            color_continuous_scale='YlOrBr', 
+                            title=None
+                        )
                         fig_food.update_traces(
-                            texttemplate="<b>%{label}</b><br><span style='font-size:13px;'>%{value:,.0f} " + f_base_curr + "</span>", 
+                            texttemplate="<b>%{label}</b><br>%{value:,.0f} " + f_base_curr, 
                             hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
-                            textposition='middle center'
+                            textposition='middle center',
+                            insidetextfont=dict(size=16)
                         )
                         fig_food.update_layout(
-                            margin=dict(l=10, r=10, t=10, b=10), height=580, coloraxis_showscale=False,
-                            uniformtext=dict(minsize=10, mode='hide')
+                            margin=dict(l=0, r=0, t=10, b=10), 
+                            height=580, 
+                            coloraxis_showscale=False
                         )
                         st.plotly_chart(fig_food, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 식당/카페 메뉴 내역이 없습니다.")
@@ -3875,30 +3874,24 @@ else:
                 # [PART 1] 상단: 그랩 및 로컬교통 돋보기
                 st.markdown("<h4 style='margin-bottom: 2px;'>그랩 및 로컬교통</h4>", unsafe_allow_html=True)
                 
-                # 4-1 ~ 4-4 로컬교통 엄격 필터링 로직
                 def is_valid_traffic_row(row):
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
                     method = str(row['PaymentMethod']).strip()
                     
-                    # 4-1. 사전 결제(한국 계좌 등) 제외
                     if method in ['원화계좌(한국)', '해외송금(한국계좌)']:
                         return False
                         
-                    # 4-2. 카테고리 화이트리스트 엄격 한정
                     allowed_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시', '지하철', '트램']
                     
-                    # 4-3. 버스는 시내버스만 허용 (시외/고속/장거리 제외)
                     if cat == '버스':
                         if any(k in desc for k in ['시외', '고속', '장거리', '슬리핑', 'limousine', 'intercity']):
                             return False
                         return True
                     
-                    # '기차', '열차', '헤리티지', '철도청' 장거리 철도 제외
                     if cat in ['기차', '열차'] or any(k in desc for k in ['헤리티지열차', '헤리티지', 'railway', 'vnr']):
                         return False
                         
-                    # 화이트리스트 카테고리이거나, 순수 로컬 이동 수단인 경우만 허용
                     if cat in allowed_traffic_cats:
                         return True
                         
@@ -3923,17 +3916,16 @@ else:
                             p_provider = cat_r if cat_r in ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시'] else "로컬교통"
                             p_item = clean_desc if clean_desc else "이동 요금"
                             
-                        # 긴 이동 경로 깔끔 분절 ("다낭공항 to 사노우바 호텔" -> "다낭공항 ➔<br>사노우바 호텔")
-                        p_item_wrapped = wrap_treemap_text(p_item, max_chars=13)
-                        p_prov_wrapped = wrap_treemap_text(p_provider, max_chars=12)
+                        p_prov_clean = sanitize_magnifier_label(p_provider, max_len=14)
+                        p_item_clean = sanitize_magnifier_label(p_item, max_len=15)
                         
-                        if not p_prov_wrapped: p_prov_wrapped = "이동 수단"
-                        if not p_item_wrapped: p_item_wrapped = "요금 및 통행료"
+                        if not p_prov_clean: p_prov_clean = "이동 수단"
+                        if not p_item_clean: p_item_clean = "요금 및 통행료"
 
                         parsed_traffic.append({
                             'Traffic_Group': '그랩 및 로컬교통',
-                            'Provider': p_prov_wrapped,
-                            'Item': p_item_wrapped,
+                            'Provider': p_prov_clean,
+                            'Item': p_item_clean,
                             'Local_val': r_amt,
                             'Curr': r_curr
                         })
@@ -3945,15 +3937,24 @@ else:
                         tot_traffic_local = traffic_df_final['Local_val'].sum()
                         
                         st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_traffic_local:,.0f} {t_base_curr}</div>", unsafe_allow_html=True)
-                        fig_traffic = px.treemap(traffic_df_final, path=['Traffic_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
+                        fig_traffic = px.treemap(
+                            traffic_df_final, 
+                            path=['Traffic_Group', 'Provider', 'Item'], 
+                            values='Local_val', 
+                            color='Local_val', 
+                            color_continuous_scale='Tealgrn', 
+                            title=None
+                        )
                         fig_traffic.update_traces(
-                            texttemplate="<b>%{label}</b><br><span style='font-size:13px;'>%{value:,.0f} " + t_base_curr + "</span>", 
+                            texttemplate="<b>%{label}</b><br>%{value:,.0f} " + t_base_curr, 
                             hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
-                            textposition='middle center'
+                            textposition='middle center',
+                            insidetextfont=dict(size=16)
                         )
                         fig_traffic.update_layout(
-                            margin=dict(l=10, r=10, t=10, b=10), height=460, coloraxis_showscale=False,
-                            uniformtext=dict(minsize=10, mode='hide')
+                            margin=dict(l=0, r=0, t=10, b=10), 
+                            height=460, 
+                            coloraxis_showscale=False
                         )
                         st.plotly_chart(fig_traffic, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 로컬 교통 내역이 없습니다.")
@@ -3961,10 +3962,9 @@ else:
 
                 st.markdown("<div style='margin: 30px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
-                # [PART 2] 하단: 마사지 돋보기 (5, 5-1 오직 '마사지' 카테고리만 100% 수집)
+                # [PART 2] 하단: 마사지 돋보기 (오직 '마사지' 카테고리만 100% 수집)
                 st.markdown("<h4 style='margin-bottom: 2px;'>마사지</h4>", unsafe_allow_html=True)
 
-                # 💡 [핵심] 텍스트 검색을 완전히 배제하고 오직 Category == '마사지'만 단독 적용 (졸리마트 완벽 배제)
                 def is_valid_massage_row(row):
                     return str(row['Category']).strip() == '마사지'
 
@@ -3983,19 +3983,19 @@ else:
                             p_provider = clean_desc.split('-', 1)[0].strip()
                             p_item = clean_desc.split('-', 1)[1].strip()
                         else:
-                            p_provider = clean_desc if len(clean_desc) <= 15 else clean_desc[:14]
+                            p_provider = clean_desc
                             p_item = clean_desc
                             
-                        p_prov_wrapped = wrap_treemap_text(p_provider, max_chars=13)
-                        p_item_wrapped = wrap_treemap_text(p_item, max_chars=12)
+                        p_prov_clean = sanitize_magnifier_label(p_provider, max_len=14)
+                        p_item_clean = sanitize_magnifier_label(p_item, max_len=15)
                         
-                        if not p_prov_wrapped: p_prov_wrapped = "마사지 샵"
-                        if not p_item_wrapped: p_item_wrapped = "힐링 마사지"
+                        if not p_prov_clean: p_prov_clean = "마사지 샵"
+                        if not p_item_clean: p_item_clean = "힐링 마사지"
 
                         parsed_massage.append({
                             'Massage_Group': '마사지', 
-                            'Provider': p_prov_wrapped, 
-                            'Item': p_item_wrapped, 
+                            'Provider': p_prov_clean, 
+                            'Item': p_item_clean, 
                             'Local_val': r_amt, 
                             'Curr': r_curr
                         })
@@ -4007,15 +4007,24 @@ else:
                         tot_massage_local = massage_df_final['Local_val'].sum()
                         
                         st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_massage_local:,.0f} {m_base_curr}</div>", unsafe_allow_html=True)
-                        fig_massage = px.treemap(massage_df_final, path=['Massage_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', title=None)
+                        fig_massage = px.treemap(
+                            massage_df_final, 
+                            path=['Massage_Group', 'Provider', 'Item'], 
+                            values='Local_val', 
+                            color='Local_val', 
+                            color_continuous_scale='Tealgrn', 
+                            title=None
+                        )
                         fig_massage.update_traces(
-                            texttemplate="<b>%{label}</b><br><span style='font-size:13px;'>%{value:,.0f} " + m_base_curr + "</span>", 
+                            texttemplate="<b>%{label}</b><br>%{value:,.0f} " + m_base_curr, 
                             hovertemplate=f"<b>분류/업체/코스:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {m_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
-                            textposition='middle center'
+                            textposition='middle center',
+                            insidetextfont=dict(size=16)
                         )
                         fig_massage.update_layout(
-                            margin=dict(l=10, r=10, t=10, b=10), height=460, coloraxis_showscale=False,
-                            uniformtext=dict(minsize=10, mode='hide')
+                            margin=dict(l=0, r=0, t=10, b=10), 
+                            height=460, 
+                            coloraxis_showscale=False
                         )
                         st.plotly_chart(fig_massage, use_container_width=True, config={'displaylogo': False})
                     else: st.info("정제할 수 있는 마사지 내역이 없습니다.")
