@@ -4003,7 +4003,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ==================================================================
-            # [SUB TAB 3] 신설: 마사지 & 교통 돋보기 (마사지 및 그랩/택시/교통 정밀 분석)
+            # [SUB TAB 3] 마사지 & 교통 돋보기 (통화 표기 오류 원천 차단 및 TRAVEL_CURRENCY 고정)
             # ==================================================================
             with sub_tab_relax:
                 def is_valid_relax_row(row):
@@ -4021,7 +4021,12 @@ else:
                     for _, r in relax_df.iterrows():
                         cat_r = str(r['Category']).strip()
                         desc_raw = str(r['Description'])
+                        
+                        # 💡 [핵심 패치] 통화 데이터가 비어있거나 꼬일 경우 현재 여행의 현지 통화(TRAVEL_CURRENCY)로 강제 방어
                         r_curr = str(r['Currency']).strip().upper()
+                        if not r_curr or r_curr == 'NAN' or len(r_curr) != 3:
+                            r_curr = TRAVEL_CURRENCY
+                            
                         r_amt = float(r['Amount'])
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
@@ -4036,7 +4041,6 @@ else:
                         else:
                             relax_group = '🚗 그랩 및 로컬교통'
                             
-                        # 단일 건이거나 상세 라인이 있는 경우 처리
                         sub_items = lines[1:] if len(lines) > 1 else [p_clean]
                         for si in sub_items:
                             if len(si) < 2: continue
@@ -4056,7 +4060,9 @@ else:
                     if parsed_relax:
                         relax_df_final = pd.DataFrame(parsed_relax)
                         relax_df_final = relax_df_final[relax_df_final['Local_val'] > 0].copy()
-                        r_base_curr = relax_df_final['Curr'].iloc[0] if not relax_df_final.empty else TRAVEL_CURRENCY
+                        
+                        # 💡 [핵심 패치] 지표 및 템플릿에 사용할 기준 통화를 TRAVEL_CURRENCY로 철저히 고정
+                        r_base_curr = TRAVEL_CURRENCY
                         tot_relax_local = relax_df_final['Local_val'].sum()
                         
                         st.metric(f"💆🚗 마사지 및 교통 총 지출액 ({r_base_curr} 기준)", f"{tot_relax_local:,.0f} {r_base_curr}")
