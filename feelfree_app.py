@@ -3807,7 +3807,7 @@ elif main_tab_choice == "일일Data":
             st.warning(f"**환불총액:** {r_krw:,.0f} 원")
             with st.expander("상세내역", expanded=False):
                 st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
-    else:
+        else:
         st.info("기록된 지출 데이터가 없습니다.")
 
 
