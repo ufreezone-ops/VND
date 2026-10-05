@@ -3367,10 +3367,11 @@ if main_tab_choice == "가계부":
 
 
 # ==============================================================================
-# 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 슬림/심플 텍스트 대시보드)
+# [Module 6.02.00] Daily Statistics & Time-Series Engine (일일Data 탭)
 # ==============================================================================
 elif main_tab_choice == "일일Data":
     if not exp_df.empty:
+        # 카테고리 컬러 팔레트 및 스택 순서
         color_map = {
             "식사": "#26A69A", "간식": "#66BB6A", "마트": "#EC407A",
             "Grab": "#29B6F6", "VinBus": "#26C6DA", "DiDi": "#29B6F6", "지하철": "#42A5F5",
@@ -3384,6 +3385,7 @@ elif main_tab_choice == "일일Data":
             "마사지", "투어", "입장료", "통신", "수수료", "팁", "항공권", "호텔", "보험", "선물", "기타"
         ]
 
+        # 통화 선택 라디오
         c_mode = st.radio(
             "통화 선택", 
             [f"현지화({TRAVEL_CURRENCY})", "원화(KRW)"], 
@@ -3398,11 +3400,16 @@ elif main_tab_choice == "일일Data":
         arr_dt = arr_dt_calc
         is_fixed_cost = exp_df['IsFixedCost']
 
+        # 1. 🛡️ 표준 YYYY-MM-DD 단일 정밀 파서
+        def extract_pure_ymd(d_val):
+            s = str(d_val).strip()
+            m = re.search(r'(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})', s)
+            if m:
+                return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+            return s
+
         def is_in_trip_period(row):
-            orig_d = str(row['Date']).strip()
-            m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
-            if not m_row: return True
-            pure_d = m_row.group(0)
+            pure_d = extract_pure_ymd(row['Date'])
             if dep_date_str and pure_d < dep_date_str: return False
             if arr_date_str and pure_d > arr_date_str: return False
             return True
@@ -3411,13 +3418,12 @@ elif main_tab_choice == "일일Data":
         ovr_df = exp_df[(~is_fixed_cost) & (~exp_df['Category'].isin(['입국','출국'])) & in_period_mask].copy()
 
         day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
+        ovr_df['Date_Clean'] = ovr_df['Date'].apply(extract_pure_ymd)
+
+        # 2. 🛡️ 이동일 더미 행 중복 원천 방지
         if dep_dt and arr_dt and dep_dt <= arr_dt:
             total_calendar_days = (arr_dt - dep_dt).days + 1
             all_cal_dates = [(dep_dt + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(total_calendar_days)]
-            
-            if 'Date_Clean' not in ovr_df.columns:
-                ovr_df['Date_Clean'] = ovr_df['Date'].str.extract(r'(\d{4}-\d{2})-(\d{2})')[0]
-                
             existing_clean_dates = set(ovr_df['Date_Clean'].dropna().unique())
             missing_dates = [d for d in all_cal_dates if d not in existing_clean_dates]
             
@@ -3440,36 +3446,28 @@ elif main_tab_choice == "일일Data":
                     })
                 ovr_df = pd.concat([ovr_df, pd.DataFrame(dummy_rows)], ignore_index=True)
         else:
-            total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2})-(\d{2})')[0].nunique()
+            total_calendar_days = ovr_df['Date_Clean'].nunique()
 
-        # ======================================================================
-        # [Module 6.02.01] Date Label Mapper & Essential Expense Chart Renderer
-        # ======================================================================
         if not ovr_df.empty:
-            ovr_df = ovr_df.copy()
-            if 'Date_Clean' not in ovr_df.columns:
-                ovr_df['Date_Clean'] = ovr_df['Date'].astype(str).str.extract(r'(\d{4}[^\d]\d{1,2}[^\d]\d{1,2})')[0]
-                
-            ovr_df['Date_Clean'] = ovr_df['Date_Clean'].fillna(ovr_df['Date'].astype(str))
             ovr_df = ovr_df.sort_values(by='Date_Clean', kind='mergesort')
             unique_clean_dates = sorted([str(d) for d in ovr_df['Date_Clean'].dropna().unique() if str(d).strip()])
             
-            # 🛡️ [AttributeError 방어] 안전한 날짜 파서 및 X축 라벨 생성기
+            # 3. 🛡️ X축 독립 날짜 라벨 1:1 매핑 생성
             date_label_map = {}
-            for idx, d in enumerate(unique_clean_dates):
-                d_str = str(d).strip()
-                m_d = re.search(r'(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})', d_str)
+            for d in unique_clean_dates:
+                m_d = re.search(r'(\d{4})-(\d{2})-(\d{2})', d)
                 if m_d:
                     yyyy_val, mm_val, dd_val = m_d.group(1), int(m_d.group(2)), int(m_d.group(3))
                     try:
                         dt_obj = datetime.strptime(f"{yyyy_val}-{mm_val:02d}-{dd_val:02d}", "%Y-%m-%d").date()
                         day_kr = day_kr_names[dt_obj.weekday()]
-                    except Exception:
+                    except:
                         day_kr = ""
                     date_label_map[d] = f"{mm_val}/{dd_val}<br>({day_kr})"
                 else:
-                    # 매칭 실패 시 원본 문자열 폴백 (에러 중단 원천 방지)
-                    date_label_map[d] = d_str
+                    date_label_map[d] = d
+
+            ordered_x_labels = [date_label_map[d] for d in unique_clean_dates]
 
             today_dt_c = datetime.now(st.session_state.current_tz).date()
             if dep_dt and arr_dt:
@@ -3532,15 +3530,17 @@ elif main_tab_choice == "일일Data":
                 </div>
             """, unsafe_allow_html=True)
 
-            # 필수지출 차트 렌더러 (심플 텍스트 & 범례 Category 제거)
+            # ------------------------------------------------------------------
+            # [Module 6.02.01] 필수지출 차트 (이모티콘/범례명 삭제 & 9개 막대 분리)
+            # ------------------------------------------------------------------
             st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>필수지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
             surv_chart_df = ovr_df[ovr_df['IsSurvival'] == 1].copy()
             if not surv_chart_df.empty:
-                surv_chart_df['Date_Display'] = surv_chart_df['Date_Clean'].map(date_label_map).fillna(surv_chart_df['Date_Clean'])
+                surv_chart_df['Date_Display'] = surv_chart_df['Date_Clean'].map(date_label_map).astype(str)
                 fig_surv = px.bar(
                     surv_chart_df, x='Date_Display', y=y_col, color='Category',
                     barmode='stack', color_discrete_map=color_map, title=None,
-                    category_orders={"Date_Display": [date_label_map.get(d, str(d)) for d in unique_clean_dates], "Category": category_stack_order}
+                    category_orders={"Date_Display": ordered_x_labels, "Category": category_stack_order}
                 )
                 if avg_daily_surv > 0:
                     fig_surv.add_hline(
@@ -3556,11 +3556,12 @@ elif main_tab_choice == "일일Data":
                     margin=dict(l=10, r=10, t=20, b=50), 
                     xaxis_title=None, 
                     yaxis_title=None,
-                    legend_title_text="",
+                    legend_title_text="",  # 범례 Category 삭제
                     legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, title=None), 
                     height=390
                 )
-                fig_surv.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map.get(d, str(d)) for d in unique_clean_dates])
+                # 🌟 X축을 category형으로 강제 지정하여 날짜 뭉개짐 방지
+                fig_surv.update_xaxes(type='category', fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=ordered_x_labels)
                 fig_surv.update_yaxes(fixedrange=True, tickfont=dict(size=16, color="#CBD5E1"))
                 st.plotly_chart(fig_surv, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
             else:
@@ -3568,15 +3569,17 @@ elif main_tab_choice == "일일Data":
 
             st.markdown("<div style='margin: 25px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
-            # 2. 🌟 일별 총지출 차트 (이모티콘 및 범례명 'Category' 완전 삭제)
+            # ------------------------------------------------------------------
+            # [Module 6.02.02] 일별 총지출 차트 (이모티콘/범례명 삭제 & 9개 막대 분리)
+            # ------------------------------------------------------------------
             st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>일별 총지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
             total_chart_df = ovr_df.copy()
-            total_chart_df['Date_Display'] = total_chart_df['Date_Clean'].map(date_label_map)
+            total_chart_df['Date_Display'] = total_chart_df['Date_Clean'].map(date_label_map).astype(str)
 
             fig_tot = px.bar(
                 total_chart_df, x='Date_Display', y=y_col, color='Category',
                 barmode='stack', color_discrete_map=color_map, title=None,
-                category_orders={"Date_Display": [date_label_map[d] for d in unique_clean_dates], "Category": category_stack_order}
+                category_orders={"Date_Display": ordered_x_labels, "Category": category_stack_order}
             )
             if avg_daily_total > 0:
                 fig_tot.add_hline(
@@ -3592,38 +3595,40 @@ elif main_tab_choice == "일일Data":
                 margin=dict(l=10, r=10, t=20, b=50), 
                 xaxis_title=None, 
                 yaxis_title=None,
-                legend_title_text="",  # 범례 Category 글자 삭제
+                legend_title_text="",  # 범례 Category 삭제
                 legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, title=None), 
                 height=390
             )
-            fig_tot.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
+            # 🌟 X축을 category형으로 강제 지정하여 날짜 뭉개짐 방지
+            fig_tot.update_xaxes(type='category', fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=ordered_x_labels)
             fig_tot.update_yaxes(fixedrange=True, tickfont=dict(size=16, color="#CBD5E1"))
             st.plotly_chart(fig_tot, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
 
         st.divider()
         
-        # 3. 🌟 일별 총액 vs 필수지출 피벗 테이블 (요약행 배경색 주입 & 폰트 불변)
-        daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
-        surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
-        daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
+        # ----------------------------------------------------------------------
+        # [Module 6.02.03] 일별 피벗 매트릭스 테이블 (중복 없는 정렬 & 요약행 배경색)
+        # ----------------------------------------------------------------------
+        daily_set = ovr_df.groupby('Date_Clean').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date_Clean', 'Country', 'KRW_val', 'Local_val'])
+        surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date_Clean').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date_Clean', 'S_KRW', 'S_Loc'])
+        daily_table = pd.merge(daily_set, surv_only, on='Date_Clean', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
         fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
         
         if not daily_table.empty:
-            def shorten_table_date(d_str):
-                d_str = str(d_str).strip()
-                m = re.search(r'(\d{4})-(\d{2})-(\d{2})', d_str)
+            def format_table_date_header(d_clean):
+                m = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(d_clean))
                 if m:
-                    pure_date, mm, dd = m.group(0), int(m.group(2)), int(m.group(3))
+                    mm, dd = int(m.group(2)), int(m.group(3))
                     try:
-                        dt_obj = datetime.strptime(pure_date, "%Y-%m-%d").date()
+                        dt_obj = datetime.strptime(d_clean, "%Y-%m-%d").date()
                         day_kr = day_kr_names[dt_obj.weekday()]
                         return f"{mm:02d}/{dd:02d}({day_kr})"
-                    except: return f"{mm:02d}/{dd:02d}"
-                return d_str
+                    except:
+                        return f"{mm:02d}/{dd:02d}"
+                return str(d_clean)
 
-            daily_table['Date_Short'] = daily_table['Date'].apply(shorten_table_date)
-            daily_table['Sort_Key'] = daily_table['Date'].str.extract(r'(\d{4}-\d{2})-(\d{2})')[0]
-            daily_table = daily_table.sort_values(by='Sort_Key', kind='mergesort').drop(columns=['Sort_Key'])
+            daily_table['Date_Short'] = daily_table['Date_Clean'].apply(format_table_date_header)
+            daily_table = daily_table.sort_values(by='Date_Clean', kind='mergesort')
 
             sum_tot_krw = daily_table['KRW_val'].sum()
             sum_tot_loc = daily_table['Local_val'].sum()
@@ -3658,7 +3663,7 @@ elif main_tab_choice == "일일Data":
 
             final_table_with_summary = pd.concat([display_table, summary_display], ignore_index=True)
             
-            # 🌟 폰트는 손대지 않고, 요약 2개 행에 배경색(Highlight)만 주입
+            # 🌟 폰트는 유지하고 요약 2개 행에 배경색(Highlight)만 주입
             def style_daily_pivot_table(df_display):
                 styles = pd.DataFrame('', index=df_display.index, columns=df_display.columns)
                 loc_cols = [c for c in df_display.columns if f"({LOCAL_SYM})" in c]
@@ -3682,148 +3687,6 @@ elif main_tab_choice == "일일Data":
             st.info("현지 지출 데이터가 없습니다.")
     else:
         st.info("기록된 지출 데이터가 없습니다.")
-
-        # --- 6.02.04 | 사전결제 스마트 트리맵 ---
-        dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
-        if not dom_df.empty:
-            dom_chart_df = dom_df[dom_df[y_col] > 0].copy()
-            if not dom_chart_df.empty:
-                st.divider()
-                st.markdown("<h4 style='text-align: center;'>🛫 사전결제 분석 (스마트 트리맵)</h4>", unsafe_allow_html=True)
-                total_dom_sum = dom_chart_df[y_col].sum() if dom_chart_df[y_col].sum() > 0 else 1
-                
-                smart_macro_list = []
-                smart_tile_list = []
-                
-                def clean_hotel_label(desc):
-                    h_clean = re.sub(r'\[.*?\]\s*', '', desc)
-                    h_clean = re.split(r'[,|]', h_clean)[0].strip()
-                    m_nights = re.search(r'(\d+)\s*박', desc)
-                    n_str = f" ({m_nights.group(1)}박)" if m_nights else ""
-                    low = h_clean.lower()
-                    if 'saigon' in low or 'morin' in low: short_name = "사이공 모린"
-                    elif 'sanouva' in low: short_name = "사누바 다낭"
-                    elif 'century' in low: short_name = "센츄리 리버"
-                    elif 'coral' in low or '코럴' in low: short_name = "코럴베이"
-                    elif 'impera' in low or '인페라' in low: short_name = "인페라 호텔"
-                    elif 'splendido' in low or '스플랜디도' in low: short_name = "스플랜디도"
-                    else:
-                        short_name = re.sub(r'Hotel|호텔|리조트|Resort', '', h_clean, flags=re.IGNORECASE).strip()
-                        if len(short_name) > 11: short_name = short_name[:10] + ".."
-                    return f"{short_name}{n_str}"
-
-                for idx, r in dom_chart_df.iterrows():
-                    cat = str(r['Category']).strip()
-                    desc = str(r['Description']).strip()
-                    amt = float(r[y_col])
-                    
-                    if cat == '항공권':
-                        if any(k in desc for k in ['부산', '인천', '김포', '대구', '제주', '청주', '왕복', '출국', '귀국', 'BX', 'VJ']): 
-                            macro_lbl = "🛫 IN/OUT 항공권"
-                        else: 
-                            macro_lbl = "✈️ 구간/국내선"
-                        clean_d = re.sub(r'\[.*?\]\s*', '', desc).split('|')[0].strip()
-                        name_lbl = clean_d if len(clean_d) <= 16 else clean_d[:15] + ".."
-                    elif cat in ['호텔', '숙박']:
-                        macro_lbl = "🏨 숙박"
-                        name_lbl = clean_hotel_label(desc)
-                    elif cat == '보험':
-                        macro_lbl = "🛡️ 보험"
-                        name_lbl = "여행자보험"
-                    elif cat in ['기차', '교통', '지하철', '택시']:
-                        macro_lbl = "🚗 현지교통(사전)"
-                        name_lbl = desc.split('(')[0].strip()
-                    else:
-                        macro_lbl = "📱 기타/통신"
-                        name_lbl = desc[:12].strip()
-
-                    smart_macro_list.append(macro_lbl)
-                    smart_tile_list.append(name_lbl)
-                    
-                dom_chart_df['Smart_Macro'] = smart_macro_list
-                dom_chart_df['Smart_Tile'] = smart_tile_list
-                treemap_color_map = {
-                    "🛫 IN/OUT 항공권": "#C62828", "✈️ 구간/국내선": "#E53935", 
-                    "🏨 숙박": "#1565C0", "🛡️ 보험": "#F9A825", 
-                    "🚗 현지교통(사전)": "#00838F", "📱 기타/통신": "#6A1B9A"
-                }
-
-                fig1 = px.treemap(
-                    dom_chart_df, 
-                    path=['Smart_Macro', 'Smart_Tile'], 
-                    values=y_col, 
-                    color='Smart_Macro', 
-                    color_discrete_map=treemap_color_map
-                )
-                fig1.update_traces(
-                    texttemplate="<b>%{label}</b><br>%{value:,.0f}원", 
-                    hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", 
-                    textposition='middle center',
-                    insidetextfont=dict(size=16),
-                    pathbar=dict(thickness=24, visible=True),
-                    tiling=dict(pad=5)
-                )
-                fig1.update_layout(
-                    margin=dict(l=10, r=10, t=10, b=10), 
-                    height=560,
-                    coloraxis_showscale=False
-                )
-                st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
-
-        # --- 6.02.05 | 다중 국가 현지 지출 트리맵 ---
-        if len(TRIP_CONFIGS[st.session_state.current_trip]["nodes"]) > 1 and not ovr_df.empty:
-            country_chart_df = ovr_df[ovr_df[y_col] > 0].copy()
-            if not country_chart_df.empty:
-                st.divider()
-                st.markdown("<h4 style='text-align: center;'>🌍 국가별 현지지출(Treemap)</h4>", unsafe_allow_html=True)
-                country_chart_df['Macro_Category'] = country_chart_df['Category'].map(MACRO_MAP).fillna("기타")
-                country_chart_df['Country'] = country_chart_df['Country'].fillna("기타")
-                country_chart_df['Category'] = country_chart_df['Category'].fillna("기타")
-                fig_country = px.treemap(
-                    country_chart_df, 
-                    path=['Country', 'Macro_Category', 'Category'], 
-                    values=y_col, 
-                    color='Country', 
-                    color_discrete_sequence=px.colors.qualitative.Pastel
-                )
-                fig_country.update_traces(
-                    texttemplate="<b>%{label}</b><br>%{value:,.0f}", 
-                    hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}<extra></extra>", 
-                    textposition='middle center',
-                    insidetextfont=dict(size=16),
-                    pathbar=dict(thickness=24, visible=True),
-                    tiling=dict(pad=5)
-                )
-                fig_country.update_layout(margin=dict(l=10, r=10, t=10, b=20), height=520)
-                st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
-
-        # --- 6.02.06 | 환불/보상 분석 요약 ---
-        st.divider()
-        st.subheader("🏁 여행 비용 요약 (Net)")
-        c1, c2 = st.columns(2)
-        refund_df = ledger_df[ledger_df['Category'] == '환불']
-        with c1:
-            st.info("🇰🇷 사전 결제")
-            st.metric("순지출액", f"{dom_df['KRW_val'].sum():,.0f} 원")
-            with st.expander("상세내역", expanded=False):
-                dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
-                for cat_name, row_data in dg.iterrows(): st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
-        with c2:
-            st.success(f"🌏 여행지 지출")
-            st.metric("총액", f"{ovr_df['KRW_val'].sum():,.0f} 원")
-            with st.expander("상세내역", expanded=False):
-                og = ovr_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
-                for cat_name, row_data in og.iterrows(): st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
-
-        if not refund_df.empty:
-            st.divider()
-            st.subheader("🛡️ 손실과 보상 (환불 목록)")
-            r_krw = refund_df.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
-            st.warning(f"**환불총액:** {r_krw:,.0f} 원")
-            with st.expander("상세내역", expanded=False):
-                st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
-        else:
-            st.info("기록된 지출 데이터가 없습니다.")
 
 
 # ==============================================================================
