@@ -3442,23 +3442,34 @@ elif main_tab_choice == "일일Data":
         else:
             total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2})-(\d{2})')[0].nunique()
 
+        # ======================================================================
+        # [Module 6.02.01] Date Label Mapper & Essential Expense Chart Renderer
+        # ======================================================================
         if not ovr_df.empty:
             ovr_df = ovr_df.copy()
             if 'Date_Clean' not in ovr_df.columns:
-                ovr_df['Date_Clean'] = ovr_df['Date'].str.extract(r'(\d{4}-\d{2})-(\d{2})')[0]
+                ovr_df['Date_Clean'] = ovr_df['Date'].astype(str).str.extract(r'(\d{4}[^\d]\d{1,2}[^\d]\d{1,2})')[0]
                 
+            ovr_df['Date_Clean'] = ovr_df['Date_Clean'].fillna(ovr_df['Date'].astype(str))
             ovr_df = ovr_df.sort_values(by='Date_Clean', kind='mergesort')
-            unique_clean_dates = sorted([d for d in ovr_df['Date_Clean'].dropna().unique()])
+            unique_clean_dates = sorted([str(d) for d in ovr_df['Date_Clean'].dropna().unique() if str(d).strip()])
             
+            # 🛡️ [AttributeError 방어] 안전한 날짜 파서 및 X축 라벨 생성기
             date_label_map = {}
             for idx, d in enumerate(unique_clean_dates):
-                m_d = re.search(r'\d{4}-(\d{2})-(\d{2})', d)
-                mm, dd = int(m_d.group(1)), int(m_d.group(2))
-                try:
-                    dt_obj = datetime.strptime(d, "%Y-%m-%d").date()
-                    day_kr = day_kr_names[dt_obj.weekday()]
-                except: day_kr = ""
-                date_label_map[d] = f"{mm}/{dd}<br>({day_kr})"
+                d_str = str(d).strip()
+                m_d = re.search(r'(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})', d_str)
+                if m_d:
+                    yyyy_val, mm_val, dd_val = m_d.group(1), int(m_d.group(2)), int(m_d.group(3))
+                    try:
+                        dt_obj = datetime.strptime(f"{yyyy_val}-{mm_val:02d}-{dd_val:02d}", "%Y-%m-%d").date()
+                        day_kr = day_kr_names[dt_obj.weekday()]
+                    except Exception:
+                        day_kr = ""
+                    date_label_map[d] = f"{mm_val}/{dd_val}<br>({day_kr})"
+                else:
+                    # 매칭 실패 시 원본 문자열 폴백 (에러 중단 원천 방지)
+                    date_label_map[d] = d_str
 
             today_dt_c = datetime.now(st.session_state.current_tz).date()
             if dep_dt and arr_dt:
@@ -3521,15 +3532,15 @@ elif main_tab_choice == "일일Data":
                 </div>
             """, unsafe_allow_html=True)
 
-            # 1. 🌟 필수지출 차트 (이모티콘 및 범례명 'Category' 완전 삭제)
+            # 필수지출 차트 렌더러 (심플 텍스트 & 범례 Category 제거)
             st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>필수지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
             surv_chart_df = ovr_df[ovr_df['IsSurvival'] == 1].copy()
             if not surv_chart_df.empty:
-                surv_chart_df['Date_Display'] = surv_chart_df['Date_Clean'].map(date_label_map)
+                surv_chart_df['Date_Display'] = surv_chart_df['Date_Clean'].map(date_label_map).fillna(surv_chart_df['Date_Clean'])
                 fig_surv = px.bar(
                     surv_chart_df, x='Date_Display', y=y_col, color='Category',
                     barmode='stack', color_discrete_map=color_map, title=None,
-                    category_orders={"Date_Display": [date_label_map[d] for d in unique_clean_dates], "Category": category_stack_order}
+                    category_orders={"Date_Display": [date_label_map.get(d, str(d)) for d in unique_clean_dates], "Category": category_stack_order}
                 )
                 if avg_daily_surv > 0:
                     fig_surv.add_hline(
@@ -3545,11 +3556,11 @@ elif main_tab_choice == "일일Data":
                     margin=dict(l=10, r=10, t=20, b=50), 
                     xaxis_title=None, 
                     yaxis_title=None,
-                    legend_title_text="",  # 범례 Category 글자 삭제
+                    legend_title_text="",
                     legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, title=None), 
                     height=390
                 )
-                fig_surv.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
+                fig_surv.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map.get(d, str(d)) for d in unique_clean_dates])
                 fig_surv.update_yaxes(fixedrange=True, tickfont=dict(size=16, color="#CBD5E1"))
                 st.plotly_chart(fig_surv, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
             else:
