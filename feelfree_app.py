@@ -3627,20 +3627,55 @@ else:
                         st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
     # ==============================================================================
-    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 전체요약 스타일 완전 일원화)
+    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 지능형 다단 줄바꿈 & 원화 환산)
     # ==============================================================================
     with tab_market:
         st.subheader("🔍 여행 소비 돋보기")
         
-        # 6.03.00-H | 전체요약 스타일 라벨 정제 헬퍼 (15자 초과 시 말줄임표 처리)
-        def sanitize_magnifier_label(text, max_len=15):
+        # 6.03.00-H | 띄어쓰기 및 괄호 지능형 다단 줄바꿈 헬퍼
+        def smart_wrap_multiline(text, max_line_len=10):
             if not text: return ""
             s = str(text).strip()
             s = re.sub(r'\[.*?\]\s*', '', s)
             s = re.sub(r'\s+to\s+', ' ➔ ', s, flags=re.IGNORECASE)
             s = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', s).strip(' -*•()[]/_')
             if not s: return ""
-            return s[:max_len] + ".." if len(s) > max_len else s
+
+            lines = []
+            # 괄호(...) 단위로 분절하여 괄호는 무조건 별도 행으로 분리
+            parts = re.split(r'(\(.*?\))', s)
+            for part in parts:
+                part = part.strip()
+                if not part: continue
+                if part.startswith('(') and part.endswith(')'):
+                    if len(part) > max_line_len + 4:
+                        sub_words = part[1:-1].split()
+                        cur = "("
+                        for sw in sub_words:
+                            if len(cur + " " + sw) <= max_line_len:
+                                cur = (cur + " " + sw).strip() if cur != "(" else "(" + sw
+                            else:
+                                lines.append(cur)
+                                cur = sw
+                        if cur: lines.append(cur + ")")
+                    else:
+                        lines.append(part)
+                else:
+                    # 띄어쓰기(공백)를 감지하여 8~10자 단위로 자연스럽게 줄바꿈
+                    words = part.split()
+                    cur_line = ""
+                    for w in words:
+                        if len(cur_line + " " + w) <= max_line_len:
+                            cur_line = (cur_line + " " + w).strip()
+                        else:
+                            if cur_line: lines.append(cur_line)
+                            cur_line = w
+                    if cur_line: lines.append(cur_line)
+
+            if len(lines) > 3:
+                lines = lines[:3]
+
+            return "<br>".join(lines)
 
         sub_tab_cart, sub_tab_food, sub_tab_relax = st.tabs(["장바구니", "식당·카페", "마사지 · 교통"])
         
@@ -3656,11 +3691,9 @@ else:
                     cat = str(row['Category']).strip()
                     desc = str(row['Description']).strip().lower()
                     
-                    # 💡 [핵심 보정] 마트/시장/선물 카테고리는 영수증 품목명('아치카페' 등)과 무관하게 100% 무조건 수집
                     if cat in ['마트', '시장', '선물']:
                         return True
                         
-                    # 타 정규 카테고리는 장바구니에서 배제
                     if cat in ['마사지', '택시', '교통', 'Grab', 'VinBus', 'DiDi', '지하철', '버스', '트램', '기차', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료', '통신', '수수료', '팁', '상환', '보증금']:
                         return False
                         
@@ -3681,7 +3714,7 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         store_name = lines[0] if lines else "기타 마트/선물"
-                        store_clean = sanitize_magnifier_label(store_name.split('|')[0], max_len=16)
+                        store_clean = smart_wrap_multiline(store_name.split('|')[0], max_line_len=12)
                         if not store_clean: store_clean = "마트/시장"
                         
                         store_lower = store_name.lower()
@@ -3723,7 +3756,7 @@ else:
                                                 if p_val > 500: price_val = p_val; break
                                         except: pass
                                     
-                            clean_name = sanitize_magnifier_label(il, max_len=15)
+                            clean_name = smart_wrap_multiline(il, max_line_len=10)
                             if clean_name and len(clean_name) >= 2 and not clean_name.startswith('로 잘못'):
                                 valid_items_in_receipt.append({'raw_line': il, 'name': clean_name, 'price': price_val})
                                 
@@ -3744,6 +3777,12 @@ else:
                         base_curr = item_df['Curr'].iloc[0] if not item_df.empty else TRAVEL_CURRENCY
                         tot_market_local = item_df['Local_val'].sum()
                         
+                        war_rate = get_WAR(base_curr)
+                        if base_curr != 'KRW' and war_rate > 0:
+                            item_df['KRW_str'] = item_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원")
+                        else:
+                            item_df['KRW_str'] = ""
+                        
                         st.metric(f"🛒 장바구니 총 지출액 ({base_curr} 기준)", f"{tot_market_local:,.0f} {base_curr}")
                         
                         fig_market = px.treemap(
@@ -3752,10 +3791,17 @@ else:
                             values='Local_val', 
                             color='Local_val', 
                             color_continuous_scale='Tealgrn', 
+                            custom_data=['KRW_str'],
                             title=None
                         )
+                        
+                        if base_curr != 'KRW':
+                            cart_tt = "<b>%{label}</b><br>%{value:,.0f} " + base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>"
+                        else:
+                            cart_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
+                            
                         fig_market.update_traces(
-                            texttemplate="<b>%{label}</b><br>%{value:,.0f} " + base_curr, 
+                            texttemplate=cart_tt, 
                             hovertemplate=f"<b>분류/상호/품목:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center',
                             insidetextfont=dict(size=16)
@@ -3794,7 +3840,7 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         place_name = lines[0] if lines else "기타 식당/카페"
-                        place_clean = sanitize_magnifier_label(place_name.split('|')[0], max_len=16)
+                        place_clean = smart_wrap_multiline(place_name.split('|')[0], max_line_len=12)
                         if not place_clean: place_clean = "식당/카페"
                         
                         place_lower = place_name.lower()
@@ -3828,7 +3874,7 @@ else:
                                                 if p_val > 500: price_val = p_val; break
                                         except: pass
                                         
-                            clean_iname = sanitize_magnifier_label(il, max_len=15)
+                            clean_iname = smart_wrap_multiline(il, max_line_len=10)
                             if clean_iname and (len(clean_iname) >= 1 or price_val > 0):
                                 valid_food_items.append({'name': clean_iname, 'price': price_val})
                                 
@@ -3849,6 +3895,12 @@ else:
                         f_base_curr = food_df['Curr'].iloc[0] if not food_df.empty else TRAVEL_CURRENCY
                         tot_food_local = food_df['Local_val'].sum()
                         
+                        f_war_rate = get_WAR(f_base_curr)
+                        if f_base_curr != 'KRW' and f_war_rate > 0:
+                            food_df['KRW_str'] = food_df['Local_val'].apply(lambda v: f"약 {round(v * f_war_rate, -2):,.0f}원")
+                        else:
+                            food_df['KRW_str'] = ""
+                        
                         st.metric(f"🍔 식당·카페 총 지출액 ({f_base_curr} 기준)", f"{tot_food_local:,.0f} {f_base_curr}")
                         
                         fig_food = px.treemap(
@@ -3857,10 +3909,17 @@ else:
                             values='Local_val', 
                             color='Local_val', 
                             color_continuous_scale='YlOrBr', 
+                            custom_data=['KRW_str'],
                             title=None
                         )
+                        
+                        if f_base_curr != 'KRW':
+                            food_tt = "<b>%{label}</b><br>%{value:,.0f} " + f_base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>"
+                        else:
+                            food_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
+                            
                         fig_food.update_traces(
-                            texttemplate="<b>%{label}</b><br>%{value:,.0f} " + f_base_curr, 
+                            texttemplate=food_tt, 
                             hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center',
                             insidetextfont=dict(size=16)
@@ -3923,8 +3982,8 @@ else:
                             p_provider = cat_r if cat_r in ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시'] else "로컬교통"
                             p_item = clean_desc if clean_desc else "이동 요금"
                             
-                        p_prov_clean = sanitize_magnifier_label(p_provider, max_len=14)
-                        p_item_clean = sanitize_magnifier_label(p_item, max_len=15)
+                        p_prov_clean = smart_wrap_multiline(p_provider, max_line_len=12)
+                        p_item_clean = smart_wrap_multiline(p_item, max_line_len=10)
                         
                         if not p_prov_clean: p_prov_clean = "이동 수단"
                         if not p_item_clean: p_item_clean = "요금 및 통행료"
@@ -3943,6 +4002,12 @@ else:
                         t_base_curr = TRAVEL_CURRENCY
                         tot_traffic_local = traffic_df_final['Local_val'].sum()
                         
+                        t_war_rate = get_WAR(t_base_curr)
+                        if t_base_curr != 'KRW' and t_war_rate > 0:
+                            traffic_df_final['KRW_str'] = traffic_df_final['Local_val'].apply(lambda v: f"약 {round(v * t_war_rate, -2):,.0f}원")
+                        else:
+                            traffic_df_final['KRW_str'] = ""
+                        
                         st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_traffic_local:,.0f} {t_base_curr}</div>", unsafe_allow_html=True)
                         fig_traffic = px.treemap(
                             traffic_df_final, 
@@ -3950,10 +4015,17 @@ else:
                             values='Local_val', 
                             color='Local_val', 
                             color_continuous_scale='Tealgrn', 
+                            custom_data=['KRW_str'],
                             title=None
                         )
+                        
+                        if t_base_curr != 'KRW':
+                            traffic_tt = "<b>%{label}</b><br>%{value:,.0f} " + t_base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>"
+                        else:
+                            traffic_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
+                            
                         fig_traffic.update_traces(
-                            texttemplate="<b>%{label}</b><br>%{value:,.0f} " + t_base_curr, 
+                            texttemplate=traffic_tt, 
                             hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center',
                             insidetextfont=dict(size=16)
@@ -3993,8 +4065,8 @@ else:
                             p_provider = clean_desc
                             p_item = clean_desc
                             
-                        p_prov_clean = sanitize_magnifier_label(p_provider, max_len=14)
-                        p_item_clean = sanitize_magnifier_label(p_item, max_len=15)
+                        p_prov_clean = smart_wrap_multiline(p_provider, max_line_len=12)
+                        p_item_clean = smart_wrap_multiline(p_item, max_line_len=10)
                         
                         if not p_prov_clean: p_prov_clean = "마사지 샵"
                         if not p_item_clean: p_item_clean = "힐링 마사지"
@@ -4013,6 +4085,12 @@ else:
                         m_base_curr = TRAVEL_CURRENCY
                         tot_massage_local = massage_df_final['Local_val'].sum()
                         
+                        m_war_rate = get_WAR(m_base_curr)
+                        if m_base_curr != 'KRW' and m_war_rate > 0:
+                            massage_df_final['KRW_str'] = massage_df_final['Local_val'].apply(lambda v: f"약 {round(v * m_war_rate, -2):,.0f}원")
+                        else:
+                            massage_df_final['KRW_str'] = ""
+                        
                         st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_massage_local:,.0f} {m_base_curr}</div>", unsafe_allow_html=True)
                         fig_massage = px.treemap(
                             massage_df_final, 
@@ -4020,10 +4098,17 @@ else:
                             values='Local_val', 
                             color='Local_val', 
                             color_continuous_scale='Tealgrn', 
+                            custom_data=['KRW_str'],
                             title=None
                         )
+                        
+                        if m_base_curr != 'KRW':
+                            massage_tt = "<b>%{label}</b><br>%{value:,.0f} " + m_base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>"
+                        else:
+                            massage_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
+                            
                         fig_massage.update_traces(
-                            texttemplate="<b>%{label}</b><br>%{value:,.0f} " + m_base_curr, 
+                            texttemplate=massage_tt, 
                             hovertemplate=f"<b>분류/업체/코스:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {m_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center',
                             insidetextfont=dict(size=16)
