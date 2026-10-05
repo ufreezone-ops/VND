@@ -3146,7 +3146,7 @@ else:
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 관제 연동 & 디자인 정밀화)
+    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 현지화 우선 & 폰트 대폭 강화)
     # --------------------------------------------------------------------------
     with tab_stats:
         if not ledger_df.empty:
@@ -3225,7 +3225,15 @@ else:
                     "마사지", "투어", "입장료", "통신", "수수료", "팁", "항공권", "호텔", "보험", "선물", "기타"
                 ]
 
-                c_mode = st.radio("📊 통화 선택", ["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
+                # 💡 [핵심] '통화 선택' 라벨을 숨기고 현지화를 좌측 1순위로 배치
+                c_mode = st.radio(
+                    "통화 선택", 
+                    [f"현지화({TRAVEL_CURRENCY})", "원화(KRW)"], 
+                    index=0, 
+                    horizontal=True, 
+                    key="st_curr_top", 
+                    label_visibility="collapsed"
+                )
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
                 def is_korea_port(text):
@@ -3360,7 +3368,7 @@ else:
                     fmt_tot = f"{avg_daily_total:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_total:,.2f}"
                     fmt_surv = f"{avg_daily_surv:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_surv:,.2f}"
 
-                    # 1. 현금 2일치 수명 관제 배너
+                    # 1. 현금 2일치 수명 관제 배너 (폰트 대폭 확대 적용)
                     rem_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({TRAVEL_CURRENCY})", [])])
                     war_curr = get_WAR(TRAVEL_CURRENCY)
                     
@@ -3378,29 +3386,29 @@ else:
                     
                     if remaining_trip_days > 0:
                         if days_survivable >= remaining_trip_days:
-                            status_badge = f"<span style='color:#10B981; font-weight:bold;'>🟢 안전 (약 {days_survivable:.1f}일분 여유)</span>"
+                            status_badge = f"<span style='color:#10B981; font-weight:800; font-size:16px;'>🟢 안전 (약 {days_survivable:.1f}일분 여유)</span>"
                         else:
                             shortfall = remaining_trip_days - days_survivable
-                            status_badge = f"<span style='color:#EF4444; font-weight:bold;'>🚨 경고 (약 {days_survivable:.1f}일 뒤 소진, 추가 현금화 필요)</span>"
+                            status_badge = f"<span style='color:#EF4444; font-weight:800; font-size:16px;'>🚨 경고 (약 {days_survivable:.1f}일 뒤 소진, 추가 현금화 필요)</span>"
                     else:
-                        status_badge = f"<span style='color:#38BDF8; font-weight:bold;'>🪙 약 {days_survivable:.1f}일 체류 가능</span>"
+                        status_badge = f"<span style='color:#38BDF8; font-weight:800; font-size:16px;'>🪙 약 {days_survivable:.1f}일 체류 가능</span>"
 
                     st.markdown(f"""
                         <div style='background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; margin-bottom: 15px;'>
                             <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;'>
                                 <div>
-                                    <span style='font-size:12.5px; color:#94A3B8;'>💳 현금 잔고: </span>
-                                    <span style='font-size:14px; font-weight:bold; color:#FFFFFF;'>{rem_cash:,.0f} {LOCAL_SYM} (카드 제외 현금기준)</span>
+                                    <span style='font-size:15px; font-weight:600; color:#94A3B8;'>💳 현금 잔고: </span>
+                                    <span style='font-size:17px; font-weight:800; color:#4EFEB3;'>{rem_cash:,.0f} {LOCAL_SYM} (카드 제외 현금기준)</span>
                                 </div>
                                 <div>
-                                    <span style='font-size:12.5px; color:#94A3B8;'>⏳ 현금 2일치 수명 관제: </span>
+                                    <span style='font-size:15px; font-weight:600; color:#94A3B8;'>⏳ 현금 2일치 수명 관제: </span>
                                     {status_badge}
                                 </div>
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
 
-                    # 💡 [순서 변경 1: 상단 배치] 🛡️ 필수지출 차트 (현금 수명 관제와 직결)
+                    # 💡 [상단 배치] 🛡️ 필수지출 차트 (눈금 16px, 점선 2배 두께, 평균 배지 16px 볼드)
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>🛡️ 필수지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
                     surv_chart_df = ovr_df[ovr_df['IsSurvival'] == 1].copy()
                     if not surv_chart_df.empty:
@@ -3412,24 +3420,24 @@ else:
                         )
                         if avg_daily_surv > 0:
                             fig_surv.add_hline(
-                                y=avg_daily_surv, line_dash="dash", line_color="#0284C7", line_width=1.8,
+                                y=avg_daily_surv, line_dash="dash", line_color="#0284C7", line_width=3.6,
                                 annotation_text=f" 평균 {fmt_surv}{y_unit} ", annotation_position="top right",
-                                annotation_font=dict(size=12, color="#FFFFFF", family="sans-serif"),
-                                annotation_bgcolor="#0369A1", annotation_bordercolor="#0284C7", annotation_borderwidth=1, annotation_borderpad=4
+                                annotation_font=dict(size=16, color="#FFFFFF", family="sans-serif"),
+                                annotation_bgcolor="#0369A1", annotation_bordercolor="#0284C7", annotation_borderwidth=1.5, annotation_borderpad=6
                             )
                         fig_surv.update_layout(
                             margin=dict(l=10, r=10, t=15, b=50), xaxis_title=None, yaxis_title=None,
-                            legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=380
+                            legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=390
                         )
-                        fig_surv.update_xaxes(fixedrange=True, tickfont=dict(size=11), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
-                        fig_surv.update_yaxes(fixedrange=True)
+                        fig_surv.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
+                        fig_surv.update_yaxes(fixedrange=True, tickfont=dict(size=16, color="#CBD5E1"))
                         st.plotly_chart(fig_surv, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
                     else:
                         st.info("해당 기간 내 필수지출 항목이 없습니다.")
 
                     st.markdown("<div style='margin: 25px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
-                    # 💡 [순서 변경 2: 하단 배치 & 제목 변경] 📊 일별 총지출 차트 (선물이 최상단 노란색 캡으로 얹어짐)
+                    # 💡 [하단 배치] 📊 일별 총지출 차트 (눈금 16px, 점선 2배 두께, 평균 배지 16px 볼드)
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>📊 일별 총지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
                     total_chart_df = ovr_df.copy()
                     total_chart_df['Date_Display'] = total_chart_df['Date_Clean'].map(date_label_map)
@@ -3441,22 +3449,22 @@ else:
                     )
                     if avg_daily_total > 0:
                         fig_tot.add_hline(
-                            y=avg_daily_total, line_dash="dash", line_color="#F59E0B", line_width=1.8,
+                            y=avg_daily_total, line_dash="dash", line_color="#F59E0B", line_width=3.6,
                             annotation_text=f" 평균 {fmt_tot}{y_unit} ", annotation_position="top right",
-                            annotation_font=dict(size=12, color="#FFFFFF", family="sans-serif"),
-                            annotation_bgcolor="#B45309", annotation_bordercolor="#F59E0B", annotation_borderwidth=1, annotation_borderpad=4
+                            annotation_font=dict(size=16, color="#FFFFFF", family="sans-serif"),
+                            annotation_bgcolor="#B45309", annotation_bordercolor="#F59E0B", annotation_borderwidth=1.5, annotation_borderpad=6
                         )
                     fig_tot.update_layout(
                         margin=dict(l=10, r=10, t=15, b=50), xaxis_title=None, yaxis_title=None,
-                        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=380
+                        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=390
                     )
-                    fig_tot.update_xaxes(fixedrange=True, tickfont=dict(size=11), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
-                    fig_tot.update_yaxes(fixedrange=True)
+                    fig_tot.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
+                    fig_tot.update_yaxes(fixedrange=True, tickfont=dict(size=16, color="#CBD5E1"))
                     st.plotly_chart(fig_tot, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
 
                 st.divider()
                 
-                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 (합계/평균 노란색 강조 스타일링) ---
+                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 (현지화 좌측 우선 배치) ---
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
                 daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3493,33 +3501,33 @@ else:
                     summary_rows = pd.DataFrame([
                         {
                             'Country': '📊 총합계', 'Date_Short': '합계(Sum)', 
-                            'KRW_val': sum_tot_krw, 'Local_val': sum_tot_loc, 
-                            'S_KRW': sum_surv_krw, 'S_Loc': sum_surv_loc
+                            'Local_val': sum_tot_loc, 'KRW_val': sum_tot_krw, 
+                            'S_Loc': sum_surv_loc, 'S_KRW': sum_surv_krw
                         },
                         {
                             'Country': '📈 1일 평균', 'Date_Short': '일평균(Avg)', 
-                            'KRW_val': avg_tot_krw, 'Local_val': avg_tot_loc, 
-                            'S_KRW': avg_surv_krw, 'S_Loc': avg_surv_loc
+                            'Local_val': avg_tot_loc, 'KRW_val': avg_tot_krw, 
+                            'S_Loc': avg_surv_loc, 'S_KRW': avg_surv_krw
                         }
                     ])
                     
+                    # 💡 [핵심] 현지화(₫)를 좌측, 원화(원)를 우측으로 순서 재배치
                     if is_single_country:
-                        display_table = daily_table[['Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(columns={'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'필수(원)', 'S_Loc':f'필수({LOCAL_SYM})'})
-                        summary_display = summary_rows[['Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(columns={'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'필수(원)', 'S_Loc':f'필수({LOCAL_SYM})'})
+                        display_table = daily_table[['Date_Short', 'Local_val', 'KRW_val', 'S_Loc', 'S_KRW']].rename(columns={'Date_Short':'날짜', 'Local_val':f'총({LOCAL_SYM})', 'KRW_val':'총(원)', 'S_Loc':f'필수({LOCAL_SYM})', 'S_KRW':'필수(원)'})
+                        summary_display = summary_rows[['Date_Short', 'Local_val', 'KRW_val', 'S_Loc', 'S_KRW']].rename(columns={'Date_Short':'날짜', 'Local_val':f'총({LOCAL_SYM})', 'KRW_val':'총(원)', 'S_Loc':f'필수({LOCAL_SYM})', 'S_KRW':'필수(원)'})
                     else:
-                        display_table = daily_table[['Country', 'Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(columns={'Country':'국가', 'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'필수(원)', 'S_Loc':f'필수({LOCAL_SYM})'})
-                        summary_display = summary_rows[['Country', 'Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(columns={'Country':'국가', 'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'필수(원)', 'S_Loc':f'필수({LOCAL_SYM})'})
+                        display_table = daily_table[['Country', 'Date_Short', 'Local_val', 'KRW_val', 'S_Loc', 'S_KRW']].rename(columns={'Country':'국가', 'Date_Short':'날짜', 'Local_val':f'총({LOCAL_SYM})', 'KRW_val':'총(원)', 'S_Loc':f'필수({LOCAL_SYM})', 'S_KRW':'필수(원)'})
+                        summary_display = summary_rows[['Country', 'Date_Short', 'Local_val', 'KRW_val', 'S_Loc', 'S_KRW']].rename(columns={'Country':'국가', 'Date_Short':'날짜', 'Local_val':f'총({LOCAL_SYM})', 'KRW_val':'총(원)', 'S_Loc':f'필수({LOCAL_SYM})', 'S_KRW':'필수(원)'})
 
                     final_table_with_summary = pd.concat([display_table, summary_display], ignore_index=True)
                     
-                    # 💡 [핵심] 합계(Sum) 및 일평균(Avg) 행 노란색/골드 강조 스타일 함수
                     def highlight_summary_rows(row):
                         if str(row['날짜']) in ['합계(Sum)', '일평균(Avg)']:
                             return ['background-color: rgba(245, 158, 11, 0.22); font-weight: bold; color: #FACC15; border-top: 1px solid #F59E0B;'] * len(row)
                         return [''] * len(row)
 
                     styled_daily_table = final_table_with_summary.style.apply(highlight_summary_rows, axis=1).format({
-                        '총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '필수(원)': '{:,.0f}', f'필수({LOCAL_SYM})': fmt_local
+                        f'총({LOCAL_SYM})': fmt_local, '총(원)': '{:,.0f}', f'필수({LOCAL_SYM})': fmt_local, '필수(원)': '{:,.0f}'
                     })
 
                     col_cfg_daily = {"날짜": st.column_config.TextColumn("날짜", width="small"), "국가": st.column_config.TextColumn("국가", width="small")}
@@ -3599,7 +3607,6 @@ else:
                             color='Smart_Macro', 
                             color_discrete_map=treemap_color_map
                         )
-                        # 💡 [핵심] 돋보기 탭과 동일한 24px 헤더 띠 & 16px 선명한 폰트 스케일러 적용
                         fig1.update_traces(
                             texttemplate="<b>%{label}</b><br>%{value:,.0f}원", 
                             hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", 
