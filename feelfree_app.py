@@ -3146,7 +3146,7 @@ else:
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 현지화 우선 & 폰트 대폭 강화)
+    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 평균값 박스 반투명 & 이격)
     # --------------------------------------------------------------------------
     with tab_stats:
         if not ledger_df.empty:
@@ -3225,7 +3225,6 @@ else:
                     "마사지", "투어", "입장료", "통신", "수수료", "팁", "항공권", "호텔", "보험", "선물", "기타"
                 ]
 
-                # 💡 [핵심] '통화 선택' 라벨을 숨기고 현지화를 좌측 1순위로 배치
                 c_mode = st.radio(
                     "통화 선택", 
                     [f"현지화({TRAVEL_CURRENCY})", "원화(KRW)"], 
@@ -3368,7 +3367,7 @@ else:
                     fmt_tot = f"{avg_daily_total:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_total:,.2f}"
                     fmt_surv = f"{avg_daily_surv:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_surv:,.2f}"
 
-                    # 1. 현금 2일치 수명 관제 배너 (폰트 대폭 확대 적용)
+                    # 1. 현금 2일치 수명 관제 배너
                     rem_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({TRAVEL_CURRENCY})", [])])
                     war_curr = get_WAR(TRAVEL_CURRENCY)
                     
@@ -3408,7 +3407,7 @@ else:
                         </div>
                     """, unsafe_allow_html=True)
 
-                    # 💡 [상단 배치] 🛡️ 필수지출 차트 (눈금 16px, 점선 2배 두께, 평균 배지 16px 볼드)
+                    # 💡 [상단 배치] 🛡️ 필수지출 차트 (반투명 배경 + yshift=14 이격 간격 적용)
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>🛡️ 필수지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
                     surv_chart_df = ovr_df[ovr_df['IsSurvival'] == 1].copy()
                     if not surv_chart_df.empty:
@@ -3423,10 +3422,13 @@ else:
                                 y=avg_daily_surv, line_dash="dash", line_color="#0284C7", line_width=3.6,
                                 annotation_text=f" 평균 {fmt_surv}{y_unit} ", annotation_position="top right",
                                 annotation_font=dict(size=16, color="#FFFFFF", family="sans-serif"),
-                                annotation_bgcolor="#0369A1", annotation_bordercolor="#0284C7", annotation_borderwidth=1.5, annotation_borderpad=6
+                                annotation_bgcolor="rgba(3, 105, 161, 0.78)",
+                                annotation_bordercolor="rgba(2, 132, 199, 0.9)",
+                                annotation_borderwidth=1.5, annotation_borderpad=6,
+                                annotation_yshift=14
                             )
                         fig_surv.update_layout(
-                            margin=dict(l=10, r=10, t=15, b=50), xaxis_title=None, yaxis_title=None,
+                            margin=dict(l=10, r=10, t=20, b=50), xaxis_title=None, yaxis_title=None,
                             legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=390
                         )
                         fig_surv.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
@@ -3437,7 +3439,7 @@ else:
 
                     st.markdown("<div style='margin: 25px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
-                    # 💡 [하단 배치] 📊 일별 총지출 차트 (눈금 16px, 점선 2배 두께, 평균 배지 16px 볼드)
+                    # 💡 [하단 배치] 📊 일별 총지출 차트 (반투명 배경 + yshift=14 이격 간격 적용)
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>📊 일별 총지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
                     total_chart_df = ovr_df.copy()
                     total_chart_df['Date_Display'] = total_chart_df['Date_Clean'].map(date_label_map)
@@ -3452,10 +3454,13 @@ else:
                             y=avg_daily_total, line_dash="dash", line_color="#F59E0B", line_width=3.6,
                             annotation_text=f" 평균 {fmt_tot}{y_unit} ", annotation_position="top right",
                             annotation_font=dict(size=16, color="#FFFFFF", family="sans-serif"),
-                            annotation_bgcolor="#B45309", annotation_bordercolor="#F59E0B", annotation_borderwidth=1.5, annotation_borderpad=6
+                            annotation_bgcolor="rgba(180, 83, 9, 0.78)",
+                            annotation_bordercolor="rgba(245, 158, 11, 0.9)",
+                            annotation_borderwidth=1.5, annotation_borderpad=6,
+                            annotation_yshift=14
                         )
                     fig_tot.update_layout(
-                        margin=dict(l=10, r=10, t=15, b=50), xaxis_title=None, yaxis_title=None,
+                        margin=dict(l=10, r=10, t=20, b=50), xaxis_title=None, yaxis_title=None,
                         legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=390
                     )
                     fig_tot.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
@@ -3464,7 +3469,7 @@ else:
 
                 st.divider()
                 
-                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 (현지화 좌측 우선 배치) ---
+                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 ---
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
                 daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3511,7 +3516,6 @@ else:
                         }
                     ])
                     
-                    # 💡 [핵심] 현지화(₫)를 좌측, 원화(원)를 우측으로 순서 재배치
                     if is_single_country:
                         display_table = daily_table[['Date_Short', 'Local_val', 'KRW_val', 'S_Loc', 'S_KRW']].rename(columns={'Date_Short':'날짜', 'Local_val':f'총({LOCAL_SYM})', 'KRW_val':'총(원)', 'S_Loc':f'필수({LOCAL_SYM})', 'S_KRW':'필수(원)'})
                         summary_display = summary_rows[['Date_Short', 'Local_val', 'KRW_val', 'S_Loc', 'S_KRW']].rename(columns={'Date_Short':'날짜', 'Local_val':f'총({LOCAL_SYM})', 'KRW_val':'총(원)', 'S_Loc':f'필수({LOCAL_SYM})', 'S_KRW':'필수(원)'})
@@ -3535,7 +3539,7 @@ else:
                 else: 
                     st.info("현지 지출 데이터가 없습니다.")
 
-                # --- 6.02.04 | 사전결제 스마트 트리맵 (돋보기 24px 헤더 띠 & 16px 폰트 엔진 적용) ---
+                # --- 6.02.04 | 사전결제 스마트 트리맵 ---
                 dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
                 if not dom_df.empty:
                     dom_chart_df = dom_df[dom_df[y_col] > 0].copy()
