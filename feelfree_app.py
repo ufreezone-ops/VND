@@ -233,59 +233,76 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 1.05.03 | Tab Navigation CSS (여유로운 좌우 여백 & 쾌적한 뱃지 탭 UI)
+# 1.05.03 | Tab Navigation CSS (겉 껍데기 전면 타격: 좌우 24px 넉넉한 패딩 & 뱃지 확장)
 tab_bg_unselected = "#18202E" if is_dark else "#E2E8F0"
 tab_text_unselected = "#38BDF8" if is_dark else "#0284C7"
 
 st.markdown(f"""
     <style>
-    /* 탭 리스트 외곽 컨테이너 여백 및 간격 확장 */
+    /* 1. 탭 리스트 컨테이너: 탭 간격 12px로 확장 */
+    div[data-testid="stTabs"] div[data-baseweb="tab-list"],
     .stTabs [data-baseweb="tab-list"] {{ 
         display: flex !important; 
-        width: 100% !important; 
-        gap: 8px !important; 
-        padding: 4px 10px !important; 
+        gap: 12px !important; 
+        padding: 6px 4px !important; 
         background: transparent !important; 
-        margin: 0px 4px 16px 4px !important; 
+        margin-bottom: 16px !important; 
+        border: none !important;
     }}
     
-    /* 탭 버튼 뱃지: 좌우 패딩을 주어 글자가 테두리에 붙지 않고 여유롭게 배치 */
+    /* 2. 탭 버튼 겉 껍데기(button & div): 좌우 24px 패딩 및 최소 너비 95px 강제 주입 */
+    div[data-testid="stTabs"] button[data-baseweb="tab"],
+    div[data-testid="stTabs"] div[data-baseweb="tab"],
+    .stTabs button[data-baseweb="tab"],
     .stTabs [data-baseweb="tab"] {{ 
-        flex: 1 1 0% !important; 
         height: 44px !important; 
-        padding: 0px 16px !important; 
+        padding-left: 24px !important; 
+        padding-right: 24px !important; 
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
+        min-width: 95px !important;
         background-color: {tab_bg_unselected} !important; 
         border-radius: 10px !important; 
         border: 1px solid #334155 !important; 
-        display: flex !important; 
+        display: inline-flex !important; 
         align-items: center !important; 
         justify-content: center !important; 
-        transition: all 0.2s ease-in-out !important;
+        box-sizing: border-box !important;
     }}
     
-    /* 탭 텍스트 폰트 & 자간 정렬 */
+    /* 3. 탭 내부 텍스트 폰트 */
+    div[data-testid="stTabs"] button[data-baseweb="tab"] p,
+    div[data-testid="stTabs"] [data-baseweb="tab"] p,
     .stTabs [data-baseweb="tab"] p {{ 
         font-size: 15.5px !important; 
         font-weight: 600 !important; 
         color: {tab_text_unselected} !important; 
         margin: 0px !important; 
-        letter-spacing: 0.3px !important;
+        padding: 0px 4px !important;
+        letter-spacing: 0.5px !important;
         white-space: nowrap !important;
     }}
     
-    /* 선택된 활성 탭 (오렌지 그라데이션) */
+    /* 4. 선택된 활성 탭 (오렌지 뱃지 박스: 좌우 24px 패딩이 적용된 시원한 직사각형) */
+    div[data-testid="stTabs"] button[aria-selected="true"],
+    div[data-testid="stTabs"] [aria-selected="true"],
     .stTabs [aria-selected="true"] {{ 
         background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; 
         border: 1px solid #FFA500 !important; 
-        box-shadow: 0 4px 12px rgba(255, 158, 0, 0.25) !important;
+        box-shadow: 0 4px 14px rgba(255, 158, 0, 0.3) !important;
     }}
+    div[data-testid="stTabs"] button[aria-selected="true"] p,
     .stTabs [aria-selected="true"] p {{ 
         color: #FFFFFF !important; 
         font-size: 16px !important; 
         font-weight: 800 !important; 
     }}
     
-    .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{ 
+    /* 5. 불필요한 기본 밑줄 및 테두리 제거 */
+    div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+    div[data-testid="stTabs"] [data-baseweb="tab-border"],
+    .stTabs [data-baseweb="tab-highlight"], 
+    .stTabs [data-baseweb="tab-border"] {{ 
         display: none !important; 
     }}
     </style>
