@@ -3627,13 +3627,13 @@ else:
                         st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
     # ==============================================================================
-    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 상호명 폰트 정상화 & 그랩 단일 요금)
+    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 상호명 14자 커팅 & 24px 헤더 띠)
     # ==============================================================================
     with tab_market:
         st.subheader("🔍 여행 소비 돋보기")
         
-        # 6.03.00-H1 | 상호명/업체명 전용 단일행 헤더 정제 헬퍼 (줄바꿈 방지 -> 폰트 크기 14~16px 유지)
-        def clean_header_label(text, max_len=20):
+        # 6.03.00-H1 | 상호명/업체명 전용 14자 한글 커팅 헬퍼 (줄바꿈 방지 -> 폰트 크기 극대화)
+        def clean_header_label(text, max_len=14):
             if not text: return ""
             s = str(text).strip()
             s = re.sub(r'\[.*?\]\s*', '', s)
@@ -3723,8 +3723,8 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         store_name = lines[0] if lines else "기타 마트/선물"
-                        # 💡 [핵심] 상호명은 줄바꿈 없는 1줄 정제(clean_header_label) 적용하여 헤더 폰트 크기 보존
-                        store_clean = clean_header_label(store_name.split('|')[0], max_len=18)
+                        # 💡 14자 한글 커팅 적용 (clean_header_label)
+                        store_clean = clean_header_label(store_name.split('|')[0], max_len=14)
                         if not store_clean: store_clean = "마트/시장"
                         
                         store_lower = store_name.lower()
@@ -3810,11 +3810,14 @@ else:
                         else:
                             cart_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
                             
+                        # 💡 24px 두께 헤더 띠(pathbar=24, tiling pad=5) 및 폰트 크기 16px 고정
                         fig_market.update_traces(
                             texttemplate=cart_tt, 
                             hovertemplate=f"<b>분류/상호/품목:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center',
-                            insidetextfont=dict(size=16)
+                            insidetextfont=dict(size=16),
+                            pathbar=dict(thickness=24, visible=True),
+                            tiling=dict(pad=5)
                         )
                         fig_market.update_layout(
                             margin=dict(l=0, r=0, t=10, b=10), 
@@ -3850,8 +3853,8 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         place_name = lines[0] if lines else "기타 식당/카페"
-                        # 💡 [핵심] 식당 상호명은 줄바꿈 없는 1줄 정제(clean_header_label) 적용
-                        place_clean = clean_header_label(place_name.split('|')[0], max_len=18)
+                        # 💡 14자 한글 커팅 적용 (clean_header_label)
+                        place_clean = clean_header_label(place_name.split('|')[0], max_len=14)
                         if not place_clean: place_clean = "식당/카페"
                         
                         place_lower = place_name.lower()
@@ -3898,8 +3901,7 @@ else:
                             for it in valid_food_items:
                                 f_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_food_items)))
                                 f_price = round(f_price * f_scale, -2)
-                                parsed_items_box = {'Food_Group': food_group, 'Place': place_clean, 'Item': it['name'], 'Local_val': f_price, 'Curr': r_curr}
-                                parsed_food.append(parsed_items_box)
+                                parsed_food.append({'Food_Group': food_group, 'Place': place_clean, 'Item': it['name'], 'Local_val': f_price, 'Curr': r_curr})
                                 
                     if parsed_food:
                         food_df = pd.DataFrame(parsed_food)
@@ -3930,11 +3932,14 @@ else:
                         else:
                             food_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
                             
+                        # 💡 24px 두께 헤더 띠(pathbar=24, tiling pad=5) 및 폰트 크기 16px 고정
                         fig_food.update_traces(
                             texttemplate=food_tt, 
                             hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center',
-                            insidetextfont=dict(size=16)
+                            insidetextfont=dict(size=16),
+                            pathbar=dict(thickness=24, visible=True),
+                            tiling=dict(pad=5)
                         )
                         fig_food.update_layout(
                             margin=dict(l=0, r=0, t=10, b=10), 
@@ -3946,7 +3951,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ------------------------------------------------------------------
-            # 6.03.03 | Subtab 3: 마사지 · 교통 (그랩 최종 단일가 & 헤더 폰트 정상화)
+            # 6.03.03 | Subtab 3: 마사지 · 교통 (그랩 최종 단일가 & 24px 헤더 띠)
             # ------------------------------------------------------------------
             with sub_tab_relax:
                 # [PART 1] 상단: 그랩 및 로컬교통 돋보기
@@ -3990,13 +3995,12 @@ else:
                         lines_t = [l.strip() for l in clean_desc.split('\n') if l.strip()]
                         first_line = lines_t[0] if lines_t else clean_desc
 
-                        # 💡 [핵심] 미터기 요금(88,000vnd), 거리(3.6km), 시간 등을 완벽 제거하여 '순수 이동 경로'만 추출
                         first_line = re.sub(r'[\d,\.]+\s*(?:vnd|동|원|\$|[kK])\b.*$', '', first_line, flags=re.IGNORECASE)
                         first_line = re.sub(r'\b\d+(?:\.\d+)?\s*(?:km|분|초|시간)\b.*$', '', first_line, flags=re.IGNORECASE).strip(' ,-')
 
                         p_provider = cat_r if cat_r in ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시'] else "로컬교통"
-                        # 💡 [핵심] Provider는 1줄(clean_header_label), 경로는 다단 줄바꿈(smart_wrap_multiline)
-                        p_prov_clean = clean_header_label(p_provider, max_len=16)
+                        # 💡 14자 한글 커팅 적용 (clean_header_label)
+                        p_prov_clean = clean_header_label(p_provider, max_len=14)
                         p_item_clean = smart_wrap_multiline(first_line, max_line_len=11)
                         
                         if not p_prov_clean: p_prov_clean = "이동 수단"
@@ -4038,11 +4042,14 @@ else:
                         else:
                             traffic_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
                             
+                        # 💡 24px 두께 헤더 띠(pathbar=24, tiling pad=5) 및 폰트 크기 16px 고정
                         fig_traffic.update_traces(
                             texttemplate=traffic_tt, 
                             hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center',
-                            insidetextfont=dict(size=16)
+                            insidetextfont=dict(size=16),
+                            pathbar=dict(thickness=24, visible=True),
+                            tiling=dict(pad=5)
                         )
                         fig_traffic.update_layout(
                             margin=dict(l=0, r=0, t=10, b=10), 
@@ -4079,8 +4086,8 @@ else:
                             p_provider = clean_desc
                             p_item = clean_desc
                             
-                        # 💡 [핵심] 마사지 샵 이름은 1줄(clean_header_label), 코스는 다단 줄바꿈(smart_wrap_multiline)
-                        p_prov_clean = clean_header_label(p_provider, max_len=18)
+                        # 💡 14자 한글 커팅 적용 (clean_header_label)
+                        p_prov_clean = clean_header_label(p_provider, max_len=14)
                         p_item_clean = smart_wrap_multiline(p_item, max_line_len=10)
                         
                         if not p_prov_clean: p_prov_clean = "마사지 샵"
@@ -4122,11 +4129,14 @@ else:
                         else:
                             massage_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
                             
+                        # 💡 24px 두께 헤더 띠(pathbar=24, tiling pad=5) 및 폰트 크기 16px 고정
                         fig_massage.update_traces(
                             texttemplate=massage_tt, 
                             hovertemplate=f"<b>분류/업체/코스:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {m_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
                             textposition='middle center',
-                            insidetextfont=dict(size=16)
+                            insidetextfont=dict(size=16),
+                            pathbar=dict(thickness=24, visible=True),
+                            tiling=dict(pad=5)
                         )
                         fig_massage.update_layout(
                             margin=dict(l=0, r=0, t=10, b=10), 
