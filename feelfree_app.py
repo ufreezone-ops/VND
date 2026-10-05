@@ -3146,7 +3146,7 @@ else:
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 선물 최상단 스택 & 옐로우 적용)
+    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 관제 연동 & 디자인 정밀화)
     # --------------------------------------------------------------------------
     with tab_stats:
         if not ledger_df.empty:
@@ -3211,7 +3211,6 @@ else:
                             exp_df.at[m_idx, 'KRW_val'] -= take
                             r_val -= take
 
-                # 💡 [핵심] '선물' 색상을 화사하고 선명한 옐로우 골드(#FACC15)로 지정
                 color_map = {
                     "식사": "#26A69A", "간식": "#66BB6A", "마트": "#EC407A",
                     "Grab": "#29B6F6", "VinBus": "#26C6DA", "DiDi": "#29B6F6", "지하철": "#42A5F5",
@@ -3221,7 +3220,6 @@ else:
                     "선물": "#FACC15", "기타": "#9E9E9E"
                 }
                 
-                # 💡 [핵심] '선물'을 누적 막대의 맨 꼭대기(최상단)로 이동
                 category_stack_order = [
                     "식사", "간식", "마트", "Grab", "VinBus", "DiDi", "지하철", "택시", "교통", 
                     "마사지", "투어", "입장료", "통신", "수수료", "팁", "항공권", "호텔", "보험", "선물", "기타"
@@ -3321,7 +3319,7 @@ else:
                 else:
                     total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0].nunique()
 
-                # --- 6.02.02 | 일별 지출 차트 2개 분리 렌더링 & 현금 2일치 수명 관제 ---
+                # --- 6.02.02 | 일별 지출 차트 2개 렌더링 & 현금 수명 관제 ---
                 if not ovr_df.empty:
                     ovr_df = ovr_df.copy()
                     if 'Date_Clean' not in ovr_df.columns:
@@ -3362,6 +3360,7 @@ else:
                     fmt_tot = f"{avg_daily_total:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_total:,.2f}"
                     fmt_surv = f"{avg_daily_surv:,.0f}" if "원화" in c_mode or MULTIPLIER != 1 else f"{avg_daily_surv:,.2f}"
 
+                    # 1. 현금 2일치 수명 관제 배너
                     rem_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({TRAVEL_CURRENCY})", [])])
                     war_curr = get_WAR(TRAVEL_CURRENCY)
                     
@@ -3401,34 +3400,7 @@ else:
                         </div>
                     """, unsafe_allow_html=True)
 
-                    # [차트 1] 일별지출 (선물이 최상단 노란색 캡으로 배치됨)
-                    st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>📊 일별지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
-                    total_chart_df = ovr_df.copy()
-                    total_chart_df['Date_Display'] = total_chart_df['Date_Clean'].map(date_label_map)
-
-                    fig_tot = px.bar(
-                        total_chart_df, x='Date_Display', y=y_col, color='Category',
-                        barmode='stack', color_discrete_map=color_map, title=None,
-                        category_orders={"Date_Display": [date_label_map[d] for d in unique_clean_dates], "Category": category_stack_order}
-                    )
-                    if avg_daily_total > 0:
-                        fig_tot.add_hline(
-                            y=avg_daily_total, line_dash="dash", line_color="#F59E0B", line_width=1.8,
-                            annotation_text=f" 평균 {fmt_tot}{y_unit} ", annotation_position="top right",
-                            annotation_font=dict(size=12, color="#FFFFFF", family="sans-serif"),
-                            annotation_bgcolor="#B45309", annotation_bordercolor="#F59E0B", annotation_borderwidth=1, annotation_borderpad=4
-                        )
-                    fig_tot.update_layout(
-                        margin=dict(l=10, r=10, t=15, b=50), xaxis_title=None, yaxis_title=None,
-                        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=380
-                    )
-                    fig_tot.update_xaxes(fixedrange=True, tickfont=dict(size=11), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
-                    fig_tot.update_yaxes(fixedrange=True)
-                    st.plotly_chart(fig_tot, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
-
-                    st.markdown("<div style='margin: 25px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
-
-                    # [차트 2] 필수지출
+                    # 💡 [순서 변경 1: 상단 배치] 🛡️ 필수지출 차트 (현금 수명 관제와 직결)
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>🛡️ 필수지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
                     surv_chart_df = ovr_df[ovr_df['IsSurvival'] == 1].copy()
                     if not surv_chart_df.empty:
@@ -3455,9 +3427,36 @@ else:
                     else:
                         st.info("해당 기간 내 필수지출 항목이 없습니다.")
 
+                    st.markdown("<div style='margin: 25px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
+
+                    # 💡 [순서 변경 2: 하단 배치 & 제목 변경] 📊 일별 총지출 차트 (선물이 최상단 노란색 캡으로 얹어짐)
+                    st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>📊 일별 총지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
+                    total_chart_df = ovr_df.copy()
+                    total_chart_df['Date_Display'] = total_chart_df['Date_Clean'].map(date_label_map)
+
+                    fig_tot = px.bar(
+                        total_chart_df, x='Date_Display', y=y_col, color='Category',
+                        barmode='stack', color_discrete_map=color_map, title=None,
+                        category_orders={"Date_Display": [date_label_map[d] for d in unique_clean_dates], "Category": category_stack_order}
+                    )
+                    if avg_daily_total > 0:
+                        fig_tot.add_hline(
+                            y=avg_daily_total, line_dash="dash", line_color="#F59E0B", line_width=1.8,
+                            annotation_text=f" 평균 {fmt_tot}{y_unit} ", annotation_position="top right",
+                            annotation_font=dict(size=12, color="#FFFFFF", family="sans-serif"),
+                            annotation_bgcolor="#B45309", annotation_bordercolor="#F59E0B", annotation_borderwidth=1, annotation_borderpad=4
+                        )
+                    fig_tot.update_layout(
+                        margin=dict(l=10, r=10, t=15, b=50), xaxis_title=None, yaxis_title=None,
+                        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=380
+                    )
+                    fig_tot.update_xaxes(fixedrange=True, tickfont=dict(size=11), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
+                    fig_tot.update_yaxes(fixedrange=True)
+                    st.plotly_chart(fig_tot, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
+
                 st.divider()
                 
-                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 ---
+                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 (합계/평균 노란색 강조 스타일링) ---
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
                 daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3512,12 +3511,23 @@ else:
                         summary_display = summary_rows[['Country', 'Date_Short', 'KRW_val', 'Local_val', 'S_KRW', 'S_Loc']].rename(columns={'Country':'국가', 'Date_Short':'날짜', 'KRW_val':'총(원)', 'Local_val':f'총({LOCAL_SYM})', 'S_KRW':'필수(원)', 'S_Loc':f'필수({LOCAL_SYM})'})
 
                     final_table_with_summary = pd.concat([display_table, summary_display], ignore_index=True)
+                    
+                    # 💡 [핵심] 합계(Sum) 및 일평균(Avg) 행 노란색/골드 강조 스타일 함수
+                    def highlight_summary_rows(row):
+                        if str(row['날짜']) in ['합계(Sum)', '일평균(Avg)']:
+                            return ['background-color: rgba(245, 158, 11, 0.22); font-weight: bold; color: #FACC15; border-top: 1px solid #F59E0B;'] * len(row)
+                        return [''] * len(row)
+
+                    styled_daily_table = final_table_with_summary.style.apply(highlight_summary_rows, axis=1).format({
+                        '총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '필수(원)': '{:,.0f}', f'필수({LOCAL_SYM})': fmt_local
+                    })
+
                     col_cfg_daily = {"날짜": st.column_config.TextColumn("날짜", width="small"), "국가": st.column_config.TextColumn("국가", width="small")}
-                    st.dataframe(final_table_with_summary.style.format({'총(원)': '{:,.0f}', f'총({LOCAL_SYM})': fmt_local, '필수(원)': '{:,.0f}', f'필수({LOCAL_SYM})': fmt_local}), use_container_width=True, hide_index=True, column_config=col_cfg_daily)
+                    st.dataframe(styled_daily_table, use_container_width=True, hide_index=True, column_config=col_cfg_daily)
                 else: 
                     st.info("현지 지출 데이터가 없습니다.")
 
-                # --- 6.02.04 | 사전결제 스마트 트리맵 ---
+                # --- 6.02.04 | 사전결제 스마트 트리맵 (돋보기 24px 헤더 띠 & 16px 폰트 엔진 적용) ---
                 dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
                 if not dom_df.empty:
                     dom_chart_df = dom_df[dom_df[y_col] > 0].copy()
@@ -3550,47 +3560,59 @@ else:
                             cat = str(r['Category']).strip()
                             desc = str(r['Description']).strip()
                             amt = float(r[y_col])
-                            pct = (amt / total_dom_sum) * 100
                             
                             if cat == '항공권':
-                                if any(k in desc for k in ['부산', '인천', '김포', '대구', '제주', '청주', '왕복', '출국', '귀국', 'BX', 'VJ']): macro_lbl = "🛫 IN/OUT 항공권"
-                                else: macro_lbl = "✈️ 구간/국내선"
+                                if any(k in desc for k in ['부산', '인천', '김포', '대구', '제주', '청주', '왕복', '출국', '귀국', 'BX', 'VJ']): 
+                                    macro_lbl = "🛫 IN/OUT 항공권"
+                                else: 
+                                    macro_lbl = "✈️ 구간/국내선"
                                 clean_d = re.sub(r'\[.*?\]\s*', '', desc).split('|')[0].strip()
                                 name_lbl = clean_d if len(clean_d) <= 16 else clean_d[:15] + ".."
-                                is_small = False
                             elif cat in ['호텔', '숙박']:
                                 macro_lbl = "🏨 숙박"
                                 name_lbl = clean_hotel_label(desc)
-                                is_small = False
                             elif cat == '보험':
                                 macro_lbl = "🛡️ 보험"
                                 name_lbl = "여행자보험"
-                                is_small = True
                             elif cat in ['기차', '교통', '지하철', '택시']:
                                 macro_lbl = "🚗 현지교통(사전)"
                                 name_lbl = desc.split('(')[0].strip()
-                                is_small = True
                             else:
                                 macro_lbl = "📱 기타/통신"
-                                name_lbl = desc[:10].strip()
-                                is_small = True
+                                name_lbl = desc[:12].strip()
 
-                            if is_small or pct < 5.5: tile_html = f"<span style='font-size:11.5px; font-weight:bold;'>{name_lbl} ({amt:,.0f}원)</span>"
-                            elif pct >= 35.0: tile_html = f"<span style='font-size:18.5px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:15.5px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:12px; opacity:0.85;'>({pct:.1f}%)</span>"
-                            elif pct >= 18.0: tile_html = f"<span style='font-size:15.5px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:13px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:11px; opacity:0.85;'>({pct:.1f}%)</span>"
-                            elif pct >= 11.0: tile_html = f"<span style='font-size:13.5px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:11.5px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:10px; opacity:0.85;'>({pct:.1f}%)</span>"
-                            else: tile_html = f"<span style='font-size:12px; font-weight:bold;'>{name_lbl}</span><br><span style='font-size:10.5px; font-weight:600;'>{amt:,.0f}원</span><br><span style='font-size:9.5px; opacity:0.85;'>({pct:.1f}%)</span>"
-                                
                             smart_macro_list.append(macro_lbl)
-                            smart_tile_list.append(tile_html)
+                            smart_tile_list.append(name_lbl)
                             
                         dom_chart_df['Smart_Macro'] = smart_macro_list
                         dom_chart_df['Smart_Tile'] = smart_tile_list
-                        treemap_color_map = {"🛫 IN/OUT 항공권": "#C62828", "✈️ 구간/국내선": "#E53935", "🏨 숙박": "#1565C0", "🛡️ 보험": "#F9A825", "🚗 현지교통(사전)": "#00838F", "📱 기타/통신": "#6A1B9A"}
+                        treemap_color_map = {
+                            "🛫 IN/OUT 항공권": "#C62828", "✈️ 구간/국내선": "#E53935", 
+                            "🏨 숙박": "#1565C0", "🛡️ 보험": "#F9A825", 
+                            "🚗 현지교통(사전)": "#00838F", "📱 기타/통신": "#6A1B9A"
+                        }
 
-                        fig1 = px.treemap(dom_chart_df, path=['Smart_Macro', 'Smart_Tile'], values=y_col, color='Smart_Macro', color_discrete_map=treemap_color_map)
-                        fig1.update_traces(texttemplate="%{label}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<extra></extra>", textposition='middle center', tiling=dict(packing='squarify', pad=4))
-                        fig1.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=560)
+                        fig1 = px.treemap(
+                            dom_chart_df, 
+                            path=['Smart_Macro', 'Smart_Tile'], 
+                            values=y_col, 
+                            color='Smart_Macro', 
+                            color_discrete_map=treemap_color_map
+                        )
+                        # 💡 [핵심] 돋보기 탭과 동일한 24px 헤더 띠 & 16px 선명한 폰트 스케일러 적용
+                        fig1.update_traces(
+                            texttemplate="<b>%{label}</b><br>%{value:,.0f}원", 
+                            hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", 
+                            textposition='middle center',
+                            insidetextfont=dict(size=16),
+                            pathbar=dict(thickness=24, visible=True),
+                            tiling=dict(pad=5)
+                        )
+                        fig1.update_layout(
+                            margin=dict(l=10, r=10, t=10, b=10), 
+                            height=560,
+                            coloraxis_showscale=False
+                        )
                         st.plotly_chart(fig1, use_container_width=True, config={'displaylogo': False})
 
                 # --- 6.02.05 | 다중 국가 현지 지출 트리맵 ---
@@ -3602,8 +3624,21 @@ else:
                         country_chart_df['Macro_Category'] = country_chart_df['Category'].map(MACRO_MAP).fillna("기타")
                         country_chart_df['Country'] = country_chart_df['Country'].fillna("기타")
                         country_chart_df['Category'] = country_chart_df['Category'].fillna("기타")
-                        fig_country = px.treemap(country_chart_df, path=['Country', 'Macro_Category', 'Category'], values=y_col, color='Country', color_discrete_sequence=px.colors.qualitative.Pastel)
-                        fig_country.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}<extra></extra>", textposition='middle center')
+                        fig_country = px.treemap(
+                            country_chart_df, 
+                            path=['Country', 'Macro_Category', 'Category'], 
+                            values=y_col, 
+                            color='Country', 
+                            color_discrete_sequence=px.colors.qualitative.Pastel
+                        )
+                        fig_country.update_traces(
+                            texttemplate="<b>%{label}</b><br>%{value:,.0f}", 
+                            hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}<extra></extra>", 
+                            textposition='middle center',
+                            insidetextfont=dict(size=16),
+                            pathbar=dict(thickness=24, visible=True),
+                            tiling=dict(pad=5)
+                        )
                         fig_country.update_layout(margin=dict(l=10, r=10, t=10, b=20), height=520)
                         st.plotly_chart(fig_country, use_container_width=True, config={'displaylogo': False})
 
