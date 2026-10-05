@@ -2324,7 +2324,7 @@ else:
             exp_df['IsSurvival'] = exp_df.apply(evaluate_survival_status_c, axis=1)
 
     # --------------------------------------------------------------------------
-    # 6.00.02 | 메인 4대 탭 Option Menu (파이썬 공식 100% 스타일 제어)
+    # 6.00.02 | 메인 4대 탭 Option Menu (모바일 1줄 고정 & 아이콘 골든 밸런스)
     # --------------------------------------------------------------------------
     main_tab_choice = option_menu(
         menu_title=None,
@@ -2336,31 +2336,32 @@ else:
             "container": {
                 "padding": "0px !important",
                 "background-color": "transparent",
-                "margin-bottom": "16px",
-                "gap": "8px"
+                "margin-bottom": "14px",
+                "gap": "4px"
             },
-            "icon": {"color": "#38BDF8", "font-size": "15px"},
+            "icon": {"color": "#38BDF8", "font-size": "13px", "margin-right": "3px"},
             "nav-link": {
-                "font-size": "15px",
+                "font-size": "13.5px",
                 "font-weight": "600",
                 "text-align": "center",
                 "margin": "0px",
-                "padding": "10px 16px",
+                "padding": "8px 4px",
+                "white-space": "nowrap",
                 "background-color": "#1E293B",
                 "color": "#38BDF8",
-                "border-radius": "10px",
+                "border-radius": "8px",
                 "border": "1.5px solid #475569",
-                "box-shadow": "0 2px 6px rgba(0,0,0,0.25)",
+                "box-shadow": "0 2px 4px rgba(0,0,0,0.25)",
                 "--hover-color": "#334155"
             },
             "nav-link-selected": {
                 "background-color": "#FF9E00",
                 "background-image": "linear-gradient(135deg, #FF9E00 0%, #EA580C 100%)",
                 "color": "#FFFFFF",
-                "font-size": "15.5px",
+                "font-size": "14px",
                 "font-weight": "800",
                 "border": "1.5px solid #FFA500",
-                "box-shadow": "0 4px 14px rgba(255, 158, 0, 0.35)"
+                "box-shadow": "0 4px 12px rgba(255, 158, 0, 0.35)"
             }
         }
     )
@@ -3855,7 +3856,7 @@ else:
             if len(lines) > 3: lines = lines[:3]
             return "<br>".join(lines)
 
-        # 💡 [핵심] 돋보기 내부 서브탭도 일관된 Option Menu 뱃지로 제어
+        # 💡 [돋보기 서브탭] 모바일 1줄 고정 & 마사지·교통 텍스트 꺾임 방지
         sub_tab_choice = option_menu(
             menu_title=None,
             options=["장바구니", "식당·카페", "마사지·교통"],
@@ -3866,16 +3867,17 @@ else:
                 "container": {
                     "padding": "0px !important",
                     "background-color": "transparent",
-                    "margin-bottom": "14px",
-                    "gap": "6px"
+                    "margin-bottom": "12px",
+                    "gap": "4px"
                 },
-                "icon": {"color": "#38BDF8", "font-size": "14px"},
+                "icon": {"color": "#38BDF8", "font-size": "13px", "margin-right": "3px"},
                 "nav-link": {
-                    "font-size": "14px",
+                    "font-size": "13.5px",
                     "font-weight": "600",
                     "text-align": "center",
                     "margin": "0px",
-                    "padding": "8px 12px",
+                    "padding": "8px 4px",
+                    "white-space": "nowrap",
                     "background-color": "#1E293B",
                     "color": "#38BDF8",
                     "border-radius": "8px",
@@ -3886,6 +3888,7 @@ else:
                     "background-color": "#FF9E00",
                     "background-image": "linear-gradient(135deg, #FF9E00 0%, #EA580C 100%)",
                     "color": "#FFFFFF",
+                    "font-size": "14px",
                     "font-weight": "800",
                     "border": "1.5px solid #FFA500"
                 }
