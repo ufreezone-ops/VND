@@ -3627,22 +3627,32 @@ else:
                         st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
     # ==============================================================================
-    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 지능형 다단 줄바꿈 & 원화 환산)
+    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 상호명 폰트 정상화 & 그랩 단일 요금)
     # ==============================================================================
     with tab_market:
         st.subheader("🔍 여행 소비 돋보기")
         
-        # 6.03.00-H | 띄어쓰기 및 괄호 지능형 다단 줄바꿈 헬퍼
-        def smart_wrap_multiline(text, max_line_len=10):
+        # 6.03.00-H1 | 상호명/업체명 전용 단일행 헤더 정제 헬퍼 (줄바꿈 방지 -> 폰트 크기 14~16px 유지)
+        def clean_header_label(text, max_len=20):
             if not text: return ""
             s = str(text).strip()
             s = re.sub(r'\[.*?\]\s*', '', s)
             s = re.sub(r'\s+to\s+', ' ➔ ', s, flags=re.IGNORECASE)
             s = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', s).strip(' -*•()[]/_')
             if not s: return ""
+            return s[:max_len] + ".." if len(s) > max_len else s
+
+        # 6.03.00-H2 | 개별 품목/메뉴명 전용 지능형 다단 줄바꿈 헬퍼
+        def smart_wrap_multiline(text, max_line_len=10):
+            if not text: return ""
+            s = str(text).strip()
+            s = re.sub(r'\[.*?\]\s*', '', s)
+            s = re.sub(r'\s+to\s+', ' ➔ ', s, flags=re.IGNORECASE)
+            s = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', s).strip(' -*•()[]/_')
+            s = re.sub(r'\b\d+(?:\.\d+)?\s*(?:km|분|초|시간)\b', '', s, flags=re.IGNORECASE).strip(' ,-')
+            if not s: return ""
 
             lines = []
-            # 괄호(...) 단위로 분절하여 괄호는 무조건 별도 행으로 분리
             parts = re.split(r'(\(.*?\))', s)
             for part in parts:
                 part = part.strip()
@@ -3661,7 +3671,6 @@ else:
                     else:
                         lines.append(part)
                 else:
-                    # 띄어쓰기(공백)를 감지하여 8~10자 단위로 자연스럽게 줄바꿈
                     words = part.split()
                     cur_line = ""
                     for w in words:
@@ -3714,7 +3723,8 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         store_name = lines[0] if lines else "기타 마트/선물"
-                        store_clean = smart_wrap_multiline(store_name.split('|')[0], max_line_len=12)
+                        # 💡 [핵심] 상호명은 줄바꿈 없는 1줄 정제(clean_header_label) 적용하여 헤더 폰트 크기 보존
+                        store_clean = clean_header_label(store_name.split('|')[0], max_len=18)
                         if not store_clean: store_clean = "마트/시장"
                         
                         store_lower = store_name.lower()
@@ -3840,7 +3850,8 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         place_name = lines[0] if lines else "기타 식당/카페"
-                        place_clean = smart_wrap_multiline(place_name.split('|')[0], max_line_len=12)
+                        # 💡 [핵심] 식당 상호명은 줄바꿈 없는 1줄 정제(clean_header_label) 적용
+                        place_clean = clean_header_label(place_name.split('|')[0], max_len=18)
                         if not place_clean: place_clean = "식당/카페"
                         
                         place_lower = place_name.lower()
@@ -3887,7 +3898,8 @@ else:
                             for it in valid_food_items:
                                 f_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_food_items)))
                                 f_price = round(f_price * f_scale, -2)
-                                parsed_food.append({'Food_Group': food_group, 'Place': place_clean, 'Item': it['name'], 'Local_val': f_price, 'Curr': r_curr})
+                                parsed_items_box = {'Food_Group': food_group, 'Place': place_clean, 'Item': it['name'], 'Local_val': f_price, 'Curr': r_curr}
+                                parsed_food.append(parsed_items_box)
                                 
                     if parsed_food:
                         food_df = pd.DataFrame(parsed_food)
@@ -3934,7 +3946,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ------------------------------------------------------------------
-            # 6.03.03 | Subtab 3: 마사지 · 교통 (엄격 필터링 및 상하 듀얼 트리맵)
+            # 6.03.03 | Subtab 3: 마사지 · 교통 (그랩 최종 단일가 & 헤더 폰트 정상화)
             # ------------------------------------------------------------------
             with sub_tab_relax:
                 # [PART 1] 상단: 그랩 및 로컬교통 돋보기
@@ -3975,18 +3987,20 @@ else:
                         r_amt = float(r['Amount'])
                         
                         clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip()
-                        if '-' in clean_desc:
-                            p_provider = clean_desc.split('-', 1)[0].strip()
-                            p_item = clean_desc.split('-', 1)[1].strip()
-                        else:
-                            p_provider = cat_r if cat_r in ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시'] else "로컬교통"
-                            p_item = clean_desc if clean_desc else "이동 요금"
-                            
-                        p_prov_clean = smart_wrap_multiline(p_provider, max_line_len=12)
-                        p_item_clean = smart_wrap_multiline(p_item, max_line_len=10)
+                        lines_t = [l.strip() for l in clean_desc.split('\n') if l.strip()]
+                        first_line = lines_t[0] if lines_t else clean_desc
+
+                        # 💡 [핵심] 미터기 요금(88,000vnd), 거리(3.6km), 시간 등을 완벽 제거하여 '순수 이동 경로'만 추출
+                        first_line = re.sub(r'[\d,\.]+\s*(?:vnd|동|원|\$|[kK])\b.*$', '', first_line, flags=re.IGNORECASE)
+                        first_line = re.sub(r'\b\d+(?:\.\d+)?\s*(?:km|분|초|시간)\b.*$', '', first_line, flags=re.IGNORECASE).strip(' ,-')
+
+                        p_provider = cat_r if cat_r in ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시'] else "로컬교통"
+                        # 💡 [핵심] Provider는 1줄(clean_header_label), 경로는 다단 줄바꿈(smart_wrap_multiline)
+                        p_prov_clean = clean_header_label(p_provider, max_len=16)
+                        p_item_clean = smart_wrap_multiline(first_line, max_line_len=11)
                         
                         if not p_prov_clean: p_prov_clean = "이동 수단"
-                        if not p_item_clean: p_item_clean = "요금 및 통행료"
+                        if not p_item_clean: p_item_clean = "이동 요금"
 
                         parsed_traffic.append({
                             'Traffic_Group': '그랩 및 로컬교통',
@@ -4065,7 +4079,8 @@ else:
                             p_provider = clean_desc
                             p_item = clean_desc
                             
-                        p_prov_clean = smart_wrap_multiline(p_provider, max_line_len=12)
+                        # 💡 [핵심] 마사지 샵 이름은 1줄(clean_header_label), 코스는 다단 줄바꿈(smart_wrap_multiline)
+                        p_prov_clean = clean_header_label(p_provider, max_len=18)
                         p_item_clean = smart_wrap_multiline(p_item, max_line_len=10)
                         
                         if not p_prov_clean: p_prov_clean = "마사지 샵"
