@@ -1417,7 +1417,7 @@ with st.sidebar:
         if is_upcoming:
             render_dday_control_tower()
 
-        # 4.01.04 | Multi-Currency Dynamic Wallet Monitor & Physical Counter
+        # 4.01.04 | Multi-Currency Dynamic Wallet Monitor & Physical Counter (Primary/Secondary 분리)
         st.subheader("💰 지갑 잔고")
         b_val, spent_val = calculate_summary_metrics(ledger_df)
         
@@ -1435,13 +1435,13 @@ with st.sidebar:
 
         active_currs = set([k.split('(')[1].replace(')','') for k in current_inventory_batches.keys() if len(current_inventory_batches[k]) > 0 and sum(b['qty'] for b in current_inventory_batches[k]) > 0])
         trip_currs_ordered = [node['currency'] for node in TRIP_CONFIGS[st.session_state.current_trip]["nodes"].values()]
+        
         primary_trip_currs = []
         for c in trip_currs_ordered:
             if c not in primary_trip_currs and c != "KRW":
                 primary_trip_currs.append(c)
 
         secondary_currs = sorted([c for c in active_currs if c not in primary_trip_currs and c != "KRW"])
-        display_currs = primary_trip_currs + secondary_currs
 
         CURR_BILLS = {
             "VND": BILLS,
@@ -1456,155 +1456,160 @@ with st.sidebar:
         LOW_CASH_THRESHOLD = {
             "VND": 1000000, "USD": 50, "EUR": 50, "TRY": 1000, "JPY": 5000, "CNY": 300, "PHP": 2000
         }
-        
-        for c in display_currs:
-            if c == "KRW": continue
 
+        def render_currency_card(c, is_secondary=False):
             fmt = "{:,.2f}" if c not in ["VND", "HUF", "PHP"] else "{:,.0f}"
+            c_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블카드({c})",[])])
+            c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
 
             debt_amt = ledger_df[(ledger_df['Currency']==c) & (ledger_df['PaymentMethod'].str.contains("외상|부채|CREDIT", na=False))]['Amount'].sum()
             repay_amt = ledger_df[(ledger_df['Currency']==c) & (ledger_df['Category']=="상환")]['Amount'].sum()
             current_debt = debt_amt - repay_amt
-            
             if current_debt > 0:
                 st.markdown(f"<div style='color:#FF4B4B; font-size:13.5px; font-weight:bold;'>📌 미결제 외상: {fmt.format(current_debt)} {c}</div>", unsafe_allow_html=True)
-            
-            c_card = sum([b['qty'] for b in current_inventory_batches.get(f"트래블카드({c})",[])])
-            c_cash = sum([b['qty'] for b in current_inventory_batches.get(f"현금({c})",[])])
-            
-            if c_card > 0 or c_cash > 0 or c in primary_trip_currs:
-                st.markdown(f"<div style='color:#FFA500; font-weight:bold; margin-top:12px; margin-bottom:10px;'>● {c}</div>", unsafe_allow_html=True)
-                st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
-                st.markdown(f"<div style='margin-bottom:12px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
 
-                threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
-                if is_trip_active and c_cash <= threshold:
-                    st.markdown("""
-                        <div style='color:#FFA500; font-size:12.5px; font-weight:bold; margin-top:2px; margin-bottom:14px; padding: 5px 10px; background-color: rgba(255, 165, 0, 0.12); border-radius: 6px; border-left: 3px solid #FFA500;'>
-                            🚨 현금 부족 경고
+            header_color = "#38BDF8" if is_secondary else "#FFA500"
+            st.markdown(f"<div style='color:{header_color}; font-weight:bold; margin-top:12px; margin-bottom:10px;'>● {c}</div>", unsafe_allow_html=True)
+            st.markdown(f"💳 카드: **{fmt.format(c_card)}**")
+            st.markdown(f"<div style='margin-bottom:12px;'>💵 현금: **{fmt.format(c_cash)}**</div>", unsafe_allow_html=True) 
+
+            threshold = LOW_CASH_THRESHOLD.get(c, 1000000 if c == "VND" else 50)
+            if not is_secondary and is_trip_active and c_cash <= threshold:
+                st.markdown("""
+                    <div style='color:#FFA500; font-size:12.5px; font-weight:bold; margin-top:2px; margin-bottom:14px; padding: 5px 10px; background-color: rgba(255, 165, 0, 0.12); border-radius: 6px; border-left: 3px solid #FFA500;'>
+                        🚨 현금 부족 경고
+                    </div>
+                """, unsafe_allow_html=True)
+
+            card_batches = current_inventory_batches.get(f"트래블카드({c})", [])
+            cash_batches = current_inventory_batches.get(f"현금({c})", [])
+
+            if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
+                with st.expander("🔍 상세 배치", expanded=(is_trip_active and not is_secondary)):
+                    r_prec = ".4f" if c in ["VND", "HUF"] else ".2f"
+                    if any(b['qty'] > 0 for b in card_batches):
+                        st.caption("[카드]")
+                        for b in card_batches:
+                            if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_prec}}")
+                    if any(b['qty'] > 0 for b in cash_batches):
+                        st.caption("[현금]")
+                        for b in cash_batches:
+                            if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_prec}}")
+
+            bills_to_count = CURR_BILLS.get(c, [])
+            if bills_to_count and (c_cash > 0 or (is_trip_active and not is_secondary)):
+                with st.expander("🪙 실물현금 카운터", expanded=False):
+                    cash_df = load_cash_inventory()
+                    cloud_total, cloud_time, cloud_counts = 0.0, "", {}
+                    
+                    if not cash_df.empty:
+                        m_sync = (cash_df['TripName'] == st.session_state.current_trip) & (cash_df['Currency'] == c)
+                        if m_sync.any():
+                            row_sync = cash_df[m_sync].iloc[0]
+                            cloud_total = float(row_sync.get('Total_Amount', 0))
+                            raw_t = str(row_sync.get('Updated_At', '')).strip()
+                            m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
+                            if m_t: cloud_time = f"{m_t.group(1)} {int(m_t.group(2)):02d}:{m_t.group(3)}"
+                            else: cloud_time = raw_t[5:16].rstrip(':')
+                                
+                            for item in str(row_sync.get('Bill_Counts', '')).split(";"):
+                                if ":" in item:
+                                    b_v, b_c = item.split(":")
+                                    try: cloud_counts[float(b_v)] = int(b_c)
+                                    except: pass
+
+                    init_key = f"init_cash_{st.session_state.current_trip}_{c}"
+                    if init_key not in st.session_state:
+                        for b in bills_to_count:
+                            val_loaded = cloud_counts.get(float(b), 0)
+                            b_key_id = str(b).replace('.', '_')
+                            st.session_state[f"cnt_{c}_{b_key_id}"] = int(val_loaded) if val_loaded > 0 else None
+                        st.session_state[init_key] = True
+
+                    total_counted, cur_counts = 0.0, {}
+                    for bill in bills_to_count:
+                        b_flt = float(bill)
+                        b_key_id = str(bill).replace('.', '_')
+                        
+                        if c == "VND": b_label = f"{int(bill // 1000)}K"
+                        elif c == "EUR": b_label = f"{int(bill)} €" if bill >= 1 else f"{int(round(bill * 100))} c"
+                        elif c == "USD": b_label = f"{int(bill)} $" if bill >= 1 else f"{int(round(bill * 100))} ¢"
+                        elif c == "TRY": b_label = f"{int(bill)} ₺" if bill >= 1 else f"{int(round(bill * 100))} kr"
+                        elif c == "JPY": b_label = f"{int(bill)} ¥"
+                        elif c == "PHP": b_label = f"{int(bill)} ₱"
+                        else: b_label = f"{bill} {c}"
+                            
+                        c_col1, c_col2 = st.columns([1, 1.4])
+                        with c_col1:
+                            st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; height:30px; line-height:30px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}</div>", unsafe_allow_html=True)
+                        with c_col2:
+                            raw_val = st.session_state.get(f"cnt_{c}_{b_key_id}", None)
+                            cnt = st.number_input(
+                                label=f"{c}_{b_key_id}",
+                                min_value=0,
+                                step=1,
+                                value=int(raw_val) if raw_val and raw_val > 0 else None,
+                                placeholder="0",
+                                key=f"cnt_{c}_{b_key_id}",
+                                label_visibility="collapsed"
+                            )
+                        final_cnt = int(cnt) if cnt is not None else 0
+                        cur_counts[b_flt] = final_cnt
+                        total_counted += bill * final_cnt
+                        
+                    total_counted = round(total_counted, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted)
+                    
+                    st.markdown(f"""
+                        <div style='margin-top: 14px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
+                            <span style='font-size:11.5px; color:#A0AEC0;'>🧮 실물현금 합계 (지폐+동전)</span><br>
+                            <span style='font-size:15px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
                         </div>
                     """, unsafe_allow_html=True)
-                
-                card_batches = current_inventory_batches.get(f"트래블카드({c})", [])
-                cash_batches = current_inventory_batches.get(f"현금({c})", [])
-                
-                if any(b['qty'] > 0 for b in (card_batches + cash_batches)):
-                    with st.expander("🔍 상세 배치", expanded=is_trip_active):
-                        r_prec = ".4f" if c in ["VND", "HUF"] else ".2f"
-                        if any(b['qty'] > 0 for b in card_batches):
-                            st.caption("[카드]")
-                            for b in card_batches:
-                                if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_prec}}")
-                        if any(b['qty'] > 0 for b in cash_batches):
-                            st.caption("[현금]")
-                            for b in cash_batches:
-                                if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_prec}}")
+                    
+                    diff_val = round(total_counted - c_cash, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted - c_cash)
+                    if total_counted > 0:
+                        if abs(diff_val) < 0.001: st.success("✅ 장부/실물 일치!")
+                        elif diff_val < 0: st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족!")
+                        else: st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
 
-                bills_to_count = CURR_BILLS.get(c, [])
-                if bills_to_count and (c_cash > 0 or is_trip_active):
-                    with st.expander("🪙 실물현금 카운터", expanded=False):
-                        cash_df = load_cash_inventory()
-                        cloud_total, cloud_time, cloud_counts = 0.0, "", {}
-                        
-                        if not cash_df.empty:
-                            m_sync = (cash_df['TripName'] == st.session_state.current_trip) & (cash_df['Currency'] == c)
-                            if m_sync.any():
-                                row_sync = cash_df[m_sync].iloc[0]
-                                cloud_total = float(row_sync.get('Total_Amount', 0))
-                                raw_t = str(row_sync.get('Updated_At', '')).strip()
-                                m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
-                                if m_t: cloud_time = f"{m_t.group(1)} {int(m_t.group(2)):02d}:{m_t.group(3)}"
-                                else: cloud_time = raw_t[5:16].rstrip(':')
-                                    
-                                for item in str(row_sync.get('Bill_Counts', '')).split(";"):
-                                    if ":" in item:
-                                        b_v, b_c = item.split(":")
-                                        try: cloud_counts[float(b_v)] = int(b_c)
-                                        except: pass
-
-                        init_key = f"init_cash_{st.session_state.current_trip}_{c}"
-                        if init_key not in st.session_state:
-                            for b in bills_to_count:
-                                val_loaded = cloud_counts.get(float(b), 0)
-                                b_key_id = str(b).replace('.', '_')
-                                st.session_state[f"cnt_{c}_{b_key_id}"] = int(val_loaded) if val_loaded > 0 else None
-                            st.session_state[init_key] = True
-
-                        total_counted, cur_counts = 0.0, {}
-                        for bill in bills_to_count:
-                            b_flt = float(bill)
-                            b_key_id = str(bill).replace('.', '_')
-                            
-                            if c == "VND": b_label = f"{int(bill // 1000)}K"
-                            elif c == "EUR": b_label = f"{int(bill)} €" if bill >= 1 else f"{int(round(bill * 100))} c"
-                            elif c == "USD": b_label = f"{int(bill)} $" if bill >= 1 else f"{int(round(bill * 100))} ¢"
-                            elif c == "TRY": b_label = f"{int(bill)} ₺" if bill >= 1 else f"{int(round(bill * 100))} kr"
-                            elif c == "JPY": b_label = f"{int(bill)} ¥"
-                            elif c == "PHP": b_label = f"{int(bill)} ₱"
-                            else: b_label = f"{bill} {c}"
-                                
-                            c_col1, c_col2 = st.columns([1, 1.4])
-                            with c_col1:
-                                st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; height:30px; line-height:30px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}</div>", unsafe_allow_html=True)
-                            with c_col2:
-                                raw_val = st.session_state.get(f"cnt_{c}_{b_key_id}", None)
-                                cnt = st.number_input(
-                                    label=f"{c}_{b_key_id}",
-                                    min_value=0,
-                                    step=1,
-                                    value=int(raw_val) if raw_val and raw_val > 0 else None,
-                                    placeholder="0",
-                                    key=f"cnt_{c}_{b_key_id}",
-                                    label_visibility="collapsed"
-                                )
-                            final_cnt = int(cnt) if cnt is not None else 0
-                            cur_counts[b_flt] = final_cnt
-                            total_counted += bill * final_cnt
-                            
-                        total_counted = round(total_counted, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted)
-                        
+                    has_conflict = bool(cloud_counts) and (cur_counts != cloud_counts)
+                    if has_conflict:
                         st.markdown(f"""
-                            <div style='margin-top: 14px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
-                                <span style='font-size:11.5px; color:#A0AEC0;'>🧮 실물현금 합계 (지폐+동전)</span><br>
-                                <span style='font-size:15px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
+                            <div style='background-color: rgba(255, 165, 0, 0.12); border-left: 3px solid #FFA500; border-radius: 6px; padding: 8px 10px; margin-top: 10px; margin-bottom: 10px;'>
+                                <div style='color: #FFA500; font-size: 12px; font-weight: bold;'>⚠️ 기기 간 데이터 불일치!</div>
+                                <div style='font-size: 11.5px; color: #E2E8F0; margin-top: 4px; line-height: 1.5;'>
+                                    • 현재 화면: <b>{fmt.format(total_counted)} {c}</b><br>
+                                    • 클라우드: <b>{fmt.format(cloud_total)} {c}</b> <span style='color:#888;'>({cloud_time})</span>
+                                </div>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        diff_val = round(total_counted - c_cash, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted - c_cash)
-                        if total_counted > 0:
-                            if abs(diff_val) < 0.001: st.success("✅ 장부/실물 일치!")
-                            elif diff_val < 0: st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족!")
-                            else: st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
-
-                        has_conflict = bool(cloud_counts) and (cur_counts != cloud_counts)
-                        if has_conflict:
-                            st.markdown(f"""
-                                <div style='background-color: rgba(255, 165, 0, 0.12); border-left: 3px solid #FFA500; border-radius: 6px; padding: 8px 10px; margin-top: 10px; margin-bottom: 10px;'>
-                                    <div style='color: #FFA500; font-size: 12px; font-weight: bold;'>⚠️ 기기 간 데이터 불일치!</div>
-                                    <div style='font-size: 11.5px; color: #E2E8F0; margin-top: 4px; line-height: 1.5;'>
-                                        • 현재 화면: <b>{fmt.format(total_counted)} {c}</b><br>
-                                        • 클라우드: <b>{fmt.format(cloud_total)} {c}</b> <span style='color:#888;'>({cloud_time})</span>
-                                    </div>
-                                </div>
-                            """, unsafe_allow_html=True)
-                            
-                            col_sel1, col_sel2 = st.columns(2)
-                            with col_sel1:
-                                st.button("📥 클라우드 가져오기", key=f"btn_pull_{c}", on_click=cb_pull_cloud_cash, args=(c, cloud_counts, bills_to_count), use_container_width=True)
-                            with col_sel2:
-                                if st.button("⚠️ 현재값 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True):
-                                    with st.spinner("클라우드 저장 중..."):
-                                        if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
-                                            st.success("덮어쓰기 완료!")
-                                            time.sleep(0.6); st.rerun()
-                        else:
-                            if cloud_total > 0: st.caption(f"클라우드 동기완료 ({cloud_time})")
-                            if st.button(f"💾 {c} 실물현금 저장", key=f"btn_save_normal_{c}", use_container_width=True):
-                                with st.spinner("구글 시트 저장 중..."):
+                        col_sel1, col_sel2 = st.columns(2)
+                        with col_sel1:
+                            st.button("📥 클라우드 가져오기", key=f"btn_pull_{c}", on_click=cb_pull_cloud_cash, args=(c, cloud_counts, bills_to_count), use_container_width=True)
+                        with col_sel2:
+                            if st.button("⚠️ 현재값 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True):
+                                with st.spinner("클라우드 저장 중..."):
                                     if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
-                                        st.success("🎉 저장 완료!")
+                                        st.success("덮어쓰기 완료!")
                                         time.sleep(0.6); st.rerun()
-                st.divider()
+                    else:
+                        if cloud_total > 0: st.caption(f"클라우드 동기완료 ({cloud_time})")
+                        if st.button(f"💾 {c} 실물현금 저장", key=f"btn_save_normal_{c}", use_container_width=True):
+                            with st.spinner("구글 시트 저장 중..."):
+                                if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
+                                    st.success("🎉 저장 완료!")
+                                    time.sleep(0.6); st.rerun()
+            st.divider()
+
+        # 1. 메인 여행 통화 우선 노출 (오렌지 헤더)
+        for c in primary_trip_currs:
+            render_currency_card(c, is_secondary=False)
+
+        # 2. 보조 통화(사전결제 잔여분 등) 하단 노출 (밝은 청색 헤더)
+        if secondary_currs:
+            for c in secondary_currs:
+                render_currency_card(c, is_secondary=True)
 
         # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
@@ -3366,7 +3371,7 @@ if main_tab_choice == "가계부":
 
 
 # ==============================================================================
-# 6.02.00 | Daily Statistics & Visualizer (일일Data 탭)
+# 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 슬림 대시보드)
 # ==============================================================================
 elif main_tab_choice == "일일Data":
     if not exp_df.empty:
@@ -3393,51 +3398,8 @@ elif main_tab_choice == "일일Data":
         )
         y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
 
-        def is_korea_port(text):
-            txt = str(text).replace(" ", "")
-            return any(k in txt for k in ['한국', '인천', '부산', '김포', '대구', '제주', '청주', '귀국', 'ICN', 'PUS'])
-
-        def is_foreign_transit(cat_str):
-            cat = str(cat_str).strip()
-            if "_" in cat:
-                sub_port = cat.split("_")[-1].strip()
-                if not is_korea_port(sub_port): return True
-            return False
-
-        dep_candidates = ledger_df[ledger_df['Category'].str.contains('출국', na=False) & ~ledger_df['Category'].apply(is_foreign_transit)]
-        korea_dep = ledger_df[ledger_df['Category'].apply(is_korea_port)]
-        target_dep_row = korea_dep if not korea_dep.empty else dep_candidates
-
-        dep_date_str = ""
-        dep_dt = None
-        if not target_dep_row.empty:
-            m_dep = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_dep_row.iloc[0]['Date']))
-            if m_dep: 
-                dep_date_str = m_dep.group(0)
-                dep_dt = datetime.strptime(dep_date_str, "%Y-%m-%d").date()
-
-        korea_arr = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False) & ledger_df['Category'].apply(is_korea_port)]
-        arr_candidates = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False) & ~ledger_df['Category'].apply(is_foreign_transit)]
-        target_arr_row = korea_arr if not korea_arr.empty else arr_candidates
-
-        arr_date_str = ""
-        arr_dt = None
-        if not target_arr_row.empty:
-            m_arr = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
-            if m_arr: 
-                arr_date_str = m_arr.group(0)
-                arr_dt = datetime.strptime(arr_date_str, "%Y-%m-%d").date()
-
-        def check_is_fixed_cost(row):
-            orig_d = str(row['Date']).strip()
-            m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
-            pure_d = m_row.group(0) if m_row else ""
-            if dep_date_str and pure_d and pure_d < dep_date_str: return True
-            cat = str(row['Category']).strip()
-            met = str(row['PaymentMethod']).strip()
-            return (met == '원화계좌(한국)') or (cat in FIXED_COST_CATS)
-
-        exp_df['IsFixedCost'] = exp_df.apply(check_is_fixed_cost, axis=1)
+        dep_dt = dep_dt_calc
+        arr_dt = arr_dt_calc
         is_fixed_cost = exp_df['IsFixedCost']
 
         def is_in_trip_period(row):
@@ -3478,7 +3440,7 @@ elif main_tab_choice == "일일Data":
                         'Date': d_str, 'Date_Clean': md, 'Country': last_country, 'Category': '기타',
                         'Description': '이동일 (지출 0원)', 'Currency': TRAVEL_CURRENCY, 'Amount': 0.0,
                         'PaymentMethod': '정보', 'IsExpense': 1, 'AppliedRate': 1.0, 'KRW_val': 0.0,
-                        'Local_val': 0.0, 'IsSurvival': 0, 'IsFixedCost': False
+                        'Local_val': 0.0, 'IsSurvival': 0, 'IsFixedCost': False, 'Macro_Category': '📱 기타/통신'
                     })
                 ovr_df = pd.concat([ovr_df, pd.DataFrame(dummy_rows)], ignore_index=True)
         else:
@@ -3623,7 +3585,7 @@ elif main_tab_choice == "일일Data":
 
         st.divider()
         
-        # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 (현지화 좌측 우선 & 열/행 하이라이트) ---
+        # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 ---
         daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
         surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
         daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3643,7 +3605,7 @@ elif main_tab_choice == "일일Data":
                 return d_str
 
             daily_table['Date_Short'] = daily_table['Date'].apply(shorten_table_date)
-            daily_table['Sort_Key'] = daily_table['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
+            daily_table['Sort_Key'] = daily_table['Date'].str.extract(r'(\d{4}-\d{2})-(\d{2})')[0]
             daily_table = daily_table.sort_values(by='Sort_Key', kind='mergesort').drop(columns=['Sort_Key'])
 
             sum_tot_krw = daily_table['KRW_val'].sum()
@@ -3693,7 +3655,7 @@ elif main_tab_choice == "일일Data":
                                 styles.loc[idx, col] = 'background-color: rgba(245, 158, 11, 0.35); font-weight: 800; color: #FACC15; border-top: 1px solid #F59E0B;'
                             else:
                                 styles.loc[idx, col] = 'background-color: rgba(245, 158, 11, 0.22); font-weight: bold; color: #FACC15; border-top: 1px solid #F59E0B;'
-                return styles
+                    return styles
 
             styled_daily_table = final_table_with_summary.style.apply(style_daily_pivot_table, axis=None).format({
                 f'총({LOCAL_SYM})': fmt_local, '총(원)': '{:,.0f}', f'필수({LOCAL_SYM})': fmt_local, '필수(원)': '{:,.0f}'
@@ -3703,6 +3665,8 @@ elif main_tab_choice == "일일Data":
             st.dataframe(styled_daily_table, use_container_width=True, hide_index=True, column_config=col_cfg_daily)
         else: 
             st.info("현지 지출 데이터가 없습니다.")
+    else:
+        st.info("기록된 지출 데이터가 없습니다.")
 
         # --- 6.02.04 | 사전결제 스마트 트리맵 ---
         dom_df = exp_df[is_fixed_cost & (~exp_df['Category'].isin(['입국','출국']))]
@@ -4240,7 +4204,7 @@ elif main_tab_choice == "돋보기":
 
 
 # ==============================================================================
-# 6.04.00 | Final Settlement Dashboard (전체요약 탭 - 무결점 표준 렌더러)
+# 6.04.00 | Final Settlement Dashboard (전체요약 탭 - 원스톱 정산 / No Emoji)
 # ==============================================================================
 elif main_tab_choice == "전체요약":
     if not exp_df.empty:
@@ -4254,34 +4218,17 @@ elif main_tab_choice == "전체요약":
         total_nights = sum(float(n) for n in nights_match) if nights_match else 7
         if total_nights == 0: total_nights = 7 
 
-        # 6.00.01에서 사전 계산된 컬럼 참조
         is_fixed_cost_final = exp_df['IsFixedCost']
-        dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum()
-        ovr_total_krw = total_trip_krw - dom_total_krw
-        ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
+        dom_df = exp_df[is_fixed_cost_final & (~exp_df['Category'].isin(['입국','출국']))]
+        ovr_df = exp_df[(~is_fixed_cost_final) & (~exp_df['Category'].isin(['입국','출국']))]
 
         dep_dt_f = dep_dt_calc
         arr_dt_f = arr_dt_calc
 
-        if dep_dt_f and arr_dt_f: trip_days_count = max(1, (arr_dt_f - dep_dt_f).days + 1)
-        else: trip_days_count = max(1, int(total_nights))
-
-        avg_local_krw = ovr_total_krw / trip_days_count if trip_days_count > 0 else 0
-        avg_local_loc = ovr_total_loc / trip_days_count if trip_days_count > 0 else 0
-        
-        fmt_local = "{:,.2f}" if MULTIPLIER == 1 else "{:,.0f}"
-        def kpi_box(title, krw, loc=None):
-            loc_str = f"<div class='kpi-value-vnd'>({fmt_local.format(loc)} {LOCAL_SYM})</div>" if loc is not None else ""
-            return f"<div class='kpi-box'><div class='kpi-title'>{title}</div><div class='kpi-value-krw'>{krw:,.0f} 원</div>{loc_str}</div>"
-            
-        st.markdown("<h3 style='margin-top: 0px; margin-bottom: 8px;'>🏁 여행요약</h3>", unsafe_allow_html=True)
-        k1, k2, k3, k4 = st.columns(4)
-        with k1: st.markdown(kpi_box("최종 지출", total_trip_krw, total_trip_loc), unsafe_allow_html=True)
-        with k2: st.markdown(kpi_box("국내 지출", dom_total_krw), unsafe_allow_html=True)
-        with k3: st.markdown(kpi_box("현지 지출", ovr_total_krw, ovr_total_loc), unsafe_allow_html=True)
-        with k4: st.markdown(kpi_box("여행중 1일 평균지출", avg_local_krw, avg_local_loc), unsafe_allow_html=True)
-        
-        st.markdown("<h4 style='margin-top: 15px; margin-bottom: 5px;'>🌳 지출분석 (Treemap)</h4>", unsafe_allow_html=True)
+        # ----------------------------------------------------------------------
+        # 1. 총지출 (종합 트리맵)
+        # ----------------------------------------------------------------------
+        st.markdown("<h3 style='margin-top: 0px; margin-bottom: 8px;'>총지출</h3>", unsafe_allow_html=True)
         chart_df = exp_df[exp_df['KRW_val'] > 0].copy()
         if not chart_df.empty:
             def sanitize_desc(row):
@@ -4307,11 +4254,12 @@ elif main_tab_choice == "전체요약":
                 pathbar=dict(thickness=24, visible=True), 
                 tiling=dict(pad=5)
             )
-            fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=580, coloraxis_showscale=False)
+            fig_tree.update_layout(margin=dict(l=0, r=0, t=5, b=10), height=580, coloraxis_showscale=False)
             st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
         
-        st.markdown("<h4 style='margin-top: 12px; margin-bottom: 0px;'>🍕 지출비중</h4>", unsafe_allow_html=True)
-        # 🌟 표준 Macro_Category 컬럼을 통한 안전한 집계
+        # ----------------------------------------------------------------------
+        # 2. 파이 그래프 (도넛 차트 - 제목 없이 바로 렌더링)
+        # ----------------------------------------------------------------------
         cat_pie = exp_df[exp_df['KRW_val'] > 0].groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
         
         if not cat_pie.empty:
@@ -4345,11 +4293,128 @@ elif main_tab_choice == "전체요약":
                 font=dict(size=16)
             )
             fig_donut.update_layout(
-                height=440, 
-                margin=dict(l=10, r=10, t=5, b=20), 
+                height=420, 
+                margin=dict(l=10, r=10, t=10, b=20), 
                 legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5)
             )
             st.plotly_chart(fig_donut, use_container_width=True)
+
+        # ----------------------------------------------------------------------
+        # 3. 사전결제 (스마트 트리맵)
+        # ----------------------------------------------------------------------
+        if not dom_df.empty:
+            dom_chart_df = dom_df[dom_df['KRW_val'] > 0].copy()
+            if not dom_chart_df.empty:
+                st.divider()
+                st.markdown("<h3 style='margin-bottom: 8px;'>사전결제</h3>", unsafe_allow_html=True)
+                
+                smart_macro_list = []
+                smart_tile_list = []
+                
+                def clean_hotel_label(desc):
+                    h_clean = re.sub(r'\[.*?\]\s*', '', desc)
+                    h_clean = re.split(r'[,|]', h_clean)[0].strip()
+                    m_nights = re.search(r'(\d+)\s*박', desc)
+                    n_str = f" ({m_nights.group(1)}박)" if m_nights else ""
+                    low = h_clean.lower()
+                    if 'saigon' in low or 'morin' in low: short_name = "사이공 모린"
+                    elif 'sanouva' in low: short_name = "사누바 다낭"
+                    elif 'century' in low: short_name = "센츄리 리버"
+                    elif 'coral' in low or '코럴' in low: short_name = "코럴베이"
+                    elif 'impera' in low or '인페라' in low: short_name = "인페라 호텔"
+                    elif 'splendido' in low or '스플랜디도' in low: short_name = "스플랜디도"
+                    else:
+                        short_name = re.sub(r'Hotel|호텔|리조트|Resort', '', h_clean, flags=re.IGNORECASE).strip()
+                        if len(short_name) > 11: short_name = short_name[:10] + ".."
+                    return f"{short_name}{n_str}"
+
+                for idx, r in dom_chart_df.iterrows():
+                    cat = str(r['Category']).strip()
+                    desc = str(r['Description']).strip()
+                    
+                    if cat == '항공권':
+                        if any(k in desc for k in ['부산', '인천', '김포', '대구', '제주', '청주', '왕복', '출국', '귀국', 'BX', 'VJ']): 
+                            macro_lbl = "IN/OUT 항공권"
+                        else: 
+                            macro_lbl = "구간/국내선"
+                        clean_d = re.sub(r'\[.*?\]\s*', '', desc).split('|')[0].strip()
+                        name_lbl = clean_d if len(clean_d) <= 16 else clean_d[:15] + ".."
+                    elif cat in ['호텔', '숙박']:
+                        macro_lbl = "숙박"
+                        name_lbl = clean_hotel_label(desc)
+                    elif cat == '보험':
+                        macro_lbl = "보험"
+                        name_lbl = "여행자보험"
+                    elif cat in ['기차', '교통', '지하철', '택시']:
+                        macro_lbl = "현지교통(사전)"
+                        name_lbl = desc.split('(')[0].strip()
+                    else:
+                        macro_lbl = "기타/통신"
+                        name_lbl = desc[:12].strip()
+
+                    smart_macro_list.append(macro_lbl)
+                    smart_tile_list.append(name_lbl)
+                    
+                dom_chart_df['Smart_Macro'] = smart_macro_list
+                dom_chart_df['Smart_Tile'] = smart_tile_list
+                treemap_color_map = {
+                    "IN/OUT 항공권": "#C62828", "구간/국내선": "#E53935", 
+                    "숙박": "#1565C0", "보험": "#F9A825", 
+                    "현지교통(사전)": "#00838F", "기타/통신": "#6A1B9A"
+                }
+
+                fig_dom = px.treemap(
+                    dom_chart_df, 
+                    path=['Smart_Macro', 'Smart_Tile'], 
+                    values='KRW_val', 
+                    color='Smart_Macro', 
+                    color_discrete_map=treemap_color_map
+                )
+                fig_dom.update_traces(
+                    texttemplate="<b>%{label}</b><br>%{value:,.0f}원", 
+                    hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", 
+                    textposition='middle center',
+                    insidetextfont=dict(size=16),
+                    pathbar=dict(thickness=24, visible=True),
+                    tiling=dict(pad=5)
+                )
+                fig_dom.update_layout(
+                    margin=dict(l=0, r=0, t=5, b=10), 
+                    height=520,
+                    coloraxis_showscale=False
+                )
+                st.plotly_chart(fig_dom, use_container_width=True, config={'displaylogo': False})
+
+        # ----------------------------------------------------------------------
+        # 4. 요약 (사전결제 vs 여행지 지출 2분할 요약 박스)
+        # ----------------------------------------------------------------------
+        st.divider()
+        st.markdown("<h3 style='margin-bottom: 8px;'>요약</h3>", unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.info("사전 결제")
+            st.metric("순지출액", f"{dom_df['KRW_val'].sum():,.0f} 원")
+            with st.expander("상세내역", expanded=False):
+                dg = dom_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
+                for cat_name, row_data in dg.iterrows(): st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
+        with c2:
+            st.success("여행지 지출")
+            st.metric("총액", f"{ovr_df['KRW_val'].sum():,.0f} 원")
+            with st.expander("상세내역", expanded=False):
+                og = ovr_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
+                for cat_name, row_data in og.iterrows(): st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
+
+        # ----------------------------------------------------------------------
+        # 5. 손실과 보상 (환불 목록)
+        # ----------------------------------------------------------------------
+        refund_df = ledger_df[ledger_df['Category'] == '환불']
+        if not refund_df.empty:
+            st.divider()
+            st.markdown("<h3 style='margin-bottom: 8px;'>손실과 보상</h3>", unsafe_allow_html=True)
+            r_krw = refund_df.apply(lambda r: r['Amount'] if str(r['Currency']).strip() == 'KRW' else r['Amount'] * r['AppliedRate'], axis=1).sum()
+            st.warning(f"**환불총액:** {r_krw:,.0f} 원")
+            with st.expander("상세내역", expanded=True):
+                st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True, hide_index=True)
     else:
         st.info("기록된 지출 데이터가 없습니다.")
 # ------------------------------------------------------------------------------
