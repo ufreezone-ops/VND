@@ -2338,21 +2338,21 @@ else:
 
     if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
 
-    # ==============================================================================
-# [Module 6.00.02] Main Navigation Router (Mobile 1-Line Fixed Patch)
+# ==============================================================================
+# [Module 6.00.02] Main Navigation Router (Mobile 1-Line & Arrow Removal Patch)
 # ==============================================================================
 def render_main_navbar(current_selection: str = "가계부") -> str:
     """
     메인 4대 탭 네비게이션 바를 렌더링합니다.
-    - 화살표(아이콘)를 완전히 숨기고(display: none),
-    - flex-wrap: nowrap 및 슬림 패딩을 적용하여 모바일 화면에서도 1줄 고정 레이아웃을 보장합니다.
+    1. icons=['', '', '', ''] 명시: 기본 caret-right(▷) 화살표 생성 원천 차단
+    2. letter-spacing(-0.6px), padding(6px 1px), flex(1 1 0%): 모바일 1줄(No-wrap) 강제 안착
     """
     from streamlit_option_menu import option_menu
 
-    # 메인 4대 탭 정의
+    # 4대 탭 정의
     menu_options = ["가계부", "일일Data", "돋보기", "전체요약"]
     
-    # 기본 인덱스 매핑 (현재 선택값 보존)
+    # 기본 인덱스 매핑 (현재 선택 상태 유지)
     default_index = 0
     if current_selection in menu_options:
         default_index = menu_options.index(current_selection)
@@ -2360,38 +2360,44 @@ def render_main_navbar(current_selection: str = "가계부") -> str:
     selected_tab = option_menu(
         menu_title=None,
         options=menu_options,
+        icons=["", "", "", ""],  # 빈 문자열 4개로 ▷ 화살표(caret-right) 강제 주입 원천 차단
         default_index=default_index,
         orientation="horizontal",
         styles={
             "container": {
                 "padding": "0px !important",
-                "margin": "0px auto 10px auto !important",
-                "background-color": "#1E293B",
-                "border-radius": "8px",
+                "margin": "0px auto 12px auto !important",
+                "background-color": "transparent",
                 "display": "flex !important",
                 "flex-wrap": "nowrap !important",
-                "justify-content": "space-between !important",
                 "width": "100% !important",
             },
             "icon": {
-                "display": "none !important"  # ▷ 화살표/아이콘 영역 완전 소멸
+                "display": "none !important",     # 아이콘 태그 숨김
+                "width": "0px !important",
+                "margin": "0px !important",
             },
             "nav-link": {
-                "font-size": "13.5px !important",
-                "font-weight": "500 !important",
+                "font-size": "12.5px !important", # 모바일 4분할 최적 글자 크기
+                "font-weight": "600 !important",
+                "letter-spacing": "-0.6px !important", # 자간 압축으로 2줄 꺾임 방지
                 "text-align": "center !important",
-                "padding": "8px 2px !important",
+                "padding": "7px 1px !important",  # 좌우 여백 극소화
                 "margin": "0px 1px !important",
-                "color": "#94A3B8 !important",
                 "white-space": "nowrap !important",
-                "flex": "1 1 0% !important",  # 4개 탭 균등 분배
-                "--hover-color": "#334155 !important",
+                "min-width": "0px !important",    # 축소 허용
+                "flex": "1 1 0% !important",      # 4개 탭 25% 균등 분배
+                "border": "1px solid #334155",
                 "border-radius": "6px",
+                "color": "#94A3B8 !important",
+                "background-color": "#1E293B",
+                "--hover-color": "#334155 !important",
             },
             "nav-link-selected": {
-                "background-color": "#2563EB !important",
+                "background-color": "#EA580C !important", # 가계부 테마 오렌지 하이라이트
                 "color": "#FFFFFF !important",
                 "font-weight": "700 !important",
+                "border": "1px solid #EA580C !important",
             },
         },
         key="main_navigation_bar"
