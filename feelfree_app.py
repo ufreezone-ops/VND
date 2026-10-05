@@ -3627,20 +3627,25 @@ else:
                         st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True)
 
     # ==============================================================================
-    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 상호명 14자 커팅 & 24px 헤더 띠)
+    # 6.03.00 | Unified Magnifier Hub (돋보기 탭 - 지출 비중 기반 동적 텍스트 엔진)
     # ==============================================================================
     with tab_market:
         st.subheader("🔍 여행 소비 돋보기")
         
-        # 6.03.00-H1 | 상호명/업체명 전용 14자 한글 커팅 헬퍼 (줄바꿈 방지 -> 폰트 크기 극대화)
-        def clean_header_label(text, max_len=14):
+        # 6.03.00-H1 | 지출 비중(면적 %) 연동 상호명 동적 글자수 산출 헬퍼 (방법 1 + 방법 3 결합)
+        def auto_fit_header_label(text, amount, total_amount):
             if not text: return ""
             s = str(text).strip()
             s = re.sub(r'\[.*?\]\s*', '', s)
             s = re.sub(r'\s+to\s+', ' ➔ ', s, flags=re.IGNORECASE)
             s = re.sub(r'[\d,\.]+\s*[kK원동\$]+.*$', '', s).strip(' -*•()[]/_')
             if not s: return ""
-            return s[:max_len] + ".." if len(s) > max_len else s
+
+            # 지출 비중(%)에 비례하여 10자 ~ 28자까지 동적 자동 확장
+            pct = (amount / total_amount * 100) if total_amount > 0 else 0
+            dynamic_max_len = int(min(28, max(10, 10 + pct * 0.6)))
+            
+            return s[:dynamic_max_len] + ".." if len(s) > dynamic_max_len else s
 
         # 6.03.00-H2 | 개별 품목/메뉴명 전용 지능형 다단 줄바꿈 헬퍼
         def smart_wrap_multiline(text, max_line_len=10):
@@ -3715,6 +3720,7 @@ else:
                 market_df = ledger_df[ledger_df.apply(is_valid_market_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
                 if not market_df.empty:
+                    tot_market_raw = market_df['Amount'].sum()
                     parsed_items = []
                     for _, r in market_df.iterrows():
                         desc_raw = str(r['Description'])
@@ -3723,8 +3729,9 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         store_name = lines[0] if lines else "기타 마트/선물"
-                        # 💡 14자 한글 커팅 적용 (clean_header_label)
-                        store_clean = clean_header_label(store_name.split('|')[0], max_len=14)
+                        
+                        # 💡 지출 비중 기반 동적 글자수 산출 적용 (auto_fit_header_label)
+                        store_clean = auto_fit_header_label(store_name.split('|')[0], r_amt, tot_market_raw)
                         if not store_clean: store_clean = "마트/시장"
                         
                         store_lower = store_name.lower()
@@ -3810,7 +3817,6 @@ else:
                         else:
                             cart_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
                             
-                        # 💡 24px 두께 헤더 띠(pathbar=24, tiling pad=5) 및 폰트 크기 16px 고정
                         fig_market.update_traces(
                             texttemplate=cart_tt, 
                             hovertemplate=f"<b>분류/상호/품목:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
@@ -3845,6 +3851,7 @@ else:
                 food_df = ledger_df[ledger_df.apply(is_valid_food_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
                 if not food_df.empty:
+                    tot_food_raw = food_df['Amount'].sum()
                     parsed_food = []
                     for _, r in food_df.iterrows():
                         desc_raw = str(r['Description'])
@@ -3853,8 +3860,9 @@ else:
                         
                         lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
                         place_name = lines[0] if lines else "기타 식당/카페"
-                        # 💡 14자 한글 커팅 적용 (clean_header_label)
-                        place_clean = clean_header_label(place_name.split('|')[0], max_len=14)
+                        
+                        # 💡 지출 비중 기반 동적 글자수 산출 적용 (auto_fit_header_label)
+                        place_clean = auto_fit_header_label(place_name.split('|')[0], r_amt, tot_food_raw)
                         if not place_clean: place_clean = "식당/카페"
                         
                         place_lower = place_name.lower()
@@ -3901,7 +3909,8 @@ else:
                             for it in valid_food_items:
                                 f_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_food_items)))
                                 f_price = round(f_price * f_scale, -2)
-                                parsed_food.append({'Food_Group': food_group, 'Place': place_clean, 'Item': it['name'], 'Local_val': f_price, 'Curr': r_curr})
+                                parsed_items_box = {'Food_Group': food_group, 'Place': place_clean, 'Item': it['name'], 'Local_val': f_price, 'Curr': r_curr}
+                                parsed_food.append(parsed_items_box)
                                 
                     if parsed_food:
                         food_df = pd.DataFrame(parsed_food)
@@ -3932,7 +3941,6 @@ else:
                         else:
                             food_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
                             
-                        # 💡 24px 두께 헤더 띠(pathbar=24, tiling pad=5) 및 폰트 크기 16px 고정
                         fig_food.update_traces(
                             texttemplate=food_tt, 
                             hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
@@ -3951,7 +3959,7 @@ else:
                 else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
             # ------------------------------------------------------------------
-            # 6.03.03 | Subtab 3: 마사지 · 교통 (그랩 최종 단일가 & 24px 헤더 띠)
+            # 6.03.03 | Subtab 3: 마사지 · 교통 (그랩 최종 단일가 & 동적 상호명)
             # ------------------------------------------------------------------
             with sub_tab_relax:
                 # [PART 1] 상단: 그랩 및 로컬교통 돋보기
@@ -3983,6 +3991,7 @@ else:
                 traffic_df = ledger_df[ledger_df.apply(is_valid_traffic_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
                 if not traffic_df.empty:
+                    tot_traffic_raw = traffic_df['Amount'].sum()
                     parsed_traffic = []
                     for _, r in traffic_df.iterrows():
                         cat_r = str(r['Category']).strip()
@@ -3999,8 +4008,8 @@ else:
                         first_line = re.sub(r'\b\d+(?:\.\d+)?\s*(?:km|분|초|시간)\b.*$', '', first_line, flags=re.IGNORECASE).strip(' ,-')
 
                         p_provider = cat_r if cat_r in ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시'] else "로컬교통"
-                        # 💡 14자 한글 커팅 적용 (clean_header_label)
-                        p_prov_clean = clean_header_label(p_provider, max_len=14)
+                        # 💡 지출 비중 기반 동적 글자수 산출 적용 (auto_fit_header_label)
+                        p_prov_clean = auto_fit_header_label(p_provider, r_amt, tot_traffic_raw)
                         p_item_clean = smart_wrap_multiline(first_line, max_line_len=11)
                         
                         if not p_prov_clean: p_prov_clean = "이동 수단"
@@ -4042,7 +4051,6 @@ else:
                         else:
                             traffic_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
                             
-                        # 💡 24px 두께 헤더 띠(pathbar=24, tiling pad=5) 및 폰트 크기 16px 고정
                         fig_traffic.update_traces(
                             texttemplate=traffic_tt, 
                             hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
@@ -4071,6 +4079,7 @@ else:
                 massage_df = ledger_df[ledger_df.apply(is_valid_massage_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
                 
                 if not massage_df.empty:
+                    tot_massage_raw = massage_df['Amount'].sum()
                     parsed_massage = []
                     for _, r in massage_df.iterrows():
                         desc_raw = str(r['Description'])
@@ -4086,8 +4095,8 @@ else:
                             p_provider = clean_desc
                             p_item = clean_desc
                             
-                        # 💡 14자 한글 커팅 적용 (clean_header_label)
-                        p_prov_clean = clean_header_label(p_provider, max_len=14)
+                        # 💡 지출 비중 기반 동적 글자수 산출 적용 (auto_fit_header_label)
+                        p_prov_clean = auto_fit_header_label(p_provider, r_amt, tot_massage_raw)
                         p_item_clean = smart_wrap_multiline(p_item, max_line_len=10)
                         
                         if not p_prov_clean: p_prov_clean = "마사지 샵"
@@ -4129,7 +4138,6 @@ else:
                         else:
                             massage_tt = "<b>%{label}</b><br>%{value:,.0f} KRW"
                             
-                        # 💡 24px 두께 헤더 띠(pathbar=24, tiling pad=5) 및 폰트 크기 16px 고정
                         fig_massage.update_traces(
                             texttemplate=massage_tt, 
                             hovertemplate=f"<b>분류/업체/코스:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {m_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", 
