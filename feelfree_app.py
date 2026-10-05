@@ -2284,10 +2284,96 @@ elif st.session_state.get('show_new_trip', False):
                     st.rerun()
 
 # ==============================================================================
-# [Module 6.00] Individual Trip Manager Views Header & Common Preparation
+# [Module 6.00] Main Navigation & Tab Routing Controller
 # ==============================================================================
-else:
-    st.title(f"{st.session_state.current_trip}")
+def render_main_app_router(df_ledger, df_master=None, selected_trip=None):
+    """
+    메인 4대 탭 네비게이션 및 하위 렌더러(6.01 ~ 6.04)를 안전하게 연결하는 통합 라우터입니다.
+    - 텍스트 불일치(이모지 포함 여부)로 인한 화면 누락을 방지하도록 유연한 매핑 적용
+    - ▷ 화살표 완벽 제거 및 모바일 1줄(No-wrap) 고정
+    """
+    from streamlit_option_menu import option_menu
+
+    # 메인 4대 메뉴 정의
+    menu_options = ["가계부", "일일Data", "돋보기", "전체요약"]
+    
+    # 세션 상태 기반 탭 선택값 관리
+    if "current_main_tab" not in st.session_state:
+        st.session_state["current_main_tab"] = "가계부"
+        
+    current_tab = st.session_state["current_main_tab"]
+    default_idx = menu_options.index(current_tab) if current_tab in menu_options else 0
+
+    # 1. 메인 네비게이션 바 렌더링
+    selected = option_menu(
+        menu_title=None,
+        options=menu_options,
+        icons=["", "", "", ""],  # 빈 문자열로 ▷ 화살표(caret-right) 강제 주입 원천 제거
+        default_index=default_idx,
+        orientation="horizontal",
+        styles={
+            "container": {
+                "padding": "0px !important",
+                "margin": "0px auto 14px auto !important",
+                "background-color": "transparent",
+                "display": "flex !important",
+                "flex-wrap": "nowrap !important",
+                "width": "100% !important",
+            },
+            "icon": {
+                "display": "none !important",
+                "width": "0px !important",
+                "margin": "0px !important",
+            },
+            "nav": {
+                "display": "flex !important",
+                "flex-wrap": "nowrap !important",
+                "width": "100% !important",
+            },
+            "nav-link": {
+                "font-size": "13px !important",
+                "font-weight": "600 !important",
+                "letter-spacing": "-0.5px !important",
+                "text-align": "center !important",
+                "padding": "8px 2px !important",
+                "margin": "0px 1.5px !important",
+                "white-space": "nowrap !important",
+                "min-width": "0px !important",
+                "flex": "1 1 0% !important",
+                "border": "1px solid #334155",
+                "border-radius": "6px",
+                "color": "#94A3B8 !important",
+                "background-color": "#1E293B",
+                "--hover-color": "#334155 !important",
+            },
+            "nav-link-selected": {
+                "background-color": "#EA580C !important",  # 오렌지 하이라이트
+                "color": "#FFFFFF !important",
+                "font-weight": "700 !important",
+                "border": "1px solid #EA580C !important",
+            },
+        },
+        key="main_navbar_controller"
+    )
+
+    st.session_state["current_main_tab"] = selected
+
+    # 2. 하위 4대 탭 안전 분기 (이모지 포함 여부와 무관하게 모두 수용)
+    if any(k in selected for k in ["가계부", "Ledger"]):
+        # [Module 6.01] 가계부 등록 / 상세 뷰어 / 수정 모듈
+        render_tab_ledger(df_ledger=df_ledger, selected_trip=selected_trip)
+
+    elif any(k in selected for k in ["일일Data", "일일", "Daily"]):
+        # [Module 6.02] 일일 Data (필수지출 차트 + 일별 총지출 + 일별 피벗 매트릭스)
+        render_tab_daily(df_ledger=df_ledger, selected_trip=selected_trip)
+
+    elif any(k in selected for k in ["돋보기", "카테고리", "Magnifier"]):
+        # [Module 6.03] 돋보기 (장바구니 / 식당·카페 / 마사지·교통 3대 트리맵)
+        render_tab_magnifier(df_ledger=df_ledger, selected_trip=selected_trip)
+
+    elif any(k in selected for k in ["전체요약", "요약", "Summary"]):
+        # [Module 6.04] 전체요약 (4대 KPI + 종합 트리맵 + 지출비중 도넛)
+        render_tab_summary(df_ledger=df_ledger, selected_trip=selected_trip)
     
     # --------------------------------------------------------------------------
     # 6.00.01 | 전역 노드·국가 판별 & 공통 변수 승격 선언 (NameError 원천 차단)
