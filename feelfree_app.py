@@ -2284,52 +2284,66 @@ elif st.session_state.get('show_new_trip', False):
                     st.rerun()
 
 # ==============================================================================
-# [Module 6.00.00] Individual Trip Manager Views (고성능 Option Menu 엔진 탑재)
+# [Module 6.00] Individual Trip Manager Views Header & Common Preparation
 # ==============================================================================
 else:
     st.title(f"{st.session_state.current_trip}")
     
     # --------------------------------------------------------------------------
-    # 6.00.01 | 공통 지출 데이터 및 여정 전처리 (조건부 렌더링 안전 보장)
+    # 6.00.01 | 전역 노드·국가 판별 & 공통 변수 승격 선언 (NameError 원천 차단)
     # --------------------------------------------------------------------------
-    if not ledger_df.empty:
-        exp_df = ledger_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
-        exp_df = exp_df[exp_df['IsExpense'] == 1].copy()
-        if not exp_df.empty:
-            exp_df['Macro_Category'] = exp_df['Category'].map(MACRO_MAP).fillna("기타")
-            def get_krw_val_c(r):
-                if str(r['Currency']).strip() == 'KRW': return r['Amount']
-                return r['Amount'] * r['AppliedRate']
-            exp_df['KRW_val'] = exp_df.apply(get_krw_val_c, axis=1)
-            
-            def get_local_val_c(r):
-                c_curr = str(r['Currency']).strip()
-                if c_curr == TRAVEL_CURRENCY: return r['Amount']
-                krw_v = r['Amount'] if c_curr == 'KRW' else r['Amount'] * r['AppliedRate']
-                war_t = get_WAR(TRAVEL_CURRENCY)
-                return krw_v / war_t if war_t > 0 else 0
-            exp_df['Local_val'] = exp_df.apply(get_local_val_c, axis=1)
-            
-            def evaluate_survival_status_c(r):
-                cat = str(r['Category']).strip()
-                desc = str(r['Description']).strip().lower()
-                if cat in ['선물', '쇼핑', '호텔', '숙박', '항공권', '보험', '보증금', '상환', '개인지출']: return 0
-                if cat == '렌트카' or '렌트' in desc: return 0
-                if cat in ['투어', '입장료']: return 1
-                if cat == '기차':
-                    if any(k in desc for k in ['사전', '예매', '트립닷컴', '코레일', 'online', 'booking']): return 0
-                    return 1
-                base_surv = ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '마사지', '팁']
-                return 1 if cat in base_surv else 0
-            exp_df['IsSurvival'] = exp_df.apply(evaluate_survival_status_c, axis=1)
+    trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
+    node_keys = list(trip_nodes.keys())
+    is_single_country = len(node_keys) <= 1
+    sel_node_default = node_keys[0] if node_keys else FIRST_NODE_NAME
+
+    # 날짜 및 시차 공통 계산
+    dep_rows_tz = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
+    korea_dep_tz = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
+    t_dep_tz = korea_dep_tz if not korea_dep_tz.empty else dep_rows_tz
+    
+    dep_dt_calc = None
+    if not t_dep_tz.empty:
+        m_d = re.search(r'(\d{4}-\d{2})-(\d{2})', str(t_dep_tz.iloc[0]['Date']))
+        if m_d: dep_dt_calc = datetime.strptime(m_d.group(0), "%Y-%m-%d").date()
+
+    arr_rows_tz = ledger_df[ledger_df['Category'].str.contains('귀국|입국', na=False)]
+    korea_arr_tz = ledger_df[ledger_df['Category'].str.contains('귀국_한국|귀국.*한국|입국_한국|입국.*한국', na=False)]
+    t_arr_tz = korea_arr_tz if not korea_arr_tz.empty else arr_rows_tz
+    
+    arr_dt_calc = None
+    if not t_arr_tz.empty:
+        m_a = re.search(r'(\d{4}-\d{2})-(\d{2})', str(t_arr_tz.iloc[-1]['Date']))
+        if m_a: arr_dt_calc = datetime.strptime(m_a.group(0), "%Y-%m-%d").date()
+
+    today_kst_now = datetime.now(TZ_KST).date()
+    is_traveling_now = bool(dep_dt_calc and arr_dt_calc and dep_dt_calc <= today_kst_now <= arr_dt_calc)
+    dynamic_tz = timezone(timedelta(hours=trip_nodes.get(sel_node_default, FIRST_NODE)["timezone"])) if is_traveling_now else TZ_KST
+
+    def safe_parse_date_obj(d_str, fallback):
+        if not d_str: return fallback
+        s = str(d_str).strip()
+        m_iso = re.search(r'(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})', s)
+        if m_iso:
+            try: return dt_date(int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3)))
+            except: pass
+        month_map = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6, 'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
+        m_eng = re.search(r'([a-zA-Z]+)\s*(\d{1,2}),?\s*(\d{4})', s)
+        if m_eng:
+            mon_str, day_str, year_str = m_eng.group(1).lower()[:3], m_eng.group(2), m_eng.group(3)
+            if mon_str in month_map:
+                try: return dt_date(int(year_str), month_map[mon_str], int(day_str))
+                except: pass
+        return fallback
+
+    if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
 
     # --------------------------------------------------------------------------
-    # 6.00.02 | 메인 4대 탭 Option Menu (모바일 1줄 고정 & 아이콘 골든 밸런스)
+    # 6.00.02 | 메인 4대 탭 Option Menu (아이콘 제거 ➔ 모바일 1줄 완벽 고정)
     # --------------------------------------------------------------------------
     main_tab_choice = option_menu(
         menu_title=None,
         options=["가계부", "일일Data", "돋보기", "전체요약"],
-        icons=["wallet2", "bar-chart-line", "search", "pie-chart"],
         default_index=0,
         orientation="horizontal",
         styles={
@@ -2337,15 +2351,14 @@ else:
                 "padding": "0px !important",
                 "background-color": "transparent",
                 "margin-bottom": "14px",
-                "gap": "4px"
+                "gap": "6px"
             },
-            "icon": {"color": "#38BDF8", "font-size": "13px", "margin-right": "3px"},
             "nav-link": {
-                "font-size": "13.5px",
+                "font-size": "14px",
                 "font-weight": "600",
                 "text-align": "center",
                 "margin": "0px",
-                "padding": "8px 4px",
+                "padding": "8px 6px",
                 "white-space": "nowrap",
                 "background-color": "#1E293B",
                 "color": "#38BDF8",
@@ -2358,7 +2371,7 @@ else:
                 "background-color": "#FF9E00",
                 "background-image": "linear-gradient(135deg, #FF9E00 0%, #EA580C 100%)",
                 "color": "#FFFFFF",
-                "font-size": "14px",
+                "font-size": "14.5px",
                 "font-weight": "800",
                 "border": "1.5px solid #FFA500",
                 "box-shadow": "0 4px 12px rgba(255, 158, 0, 0.35)"
@@ -3856,7 +3869,9 @@ else:
             if len(lines) > 3: lines = lines[:3]
             return "<br>".join(lines)
 
-        # 💡 [돋보기 서브탭] 모바일 1줄 고정 & 마사지·교통 텍스트 꺾임 방지
+        # ----------------------------------------------------------------------
+        # 6.03.00-M | 돋보기 서브메뉴 Option Menu (예쁜 아이콘 유지 & 모바일 1줄)
+        # ----------------------------------------------------------------------
         sub_tab_choice = option_menu(
             menu_title=None,
             options=["장바구니", "식당·카페", "마사지·교통"],
@@ -3868,15 +3883,15 @@ else:
                     "padding": "0px !important",
                     "background-color": "transparent",
                     "margin-bottom": "12px",
-                    "gap": "4px"
+                    "gap": "6px"
                 },
-                "icon": {"color": "#38BDF8", "font-size": "13px", "margin-right": "3px"},
+                "icon": {"color": "#38BDF8", "font-size": "13px", "margin-right": "2px"},
                 "nav-link": {
                     "font-size": "13.5px",
                     "font-weight": "600",
                     "text-align": "center",
                     "margin": "0px",
-                    "padding": "8px 4px",
+                    "padding": "8px 6px",
                     "white-space": "nowrap",
                     "background-color": "#1E293B",
                     "color": "#38BDF8",
