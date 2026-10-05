@@ -2868,7 +2868,9 @@ else:
                     st.markdown("---")
                     c_info, c_edit = st.columns([1, 1.2])
                     
-                    # 6.01.04 | Detail Viewer & Order Mover
+                    # ----------------------------------------------------------
+                    # 6.01.04 | Detail Viewer & Shift Controller (영수증 & 원화 환산 엔진)
+                    # ----------------------------------------------------------
                     with c_info:
                         st.subheader("🧾 상세 내역 및 영수증 뷰어")
                         c_up, c_down = st.columns(2)
@@ -2899,23 +2901,32 @@ else:
                         st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}{krw_display})", unsafe_allow_html=True)
                         st.markdown(f"**🏦 결제수단:** `{row_data['PaymentMethod']}`")
                         
+                        # 💡 [핵심 패치] 베트남 마침표 천단위(55.000 -> 55,000동) 정밀 정규화 환산 엔진
                         def smart_krw_translator(text, rate, curr):
                             if rate <= 0 or curr == 'KRW': return text
                             def replacer(match):
-                                num_str = match.group(1).replace(',', '')
+                                raw_num = match.group(1).strip()
                                 suffix = match.group(2).lower() if match.group(2) else ""
+                                
+                                # 베트남 통화(VND)이거나 마침표 뒤 3자리 숫자(예: 55.000)인 경우 천 단위 구분기호로 정규화
+                                if curr in ['VND', 'HUF', 'KRW'] or re.search(r'\.\d{3}(?!\d)', raw_num):
+                                    clean_num_str = raw_num.replace('.', '').replace(',', '')
+                                else:
+                                    clean_num_str = raw_num.replace(',', '')
+
                                 try:
-                                    v = float(num_str)
+                                    v = float(clean_num_str)
                                     if 'k' in suffix: return match.group(0)
-                                    is_currency = any(c in suffix for c in ['vnd', 'usd', 'eur', 'cny', 'try', 'rsd', 'huf', 'krw', '원', '동', '달러'])
-                                    is_unit = any(u in suffix for u in ['ml', 'g', 'kg', 'cm', 'mm', '개', 'x', '입', '장', '명', '박스'])
+                                    is_currency = any(c in suffix for c in ['vnd', 'usd', 'eur', 'cny', 'try', 'rsd', 'huf', 'krw', '원', '동', '달러', 'đ'])
+                                    is_unit = any(u in suffix for u in ['ml', 'g', 'kg', 'cm', 'mm', '개', 'x', '입', '장', '명', '박스', 'p', 'l'])
                                     if is_unit and not is_currency: return match.group(0)
-                                    if is_currency or (curr in ['VND', 'HUF'] and v >= 1000) or ('.' in num_str) or (v > 100):
+                                    if is_currency or (curr in ['VND', 'HUF'] and v >= 1000) or (v > 100) or ('.' in raw_num and curr not in ['VND', 'HUF']):
                                         krw_val = v * rate
                                         return f"{match.group(1)}<span style='font-size:13px;color:#FFD700;font-style:italic;'> (약 {krw_val:,.0f}원)</span>{match.group(2)}"
                                 except: pass
                                 return match.group(0)
-                            pattern = re.compile(r'(?<![\d\.])(\d{1,3}(?:,\d{3})*(?:\.\d+)?)(?!\d)(\s*[a-zA-Z가-힣]*)')
+                            
+                            pattern = re.compile(r'(?<![\d\.])(\d{1,3}(?:[,\.]\d{3})*(?:\.\d+)?|\d+)(?!\d)(\s*[a-zA-Z가-힣đĐ]*)')
                             return pattern.sub(replacer, text)
 
                         desc_full = str(row_data['Description'])
@@ -3469,7 +3480,7 @@ else:
 
                 st.divider()
                 
-                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 ---
+                # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 (현지화 열 시안/블루 배경색 적용) ---
                 daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
                 surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
                 daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3525,12 +3536,27 @@ else:
 
                     final_table_with_summary = pd.concat([display_table, summary_display], ignore_index=True)
                     
-                    def highlight_summary_rows(row):
-                        if str(row['날짜']) in ['합계(Sum)', '일평균(Avg)']:
-                            return ['background-color: rgba(245, 158, 11, 0.22); font-weight: bold; color: #FACC15; border-top: 1px solid #F59E0B;'] * len(row)
-                        return [''] * len(row)
+                    # 💡 [핵심] 현지화 열 시안/블루 하이라이트 & 요약 행 골드 하이라이트 매트릭스 스타일러
+                    def style_daily_pivot_table(df_display):
+                        styles = pd.DataFrame('', index=df_display.index, columns=df_display.columns)
+                        loc_cols = [c for c in df_display.columns if f"({LOCAL_SYM})" in c]
+                        
+                        # 1. 현지화 열(총(₫), 필수(₫)) 세로 시안/블루 틴트 적용
+                        for col in loc_cols:
+                            styles[col] = 'background-color: rgba(2, 132, 199, 0.12); color: #38BDF8; font-weight: 600;'
 
-                    styled_daily_table = final_table_with_summary.style.apply(highlight_summary_rows, axis=1).format({
+                        # 2. 요약 행(합계/일평균) 가로 골드 하이라이트 적용 (교차 지점 골드-볼드)
+                        for idx in df_display.index:
+                            row_date = str(df_display.loc[idx, '날짜'])
+                            if row_date in ['합계(Sum)', '일평균(Avg)']:
+                                for col in df_display.columns:
+                                    if col in loc_cols:
+                                        styles.loc[idx, col] = 'background-color: rgba(245, 158, 11, 0.35); font-weight: 800; color: #FACC15; border-top: 1px solid #F59E0B;'
+                                    else:
+                                        styles.loc[idx, col] = 'background-color: rgba(245, 158, 11, 0.22); font-weight: bold; color: #FACC15; border-top: 1px solid #F59E0B;'
+                        return styles
+
+                    styled_daily_table = final_table_with_summary.style.apply(style_daily_pivot_table, axis=None).format({
                         f'총({LOCAL_SYM})': fmt_local, '총(원)': '{:,.0f}', f'필수({LOCAL_SYM})': fmt_local, '필수(원)': '{:,.0f}'
                     })
 
