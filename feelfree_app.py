@@ -3146,7 +3146,7 @@ else:
                     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭)
+    # 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 선물 최상단 스택 & 옐로우 적용)
     # --------------------------------------------------------------------------
     with tab_stats:
         if not ledger_df.empty:
@@ -3211,14 +3211,21 @@ else:
                             exp_df.at[m_idx, 'KRW_val'] -= take
                             r_val -= take
 
+                # 💡 [핵심] '선물' 색상을 화사하고 선명한 옐로우 골드(#FACC15)로 지정
                 color_map = {
-                    "식사": "#26A69A", "간식": "#66BB6A", "마트": "#EC407A", "선물": "#AB47BC",
+                    "식사": "#26A69A", "간식": "#66BB6A", "마트": "#EC407A",
                     "Grab": "#29B6F6", "VinBus": "#26C6DA", "DiDi": "#29B6F6", "지하철": "#42A5F5",
                     "택시": "#5C6BC0", "교통": "#5C6BC0", "마사지": "#FF7043", "투어": "#7E57C2",
                     "입장료": "#AB47BC", "통신": "#FFA726", "수수료": "#8D6E63", "팁": "#26A69A",
-                    "항공권": "#EF5350", "호텔": "#42A5F5", "보험": "#FFEE58"
+                    "항공권": "#EF5350", "호텔": "#42A5F5", "보험": "#FFEE58",
+                    "선물": "#FACC15", "기타": "#9E9E9E"
                 }
-                category_stack_order = ["식사", "간식", "마트", "선물", "Grab", "VinBus", "DiDi", "지하철", "택시", "교통", "마사지", "투어", "입장료", "통신", "수수료", "팁", "항공권", "호텔", "보험", "기타"]
+                
+                # 💡 [핵심] '선물'을 누적 막대의 맨 꼭대기(최상단)로 이동
+                category_stack_order = [
+                    "식사", "간식", "마트", "Grab", "VinBus", "DiDi", "지하철", "택시", "교통", 
+                    "마사지", "투어", "입장료", "통신", "수수료", "팁", "항공권", "호텔", "보험", "선물", "기타"
+                ]
 
                 c_mode = st.radio("📊 통화 선택", ["원화(KRW)", f"현지화({TRAVEL_CURRENCY})"], horizontal=True, key="st_curr_top")
                 y_col = 'KRW_val' if "원화" in c_mode else 'Local_val'
@@ -3394,7 +3401,7 @@ else:
                         </div>
                     """, unsafe_allow_html=True)
 
-                    # [차트 1] 일별지출
+                    # [차트 1] 일별지출 (선물이 최상단 노란색 캡으로 배치됨)
                     st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>📊 일별지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
                     total_chart_df = ovr_df.copy()
                     total_chart_df['Date_Display'] = total_chart_df['Date_Clean'].map(date_label_map)
