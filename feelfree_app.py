@@ -233,18 +233,61 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 1.05.03 | Tab Navigation CSS (뱃지 스타일 탭 UI)
+# 1.05.03 | Tab Navigation CSS (여유로운 좌우 여백 & 쾌적한 뱃지 탭 UI)
 tab_bg_unselected = "#18202E" if is_dark else "#E2E8F0"
 tab_text_unselected = "#38BDF8" if is_dark else "#0284C7"
 
 st.markdown(f"""
     <style>
-    .stTabs [data-baseweb="tab-list"] {{ display: flex !important; width: 100% !important; gap: 6px !important; padding: 4px !important; background: transparent !important; margin-bottom: 16px !important; }}
-    .stTabs [data-baseweb="tab"] {{ flex: 1 1 0% !important; height: 42px !important; background-color: {tab_bg_unselected} !important; border-radius: 10px !important; border: 1px solid #334155 !important; display: flex !important; align-items: center !important; justify-content: center !important; }}
-    .stTabs [data-baseweb="tab"] p {{ font-size: 15.5px !important; font-weight: 600 !important; color: {tab_text_unselected} !important; margin: 0px !important; }}
-    .stTabs [aria-selected="true"] {{ background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; border: 1px solid #FFA500 !important; }}
-    .stTabs [aria-selected="true"] p {{ color: #FFFFFF !important; font-size: 16px !important; font-weight: 800 !important; }}
-    .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{ display: none !important; }}
+    /* 탭 리스트 외곽 컨테이너 여백 및 간격 확장 */
+    .stTabs [data-baseweb="tab-list"] {{ 
+        display: flex !important; 
+        width: 100% !important; 
+        gap: 8px !important; 
+        padding: 4px 10px !important; 
+        background: transparent !important; 
+        margin: 0px 4px 16px 4px !important; 
+    }}
+    
+    /* 탭 버튼 뱃지: 좌우 패딩을 주어 글자가 테두리에 붙지 않고 여유롭게 배치 */
+    .stTabs [data-baseweb="tab"] {{ 
+        flex: 1 1 0% !important; 
+        height: 44px !important; 
+        padding: 0px 16px !important; 
+        background-color: {tab_bg_unselected} !important; 
+        border-radius: 10px !important; 
+        border: 1px solid #334155 !important; 
+        display: flex !important; 
+        align-items: center !important; 
+        justify-content: center !important; 
+        transition: all 0.2s ease-in-out !important;
+    }}
+    
+    /* 탭 텍스트 폰트 & 자간 정렬 */
+    .stTabs [data-baseweb="tab"] p {{ 
+        font-size: 15.5px !important; 
+        font-weight: 600 !important; 
+        color: {tab_text_unselected} !important; 
+        margin: 0px !important; 
+        letter-spacing: 0.3px !important;
+        white-space: nowrap !important;
+    }}
+    
+    /* 선택된 활성 탭 (오렌지 그라데이션) */
+    .stTabs [aria-selected="true"] {{ 
+        background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; 
+        border: 1px solid #FFA500 !important; 
+        box-shadow: 0 4px 12px rgba(255, 158, 0, 0.25) !important;
+    }}
+    .stTabs [aria-selected="true"] p {{ 
+        color: #FFFFFF !important; 
+        font-size: 16px !important; 
+        font-weight: 800 !important; 
+    }}
+    
+    .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {{ 
+        display: none !important; 
+    }}
     </style>
 """, unsafe_allow_html=True)
 
