@@ -2288,7 +2288,7 @@ elif st.session_state.get('show_new_trip', False):
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 6.00.01 | Common Preprocessing & Financial Calculation Engine (exp_df 승격 생성)
+# 6.00.01 | Common Preprocessing & Financial Calculation Engine (표준 대분류 장착)
 # ------------------------------------------------------------------------------
 trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
 node_keys = list(trip_nodes.keys())
@@ -2363,9 +2363,10 @@ def check_is_fixed_cost(row):
     met = str(row['PaymentMethod']).strip()
     return (met == '원화계좌(한국)') or (cat in FIXED_COST_CATS)
 
-# 🔥 [핵심 비즈니스 규칙] 지출 원장(exp_df), 필수지출(IsSurvival), 고정비(IsFixedCost) 일괄 전처리
+# 🔥 [핵심 비즈니스 규칙] 지출 원장(exp_df), 대분류(Macro_Category), 필수/고정비 완벽 일괄 생성
 exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
 if not exp_df.empty:
+    # 1. 원화 및 현지화 환산액 계산
     exp_df['KRW_val'] = exp_df.apply(
         lambda r: float(r['Amount']) if str(r['Currency']).strip() == 'KRW' else float(r['Amount']) * float(r['AppliedRate']),
         axis=1
@@ -2375,6 +2376,10 @@ if not exp_df.empty:
         axis=1
     )
 
+    # 2. 🌟 대분류(Macro_Category) 표준 컬럼 탑재 (KeyError 원천 차단)
+    exp_df['Macro_Category'] = exp_df['Category'].map(MACRO_MAP).fillna("📱 기타/통신").astype(str)
+
+    # 3. 필수지출(IsSurvival) 및 고정비(IsFixedCost) 판별
     def check_is_survival_cost(row):
         cat = str(row['Category']).strip()
         met = str(row['PaymentMethod']).strip()
@@ -4235,7 +4240,7 @@ elif main_tab_choice == "돋보기":
 
 
 # ==============================================================================
-# 6.04.00 | Final Settlement Dashboard (전체요약 탭 - NameError 완벽 방어)
+# 6.04.00 | Final Settlement Dashboard (전체요약 탭 - 무결점 표준 렌더러)
 # ==============================================================================
 elif main_tab_choice == "전체요약":
     if not exp_df.empty:
@@ -4249,7 +4254,7 @@ elif main_tab_choice == "전체요약":
         total_nights = sum(float(n) for n in nights_match) if nights_match else 7
         if total_nights == 0: total_nights = 7 
 
-        # 6.00.01에서 미리 안전하게 계산된 IsFixedCost 참조
+        # 6.00.01에서 사전 계산된 컬럼 참조
         is_fixed_cost_final = exp_df['IsFixedCost']
         dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum()
         ovr_total_krw = total_trip_krw - dom_total_krw
@@ -4279,9 +4284,6 @@ elif main_tab_choice == "전체요약":
         st.markdown("<h4 style='margin-top: 15px; margin-bottom: 5px;'>🌳 지출분석 (Treemap)</h4>", unsafe_allow_html=True)
         chart_df = exp_df[exp_df['KRW_val'] > 0].copy()
         if not chart_df.empty:
-            chart_df['Macro_Category'] = chart_df['Category'].map(MACRO_MAP).fillna("기타").astype(str)
-            chart_df['Category'] = chart_df['Category'].astype(str)
-            
             def sanitize_desc(row):
                 d = str(row['Description']).strip()
                 if not d or d.lower() == 'nan': d = row['Category']
@@ -4290,32 +4292,66 @@ elif main_tab_choice == "전체요약":
 
             chart_df['Short_Desc'] = chart_df.apply(sanitize_desc, axis=1)
             
-            fig_tree = px.treemap(chart_df, path=['Macro_Category', 'Category', 'Short_Desc'], values='KRW_val', color='KRW_val', color_continuous_scale='Greens')
-            fig_tree.update_traces(texttemplate="<b>%{label}</b><br>%{value:,.0f}원", hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16), pathbar=dict(thickness=24, visible=True), tiling=dict(pad=5))
+            fig_tree = px.treemap(
+                chart_df, 
+                path=['Macro_Category', 'Category', 'Short_Desc'], 
+                values='KRW_val', 
+                color='KRW_val', 
+                color_continuous_scale='Greens'
+            )
+            fig_tree.update_traces(
+                texttemplate="<b>%{label}</b><br>%{value:,.0f}원", 
+                hovertemplate="<b>%{label}</b><br>금액: %{value:,.0f}원<br>비중: %{percentRoot:.1%}<extra></extra>", 
+                textposition='middle center', 
+                insidetextfont=dict(size=16), 
+                pathbar=dict(thickness=24, visible=True), 
+                tiling=dict(pad=5)
+            )
             fig_tree.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=580, coloraxis_showscale=False)
             st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
         
         st.markdown("<h4 style='margin-top: 12px; margin-bottom: 0px;'>🍕 지출비중</h4>", unsafe_allow_html=True)
-        cat_pie = exp_df.groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
+        # 🌟 표준 Macro_Category 컬럼을 통한 안전한 집계
+        cat_pie = exp_df[exp_df['KRW_val'] > 0].groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
         
-        fig_donut = px.pie(cat_pie, values='KRW_val', names='Macro_Category', hole=0.35, color_discrete_sequence=px.colors.qualitative.Set3)
-        fig_donut.update_traces(textposition='inside', textinfo='label+value+percent', texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>(%{percent:.1%})", insidetextfont=dict(size=13.5))
+        if not cat_pie.empty:
+            fig_donut = px.pie(
+                cat_pie, 
+                values='KRW_val', 
+                names='Macro_Category', 
+                hole=0.35, 
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            fig_donut.update_traces(
+                textposition='inside', 
+                textinfo='label+value+percent', 
+                texttemplate="<b>%{label}</b><br>%{value:,.0f}원<br>(%{percent:.1%})", 
+                insidetextfont=dict(size=13.5)
+            )
 
-        today_f = datetime.now(TZ_KST).date()
-        if dep_dt_f and arr_dt_f:
-            cal_days_f = (arr_dt_f - dep_dt_f).days + 1
-            if today_f < dep_dt_f: center_sub_text = f"({cal_days_f}일예정)"
-            elif dep_dt_f <= today_f <= arr_dt_f: center_sub_text = f"({(today_f - dep_dt_f).days + 1}일차)"
-            else: center_sub_text = f"({cal_days_f}일간)"
-        else:
-            center_sub_text = f"({total_nights}일간)"
+            today_f = datetime.now(TZ_KST).date()
+            if dep_dt_f and arr_dt_f:
+                cal_days_f = (arr_dt_f - dep_dt_f).days + 1
+                if today_f < dep_dt_f: center_sub_text = f"({cal_days_f}일예정)"
+                elif dep_dt_f <= today_f <= arr_dt_f: center_sub_text = f"({(today_f - dep_dt_f).days + 1}일차)"
+                else: center_sub_text = f"({cal_days_f}일간)"
+            else:
+                center_sub_text = f"({total_nights}일간)"
 
-        fig_donut.add_annotation(text=f"<b>{total_trip_krw:,.0f}원</b><br><span style='font-size:12px; color:#A0AEC0;'>{center_sub_text}</span>", showarrow=False, align="center", font=dict(size=16))
-        fig_donut.update_layout(height=440, margin=dict(l=10, r=10, t=5, b=20), legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5))
-        st.plotly_chart(fig_donut, use_container_width=True)
+            fig_donut.add_annotation(
+                text=f"<b>{total_trip_krw:,.0f}원</b><br><span style='font-size:12px; color:#A0AEC0;'>{center_sub_text}</span>", 
+                showarrow=False, 
+                align="center", 
+                font=dict(size=16)
+            )
+            fig_donut.update_layout(
+                height=440, 
+                margin=dict(l=10, r=10, t=5, b=20), 
+                legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5)
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
     else:
         st.info("기록된 지출 데이터가 없습니다.")
-
 # ------------------------------------------------------------------------------
 # 6.05.00 | Build Version & Sync Timestamp Footer
 # ------------------------------------------------------------------------------
