@@ -2338,46 +2338,66 @@ else:
 
     if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
 
-    # --------------------------------------------------------------------------
-    # 6.00.02 | 메인 4대 탭 Option Menu (아이콘 제거 ➔ 모바일 1줄 완벽 고정)
-    # --------------------------------------------------------------------------
-    main_tab_choice = option_menu(
+    # ==============================================================================
+# [Module 6.00.02] Main Navigation Router (Mobile 1-Line Fixed Patch)
+# ==============================================================================
+def render_main_navbar(current_selection: str = "가계부") -> str:
+    """
+    메인 4대 탭 네비게이션 바를 렌더링합니다.
+    - 화살표(아이콘)를 완전히 숨기고(display: none),
+    - flex-wrap: nowrap 및 슬림 패딩을 적용하여 모바일 화면에서도 1줄 고정 레이아웃을 보장합니다.
+    """
+    from streamlit_option_menu import option_menu
+
+    # 메인 4대 탭 정의
+    menu_options = ["가계부", "일일Data", "돋보기", "전체요약"]
+    
+    # 기본 인덱스 매핑 (현재 선택값 보존)
+    default_index = 0
+    if current_selection in menu_options:
+        default_index = menu_options.index(current_selection)
+
+    selected_tab = option_menu(
         menu_title=None,
-        options=["가계부", "일일Data", "돋보기", "전체요약"],
-        default_index=0,
+        options=menu_options,
+        default_index=default_index,
         orientation="horizontal",
         styles={
             "container": {
                 "padding": "0px !important",
-                "background-color": "transparent",
-                "margin-bottom": "14px",
-                "gap": "6px"
+                "margin": "0px auto 10px auto !important",
+                "background-color": "#1E293B",
+                "border-radius": "8px",
+                "display": "flex !important",
+                "flex-wrap": "nowrap !important",
+                "justify-content": "space-between !important",
+                "width": "100% !important",
+            },
+            "icon": {
+                "display": "none !important"  # ▷ 화살표/아이콘 영역 완전 소멸
             },
             "nav-link": {
-                "font-size": "14px",
-                "font-weight": "600",
-                "text-align": "center",
-                "margin": "0px",
-                "padding": "8px 6px",
-                "white-space": "nowrap",
-                "background-color": "#1E293B",
-                "color": "#38BDF8",
-                "border-radius": "8px",
-                "border": "1.5px solid #475569",
-                "box-shadow": "0 2px 4px rgba(0,0,0,0.25)",
-                "--hover-color": "#334155"
+                "font-size": "13.5px !important",
+                "font-weight": "500 !important",
+                "text-align": "center !important",
+                "padding": "8px 2px !important",
+                "margin": "0px 1px !important",
+                "color": "#94A3B8 !important",
+                "white-space": "nowrap !important",
+                "flex": "1 1 0% !important",  # 4개 탭 균등 분배
+                "--hover-color": "#334155 !important",
+                "border-radius": "6px",
             },
             "nav-link-selected": {
-                "background-color": "#FF9E00",
-                "background-image": "linear-gradient(135deg, #FF9E00 0%, #EA580C 100%)",
-                "color": "#FFFFFF",
-                "font-size": "14.5px",
-                "font-weight": "800",
-                "border": "1.5px solid #FFA500",
-                "box-shadow": "0 4px 12px rgba(255, 158, 0, 0.35)"
-            }
-        }
+                "background-color": "#2563EB !important",
+                "color": "#FFFFFF !important",
+                "font-weight": "700 !important",
+            },
+        },
+        key="main_navigation_bar"
     )
+
+    return selected_tab
 
     # ==========================================================================
     # 6.01.00 | Unified Ledger Console (가계부 탭)
