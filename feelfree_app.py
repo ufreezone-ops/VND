@@ -2261,7 +2261,13 @@ elif st.session_state.get('show_new_trip', False):
 else:
     st.title(f"{st.session_state.current_trip}")
     
-    tab_main, tab_stats, tab_market, tab_final = st.tabs(["가계부", "일일Data", "돋보기", "전체요약"])
+    # 💡 [안 1 적용] 투명 전각 공백(\u2003\u2003)으로 주황색 뱃지 좌우 여백 시원하게 확장
+    tab_main, tab_stats, tab_market, tab_final = st.tabs([
+        "\u2003\u2003가계부\u2003\u2003", 
+        "\u2003\u2003일일Data\u2003\u2003", 
+        "\u2003\u2003돋보기\u2003\u2003", 
+        "\u2003\u2003전체요약\u2003\u2003"
+    ])
 
     # --------------------------------------------------------------------------
     # 6.01.00 | Unified Ledger Console (가계부 통합 콘솔)
@@ -3841,7 +3847,12 @@ else:
 
             return "<br>".join(lines)
 
-        sub_tab_cart, sub_tab_food, sub_tab_relax = st.tabs(["장바구니", "식당·카페", "마사지 · 교통"])
+        # 💡 [안 1 적용] 돋보기 서브탭 뱃지도 좌우 전각 공백(\u2003\u2003)으로 균형 있게 확장
+        sub_tab_cart, sub_tab_food, sub_tab_relax = st.tabs([
+            "\u2003\u2003장바구니\u2003\u2003", 
+            "\u2003\u2003식당·카페\u2003\u2003", 
+            "\u2003\u2003마사지 · 교통\u2003\u2003"
+        ])
         
         if not ledger_df.empty:
             # ------------------------------------------------------------------
