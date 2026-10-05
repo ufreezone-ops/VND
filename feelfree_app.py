@@ -233,13 +233,14 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 1.05.03 | Tab Navigation CSS (PC 시원한 여백 & 모바일 1줄 고정 반응형 엔진)
-tab_bg_unselected = "#18202E" if is_dark else "#E2E8F0"
+# 1.05.03 | Tab Navigation CSS (클릭 직관성 극대화: 슬레이트 뱃지 & 오렌지 활성 탭)
+tab_bg_unselected = "#1E293B" if is_dark else "#E2E8F0"
+tab_border_unselected = "#475569" if is_dark else "#CBD5E1"
 tab_text_unselected = "#38BDF8" if is_dark else "#0284C7"
 
 st.markdown(f"""
     <style>
-    /* 1. PC 기본: 탭 컨테이너 */
+    /* 1. 탭 리스트 컨테이너 */
     [data-baseweb="tab-list"] {{ 
         display: flex !important; 
         gap: 8px !important; 
@@ -250,7 +251,7 @@ st.markdown(f"""
         width: 100% !important;
     }}
     
-    /* 2. PC 기본: 탭 버튼 껍데기 */
+    /* 2. 비활성 탭 버튼: 누를 수 있는 명확한 독립 슬레이트 뱃지 형태 */
     button[data-baseweb="tab"],
     [data-baseweb="tab"] {{ 
         flex: 1 1 0% !important; 
@@ -258,7 +259,8 @@ st.markdown(f"""
         min-height: 44px !important;
         background-color: {tab_bg_unselected} !important; 
         border-radius: 10px !important; 
-        border: 1px solid #334155 !important; 
+        border: 1.5px solid {tab_border_unselected} !important; 
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
         display: inline-flex !important; 
         align-items: center !important; 
         justify-content: center !important; 
@@ -266,9 +268,18 @@ st.markdown(f"""
         margin: 0px !important;
         cursor: pointer !important;
         padding: 0px !important;
+        transition: all 0.2s ease-in-out !important;
+    }}
+
+    /* 3. 비활성 탭 마우스/터치 호버 반응 (클릭 가능한 버튼 피드백) */
+    button[data-baseweb="tab"]:hover,
+    [data-baseweb="tab"]:hover {{
+        background-color: #334155 !important;
+        border-color: #38BDF8 !important;
+        box-shadow: 0 3px 8px rgba(56, 189, 248, 0.2) !important;
     }}
     
-    /* 3. PC 기본: 탭 텍스트 */
+    /* 4. 비활성 탭 텍스트 폰트 & 컬러 */
     button[data-baseweb="tab"] p,
     [data-baseweb="tab"] p {{ 
         font-size: 15px !important; 
@@ -277,15 +288,20 @@ st.markdown(f"""
         margin: 0px !important; 
         letter-spacing: 0.2px !important;
         white-space: nowrap !important;
+        transition: color 0.2s ease !important;
+    }}
+    button[data-baseweb="tab"]:hover p,
+    [data-baseweb="tab"]:hover p {{
+        color: #FFFFFF !important;
     }}
     
-    /* 4. 활성 선택 탭 (오렌지 그라데이션) */
+    /* 5. 선택된 활성 탭 (선명한 오렌지 뱃지) */
     button[data-baseweb="tab"][aria-selected="true"],
     [data-baseweb="tab"][aria-selected="true"],
     [aria-selected="true"] {{ 
         background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; 
-        border: 1px solid #FFA500 !important; 
-        box-shadow: 0 4px 12px rgba(255, 158, 0, 0.25) !important;
+        border: 1.5px solid #FFA500 !important; 
+        box-shadow: 0 4px 14px rgba(255, 158, 0, 0.35) !important;
     }}
     button[data-baseweb="tab"][aria-selected="true"] p,
     [data-baseweb="tab"][aria-selected="true"] p,
@@ -295,13 +311,13 @@ st.markdown(f"""
         font-weight: 800 !important; 
     }}
     
-    /* 5. BaseWeb 기본 밑줄 제거 */
+    /* 6. BaseWeb 기본 밑줄 제거 */
     [data-baseweb="tab-highlight"], 
     [data-baseweb="tab-border"] {{ 
         display: none !important; 
     }}
 
-    /* 📱 6. 모바일 반응형 미디어 쿼리 (화면 폭 600px 이하에서 4개 탭 1줄 완벽 고정) */
+    /* 📱 7. 모바일 반응형 미디어 쿼리 (화면 폭 600px 이하 1줄 완벽 고정) */
     @media (max-width: 600px) {{
         [data-baseweb="tab-list"] {{ 
             gap: 4px !important; 
@@ -313,6 +329,7 @@ st.markdown(f"""
             height: 38px !important; 
             min-height: 38px !important;
             border-radius: 8px !important;
+            border-width: 1px !important;
             padding: 0px !important;
         }}
         button[data-baseweb="tab"] p,
