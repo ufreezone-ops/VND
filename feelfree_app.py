@@ -233,34 +233,29 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 1.05.03 | Tab Navigation CSS (부모 의존성 완전 배제: 100% 강제 적용 뱃지 탭 엔진)
+# 1.05.03 | Tab Navigation CSS (PC 시원한 여백 & 모바일 1줄 고정 반응형 엔진)
 tab_bg_unselected = "#18202E" if is_dark else "#E2E8F0"
 tab_text_unselected = "#38BDF8" if is_dark else "#0284C7"
 
 st.markdown(f"""
     <style>
-    /* 1. 탭 리스트 컨테이너 (부모 선택자 없이 단독 타겟팅) */
+    /* 1. PC 기본: 탭 컨테이너 */
     [data-baseweb="tab-list"] {{ 
         display: flex !important; 
-        gap: 10px !important; 
-        padding: 4px 6px !important; 
+        gap: 8px !important; 
+        padding: 4px 2px !important; 
         background: transparent !important; 
         margin-bottom: 16px !important; 
         border: none !important;
         width: 100% !important;
     }}
     
-    /* 2. 모든 탭 버튼 껍데기 (비활성/활성 공통: 너비 100% 균등 분할 & 좌우 24px 패딩) */
+    /* 2. PC 기본: 탭 버튼 껍데기 */
     button[data-baseweb="tab"],
     [data-baseweb="tab"] {{ 
         flex: 1 1 0% !important; 
         height: 44px !important; 
         min-height: 44px !important;
-        min-width: 90px !important;
-        padding-left: 24px !important; 
-        padding-right: 24px !important; 
-        padding-top: 0px !important;
-        padding-bottom: 0px !important;
         background-color: {tab_bg_unselected} !important; 
         border-radius: 10px !important; 
         border: 1px solid #334155 !important; 
@@ -270,51 +265,66 @@ st.markdown(f"""
         box-sizing: border-box !important;
         margin: 0px !important;
         cursor: pointer !important;
-        transition: all 0.2s ease-in-out !important;
-    }}
-
-    /* 3. 탭 버튼 내부 컨테이너 패딩 초기화 */
-    button[data-baseweb="tab"] > div,
-    [data-baseweb="tab"] > div {{
         padding: 0px !important;
-        margin: 0px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
     }}
     
-    /* 4. 비활성 탭 텍스트 폰트 & 컬러 */
+    /* 3. PC 기본: 탭 텍스트 */
     button[data-baseweb="tab"] p,
     [data-baseweb="tab"] p {{ 
-        font-size: 15.5px !important; 
+        font-size: 15px !important; 
         font-weight: 600 !important; 
         color: {tab_text_unselected} !important; 
         margin: 0px !important; 
-        padding: 0px 4px !important;
-        letter-spacing: 0.3px !important;
+        letter-spacing: 0.2px !important;
         white-space: nowrap !important;
     }}
     
-    /* 5. 선택된 활성 탭 (오렌지 그라데이션 뱃지: 좌우 24px 넉넉한 패딩 완벽 상속) */
+    /* 4. 활성 선택 탭 (오렌지 그라데이션) */
     button[data-baseweb="tab"][aria-selected="true"],
     [data-baseweb="tab"][aria-selected="true"],
     [aria-selected="true"] {{ 
         background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important; 
         border: 1px solid #FFA500 !important; 
-        box-shadow: 0 4px 14px rgba(255, 158, 0, 0.3) !important;
+        box-shadow: 0 4px 12px rgba(255, 158, 0, 0.25) !important;
     }}
     button[data-baseweb="tab"][aria-selected="true"] p,
     [data-baseweb="tab"][aria-selected="true"] p,
     [aria-selected="true"] p {{ 
         color: #FFFFFF !important; 
-        font-size: 16px !important; 
+        font-size: 15.5px !important; 
         font-weight: 800 !important; 
     }}
     
-    /* 6. BaseWeb 디폴트 밑줄 인디케이터 완전 제거 */
+    /* 5. BaseWeb 기본 밑줄 제거 */
     [data-baseweb="tab-highlight"], 
     [data-baseweb="tab-border"] {{ 
         display: none !important; 
+    }}
+
+    /* 📱 6. 모바일 반응형 미디어 쿼리 (화면 폭 600px 이하에서 4개 탭 1줄 완벽 고정) */
+    @media (max-width: 600px) {{
+        [data-baseweb="tab-list"] {{ 
+            gap: 4px !important; 
+            padding: 0px !important;
+            margin-bottom: 12px !important;
+        }}
+        button[data-baseweb="tab"],
+        [data-baseweb="tab"] {{ 
+            height: 38px !important; 
+            min-height: 38px !important;
+            border-radius: 8px !important;
+            padding: 0px !important;
+        }}
+        button[data-baseweb="tab"] p,
+        [data-baseweb="tab"] p {{ 
+            font-size: 13.5px !important; 
+            letter-spacing: -0.2px !important;
+        }}
+        button[data-baseweb="tab"][aria-selected="true"] p,
+        [data-baseweb="tab"][aria-selected="true"] p,
+        [aria-selected="true"] p {{ 
+            font-size: 14px !important; 
+        }}
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -2261,12 +2271,12 @@ elif st.session_state.get('show_new_trip', False):
 else:
     st.title(f"{st.session_state.current_trip}")
     
-    # 💡 [안 1 적용] 투명 전각 공백(\u2003\u2003)으로 주황색 뱃지 좌우 여백 시원하게 확장
+    # 💡 유니코드 1칸(\u2003) 적용으로 모바일 1줄 정렬 & PC 여백 확보
     tab_main, tab_stats, tab_market, tab_final = st.tabs([
-        "\u2003\u2003가계부\u2003\u2003", 
-        "\u2003\u2003일일Data\u2003\u2003", 
-        "\u2003\u2003돋보기\u2003\u2003", 
-        "\u2003\u2003전체요약\u2003\u2003"
+        "\u2003가계부\u2003", 
+        "\u2003일일Data\u2003", 
+        "\u2003돋보기\u2003", 
+        "\u2003전체요약\u2003"
     ])
 
     # --------------------------------------------------------------------------
@@ -3847,11 +3857,11 @@ else:
 
             return "<br>".join(lines)
 
-        # 💡 [안 1 적용] 돋보기 서브탭 뱃지도 좌우 전각 공백(\u2003\u2003)으로 균형 있게 확장
+        # 💡 유니코드 1칸(\u2003) 및 '마사지·교통' 공백 최적화 적용
         sub_tab_cart, sub_tab_food, sub_tab_relax = st.tabs([
-            "\u2003\u2003장바구니\u2003\u2003", 
-            "\u2003\u2003식당·카페\u2003\u2003", 
-            "\u2003\u2003마사지 · 교통\u2003\u2003"
+            "\u2003장바구니\u2003", 
+            "\u2003식당·카페\u2003", 
+            "\u2003마사지·교통\u2003"
         ])
         
         if not ledger_df.empty:
