@@ -7,3 +7,4 @@ yfinance
 st-gsheets-connection
 google-cloud-vision
 google-generativeai>=0.8.3  # 버전을 0.8.3 이상으로 확실히 상향
+streamlit-option-menu
