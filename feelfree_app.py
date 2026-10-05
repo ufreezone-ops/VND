@@ -1300,12 +1300,8 @@ def calculate_summary_metrics(df):
 
     return float(b_total), float(gross_spent - refund_total)
 
-# ==============================================================================
-# [Module 4.00.00] Sidebar & Navigation Control Tower (사이드바 및 전역 라우터)
-# ==============================================================================
-
 # ------------------------------------------------------------------------------
-# 4.01.00 | Sidebar Dashboard (지갑 잔고, 여정 관제탑, K단위 실물현금 카운터)
+# 4.01.00 | Sidebar Dashboard (지갑 잔고, 여정 관제탑, 실물현금 카운터, 보조통화 최하단)
 # ------------------------------------------------------------------------------
 # 4.01.01 | Physical Cash Cloud Pull Callback
 def cb_pull_cloud_cash(curr_c, counts_dict, b_list):
@@ -1337,7 +1333,6 @@ with st.sidebar:
 
         today_sb = datetime.now(TZ_KST).date()
         
-        # 1. 비행 D-Day 배지 생성
         if sb_dep_dt:
             diff_dep = (sb_dep_dt - today_sb).days
             if diff_dep > 0:
@@ -1353,7 +1348,6 @@ with st.sidebar:
         else:
             flight_badge = "<span style='color:#94A3B8; font-size:12px;'>🛫 출국 일정 미정</span>"
 
-        # 2. 호텔 취소 마감 D-Day 탐색
         hotel_rows = ledger_df[ledger_df['Category'] == '호텔']
         cancel_alerts = []
         for _, h_r in hotel_rows.iterrows():
@@ -1417,7 +1411,7 @@ with st.sidebar:
         if is_upcoming:
             render_dday_control_tower()
 
-        # 4.01.04 | Multi-Currency Dynamic Wallet Monitor & Physical Counter (Primary/Secondary 분리)
+        # 4.01.04 | 지갑 카드 렌더러 정의
         st.subheader("💰 지갑 잔고")
         b_val, spent_val = calculate_summary_metrics(ledger_df)
         
@@ -1602,14 +1596,9 @@ with st.sidebar:
                                     time.sleep(0.6); st.rerun()
             st.divider()
 
-        # 1. 메인 여행 통화 우선 노출 (오렌지 헤더)
+        # 1. 🌟 메인 여행 통화 우선 상단 노출 (오렌지 헤더)
         for c in primary_trip_currs:
             render_currency_card(c, is_secondary=False)
-
-        # 2. 보조 통화(사전결제 잔여분 등) 하단 노출 (밝은 청색 헤더)
-        if secondary_currs:
-            for c in secondary_currs:
-                render_currency_card(c, is_secondary=True)
 
         # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
@@ -1633,6 +1622,13 @@ with st.sidebar:
                 st.error(f"동기화 에러: {e_cr}")
             time.sleep(0.5)
             st.rerun()
+
+        # 2. 🌟 보조 통화(사전결제 잔여분 등) 최하단 분리 노출 (밝은 청색 헤더)
+        if secondary_currs:
+            st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+            st.caption("🌐 보조/기타 통화 잔고")
+            for c in secondary_currs:
+                render_currency_card(c, is_secondary=True)
 
 # ------------------------------------------------------------------------------
 # 4.02.00 | Top Navigation Router (여행지 선택 및 관제탑 모드 스위처)
@@ -3371,7 +3367,7 @@ if main_tab_choice == "가계부":
 
 
 # ==============================================================================
-# 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 슬림 대시보드)
+# 6.02.00 | Daily Statistics & Visualizer (일일Data 탭 - 슬림/심플 텍스트 대시보드)
 # ==============================================================================
 elif main_tab_choice == "일일Data":
     if not exp_df.empty:
@@ -3420,7 +3416,7 @@ elif main_tab_choice == "일일Data":
             all_cal_dates = [(dep_dt + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(total_calendar_days)]
             
             if 'Date_Clean' not in ovr_df.columns:
-                ovr_df['Date_Clean'] = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
+                ovr_df['Date_Clean'] = ovr_df['Date'].str.extract(r'(\d{4}-\d{2})-(\d{2})')[0]
                 
             existing_clean_dates = set(ovr_df['Date_Clean'].dropna().unique())
             missing_dates = [d for d in all_cal_dates if d not in existing_clean_dates]
@@ -3444,12 +3440,12 @@ elif main_tab_choice == "일일Data":
                     })
                 ovr_df = pd.concat([ovr_df, pd.DataFrame(dummy_rows)], ignore_index=True)
         else:
-            total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0].nunique()
+            total_calendar_days = ovr_df['Date'].str.extract(r'(\d{4}-\d{2})-(\d{2})')[0].nunique()
 
         if not ovr_df.empty:
             ovr_df = ovr_df.copy()
             if 'Date_Clean' not in ovr_df.columns:
-                ovr_df['Date_Clean'] = ovr_df['Date'].str.extract(r'(\d{4}-\d{2}-\d{2})')[0]
+                ovr_df['Date_Clean'] = ovr_df['Date'].str.extract(r'(\d{4}-\d{2})-(\d{2})')[0]
                 
             ovr_df = ovr_df.sort_values(by='Date_Clean', kind='mergesort')
             unique_clean_dates = sorted([d for d in ovr_df['Date_Clean'].dropna().unique()])
@@ -3525,7 +3521,8 @@ elif main_tab_choice == "일일Data":
                 </div>
             """, unsafe_allow_html=True)
 
-            st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>🛡️ 필수지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
+            # 1. 🌟 필수지출 차트 (이모티콘 및 범례명 'Category' 완전 삭제)
+            st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>필수지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
             surv_chart_df = ovr_df[ovr_df['IsSurvival'] == 1].copy()
             if not surv_chart_df.empty:
                 surv_chart_df['Date_Display'] = surv_chart_df['Date_Clean'].map(date_label_map)
@@ -3545,8 +3542,12 @@ elif main_tab_choice == "일일Data":
                         annotation_yshift=14
                     )
                 fig_surv.update_layout(
-                    margin=dict(l=10, r=10, t=20, b=50), xaxis_title=None, yaxis_title=None,
-                    legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=390
+                    margin=dict(l=10, r=10, t=20, b=50), 
+                    xaxis_title=None, 
+                    yaxis_title=None,
+                    legend_title_text="",  # 범례 Category 글자 삭제
+                    legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, title=None), 
+                    height=390
                 )
                 fig_surv.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
                 fig_surv.update_yaxes(fixedrange=True, tickfont=dict(size=16, color="#CBD5E1"))
@@ -3556,7 +3557,8 @@ elif main_tab_choice == "일일Data":
 
             st.markdown("<div style='margin: 25px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
-            st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>📊 일별 총지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
+            # 2. 🌟 일별 총지출 차트 (이모티콘 및 범례명 'Category' 완전 삭제)
+            st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>일별 총지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
             total_chart_df = ovr_df.copy()
             total_chart_df['Date_Display'] = total_chart_df['Date_Clean'].map(date_label_map)
 
@@ -3576,8 +3578,12 @@ elif main_tab_choice == "일일Data":
                     annotation_yshift=14
                 )
             fig_tot.update_layout(
-                margin=dict(l=10, r=10, t=20, b=50), xaxis_title=None, yaxis_title=None,
-                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), height=390
+                margin=dict(l=10, r=10, t=20, b=50), 
+                xaxis_title=None, 
+                yaxis_title=None,
+                legend_title_text="",  # 범례 Category 글자 삭제
+                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, title=None), 
+                height=390
             )
             fig_tot.update_xaxes(fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=[date_label_map[d] for d in unique_clean_dates])
             fig_tot.update_yaxes(fixedrange=True, tickfont=dict(size=16, color="#CBD5E1"))
@@ -3585,7 +3591,7 @@ elif main_tab_choice == "일일Data":
 
         st.divider()
         
-        # --- 6.02.03 | 일별 총액 vs 필수지출 피벗 테이블 ---
+        # 3. 🌟 일별 총액 vs 필수지출 피벗 테이블 (요약행 배경색 주입 & 폰트 불변)
         daily_set = ovr_df.groupby('Date').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date', 'Country', 'KRW_val', 'Local_val'])
         surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date', 'S_KRW', 'S_Loc'])
         daily_table = pd.merge(daily_set, surv_only, on='Date', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3641,21 +3647,19 @@ elif main_tab_choice == "일일Data":
 
             final_table_with_summary = pd.concat([display_table, summary_display], ignore_index=True)
             
+            # 🌟 폰트는 손대지 않고, 요약 2개 행에 배경색(Highlight)만 주입
             def style_daily_pivot_table(df_display):
                 styles = pd.DataFrame('', index=df_display.index, columns=df_display.columns)
                 loc_cols = [c for c in df_display.columns if f"({LOCAL_SYM})" in c]
                 for col in loc_cols:
-                    styles[col] = 'background-color: rgba(2, 132, 199, 0.12); color: #38BDF8; font-weight: 600;'
+                    styles[col] = 'background-color: rgba(2, 132, 199, 0.12);'
 
                 for idx in df_display.index:
                     row_date = str(df_display.loc[idx, '날짜'])
                     if row_date in ['합계(Sum)', '일평균(Avg)']:
                         for col in df_display.columns:
-                            if col in loc_cols:
-                                styles.loc[idx, col] = 'background-color: rgba(245, 158, 11, 0.35); font-weight: 800; color: #FACC15; border-top: 1px solid #F59E0B;'
-                            else:
-                                styles.loc[idx, col] = 'background-color: rgba(245, 158, 11, 0.22); font-weight: bold; color: #FACC15; border-top: 1px solid #F59E0B;'
-                    return styles
+                            styles.loc[idx, col] = 'background-color: rgba(245, 158, 11, 0.22);'
+                return styles
 
             styled_daily_table = final_table_with_summary.style.apply(style_daily_pivot_table, axis=None).format({
                 f'총({LOCAL_SYM})': fmt_local, '총(원)': '{:,.0f}', f'필수({LOCAL_SYM})': fmt_local, '필수(원)': '{:,.0f}'
