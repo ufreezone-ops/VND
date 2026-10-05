@@ -2288,7 +2288,7 @@ elif st.session_state.get('show_new_trip', False):
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 6.00.01 | Common Preprocessing & Financial Calculation Engine (exp_df 생성)
+# 6.00.01 | Common Preprocessing & Financial Calculation Engine (exp_df 승격 생성)
 # ------------------------------------------------------------------------------
 trip_nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
 node_keys = list(trip_nodes.keys())
@@ -2296,23 +2296,40 @@ is_single_country = len(node_keys) <= 1
 sel_node_default = node_keys[0] if node_keys else FIRST_NODE_NAME
 
 # 여정 출국/귀국 날짜 및 시차 공통 계산
-dep_rows_tz = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
-korea_dep_tz = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
-t_dep_tz = korea_dep_tz if not korea_dep_tz.empty else dep_rows_tz
+def is_korea_port_common(text):
+    txt = str(text).replace(" ", "")
+    return any(k in txt for k in ['한국', '인천', '부산', '김포', '대구', '제주', '청주', '귀국', 'ICN', 'PUS'])
 
+def is_foreign_transit_common(cat_str):
+    cat = str(cat_str).strip()
+    if "_" in cat:
+        sub_port = cat.split("_")[-1].strip()
+        if not is_korea_port_common(sub_port): return True
+    return False
+
+dep_candidates = ledger_df[ledger_df['Category'].str.contains('출국', na=False) & ~ledger_df['Category'].apply(is_foreign_transit_common)]
+korea_dep = ledger_df[ledger_df['Category'].apply(is_korea_port_common)]
+target_dep_row = korea_dep if not korea_dep.empty else dep_candidates
+
+dep_date_str = ""
 dep_dt_calc = None
-if not t_dep_tz.empty:
-    m_d = re.search(r'(\d{4}-\d{2})-(\d{2})', str(t_dep_tz.iloc[0]['Date']))
-    if m_d: dep_dt_calc = datetime.strptime(m_d.group(0), "%Y-%m-%d").date()
+if not target_dep_row.empty:
+    m_d = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_dep_row.iloc[0]['Date']))
+    if m_d: 
+        dep_date_str = m_d.group(0)
+        dep_dt_calc = datetime.strptime(dep_date_str, "%Y-%m-%d").date()
 
-arr_rows_tz = ledger_df[ledger_df['Category'].str.contains('귀국|입국', na=False)]
-korea_arr_tz = ledger_df[ledger_df['Category'].str.contains('귀국_한국|귀국.*한국|입국_한국|입국.*한국', na=False)]
-t_arr_tz = korea_arr_tz if not korea_arr_tz.empty else arr_rows_tz
+korea_arr = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False) & ledger_df['Category'].apply(is_korea_port_common)]
+arr_candidates = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False) & ~ledger_df['Category'].apply(is_foreign_transit_common)]
+target_arr_row = korea_arr if not korea_arr.empty else arr_candidates
 
+arr_date_str = ""
 arr_dt_calc = None
-if not t_arr_tz.empty:
-    m_a = re.search(r'(\d{4}-\d{2})-(\d{2})', str(t_arr_tz.iloc[-1]['Date']))
-    if m_a: arr_dt_calc = datetime.strptime(m_a.group(0), "%Y-%m-%d").date()
+if not target_arr_row.empty:
+    m_a = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
+    if m_a: 
+        arr_date_str = m_a.group(0)
+        arr_dt_calc = datetime.strptime(arr_date_str, "%Y-%m-%d").date()
 
 today_kst_now = datetime.now(TZ_KST).date()
 is_traveling_now = bool(dep_dt_calc and arr_dt_calc and dep_dt_calc <= today_kst_now <= arr_dt_calc)
@@ -2336,7 +2353,17 @@ def safe_parse_date_obj(d_str, fallback):
 
 if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
 
-# 🔥 [핵심 비즈니스 규칙] 지출 원장(exp_df) 및 필수지출(IsSurvival) 엔진 구성
+# 🔥 [전역 공통 판별 함수] 고정비/사전결제 여부 판별
+def check_is_fixed_cost(row):
+    orig_d = str(row['Date']).strip()
+    m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
+    pure_d = m_row.group(0) if m_row else ""
+    if dep_date_str and pure_d and pure_d < dep_date_str: return True
+    cat = str(row['Category']).strip()
+    met = str(row['PaymentMethod']).strip()
+    return (met == '원화계좌(한국)') or (cat in FIXED_COST_CATS)
+
+# 🔥 [핵심 비즈니스 규칙] 지출 원장(exp_df), 필수지출(IsSurvival), 고정비(IsFixedCost) 일괄 전처리
 exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
 if not exp_df.empty:
     exp_df['KRW_val'] = exp_df.apply(
@@ -2351,23 +2378,16 @@ if not exp_df.empty:
     def check_is_survival_cost(row):
         cat = str(row['Category']).strip()
         met = str(row['PaymentMethod']).strip()
-        desc = str(row['Description']).strip().lower()
-
-        # 1. 무조건 제외 대상: 선물/쇼핑, 숙박, 항공, 렌트카, 보험/통신/수수료, 보증금, 개인지출
         if cat in ['선물', '쇼핑', '호텔', '숙박', '항공권', '출국', '귀국', '렌트카', '보험', '통신', '수수료', '보증금', '개인지출']:
             return 0
-        
-        # 2. 사전 원화 결제분 제외 (단, 현지 결제분은 필수지출 인정)
         if met in ['원화계좌(한국)', '해외송금(한국계좌)']:
             return 0
-
-        # 3. 필수지출 포함 대상 (식음료, 로컬교통, 마사지, 팁, 현지 투어/입장료, 현지 기차, 상환)
         if cat in ['식사', '간식', '마트', 'Grab', 'VinBus', 'DiDi', '지하철', '택시', '교통', '마사지', '팁', '투어', '입장료', '기차', '상환']:
             return 1
-            
         return 0
 
     exp_df['IsSurvival'] = exp_df.apply(check_is_survival_cost, axis=1)
+    exp_df['IsFixedCost'] = exp_df.apply(check_is_fixed_cost, axis=1)
 
 # ------------------------------------------------------------------------------
 # 6.00.02 | Main 4-Tab Navigation Bar (Mobile 1-Line & Arrow Removal)
@@ -4215,7 +4235,7 @@ elif main_tab_choice == "돋보기":
 
 
 # ==============================================================================
-# 6.04.00 | Final Settlement Dashboard (전체요약 탭)
+# 6.04.00 | Final Settlement Dashboard (전체요약 탭 - NameError 완벽 방어)
 # ==============================================================================
 elif main_tab_choice == "전체요약":
     if not exp_df.empty:
@@ -4229,28 +4249,14 @@ elif main_tab_choice == "전체요약":
         total_nights = sum(float(n) for n in nights_match) if nights_match else 7
         if total_nights == 0: total_nights = 7 
 
-        is_fixed_cost_final = exp_df['IsFixedCost'] if 'IsFixedCost' in exp_df.columns else exp_df.apply(check_is_fixed_cost, axis=1)
+        # 6.00.01에서 미리 안전하게 계산된 IsFixedCost 참조
+        is_fixed_cost_final = exp_df['IsFixedCost']
         dom_total_krw = exp_df[is_fixed_cost_final]['KRW_val'].sum()
         ovr_total_krw = total_trip_krw - dom_total_krw
         ovr_total_loc = exp_df[~is_fixed_cost_final]['Local_val'].sum()
 
-        korea_dep_rows = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
-        dep_rows_all = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
-        t_dep = korea_dep_rows if not korea_dep_rows.empty else (dep_rows_all[~dep_rows_all['Category'].str.contains('_', na=False)] if not dep_rows_all.empty else dep_rows_all)
-        
-        dep_dt_f = None
-        if not t_dep.empty:
-            m_df = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_dep.iloc[0]['Date']))
-            if m_df: dep_dt_f = datetime.strptime(m_df.group(0), "%Y-%m-%d").date()
-
-        korea_arr_rows = ledger_df[ledger_df['Category'].str.contains('입국_한국|입국.*한국', na=False)]
-        arr_rows_all = ledger_df[ledger_df['Category'].str.contains('입국|귀국', na=False)]
-        t_arr = korea_arr_rows if not korea_arr_rows.empty else (arr_rows_all[~arr_rows_all['Category'].str.contains('_', na=False)] if not arr_rows_all.empty else arr_rows_all)
-        
-        arr_dt_f = None
-        if not t_arr.empty:
-            m_af = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(t_arr.iloc[-1]['Date']))
-            if m_af: arr_dt_f = datetime.strptime(m_af.group(0), "%Y-%m-%d").date()
+        dep_dt_f = dep_dt_calc
+        arr_dt_f = arr_dt_calc
 
         if dep_dt_f and arr_dt_f: trip_days_count = max(1, (arr_dt_f - dep_dt_f).days + 1)
         else: trip_days_count = max(1, int(total_nights))
