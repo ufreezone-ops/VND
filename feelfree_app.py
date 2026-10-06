@@ -1346,12 +1346,87 @@ def recalculate_entire_ledger(df):
 # ------------------------------------------------------------------------------
 # 2.05.00 | Cloud Persistence & Inventory Synchronization (클라우드 동기화 및 가드)
 # ------------------------------------------------------------------------------
-# 2.05.01 | Anti-Wipe Cloud Committer
+# 2.05.01 | Memory Mutation & Dirty-State Manager
+LEDGER_BACKUP_INTERVAL_SECONDS = 180  # 3분
+
+def mark_ledger_dirty():
+    """원장 변경을 메모리에만 반영했음을 표시한다. Google Sheets에는 접근하지 않는다."""
+    st.session_state['ledger_dirty'] = True
+    st.session_state['ledger_mutation_count'] = int(st.session_state.get('ledger_mutation_count', 0)) + 1
+    st.session_state['ledger_order_dirty'] = True
+
+
+def _invalidate_post_commit_lookup_caches():
+    """정식 저장 후 다른 화면의 조회 캐시만 무효화한다. active_ledger_df는 유지한다."""
+    st.session_state.pop('all_trips_lookup_df', None)
+    for fn_name in ['_load_all_trips_data_cloud', 'load_all_trips_data']:
+        try:
+            fn = globals().get(fn_name)
+            if fn is not None and hasattr(fn, 'clear'):
+                fn.clear()
+        except Exception:
+            pass
+
+
 def save_data(df, metrics=None):
-    if df is None or df.empty: 
+    """
+    기존 save_data의 이름은 유지하되, 이제는 '메모리 저장'만 담당한다.
+    Google Sheets 저장은 commit_ledger_to_cloud()에서 한 번에 수행한다.
+    """
+    if df is None or df.empty:
         st.error("🚨 저장하려는 데이터가 비어있습니다. 데이터 보호를 위해 저장을 중단합니다.")
         return False
-    
+
+    final_df = recalculate_entire_ledger(df)
+    st.session_state.active_ledger_df = final_df
+    st.session_state.last_loaded_sheet = ACTIVE_SHEET
+    mark_ledger_dirty()
+    return True
+
+
+# 2.05.02 | Atomic Ledger Appender (Memory-First)
+def append_new_data(new_rows_df):
+    """새 내역을 active_ledger_df에 추가하고 전체 정합성을 메모리에서 계산한다."""
+    if new_rows_df is None or new_rows_df.empty:
+        return False
+
+    latest_df = st.session_state.get('active_ledger_df')
+    if latest_df is None:
+        latest_df = load_data(ACTIVE_SHEET)
+
+    merged_df = pd.concat([latest_df, new_rows_df], ignore_index=True)
+    final_df = recalculate_entire_ledger(merged_df)
+    st.session_state.active_ledger_df = final_df
+    st.session_state.last_loaded_sheet = ACTIVE_SHEET
+    mark_ledger_dirty()
+    return True
+
+
+# 2.05.03 | Quick Order Swap Committer (Memory-First)
+def quick_swap_and_save(df):
+    """기존 호출부 호환용. 실제 클라우드 저장은 하지 않고 메모리만 갱신한다."""
+    try:
+        if df is None or len(df) < 1:
+            return False
+        final_df = recalculate_entire_ledger(df)
+        st.session_state.active_ledger_df = final_df
+        st.session_state.last_loaded_sheet = ACTIVE_SHEET
+        mark_ledger_dirty()
+        return True
+    except Exception as e:
+        st.error(f"🚨 메모리 순서 변경 실패: {e}")
+        return False
+
+
+# 2.05.03A | Explicit Cloud Committer (Single Final Save)
+def commit_ledger_to_cloud():
+    """현재 메모리 원장을 최종 계산한 뒤 Google Sheets에 단 한 번 확정 저장한다."""
+    df = st.session_state.get('active_ledger_df')
+    if df is None or df.empty:
+        st.error("🚨 저장할 원장 데이터가 없습니다.")
+        return False
+
+    # 기존 Anti-Wipe 보호장치는 '최종 저장'에서만 실행한다.
     existing_df = None
     for attempt in range(3):
         try:
@@ -1361,46 +1436,38 @@ def save_data(df, metrics=None):
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(2)
                 continue
-            st.error(f"🚨 클라우드 상태 확인 실패! 덮어쓰기 참사를 막기 위해 저장을 차단합니다. ({e})")
+            st.error(f"🚨 클라우드 상태 확인 실패! 안전을 위해 최종 저장을 중단합니다. ({e})")
             return False
 
-    if existing_df is not None and len(existing_df) > 5:
-        if len(df) <= 3:
-            st.error(f"🚨 **치명적 데이터 증발(Wipe) 시도 차단됨!** (클라우드: {len(existing_df)}건 -> 저장시도: {len(df)}건)")
-            return False
+    if existing_df is not None and len(existing_df) > 5 and len(df) <= 3:
+        st.error(
+            f"🚨 **치명적 데이터 증발(Wipe) 시도 차단됨!** "
+            f"(클라우드: {len(existing_df)}건 -> 저장시도: {len(df)}건)"
+        )
+        return False
 
-    final_df = recalculate_entire_ledger(df)
-    
+    final_df = recalculate_entire_ledger(df).reindex(columns=FINAL_COLUMNS).copy()
+
     for attempt in range(3):
         try:
-            conn.update(worksheet=ACTIVE_SHEET, data=final_df.reindex(columns=FINAL_COLUMNS))
-            smart_cache_clear()
+            conn.update(worksheet=ACTIVE_SHEET, data=final_df)
+            st.session_state.active_ledger_df = final_df
+            st.session_state.last_loaded_sheet = ACTIVE_SHEET
+            st.session_state['ledger_dirty'] = False
+            st.session_state['ledger_order_dirty'] = False
+            st.session_state['ledger_mutation_count'] = 0
+            st.session_state['last_cloud_commit_at'] = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
+            _invalidate_post_commit_lookup_caches()
             return True
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(2.5)
                 continue
-            st.error(f"🚨 클라우드 저장 실패: {e}")
+            st.error(f"🚨 Google Sheets 최종 저장 실패: {e}")
             return False
 
-# 2.05.02 | Atomic Ledger Appender
-def append_new_data(new_rows_df):
-    smart_cache_clear()
-    latest_df = load_data(ACTIVE_SHEET)
-    merged_df = pd.concat([latest_df, new_rows_df], ignore_index=True)
-    return save_data(merged_df)
 
-# 2.05.03 | Quick Order Swap Committer
-def quick_swap_and_save(df):
-    try:
-        if df is None or len(df) < 3: return False
-        conn.update(worksheet=ACTIVE_SHEET, data=df.reindex(columns=FINAL_COLUMNS))
-        smart_cache_clear()
-        return True
-    except Exception as e:
-        st.error(f"🚨 순서 변경 저장 실패: {e}")
-        return False
-
+# 2.05.04 | Cash Inventory Cloud Loader & Saver (Memory-First)
 # 2.05.04 | Cash Inventory Cloud Loader & Saver (Memory-First)
 def load_cash_inventory(force_cloud=False):
     # ⚡ 세션 메모리에 이미 있으면 구글 통신 0회 즉시 반환
@@ -1455,12 +1522,140 @@ def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
         st.error(f"🚨 지폐 실사 동기화 실패: {e}")
         return False
 
-# 2.05.05 | Pure Memory Cache Binder
+
+# 2.05.05 | Ledger Auto-Backup & Recovery Guard
+AUTO_BACKUP_PREFIX = "AUTO_BACKUP_"
+
+
+def _backup_sheet_name(sheet_name):
+    safe = re.sub(r"[^0-9A-Za-z가-힣_-]+", "_", str(sheet_name)).strip("_")
+    return (AUTO_BACKUP_PREFIX + safe)[:90]
+
+
+def _trip_name_for_sheet(sheet_name):
+    for trip_name, config in TRIP_CONFIGS.items():
+        if str(config.get('sheet')) == str(sheet_name):
+            return trip_name
+    return str(sheet_name)
+
+
+def _write_auto_backup_snapshot(df, sheet_name=None, trip_name=None):
+    """현재 메모리 원장을 별도 AUTO_BACKUP worksheet에 스냅샷으로 저장한다."""
+    if df is None or df.empty:
+        return False
+
+    target_sheet = str(sheet_name or ACTIVE_SHEET)
+    target_trip = str(trip_name or _trip_name_for_sheet(target_sheet))
+    backup_sheet = _backup_sheet_name(target_sheet)
+    backup_time = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
+
+    snapshot = df.reindex(columns=FINAL_COLUMNS).copy()
+    snapshot.insert(0, 'BackupTime', backup_time)
+    snapshot.insert(1, 'ActiveSheet', target_sheet)
+    snapshot.insert(2, 'TripName', target_trip)
+    snapshot.insert(3, 'RowCount', len(df))
+
+    try:
+        try:
+            conn.update(worksheet=backup_sheet, data=snapshot)
+        except Exception as e_update:
+            msg = str(e_update).lower()
+            if 'not found' in msg or 'worksheet' in msg and ('404' in msg or 'does not exist' in msg):
+                conn.create(worksheet=backup_sheet, data=snapshot)
+            else:
+                raise
+        return True
+    except Exception as e:
+        st.session_state['last_auto_backup_error'] = str(e)
+        return False
+
+
+def backup_active_ledger_to_cloud():
+    """현재 메모리 원장의 자동 백업을 즉시 실행한다. 정식 원장은 변경하지 않는다."""
+    df = st.session_state.get('active_ledger_df')
+    if df is None or df.empty:
+        return False
+
+    ok = _write_auto_backup_snapshot(df)
+    if ok:
+        now_str = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
+        st.session_state['last_auto_backup_at'] = now_str
+        st.session_state['last_auto_backup_sheet'] = ACTIVE_SHEET
+        st.session_state['last_auto_backup_error'] = ''
+    return ok
+
+
+def restore_auto_backup_from_cloud():
+    """현재 여행의 AUTO_BACKUP 스냅샷을 메모리로 복원한다. 복원 후에는 다시 최종 저장이 필요하다."""
+    backup_sheet = _backup_sheet_name(ACTIVE_SHEET)
+    try:
+        backup_df = conn.read(worksheet=backup_sheet, ttl="0s")
+        if backup_df is None or backup_df.empty:
+            st.error("🛡️ 복원할 자동 백업이 없습니다.")
+            return False
+
+        backup_df = backup_df[backup_df['ActiveSheet'].astype(str) == str(ACTIVE_SHEET)].copy() if 'ActiveSheet' in backup_df.columns else backup_df
+        if backup_df.empty:
+            st.error("🛡️ 현재 여행가계부와 일치하는 자동 백업이 없습니다.")
+            return False
+
+        data_df = backup_df.reindex(columns=FINAL_COLUMNS).copy()
+        data_df = data_df.dropna(how='all').reset_index(drop=True)
+        if data_df.empty:
+            st.error("🛡️ 자동 백업 데이터가 비어 있습니다.")
+            return False
+
+        final_df = recalculate_entire_ledger(data_df)
+        st.session_state.active_ledger_df = final_df
+        st.session_state.last_loaded_sheet = ACTIVE_SHEET
+        st.session_state['ledger_dirty'] = True
+        st.session_state['ledger_order_dirty'] = True
+        st.session_state['ledger_mutation_count'] = int(st.session_state.get('ledger_mutation_count', 0)) + 1
+        st.toast("🛡️ 자동 백업을 메모리로 복원했습니다. 확인 후 '변경사항 일괄 저장'을 눌러주세요.", icon="🔄")
+        return True
+    except Exception as e:
+        st.error(f"🚨 자동 백업 복원 실패: {e}")
+        return False
+
+
+@st.fragment(run_every="3m")
+def _ledger_auto_backup_fragment():
+    """3분마다 메모리 변경사항을 별도 백업 시트에 저장한다."""
+    if not st.session_state.get('ledger_dirty', False):
+        return
+
+    backup_active_ledger_to_cloud()
+
+
+# 2.05.06 | Pure Memory Cache Binder + Safe Trip Context
+if 'ledger_dirty' not in st.session_state:
+    st.session_state['ledger_dirty'] = False
+if 'ledger_mutation_count' not in st.session_state:
+    st.session_state['ledger_mutation_count'] = 0
+
+_previous_working_sheet = st.session_state.get('ledger_working_sheet')
+if _previous_working_sheet and _previous_working_sheet != ACTIVE_SHEET and st.session_state.get('ledger_dirty', False):
+    # 여행가계부를 바꾸기 전에 현재 메모리 작업본을 먼저 안전 백업한다.
+    _write_auto_backup_snapshot(
+        st.session_state.get('active_ledger_df'),
+        sheet_name=_previous_working_sheet,
+        trip_name=_trip_name_for_sheet(_previous_working_sheet),
+    )
+
 if 'active_ledger_df' not in st.session_state or st.session_state.get('last_loaded_sheet') != ACTIVE_SHEET:
     st.session_state.active_ledger_df = load_data(ACTIVE_SHEET, force_cloud=False)
     st.session_state.last_loaded_sheet = ACTIVE_SHEET
+    st.session_state['ledger_dirty'] = False
+    st.session_state['ledger_order_dirty'] = False
+    st.session_state['ledger_mutation_count'] = 0
 
+st.session_state['ledger_working_sheet'] = ACTIVE_SHEET
 ledger_df = st.session_state.active_ledger_df
+
+# 자동 백업은 현재 화면과 독립적으로 3분마다 동작한다.
+_ledger_auto_backup_fragment()
+
+
 
 # ==============================================================================
 # [Module 3.00.00] URDI Engine (Unified Real-time Deductive Inventory)
@@ -2796,7 +2991,6 @@ main_tab_choice = option_menu(
 st.session_state["current_main_tab"] = main_tab_choice
 
 
-# ==============================================================================
 # 6.01.00 | Unified Ledger Console (가계부 탭)
 # ==============================================================================
 if main_tab_choice == "가계부":
@@ -2995,18 +3189,12 @@ if main_tab_choice == "가계부":
                     f_desc = f"[{final_gateway}] {desc}" if final_gateway else desc
                     new_rows_to_add.append({'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': cat, 'Description': f_desc.strip(), 'Currency': curr, 'Amount': total_amt_val, 'PaymentMethod': met, 'IsExpense': 1, 'AppliedRate': cr_final, 'Note': '', 'Receipt_URL': final_receipt_urls})
 
-                base_ledger = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state and not st.session_state.active_ledger_df.empty else load_data(ACTIVE_SHEET)
-                combined_df = pd.concat([base_ledger, pd.DataFrame(new_rows_to_add)], ignore_index=True)
-                final_saved_df = recalculate_entire_ledger(combined_df)
-                st.session_state.active_ledger_df = final_saved_df
-                
-                try: conn.update(worksheet=ACTIVE_SHEET, data=final_saved_df.reindex(columns=FINAL_COLUMNS))
-                except Exception as e_s: st.error(f"구글 시트 저장 실패: {e_s}"); st.stop()
-
-                st.toast("🎉 지출이 성공적으로 기록되었습니다!", icon="✅")
-                st.session_state.clear_exp_desc = True
-                time.sleep(0.4)
-                st.rerun()
+                new_rows_df = pd.DataFrame(new_rows_to_add)
+                if append_new_data(new_rows_df):
+                    st.toast("🎉 지출이 메모리에 기록되었습니다! Google Sheets는 최종 저장 시 한 번에 반영됩니다.", icon="✅")
+                    st.session_state.clear_exp_desc = True
+                    time.sleep(0.2)
+                    st.rerun()
 
         elif mode == "🛫 항공권(특수)":
             st.subheader("✈️ 항공권 및 스케줄 통합 기록")
@@ -3298,10 +3486,31 @@ if main_tab_choice == "가계부":
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
                 if append_new_data(new_row): st.toast("환불 롤백 완료!", icon="✅"); st.rerun()
 
-        # 6.01.03 | Filter & Ledger Table Engine
+
+
+            # 6.01.03 | Filter & Ledger Table Engine
     @st.fragment
     def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
+
+        # ☁️ 원장 저장은 이제 여기 하나로 통합한다. 모든 편집은 먼저 메모리에 반영된다.
+        if st.session_state.get('ledger_dirty', False):
+            c_save, c_backup = st.columns([3, 2])
+            with c_save:
+                st.warning("📝 **저장되지 않은 변경사항이 있습니다.** 현재 작업은 메모리에 안전하게 반영되어 있습니다.")
+                if st.button("☁️ 변경사항 일괄 저장", key="btn_commit_ledger_global", use_container_width=True, type="primary"):
+                    if commit_ledger_to_cloud():
+                        st.toast("☁️ 변경사항을 Google Sheets에 일괄 저장했습니다!", icon="✅")
+                        st.rerun(scope="fragment")
+            with c_backup:
+                backup_at = st.session_state.get('last_auto_backup_at')
+                backup_text = backup_at if backup_at else "아직 없음"
+                st.caption(f"🛡️ 자동 백업: 3분 간격\n\n마지막 백업: **{backup_text}**")
+            if st.button("🛡️ 지금 백업", key="btn_manual_ledger_backup", use_container_width=True):
+                if backup_active_ledger_to_cloud():
+                    st.toast("🛡️ 현재 메모리 원장을 자동 백업했습니다.", icon="✅")
+                    st.rerun(scope="fragment")
+
         viewer_placeholder = st.empty()
 
         # 🔥 검색결과 표와 행 이동의 단일 메모리 원본
@@ -3416,7 +3625,7 @@ if main_tab_choice == "가계부":
             styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
             col_cfg = {"Date": st.column_config.TextColumn("날짜", width=120), "Category": st.column_config.TextColumn("항목", width="small"), "Receipt_URL": link_cfg}
             
-            df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-cell", on_select="rerun")
+            df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-cell", on_select="rerun", key="ledger_result_table")
 
             # 선택 행은 "표시 위치"가 아니라 실제 ledger index로 기억한다.
             # 행 이동 직후에는 dataframe selection이 이전 화면 위치를 다시 보내올 수 있으므로
@@ -3497,7 +3706,7 @@ if main_tab_choice == "가계부":
                             cur_df = recalculate_entire_ledger(cur_df)
                             st.session_state.active_ledger_df = cur_df
                             st.session_state['ledger_selected_real_idx'] = cur_df.index[new_pos]
-                            st.session_state['ledger_order_dirty'] = True
+                            mark_ledger_dirty()
 
                             # 다음 fragment rerun에서는 dataframe이 기억하고 있는 옛 선택 위치를 한 번 무시한다.
                             st.session_state['ledger_ignore_selection_once'] = True
@@ -3519,26 +3728,6 @@ if main_tab_choice == "가계부":
                             if st.button("⏬ 5칸", key=f"btn_move_down5_{real_idx}", use_container_width=True):
                                 if move_ledger_row(5):
                                     st.rerun(scope="fragment")
-
-                        if st.session_state.get('ledger_order_dirty', False):
-                            st.warning("📝 순서 변경 내용이 메모리에만 반영되어 있습니다. Google Sheets에 저장하려면 아래 버튼을 눌러주세요.")
-                            if st.button("☁️ 변경된 순서를 Google Sheets에 저장", key="btn_commit_ledger_order", use_container_width=True, type="primary"):
-                                try:
-                                    save_df = st.session_state.active_ledger_df.reindex(columns=FINAL_COLUMNS).copy()
-                                    conn.update(worksheet=ACTIVE_SHEET, data=save_df)
-                                    # 저장 후에도 화면은 방금 저장한 메모리 DataFrame을 그대로 사용한다.
-                                    st.session_state.active_ledger_df = save_df.copy()
-                                    st.session_state['ledger_order_dirty'] = False
-                                    if 'all_trips_lookup_df' in st.session_state:
-                                        del st.session_state['all_trips_lookup_df']
-                                    try:
-                                        _load_all_trips_data_cloud.clear()
-                                    except Exception:
-                                        pass
-                                    st.toast("☁️ 변경된 순서를 저장했습니다!", icon="✅")
-                                    st.rerun(scope="fragment")
-                                except Exception as e_order:
-                                    st.error(f"🚨 순서 저장 실패: {e_order}")
 
                         amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
                         krw_equivalent = row_data['Amount'] if row_data['Currency'] == 'KRW' else row_data['Amount'] * row_data['AppliedRate']
@@ -3601,8 +3790,7 @@ if main_tab_choice == "가계부":
                                     target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else display_df
                                     if real_idx in target_df.index: target_df.at[real_idx, 'Receipt_URL'] = new_urls_str
                                     if save_data(target_df):
-                                        st.session_state.active_ledger_df = load_data(ACTIVE_SHEET)
-                                        st.toast(f"사진 #{idx+1} 삭제 완료!", icon="✅"); time.sleep(0.4); st.rerun()
+                                        st.toast(f"사진 #{idx+1} 삭제 완료! (메모리 반영)", icon="✅"); time.sleep(0.2); st.rerun(scope="fragment")
                         else: st.info("첨부된 영수증 사진이 없습니다.")
                             
                     with c_edit:
@@ -3663,7 +3851,7 @@ if main_tab_choice == "가계부":
                                             if smart_text:
                                                 st.session_state[desc_key] = smart_text
                                                 st.toast(f"기존 영수증 재스캔 완료! (총액: {tot_amt:,.0f})", icon="🎉")
-                                                st.rerun()
+                                                st.rerun(scope="fragment")
 
                         new_desc = st.text_area("4. 세부 내역 (수정/추가)", height=110, key=desc_key)
 
@@ -3713,7 +3901,7 @@ if main_tab_choice == "가계부":
                                     elif gift_amt_split > 0 and remaining_normal_amt > 0:
                                         st.success(f"✂️ **2개 행 분할**:\n• 기존 (`{edit_cat}`): **{remaining_normal_amt:,.0f}** {row_data['Currency']}\n• 신설 (`선물`): **{gift_amt_split:,.0f}** {row_data['Currency']}")
 
-                        if st.button("💾 이 내역 전체 업데이트 (선물 자동분할 동시적용)", use_container_width=True, type="primary"):
+                        if st.button("💾 이 내역 변경사항 적용 (선물 자동분할 동시적용)", use_container_width=True, type="primary"):
                             updated_rcpt_url = str(row_data.get('Receipt_URL', '')).strip()
                             if new_receipts:
                                 with st.spinner("📸 영수증 클라우드 전송 중..."):
@@ -3774,13 +3962,11 @@ if main_tab_choice == "가계부":
 
                             final_calc_df = recalculate_entire_ledger(target_df)
                             st.session_state.active_ledger_df = final_calc_df
-                            
-                            try: conn.update(worksheet=ACTIVE_SHEET, data=final_calc_df.reindex(columns=FINAL_COLUMNS))
-                            except: pass
+                            mark_ledger_dirty()
 
-                            st.toast("🎉 선물 분할 및 정합성 원샷 업데이트 완료!", icon="✅")
-                            time.sleep(0.3)
-                            st.rerun()
+                            st.toast("🎉 선물 분할 및 정합성 원샷 업데이트 완료! (메모리 반영)", icon="✅")
+                            time.sleep(0.2)
+                            st.rerun(scope="fragment")
 
                         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
                         if st.button("🚨 이 지출 내역 영구 삭제하기", key=f"btn_delete_row_{real_idx}", use_container_width=True):
@@ -3788,13 +3974,11 @@ if main_tab_choice == "가계부":
                             target_df = target_df.drop(real_idx).reset_index(drop=True)
                             final_calc_df = recalculate_entire_ledger(target_df)
                             st.session_state.active_ledger_df = final_calc_df
-                            
-                            try: conn.update(worksheet=ACTIVE_SHEET, data=final_calc_df.reindex(columns=FINAL_COLUMNS))
-                            except Exception as e_del: st.error(f"구글 시트 삭제 반영 실패: {e_del}"); st.stop()
-                                
-                            st.toast("🗑️ 해당 지출 내역이 성공적으로 삭제되었습니다!", icon="✅")
-                            time.sleep(0.4)
-                            st.rerun()
+                            mark_ledger_dirty()
+
+                            st.toast("🗑️ 해당 지출 내역을 메모리에서 삭제했습니다. (최종 저장 전까지 복구 가능)", icon="🗑️")
+                            time.sleep(0.2)
+                            st.rerun(scope="fragment")
 
                     st.markdown("---")
 
