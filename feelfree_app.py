@@ -3487,12 +3487,7 @@ if main_tab_choice == "가계부":
                 if append_new_data(new_row): st.toast("환불 롤백 완료!", icon="✅"); st.rerun()
 
 
-
-            # 교체 범위: 6.01.03 ~ 6.01.06 전체
-# 기존 6.01.03 ~ 6.01.06을 위에서 아래까지 통째로 교체하세요.
-# 검색결과 영역과 상세 내역 영역을 독립 Fragment로 분리합니다.
-    # 6.01.03 | Filter & Ledger Table Engine
-    @st.fragment
+        @st.fragment
     def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
 
@@ -3625,7 +3620,24 @@ if main_tab_choice == "가계부":
             num_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
             styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
             col_cfg = {"Date": st.column_config.TextColumn("날짜", width=120), "Category": st.column_config.TextColumn("항목", width="small"), "Receipt_URL": link_cfg}
-            
+
+            pending_selection_real_idx = st.session_state.pop('ledger_table_pending_selection_real_idx', None)
+            if pending_selection_real_idx is not None:
+                try:
+                    pending_display_row = render_df.index.get_loc(pending_selection_real_idx)
+                    if isinstance(pending_display_row, slice):
+                        pending_display_row = pending_display_row.start
+                    pending_display_row = int(pending_display_row)
+                    if 0 <= pending_display_row < len(render_df):
+                        st.session_state.pop('ledger_result_table', None)
+                        st.session_state['ledger_result_table'] = {
+                            "selection": {
+                                "cells": [[pending_display_row, "Date"]]
+                            }
+                        }
+                except (KeyError, TypeError, IndexError):
+                    pass
+
             df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-cell", on_select="rerun", key="ledger_result_table")
 
             # 6.01.04 | 선택 행 상태 관리
@@ -3702,32 +3714,36 @@ if main_tab_choice == "가계부":
                             return False
 
                         cur_df = cur_df.copy()
-                        row_a = cur_df.iloc[current_pos].copy()
-                        row_b = cur_df.iloc[new_pos].copy()
-                        cur_df.iloc[current_pos] = row_b
-                        cur_df.iloc[new_pos] = row_a
-                        cur_df = recalculate_entire_ledger(cur_df)
+                        moved_real_idx = cur_df.index[current_pos]
+
+                        # 행 교환(swap)이 아니라 실제 삽입 이동을 수행한다.
+                        # 위쪽 화살표는 delta=-1/-5, 아래쪽 화살표는 delta=+1/+5이다.
+                        new_order = list(cur_df.index)
+                        moved_label = new_order.pop(current_pos)
+                        new_order.insert(new_pos, moved_label)
+                        cur_df = cur_df.loc[new_order].copy()
 
                         st.session_state.active_ledger_df = cur_df
-                        st.session_state['ledger_selected_real_idx'] = cur_df.index[new_pos]
+                        st.session_state['ledger_selected_real_idx'] = moved_real_idx
+                        st.session_state['ledger_table_pending_selection_real_idx'] = moved_real_idx
                         mark_ledger_dirty()
                         st.session_state['ledger_ignore_selection_once'] = True
                         return True
 
                     with c_up5:
-                        if st.button("⏫ 5칸", key=f"btn_move_up5_search_{selected_real_idx_for_move}", use_container_width=True):
+                        if st.button("⏫ 5칸", key="btn_move_up5_search", use_container_width=True):
                             if _move_ledger_row_from_search(-5):
                                 st.rerun(scope="fragment")
                     with c_up1:
-                        if st.button("🔼 1칸", key=f"btn_move_up1_search_{selected_real_idx_for_move}", use_container_width=True):
+                        if st.button("🔼 1칸", key="btn_move_up1_search", use_container_width=True):
                             if _move_ledger_row_from_search(-1):
                                 st.rerun(scope="fragment")
                     with c_down1:
-                        if st.button("🔽 1칸", key=f"btn_move_down1_search_{selected_real_idx_for_move}", use_container_width=True):
+                        if st.button("🔽 1칸", key="btn_move_down1_search", use_container_width=True):
                             if _move_ledger_row_from_search(1):
                                 st.rerun(scope="fragment")
                     with c_down5:
-                        if st.button("⏬ 5칸", key=f"btn_move_down5_search_{selected_real_idx_for_move}", use_container_width=True):
+                        if st.button("⏬ 5칸", key="btn_move_down5_search", use_container_width=True):
                             if _move_ledger_row_from_search(5):
                                 st.rerun(scope="fragment")
 
@@ -4026,8 +4042,6 @@ if main_tab_choice == "가계부":
     # 6.01.06 | Search Result + Detail Entry
     _render_ledger_table_fragment()
     _render_ledger_detail_fragment()
-
-
 
 # ==============================================================================
 # [Module 6.02.00] Daily Statistics & Time-Series Engine (일일Data 탭)
