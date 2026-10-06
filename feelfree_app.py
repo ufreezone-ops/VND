@@ -3487,6 +3487,7 @@ if main_tab_choice == "가계부":
                 if append_new_data(new_row): st.toast("환불 롤백 완료!", icon="✅"); st.rerun()
 
 
+    # 6.01.03 | 검색결과 표 + 메모리 행 이동
     @st.fragment
     def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
@@ -3640,7 +3641,7 @@ if main_tab_choice == "가계부":
 
             df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-cell", on_select="rerun", key="ledger_result_table")
 
-            # 6.01.04 | 선택 행 상태 관리
+            # 6.01.04 | 선택 행 상태 관리 + 연속 행 이동
             # 선택 행은 "표시 위치"가 아니라 실제 ledger index로 기억한다.
             # 행 이동 직후에는 dataframe selection이 이전 화면 위치를 다시 보내올 수 있으므로
             # 한 번만 무시하고, 방금 이동한 행을 계속 선택 상태로 유지한다.
@@ -3679,7 +3680,6 @@ if main_tab_choice == "가계부":
                         selected_idx = None
 
 
-            # 6.01.03 | 검색결과 바로 아래 행 순서 조정판
             # 이동은 active_ledger_df 메모리만 변경하고, 이 검색결과 fragment만 다시 그린다.
             selected_real_idx_for_move = st.session_state.get('ledger_selected_real_idx')
             if selected_real_idx_for_move is not None:
