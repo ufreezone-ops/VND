@@ -806,58 +806,94 @@ def load_data(sheet_name, force_cloud=False):
                 continue
             st.error(f"🚨 **치명적 오류:** 클라우드 데이터베이스 연결에 실패했습니다. ({e})")
             st.stop()
-        
-    if df is None or df.empty: 
+
+    if df is None or df.empty:
         df_init = pd.DataFrame(columns=FINAL_COLUMNS)
-        try: conn.update(worksheet=ACTIVE_SHEET, data=df_init)
-        except: pass 
+        try:
+            conn.update(worksheet=ACTIVE_SHEET, data=df_init)
+        except:
+            pass
         return df_init
 
     year_match = re.search(r'\((\d{4})\)', st.session_state.get('current_trip', ''))
     trip_year = year_match.group(1) if year_match else "2026"
 
     first_node_curr = FIRST_NODE_NAME if 'FIRST_NODE_NAME' in globals() else "베트남"
-    if 'Country' not in df.columns: df.insert(1, 'Country', first_node_curr)
+
+    if 'Country' not in df.columns:
+        df.insert(1, 'Country', first_node_curr)
     else:
         df['Country'] = df['Country'].astype(str).str.strip().replace(['nan', 'None', ''], None)
         df['Country'] = df['Country'].fillna(first_node_curr)
-    
-    if 'Cum_Card_VND' in df.columns: df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
-    if 'Cum_Cash_VND' in df.columns: df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
-    if 'Receipt_URL' not in df.columns: df['Receipt_URL'] = ""
-        
+
+    if 'Cum_Card_VND' in df.columns:
+        df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
+
+    if 'Cum_Cash_VND' in df.columns:
+        df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
+
+    if 'Receipt_URL' not in df.columns:
+        df['Receipt_URL'] = ""
+
     df = df.dropna(subset=['Date', 'Category'], how='any')
     df['Category'] = df['Category'].astype(str).str.strip()
     df['PaymentMethod'] = df['PaymentMethod'].astype(str).str.strip().str.replace('트래블로그', '트래블카드')
-    df['Currency'] = df['Currency'].astype(str).str.strip().str.upper() 
-    
+    df['Currency'] = df['Currency'].astype(str).str.strip().str.upper()
+
     def fix_legacy_date(d):
         d = str(d).strip()
-        if d and not re.match(r'^\d{4}', d): return f"{trip_year}-{d.replace('/', '-')}"
+        if d and not re.match(r'^\d{4}', d):
+            return f"{trip_year}-{d.replace('/', '-')}"
         return d
 
     df['Date'] = df['Date'].apply(fix_legacy_date)
     df['Date'] = df['Date'].apply(normalize_date)
     df = df.reindex(columns=FINAL_COLUMNS)
-    
-    numeric_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
+
+    numeric_cols = [
+        'Amount',
+        'AppliedRate',
+        'Cum_Budget_KRW',
+        'Cum_Card_Local',
+        'Cum_Cash_Local'
+    ]
+
     for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
-    
-    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물'])) if 'EXPENSE_CATS' in globals() else ['식사', '간식', '마트', '선물']
+
+    # ------------------------------------------------------------------
+    # 🛡️ IsExpense 판정
+    # - 실제 결제가 발생한 일반 지출은 1
+    # - 호텔외상(CREDIT)은 아직 실제 결제가 아니므로 0
+    # - 상환은 실제 결제가 발생한 것이므로 1
+    # ------------------------------------------------------------------
+    clean_expense_cats = list(
+        set([c.strip() for c in EXPENSE_CATS] + ['선물', '상환'])
+    ) if 'EXPENSE_CATS' in globals() else ['식사', '간식', '마트', '선물', '상환']
+
     def evaluate_is_expense(r):
         cat = str(r['Category']).strip()
-        if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출']:
+        method = str(r['PaymentMethod']).strip()
+
+        # 호텔외상/외상 등 신용성 결제는 실제 지출 시점이 아니므로 제외
+        if get_asset_class(method) == "CREDIT":
+            return 0
+
+        # 실제 결제된 지출
+        if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '개인지출']:
             return 1
+
         return 0
 
     df['IsExpense'] = df.apply(evaluate_is_expense, axis=1)
+
     df['Note'] = df['Note'].fillna("").astype(str)
     df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
-    
+
     st.session_state.active_ledger_df = df
     st.session_state.last_loaded_sheet = sheet_name
+
     return df
 
 # 2.03.03 | Multi-Trip Global Ledger Consolidator
@@ -980,156 +1016,331 @@ def smart_cache_clear():
 def recalculate_entire_ledger(df):
     temp_df = df.copy()
     temp_df = temp_df.sort_values(by='Date', kind='mergesort', ignore_index=True)
-    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물', '상환']))
+
+    clean_expense_cats = list(
+        set([c.strip() for c in EXPENSE_CATS] + ['선물', '상환'])
+    )
 
     for i, row in temp_df.iterrows():
         cat = str(row['Category']).strip()
-        asset_cls = get_asset_class(row['PaymentMethod'])
-        if cat in clean_expense_cats and cat not in ['보증금', '재환전', '개인지출'] and asset_cls != "DOMESTIC":
+        method = str(row['PaymentMethod']).strip()
+        asset_cls = get_asset_class(method)
+
+        if (
+            cat in clean_expense_cats
+            and cat not in ['보증금', '재환전', '개인지출']
+            and asset_cls != "DOMESTIC"
+        ):
             temp_df.at[i, 'AppliedRate'] = 0.0
-        temp_df.at[i, 'Note'] = ""; temp_df.at[i, 'Cum_Budget_KRW'] = 0.0; temp_df.at[i, 'Cum_Card_Local'] = 0.0; temp_df.at[i, 'Cum_Cash_Local'] = 0.0
-    
+
+        temp_df.at[i, 'Note'] = ""
+        temp_df.at[i, 'Cum_Budget_KRW'] = 0.0
+        temp_df.at[i, 'Cum_Card_Local'] = 0.0
+        temp_df.at[i, 'Cum_Cash_Local'] = 0.0
+
     from collections import defaultdict
+
     inv_batches = defaultdict(list)
     c_budget = 0.0
 
     for i, row in temp_df.iterrows():
         qty, curr = row['Amount'], row['Currency']
-        cat, method, desc = str(row['Category']).strip(), str(row['PaymentMethod']).strip(), str(row['Description']).strip()
-        
-        is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '개인지출'] else 0
-        temp_df.at[i, 'IsExpense'] = is_exp
-        
-        is_deductible = 1 if (is_exp == 1 or cat in ['보증금']) else 0
-        rate = temp_df.at[i, 'AppliedRate'] 
+        cat = str(row['Category']).strip()
+        method = str(row['PaymentMethod']).strip()
+        desc = str(row['Description']).strip()
+
         asset_cls = get_asset_class(method)
-        
+
+        # ------------------------------------------------------------------
+        # 🛡️ IsExpense 판정
+        # 호텔외상(CREDIT)은 실제 결제가 아니므로 0
+        # 상환은 실제 결제가 발생하므로 1
+        # ------------------------------------------------------------------
+        if asset_cls == "CREDIT":
+            is_exp = 0
+        elif cat in clean_expense_cats and cat not in [
+            '환불',
+            '보증금',
+            '재환전',
+            '개인지출'
+        ]:
+            is_exp = 1
+        else:
+            is_exp = 0
+
+        temp_df.at[i, 'IsExpense'] = is_exp
+
+        is_deductible = 1 if (is_exp == 1 or cat in ['보증금']) else 0
+
+        rate = temp_df.at[i, 'AppliedRate']
+
         if cat in ['충전', '환전', '입금', '직접환전', '이월잔액']:
-            if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0): rate = get_default_rate(curr)
-            if cat == '이월잔액': final_dest_cls = "CASH"
-            elif cat == '충전': final_dest_cls = "PREPAID"
-            elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
-            else: final_dest_cls = get_asset_class(desc + method)
+            if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0 or rate == 1.0):
+                rate = get_default_rate(curr)
+
+            if cat == '이월잔액':
+                final_dest_cls = "CASH"
+            elif cat == '충전':
+                final_dest_cls = "PREPAID"
+            elif cat in ['환전', '직접환전']:
+                final_dest_cls = "CASH"
+            else:
+                final_dest_cls = get_asset_class(desc + method)
 
             target = f"트래블카드({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})"
-            if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
-            if asset_cls == "DOMESTIC" or cat == '충전' or cat == '이월잔액': c_budget += qty if curr == 'KRW' else qty * rate
-        
+
+            if curr != 'KRW':
+                inv_batches[target].append({'rate': rate, 'qty': qty})
+
+            if asset_cls == "DOMESTIC" or cat == '충전' or cat == '이월잔액':
+                c_budget += qty if curr == 'KRW' else qty * rate
+
         elif cat == '환불':
             if curr != 'KRW' and (pd.isna(rate) or rate <= 1.0):
                 inherited_rate = None
+
                 for j in range(i - 1, -1, -1):
                     prev_cat = str(temp_df.at[j, 'Category']).strip()
                     prev_curr = str(temp_df.at[j, 'Currency']).strip()
+
                     if prev_cat == '보증금' and prev_curr == curr:
                         inherited_rate = temp_df.at[j, 'AppliedRate']
                         break
+
                 if inherited_rate and inherited_rate > 0:
                     rate = inherited_rate
                     temp_df.at[i, 'Note'] = f"Inherited Deposit Rate: {rate:.9f}"
-                else: rate = get_default_rate(curr)
-            
+                else:
+                    rate = get_default_rate(curr)
+
             is_dep = str(row['Description']).replace(" ", "").lower()
-            is_deposit_refund = any(k in is_dep for k in ["보증금", "deposit"])
-            
+            is_deposit_refund = any(
+                k in is_dep for k in ["보증금", "deposit"]
+            )
+
             if not is_deposit_refund:
                 c_budget -= qty if curr == 'KRW' else qty * rate
+
                 if asset_cls != "DOMESTIC":
-                    target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
-                    if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
+                    target = (
+                        f"트래블카드({curr})"
+                        if asset_cls == "PREPAID"
+                        else f"현금({curr})"
+                    )
+
+                    if curr != 'KRW':
+                        inv_batches[target].append({
+                            'rate': rate,
+                            'qty': qty
+                        })
             else:
                 if asset_cls == "DOMESTIC":
                     c_budget -= qty if curr == 'KRW' else qty * rate
                 else:
-                    target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
-                    if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty})
-                
+                    target = (
+                        f"트래블카드({curr})"
+                        if asset_cls == "PREPAID"
+                        else f"현금({curr})"
+                    )
+
+                    if curr != 'KRW':
+                        inv_batches[target].append({
+                            'rate': rate,
+                            'qty': qty
+                        })
+
         elif cat in ['재환전', '개인지출']:
             if curr != 'KRW':
-                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                target_from = (
+                    f"트래블카드({curr})"
+                    if asset_cls == "PREPAID"
+                    else f"현금({curr})"
+                )
+
                 temp_qty = qty
+
                 if target_from in inv_batches:
                     for batch in inv_batches[target_from]:
-                        if temp_qty <= 0: break
-                        if batch['qty'] <= 0: continue
-                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
-                if pd.notna(rate) and rate > 0: c_budget -= qty * rate
-                
+                        if temp_qty <= 0:
+                            break
+                        if batch['qty'] <= 0:
+                            continue
+
+                        take = min(temp_qty, batch['qty'])
+                        batch['qty'] -= take
+                        temp_qty -= take
+
+                if pd.notna(rate) and rate > 0:
+                    c_budget -= qty * rate
+
         elif cat == '이종환전':
             if curr != 'KRW':
-                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+                target_from = (
+                    f"트래블카드({curr})"
+                    if asset_cls == "PREPAID"
+                    else f"현금({curr})"
+                )
+
                 temp_qty = qty
+
                 if target_from in inv_batches:
                     for batch in inv_batches[target_from]:
-                        if temp_qty <= 0: break
-                        if batch['qty'] <= 0: continue
-                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
-        
+                        if temp_qty <= 0:
+                            break
+                        if batch['qty'] <= 0:
+                            continue
+
+                        take = min(temp_qty, batch['qty'])
+                        batch['qty'] -= take
+                        temp_qty -= take
+
         elif cat == 'ATM출금':
-            temp_qty = qty; total_inherited_krw = 0.0
-            target_from = f"트래블카드({curr})"; target_to = f"현금({curr})"
+            temp_qty = qty
+            total_inherited_krw = 0.0
+
+            target_from = f"트래블카드({curr})"
+            target_to = f"현금({curr})"
+
             if target_from in inv_batches:
                 for batch in inv_batches[target_from]:
-                    if temp_qty <= 0: break
-                    if batch['qty'] <= 0: continue
-                    take = min(temp_qty, batch['qty']); batch['qty'] -= take
-                    inv_batches[target_to].append({'rate': batch['rate'], 'qty': take})
-                    total_inherited_krw += take * batch['rate']; temp_qty -= take
-            
+                    if temp_qty <= 0:
+                        break
+                    if batch['qty'] <= 0:
+                        continue
+
+                    take = min(temp_qty, batch['qty'])
+                    batch['qty'] -= take
+
+                    inv_batches[target_to].append({
+                        'rate': batch['rate'],
+                        'qty': take
+                    })
+
+                    total_inherited_krw += take * batch['rate']
+                    temp_qty -= take
+
             if temp_qty > 0:
                 fallback_r = get_WAR(curr)
-                inv_batches[target_to].append({'rate': fallback_r, 'qty': temp_qty})
+
+                inv_batches[target_to].append({
+                    'rate': fallback_r,
+                    'qty': temp_qty
+                })
+
                 total_inherited_krw += temp_qty * fallback_r
-                
-            if qty > 0: rate = total_inherited_krw / qty if total_inherited_krw > 0 else get_default_rate(curr)
-        
+
+            if qty > 0:
+                rate = (
+                    total_inherited_krw / qty
+                    if total_inherited_krw > 0
+                    else get_default_rate(curr)
+                )
+
         elif is_deductible == 1 or cat == '상환':
             if asset_cls == "DOMESTIC":
-                if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0): rate = get_default_rate(curr)
+                if curr != 'KRW' and (pd.isna(rate) or rate <= 0.0):
+                    rate = get_default_rate(curr)
+
                 c_budget += qty if curr == 'KRW' else qty * rate
                 rate = 1.0 if curr == 'KRW' else rate
+
             elif curr != 'KRW':
                 if asset_cls == "CREDIT":
                     rate = get_WAR(curr)
                     temp_df.at[i, 'Note'] = "Credit (Debt Generated)"
+
                 else:
-                    target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
-                    temp_qty = qty; total_cost_krw = 0.0; decomposed = []
-                    
+                    target = (
+                        f"트래블카드({curr})"
+                        if asset_cls == "PREPAID"
+                        else f"현금({curr})"
+                    )
+
+                    temp_qty = qty
+                    total_cost_krw = 0.0
+                    decomposed = []
+
                     if target in inv_batches:
                         for batch in inv_batches[target]:
-                            if temp_qty <= 0: break
-                            if batch['qty'] <= 0: continue
-                            take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
+                            if temp_qty <= 0:
+                                break
+                            if batch['qty'] <= 0:
+                                continue
+
+                            take = min(temp_qty, batch['qty'])
+                            batch['qty'] -= take
+                            temp_qty -= take
+
                             total_cost_krw += take * batch['rate']
+
                             r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
                             q_fmt = ",.0f" if curr in ["VND", "HUF"] else ",.2f"
-                            decomposed.append(f"{take:{q_fmt}}@{batch['rate']:{r_prec}}")
+
+                            decomposed.append(
+                                f"{take:{q_fmt}}@{batch['rate']:{r_prec}}"
+                            )
 
                     if temp_qty > 0:
                         fallback_r = get_WAR(curr)
                         total_cost_krw += temp_qty * fallback_r
+
                         r_prec = ".4f" if curr in ["VND", "HUF", "PHP"] else ".2f"
                         q_fmt = ",.0f" if curr in ["VND", "HUF"] else ",.2f"
-                        decomposed.append(f"{temp_qty:{q_fmt}}@{fallback_r:{r_prec}}(Auto-Topup?)")
-                    
+
+                        decomposed.append(
+                            f"{temp_qty:{q_fmt}}@{fallback_r:{r_prec}}(Auto-Topup?)"
+                        )
+
                     if qty > 0:
-                        rate = total_cost_krw / qty 
-                        if decomposed: temp_df.at[i, 'Note'] = "Decomposed: " + " + ".join(decomposed)
-                    else: rate = 0.0
+                        rate = total_cost_krw / qty
+
+                        if decomposed:
+                            temp_df.at[i, 'Note'] = (
+                                "Decomposed: " + " + ".join(decomposed)
+                            )
+                    else:
+                        rate = 0.0
 
         row_country = temp_df.at[i, 'Country']
-        nodes = TRIP_CONFIGS[st.session_state.current_trip].get("nodes", {})
-        row_curr = nodes.get(row_country, FIRST_NODE)["currency"] if nodes else "USD"
-        
+        nodes = TRIP_CONFIGS[
+            st.session_state.current_trip
+        ].get("nodes", {})
+
+        row_curr = (
+            nodes.get(row_country, FIRST_NODE)["currency"]
+            if nodes
+            else "USD"
+        )
+
         active_curr = curr if curr != 'KRW' else row_curr
-        rnd_dec = 0 if active_curr in ["VND", "HUF", "KRW"] else 2
-        
+
+        rnd_dec = (
+            0
+            if active_curr in ["VND", "HUF", "KRW"]
+            else 2
+        )
+
         temp_df.at[i, 'AppliedRate'] = rate
         temp_df.at[i, 'Cum_Budget_KRW'] = round(c_budget, 2)
-        temp_df.at[i, 'Cum_Card_Local'] = round(sum([b['qty'] for b in inv_batches[f"트래블카드({active_curr})"]]), rnd_dec)
-        temp_df.at[i, 'Cum_Cash_Local'] = round(sum([b['qty'] for b in inv_batches[f"현금({active_curr})"]]), rnd_dec)
-        
+
+        temp_df.at[i, 'Cum_Card_Local'] = round(
+            sum(
+                [b['qty'] for b in inv_batches[
+                    f"트래블카드({active_curr})"
+                ]]
+            ),
+            rnd_dec
+        )
+
+        temp_df.at[i, 'Cum_Cash_Local'] = round(
+            sum(
+                [b['qty'] for b in inv_batches[
+                    f"현금({active_curr})"
+                ]]
+            ),
+            rnd_dec
+        )
+
     return temp_df
 
 # ------------------------------------------------------------------------------
