@@ -3298,7 +3298,7 @@ if main_tab_choice == "가계부":
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
                 if append_new_data(new_row): st.toast("환불 롤백 완료!", icon="✅"); st.rerun()
 
-        # 6.01.03 | Filter & Ledger Table Engine
+    # 6.01.03 | Filter & Ledger Table Engine
     @st.fragment
     def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
@@ -3412,6 +3412,12 @@ if main_tab_choice == "가계부":
                 selected_idx = df_event.selection.cells[0][0]
             elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
                 selected_idx = df_event.selection.rows[0]
+            elif st.session_state.get('ledger_selected_real_idx') is not None:
+                saved_real_idx = st.session_state.get('ledger_selected_real_idx')
+                try:
+                    selected_idx = render_df.index.get_loc(saved_real_idx)
+                except (KeyError, TypeError, IndexError):
+                    selected_idx = None
 
             # 6.01.04 & 6.01.05 | Detail Viewer & Inline Editor
             if selected_idx is not None:
@@ -3424,27 +3430,65 @@ if main_tab_choice == "가계부":
                     
                     with c_info:
                         st.subheader("🧾 상세 내역 및 영수증 뷰어")
-                        c_up, c_down = st.columns(2)
-                        with c_up:
-                            if st.button("🔼 위로 한 칸 이동", key=f"btn_move_up_{real_idx}", use_container_width=True):
-                                cur_df = st.session_state.active_ledger_df
-                                if real_idx > 0:
-                                    idx_above = real_idx - 1
-                                    cur_df.iloc[idx_above], cur_df.iloc[real_idx] = cur_df.iloc[real_idx].copy(), cur_df.iloc[idx_above].copy()
-                                    st.session_state.active_ledger_df = cur_df
-                                    try: conn.update(worksheet=ACTIVE_SHEET, data=cur_df.reindex(columns=FINAL_COLUMNS))
-                                    except: pass
-                                    st.rerun()
-                        with c_down:
-                            if st.button("🔽 아래로 한 칸 이동", key=f"btn_move_down_{real_idx}", use_container_width=True):
-                                cur_df = st.session_state.active_ledger_df
-                                if real_idx < len(cur_df) - 1:
-                                    idx_below = real_idx + 1
-                                    cur_df.iloc[idx_below], cur_df.iloc[real_idx] = cur_df.iloc[real_idx].copy(), cur_df.iloc[idx_below].copy()
-                                    st.session_state.active_ledger_df = cur_df
-                                    try: conn.update(worksheet=ACTIVE_SHEET, data=cur_df.reindex(columns=FINAL_COLUMNS))
-                                    except: pass
-                                    st.rerun()
+                        # 선택 행은 세션에 유지하여 fragment rerun 후에도 같은 행을 계속 조작할 수 있게 함
+                        if getattr(df_event.selection, "cells", None) and len(df_event.selection.cells) > 0:
+                            st.session_state['ledger_selected_real_idx'] = int(render_df.index[df_event.selection.cells[0][0]])
+                        elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
+                            st.session_state['ledger_selected_real_idx'] = int(render_df.index[df_event.selection.rows[0]])
+
+                        c_up5, c_up1, c_down1, c_down5 = st.columns(4)
+
+                        def move_ledger_row(delta):
+                            cur_df = st.session_state.get('active_ledger_df')
+                            if cur_df is None or cur_df.empty:
+                                return False
+
+                            current_idx = int(st.session_state.get('ledger_selected_real_idx', real_idx))
+                            if current_idx < 0 or current_idx >= len(cur_df):
+                                return False
+
+                            new_idx = max(0, min(len(cur_df) - 1, current_idx + delta))
+                            if new_idx == current_idx:
+                                return False
+
+                            cur_df = cur_df.copy()
+                            cur_df.iloc[[current_idx, new_idx]] = cur_df.iloc[[new_idx, current_idx]].to_numpy()
+
+                            # 순서가 바뀌면 FIFO/누적 계산도 다시 맞춘다. Google Sheets에는 아직 저장하지 않는다.
+                            cur_df = recalculate_entire_ledger(cur_df)
+                            st.session_state.active_ledger_df = cur_df
+                            st.session_state['ledger_selected_real_idx'] = new_idx
+                            st.session_state['ledger_order_dirty'] = True
+                            return True
+
+                        with c_up5:
+                            if st.button("⏫ 5칸", key=f"btn_move_up5_{real_idx}", use_container_width=True):
+                                if move_ledger_row(-5):
+                                    st.rerun(scope="fragment")
+                        with c_up1:
+                            if st.button("🔼 1칸", key=f"btn_move_up1_{real_idx}", use_container_width=True):
+                                if move_ledger_row(-1):
+                                    st.rerun(scope="fragment")
+                        with c_down1:
+                            if st.button("🔽 1칸", key=f"btn_move_down1_{real_idx}", use_container_width=True):
+                                if move_ledger_row(1):
+                                    st.rerun(scope="fragment")
+                        with c_down5:
+                            if st.button("⏬ 5칸", key=f"btn_move_down5_{real_idx}", use_container_width=True):
+                                if move_ledger_row(5):
+                                    st.rerun(scope="fragment")
+
+                        if st.session_state.get('ledger_order_dirty', False):
+                            st.warning("📝 순서 변경 내용이 메모리에만 반영되어 있습니다. Google Sheets에 저장하려면 아래 버튼을 눌러주세요.")
+                            if st.button("☁️ 변경된 순서를 Google Sheets에 저장", key="btn_commit_ledger_order", use_container_width=True, type="primary"):
+                                try:
+                                    save_df = st.session_state.active_ledger_df.reindex(columns=FINAL_COLUMNS)
+                                    conn.update(worksheet=ACTIVE_SHEET, data=save_df)
+                                    st.session_state['ledger_order_dirty'] = False
+                                    st.toast("☁️ 변경된 순서를 저장했습니다!", icon="✅")
+                                    st.rerun(scope="fragment")
+                                except Exception as e_order:
+                                    st.error(f"🚨 순서 저장 실패: {e_order}")
 
                         amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
                         krw_equivalent = row_data['Amount'] if row_data['Currency'] == 'KRW' else row_data['Amount'] * row_data['AppliedRate']
