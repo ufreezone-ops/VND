@@ -3298,16 +3298,25 @@ if main_tab_choice == "가계부":
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
                 if append_new_data(new_row): st.toast("환불 롤백 완료!", icon="✅"); st.rerun()
 
-    # 6.01.03 | Filter & Ledger Table Engine
+        # 6.01.03 | Filter & Ledger Table Engine
     @st.fragment
     def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
         viewer_placeholder = st.empty()
 
+        # 🔥 검색결과 표와 행 이동의 단일 메모리 원본
+        # 이동 버튼을 누를 때마다 Google Sheets를 읽지 않고, active_ledger_df를 즉시 화면에 반영한다.
+        active_memory_df = st.session_state.get('active_ledger_df')
+        if active_memory_df is None or active_memory_df.empty:
+            active_memory_df = ledger_df.copy()
+            st.session_state.active_ledger_df = active_memory_df.copy()
+        else:
+            active_memory_df = active_memory_df.copy()
+
         initial_country = st.session_state.get('his_country', "이번 여행가계부")
         if initial_country == "모든 여행가계부": temp_display_df = load_all_trips_data()
         else:
-            temp_display_df = ledger_df
+            temp_display_df = active_memory_df
             if initial_country != "이번 여행가계부": temp_display_df = temp_display_df[temp_display_df['Country'] == initial_country]
 
         cat_options = ["모든 카테고리"] + sorted(list(temp_display_df['Category'].dropna().unique())) if not temp_display_df.empty else ["모든 카테고리"]
@@ -3325,7 +3334,8 @@ if main_tab_choice == "가계부":
             st.warning("⚠️ '모든 여행가계부' 모드에서는 내역 조회만 가능합니다.")
             display_df = load_all_trips_data()
         else:
-            display_df = ledger_df
+            # 일반 조회는 항상 메모리 원본(active_ledger_df)을 사용한다.
+            display_df = active_memory_df
             if country_filter != "이번 여행가계부": display_df = display_df[display_df['Country'] == country_filter]
 
         if not display_df.empty: 
@@ -3340,16 +3350,16 @@ if main_tab_choice == "가계부":
                 
             st.write(f"🔎 검색 결과: {len(render_df)}건")
 
-            dep_rows = ledger_df[ledger_df['Category'].str.contains('출국', na=False)]
-            korea_dep = ledger_df[ledger_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
+            dep_rows = active_memory_df[active_memory_df['Category'].str.contains('출국', na=False)]
+            korea_dep = active_memory_df[active_memory_df['Category'].str.contains('출국_한국|출국.*한국', na=False)]
             target_dep_row = korea_dep if not korea_dep.empty else dep_rows
             dep_dt, arr_dt = None, None
             if not target_dep_row.empty:
                 m_dep = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_dep_row.iloc[0]['Date']))
                 if m_dep: dep_dt = datetime.strptime(m_dep.group(0), "%Y-%m-%d").date()
 
-            arr_rows = ledger_df[ledger_df['Category'].str.contains('귀국|입국', na=False)]
-            korea_arr = ledger_df[ledger_df['Category'].str.contains('귀국_한국|귀국.*한국|입국_한국|입국.*한국', na=False)]
+            arr_rows = active_memory_df[active_memory_df['Category'].str.contains('귀국|입국', na=False)]
+            korea_arr = active_memory_df[active_memory_df['Category'].str.contains('귀국_한국|귀국.*한국|입국_한국|입국.*한국', na=False)]
             target_arr_row = korea_arr if not korea_arr.empty else arr_rows
             if not target_arr_row.empty:
                 m_arr = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
@@ -3407,17 +3417,38 @@ if main_tab_choice == "가계부":
             col_cfg = {"Date": st.column_config.TextColumn("날짜", width=120), "Category": st.column_config.TextColumn("항목", width="small"), "Receipt_URL": link_cfg}
             
             df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-cell", on_select="rerun")
+
+            # 선택 행은 "표시 위치"가 아니라 실제 ledger index로 기억한다.
+            # 행 이동 직후에는 dataframe selection이 이전 화면 위치를 다시 보내올 수 있으므로
+            # 한 번만 무시하고, 방금 이동한 행을 계속 선택 상태로 유지한다.
             selected_idx = None
-            if getattr(df_event.selection, "cells", None) and len(df_event.selection.cells) > 0:
-                selected_idx = df_event.selection.cells[0][0]
-            elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
-                selected_idx = df_event.selection.rows[0]
-            elif st.session_state.get('ledger_selected_real_idx') is not None:
-                saved_real_idx = st.session_state.get('ledger_selected_real_idx')
+            saved_real_idx = st.session_state.get('ledger_selected_real_idx')
+            ignore_stale_selection = bool(st.session_state.pop('ledger_ignore_selection_once', False))
+
+            if ignore_stale_selection and saved_real_idx is not None:
                 try:
                     selected_idx = render_df.index.get_loc(saved_real_idx)
                 except (KeyError, TypeError, IndexError):
                     selected_idx = None
+            else:
+                event_real_idx = None
+                if getattr(df_event.selection, "cells", None) and len(df_event.selection.cells) > 0:
+                    event_row_idx = df_event.selection.cells[0][0]
+                    if 0 <= event_row_idx < len(render_df):
+                        event_real_idx = render_df.index[event_row_idx]
+                elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
+                    event_row_idx = df_event.selection.rows[0]
+                    if 0 <= event_row_idx < len(render_df):
+                        event_real_idx = render_df.index[event_row_idx]
+
+                if event_real_idx is not None:
+                    selected_idx = render_df.index.get_loc(event_real_idx)
+                    st.session_state['ledger_selected_real_idx'] = int(event_real_idx)
+                elif saved_real_idx is not None:
+                    try:
+                        selected_idx = render_df.index.get_loc(saved_real_idx)
+                    except (KeyError, TypeError, IndexError):
+                        selected_idx = None
 
             # 6.01.04 & 6.01.05 | Detail Viewer & Inline Editor
             if selected_idx is not None:
@@ -3430,12 +3461,6 @@ if main_tab_choice == "가계부":
                     
                     with c_info:
                         st.subheader("🧾 상세 내역 및 영수증 뷰어")
-                        # 선택 행은 세션에 유지하여 fragment rerun 후에도 같은 행을 계속 조작할 수 있게 함
-                        if getattr(df_event.selection, "cells", None) and len(df_event.selection.cells) > 0:
-                            st.session_state['ledger_selected_real_idx'] = int(render_df.index[df_event.selection.cells[0][0]])
-                        elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
-                            st.session_state['ledger_selected_real_idx'] = int(render_df.index[df_event.selection.rows[0]])
-
                         c_up5, c_up1, c_down1, c_down5 = st.columns(4)
 
                         def move_ledger_row(delta):
@@ -3443,22 +3468,39 @@ if main_tab_choice == "가계부":
                             if cur_df is None or cur_df.empty:
                                 return False
 
-                            current_idx = int(st.session_state.get('ledger_selected_real_idx', real_idx))
-                            if current_idx < 0 or current_idx >= len(cur_df):
+                            current_real_idx = st.session_state.get('ledger_selected_real_idx', real_idx)
+                            try:
+                                current_pos = cur_df.index.get_loc(current_real_idx)
+                                if isinstance(current_pos, slice):
+                                    current_pos = current_pos.start
+                                else:
+                                    current_pos = int(current_pos)
+                            except (KeyError, TypeError, IndexError):
+                                current_pos = int(real_idx)
+
+                            if current_pos < 0 or current_pos >= len(cur_df):
                                 return False
 
-                            new_idx = max(0, min(len(cur_df) - 1, current_idx + delta))
-                            if new_idx == current_idx:
+                            new_pos = max(0, min(len(cur_df) - 1, current_pos + delta))
+                            if new_pos == current_pos:
                                 return False
 
                             cur_df = cur_df.copy()
-                            cur_df.iloc[[current_idx, new_idx]] = cur_df.iloc[[new_idx, current_idx]].to_numpy()
+
+                            # 🔥 dtype 손상을 피하면서 두 행의 전체 데이터를 안전하게 교환한다.
+                            row_a = cur_df.iloc[current_pos].copy()
+                            row_b = cur_df.iloc[new_pos].copy()
+                            cur_df.iloc[current_pos] = row_b
+                            cur_df.iloc[new_pos] = row_a
 
                             # 순서가 바뀌면 FIFO/누적 계산도 다시 맞춘다. Google Sheets에는 아직 저장하지 않는다.
                             cur_df = recalculate_entire_ledger(cur_df)
                             st.session_state.active_ledger_df = cur_df
-                            st.session_state['ledger_selected_real_idx'] = new_idx
+                            st.session_state['ledger_selected_real_idx'] = cur_df.index[new_pos]
                             st.session_state['ledger_order_dirty'] = True
+
+                            # 다음 fragment rerun에서는 dataframe이 기억하고 있는 옛 선택 위치를 한 번 무시한다.
+                            st.session_state['ledger_ignore_selection_once'] = True
                             return True
 
                         with c_up5:
@@ -3482,9 +3524,17 @@ if main_tab_choice == "가계부":
                             st.warning("📝 순서 변경 내용이 메모리에만 반영되어 있습니다. Google Sheets에 저장하려면 아래 버튼을 눌러주세요.")
                             if st.button("☁️ 변경된 순서를 Google Sheets에 저장", key="btn_commit_ledger_order", use_container_width=True, type="primary"):
                                 try:
-                                    save_df = st.session_state.active_ledger_df.reindex(columns=FINAL_COLUMNS)
+                                    save_df = st.session_state.active_ledger_df.reindex(columns=FINAL_COLUMNS).copy()
                                     conn.update(worksheet=ACTIVE_SHEET, data=save_df)
+                                    # 저장 후에도 화면은 방금 저장한 메모리 DataFrame을 그대로 사용한다.
+                                    st.session_state.active_ledger_df = save_df.copy()
                                     st.session_state['ledger_order_dirty'] = False
+                                    if 'all_trips_lookup_df' in st.session_state:
+                                        del st.session_state['all_trips_lookup_df']
+                                    try:
+                                        _load_all_trips_data_cloud.clear()
+                                    except Exception:
+                                        pass
                                     st.toast("☁️ 변경된 순서를 저장했습니다!", icon="✅")
                                     st.rerun(scope="fragment")
                                 except Exception as e_order:
