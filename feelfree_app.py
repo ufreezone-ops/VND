@@ -2367,7 +2367,6 @@ node_keys = list(trip_nodes.keys())
 is_single_country = len(node_keys) <= 1
 sel_node_default = node_keys[0] if node_keys else FIRST_NODE_NAME
 
-# 여정 출국/귀국 날짜 및 시차 공통 계산
 def is_korea_port_common(text):
     txt = str(text).replace(" ", "")
     return any(k in txt for k in ['한국', '인천', '부산', '김포', '대구', '제주', '청주', '귀국', 'ICN', 'PUS'])
@@ -2425,7 +2424,6 @@ def safe_parse_date_obj(d_str, fallback):
 
 if 'rcpt_key_idx' not in st.session_state: st.session_state.rcpt_key_idx = 0
 
-# 🔥 [전역 공통 판별 함수] 고정비/사전결제 여부 판별
 def check_is_fixed_cost(row):
     orig_d = str(row['Date']).strip()
     m_row = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
@@ -2435,10 +2433,8 @@ def check_is_fixed_cost(row):
     met = str(row['PaymentMethod']).strip()
     return (met == '원화계좌(한국)') or (cat in FIXED_COST_CATS)
 
-# 🔥 [핵심 비즈니스 규칙] 지출 원장(exp_df), 대분류(Macro_Category), 필수/고정비 완벽 일괄 생성
 exp_df = ledger_df[ledger_df['IsExpense'] == 1].copy()
 if not exp_df.empty:
-    # 1. 원화 및 현지화 환산액 계산
     exp_df['KRW_val'] = exp_df.apply(
         lambda r: float(r['Amount']) if str(r['Currency']).strip() == 'KRW' else float(r['Amount']) * float(r['AppliedRate']),
         axis=1
@@ -2447,11 +2443,8 @@ if not exp_df.empty:
         lambda r: float(r['Amount']) if str(r['Currency']).strip() == TRAVEL_CURRENCY else (float(r['KRW_val']) / get_WAR(TRAVEL_CURRENCY) if get_WAR(TRAVEL_CURRENCY) > 0 else float(r['Amount'])),
         axis=1
     )
-
-    # 2. 🌟 대분류(Macro_Category) 표준 컬럼 탑재 (KeyError 원천 차단)
     exp_df['Macro_Category'] = exp_df['Category'].map(MACRO_MAP).fillna("📱 기타/통신").astype(str)
 
-    # 3. 필수지출(IsSurvival) 및 고정비(IsFixedCost) 판별
     def check_is_survival_cost(row):
         cat = str(row['Category']).strip()
         met = str(row['PaymentMethod']).strip()
@@ -2467,7 +2460,7 @@ if not exp_df.empty:
     exp_df['IsFixedCost'] = exp_df.apply(check_is_fixed_cost, axis=1)
 
 # ------------------------------------------------------------------------------
-# 6.00.02 | Main 4-Tab Navigation Bar (Mobile 1-Line & Arrow Removal)
+# 6.00.02 | Main 4-Tab Navigation Bar (Mobile 1-Line & Lazy Router Isolation)
 # ------------------------------------------------------------------------------
 menu_options = ["가계부", "일일Data", "돋보기", "전체요약"]
 
@@ -2480,7 +2473,7 @@ default_idx = menu_options.index(current_tab) if current_tab in menu_options els
 main_tab_choice = option_menu(
     menu_title=None,
     options=menu_options,
-    icons=["", "", "", ""],  # 빈 문자열 4개로 ▷ 화살표 원천 차단
+    icons=["", "", "", ""],  
     default_index=default_idx,
     orientation="horizontal",
     styles={
@@ -2530,11 +2523,10 @@ main_tab_choice = option_menu(
 
 st.session_state["current_main_tab"] = main_tab_choice
 
-
-# ==============================================================================
-# 6.01.00 | Unified Ledger Console (가계부 탭)
-# ==============================================================================
 if main_tab_choice == "가계부":
+    # ------------------------------------------------------------------------------
+    # 6.01.00 | Unified Ledger Console (가계부 탭)
+    # ------------------------------------------------------------------------------
     with st.expander("➕ 새 지출 / 일정 / 바우처 등록하기", expanded=False):
         if is_single_country:
             sel_node = node_keys[0] if node_keys else FIRST_NODE_NAME
@@ -2920,7 +2912,7 @@ if main_tab_choice == "가계부":
                     spec_str = f" | [{' · '.join(spec_tags)}]" if spec_tags else ""
 
                     full_desc = f"[{h_gw}+{clean_asset}] {h_name} | {h_nights}박({h_checkin.strftime('%m/%d')}~{h_checkout_calc.strftime('%m/%d')}) | {h_detail.replace(chr(10), ' ')}{spec_str}"
-                    hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{f_fee}원" if h_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
+                    hotel_pay_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '호텔', 'Description': full_desc, 'Currency': h_curr, 'Amount': h_amt, 'PaymentMethod': clean_asset, 'IsExpense': 1, 'AppliedRate': h_rate, 'Note': f"수수료:{f_fee}원" if f_fee > 0 else "", 'Receipt_URL': final_hotel_receipts}])
                     checkin_row = pd.DataFrame([{'Date': h_checkin.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크인', 'Description': f"체크인 🏨 {h_name} ({h_nights}박)", 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkin', 'Receipt_URL': ''}])
                     checkout_row = pd.DataFrame([{'Date': h_checkout_calc.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '체크아웃', 'Description': f"체크아웃 🏨 {h_name}", 'Currency': h_curr, 'Amount': 0, 'PaymentMethod': '정보', 'IsExpense': 0, 'AppliedRate': 1.0, 'Note': 'Auto-Checkout', 'Receipt_URL': ''}])
                     
@@ -3033,7 +3025,6 @@ if main_tab_choice == "가계부":
                 new_row = pd.DataFrame([{'Date': sel_date.strftime("%Y-%m-%d(%a)"), 'Country': sel_node, 'Category': '환불', 'Description': f"취소: {r_desc}", 'Currency': r_curr, 'Amount': r_amt, 'PaymentMethod': r_met, 'IsExpense': 0, 'AppliedRate': r_rate, 'Note': 'Rollback', 'Receipt_URL': ''}])
                 if append_new_data(new_row): st.toast("환불 롤백 완료!", icon="✅"); st.rerun()
 
-    # 6.01.03 | Filter & Ledger Table Engine
     st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
     viewer_placeholder = st.empty()
 
@@ -3145,7 +3136,6 @@ if main_tab_choice == "가계부":
         elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
             selected_idx = df_event.selection.rows[0]
 
-        # 6.01.04 & 6.01.05 | Detail Viewer & Inline Editor
         if selected_idx is not None:
             real_idx = render_df.index[selected_idx] 
             row_data = display_df.loc[real_idx]
@@ -3442,7 +3432,6 @@ if main_tab_choice == "가계부":
 # ==============================================================================
 elif main_tab_choice == "일일Data":
     if not exp_df.empty:
-        # 카테고리 컬러 팔레트 및 스택 순서
         color_map = {
             "식사": "#26A69A", "간식": "#66BB6A", "마트": "#EC407A",
             "Grab": "#29B6F6", "VinBus": "#26C6DA", "DiDi": "#29B6F6", "지하철": "#42A5F5",
@@ -3456,7 +3445,6 @@ elif main_tab_choice == "일일Data":
             "마사지", "투어", "입장료", "통신", "수수료", "팁", "항공권", "호텔", "보험", "선물", "기타"
         ]
 
-        # 통화 선택 라디오
         c_mode = st.radio(
             "통화 선택", 
             [f"현지화({TRAVEL_CURRENCY})", "원화(KRW)"], 
@@ -3471,7 +3459,6 @@ elif main_tab_choice == "일일Data":
         arr_dt = arr_dt_calc
         is_fixed_cost = exp_df['IsFixedCost']
 
-        # 1. 🛡️ 표준 YYYY-MM-DD 단일 정밀 파서
         def extract_pure_ymd(d_val):
             s = str(d_val).strip()
             m = re.search(r'(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})', s)
@@ -3491,7 +3478,6 @@ elif main_tab_choice == "일일Data":
         day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
         ovr_df['Date_Clean'] = ovr_df['Date'].apply(extract_pure_ymd)
 
-        # 2. 🛡️ 이동일 더미 행 중복 원천 방지
         if dep_dt and arr_dt and dep_dt <= arr_dt:
             total_calendar_days = (arr_dt - dep_dt).days + 1
             all_cal_dates = [(dep_dt + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(total_calendar_days)]
@@ -3523,7 +3509,6 @@ elif main_tab_choice == "일일Data":
             ovr_df = ovr_df.sort_values(by='Date_Clean', kind='mergesort')
             unique_clean_dates = sorted([str(d) for d in ovr_df['Date_Clean'].dropna().unique() if str(d).strip()])
             
-            # 3. 🛡️ X축 독립 날짜 라벨 1:1 매핑 생성
             date_label_map = {}
             for d in unique_clean_dates:
                 m_d = re.search(r'(\d{4})-(\d{2})-(\d{2})', d)
@@ -3581,7 +3566,6 @@ elif main_tab_choice == "일일Data":
                 if days_survivable >= remaining_trip_days:
                     status_badge = f"<span style='color:#10B981; font-weight:800; font-size:16px;'>🟢 안전 (약 {days_survivable:.1f}일분 여유)</span>"
                 else:
-                    shortfall = remaining_trip_days - days_survivable
                     status_badge = f"<span style='color:#EF4444; font-weight:800; font-size:16px;'>🚨 경고 (약 {days_survivable:.1f}일 뒤 소진, 추가 현금화 필요)</span>"
             else:
                 status_badge = f"<span style='color:#38BDF8; font-weight:800; font-size:16px;'>🪙 약 {days_survivable:.1f}일 체류 가능</span>"
@@ -3601,9 +3585,6 @@ elif main_tab_choice == "일일Data":
                 </div>
             """, unsafe_allow_html=True)
 
-            # ------------------------------------------------------------------
-            # [Module 6.02.01] 필수지출 차트 (이모티콘/범례명 삭제 & 9개 막대 분리)
-            # ------------------------------------------------------------------
             st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>필수지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
             surv_chart_df = ovr_df[ovr_df['IsSurvival'] == 1].copy()
             if not surv_chart_df.empty:
@@ -3627,11 +3608,10 @@ elif main_tab_choice == "일일Data":
                     margin=dict(l=10, r=10, t=20, b=50), 
                     xaxis_title=None, 
                     yaxis_title=None,
-                    legend_title_text="",  # 범례 Category 삭제
+                    legend_title_text="",
                     legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, title=None), 
                     height=390
                 )
-                # 🌟 X축을 category형으로 강제 지정하여 날짜 뭉개짐 방지
                 fig_surv.update_xaxes(type='category', fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=ordered_x_labels)
                 fig_surv.update_yaxes(fixedrange=True, tickfont=dict(size=16, color="#CBD5E1"))
                 st.plotly_chart(fig_surv, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
@@ -3640,9 +3620,6 @@ elif main_tab_choice == "일일Data":
 
             st.markdown("<div style='margin: 25px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
-            # ------------------------------------------------------------------
-            # [Module 6.02.02] 일별 총지출 차트 (이모티콘/범례명 삭제 & 9개 막대 분리)
-            # ------------------------------------------------------------------
             st.markdown(f"<h4 style='text-align: center; margin-bottom:4px;'>일별 총지출 ({day_label_suffix})</h4>", unsafe_allow_html=True)
             total_chart_df = ovr_df.copy()
             total_chart_df['Date_Display'] = total_chart_df['Date_Clean'].map(date_label_map).astype(str)
@@ -3666,20 +3643,16 @@ elif main_tab_choice == "일일Data":
                 margin=dict(l=10, r=10, t=20, b=50), 
                 xaxis_title=None, 
                 yaxis_title=None,
-                legend_title_text="",  # 범례 Category 삭제
+                legend_title_text="",
                 legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, title=None), 
                 height=390
             )
-            # 🌟 X축을 category형으로 강제 지정하여 날짜 뭉개짐 방지
             fig_tot.update_xaxes(type='category', fixedrange=True, tickfont=dict(size=12), categoryorder='array', categoryarray=ordered_x_labels)
             fig_tot.update_yaxes(fixedrange=True, tickfont=dict(size=16, color="#CBD5E1"))
             st.plotly_chart(fig_tot, use_container_width=True, config={'displaylogo': False, 'scrollZoom': False, 'displayModeBar': False})
 
         st.divider()
         
-        # ----------------------------------------------------------------------
-        # [Module 6.02.03] 일별 피벗 매트릭스 테이블 (중복 없는 정렬 & 요약행 배경색)
-        # ----------------------------------------------------------------------
         daily_set = ovr_df.groupby('Date_Clean').agg({'Country': lambda x: ' / '.join(x.unique()), 'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index() if not ovr_df.empty else pd.DataFrame(columns=['Date_Clean', 'Country', 'KRW_val', 'Local_val'])
         surv_only = ovr_df[ovr_df['IsSurvival'] == 1].groupby('Date_Clean').agg({'KRW_val': 'sum', 'Local_val': 'sum'}).reset_index().rename(columns={'KRW_val': 'S_KRW', 'Local_val': 'S_Loc'}) if not ovr_df.empty else pd.DataFrame(columns=['Date_Clean', 'S_KRW', 'S_Loc'])
         daily_table = pd.merge(daily_set, surv_only, on='Date_Clean', how='left').fillna(0) if not daily_set.empty else pd.DataFrame()
@@ -3734,7 +3707,6 @@ elif main_tab_choice == "일일Data":
 
             final_table_with_summary = pd.concat([display_table, summary_display], ignore_index=True)
             
-            # 🌟 폰트는 유지하고 요약 2개 행에 배경색(Highlight)만 주입
             def style_daily_pivot_table(df_display):
                 styles = pd.DataFrame('', index=df_display.index, columns=df_display.columns)
                 loc_cols = [c for c in df_display.columns if f"({LOCAL_SYM})" in c]
@@ -3818,7 +3790,6 @@ elif main_tab_choice == "돋보기":
         if len(lines) > 3: lines = lines[:3]
         return "<br>".join(lines)
 
-    # ⚡ [고속화 캐시 엔진] 돋보기 3대 데이터셋 전처리 메모이제이션
     @st.cache_data(ttl=600)
     def parse_cached_market_items(df_records, travel_curr, war_rate):
         df_src = pd.DataFrame(df_records)
@@ -4022,7 +3993,6 @@ elif main_tab_choice == "돋보기":
             res_df['KRW_str'] = res_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원") if (war_rate > 0) else ""
         return res_df
 
-    # 돋보기 서브 3대 탭 메뉴
     sub_tab_choice = option_menu(
         menu_title=None,
         options=["장바구니", "식당·카페", "마사지·교통"],
@@ -4048,7 +4018,6 @@ elif main_tab_choice == "돋보기":
         raw_records = ledger_df[['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense']].to_dict('records')
         war_val = get_WAR(TRAVEL_CURRENCY)
 
-        # 1. 🌟 장바구니 트리맵 (캐시 적용)
         if sub_tab_choice == "장바구니":
             item_df = parse_cached_market_items(raw_records, TRAVEL_CURRENCY, war_val)
             if not item_df.empty:
@@ -4066,7 +4035,6 @@ elif main_tab_choice == "돋보기":
             else:
                 st.info("기록된 마트, 시장 또는 선물 지출 내역이 없습니다.")
 
-        # 2. 🌟 식당·카페 트리맵 (캐시 적용)
         elif sub_tab_choice == "식당·카페":
             food_df = parse_cached_food_items(raw_records, TRAVEL_CURRENCY, war_val)
             if not food_df.empty:
@@ -4084,7 +4052,6 @@ elif main_tab_choice == "돋보기":
             else:
                 st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
-        # 3. 🌟 마사지·교통 듀얼 트리맵 (캐시 적용)
         elif sub_tab_choice == "마사지·교통":
             st.markdown("<h4 style='margin-bottom: 2px;'>그랩 및 로컬교통</h4>", unsafe_allow_html=True)
             traffic_df_final = parse_cached_traffic_items(raw_records, TRAVEL_CURRENCY, war_val)
@@ -4139,9 +4106,6 @@ elif main_tab_choice == "전체요약":
         dep_dt_f = dep_dt_calc
         arr_dt_f = arr_dt_calc
 
-        # ----------------------------------------------------------------------
-        # 1. 총지출 (종합 트리맵)
-        # ----------------------------------------------------------------------
         st.markdown("<h3 style='margin-top: 0px; margin-bottom: 8px;'>총지출</h3>", unsafe_allow_html=True)
         chart_df = exp_df[exp_df['KRW_val'] > 0].copy()
         if not chart_df.empty:
@@ -4171,9 +4135,6 @@ elif main_tab_choice == "전체요약":
             fig_tree.update_layout(margin=dict(l=0, r=0, t=5, b=10), height=580, coloraxis_showscale=False)
             st.plotly_chart(fig_tree, use_container_width=True, config={'displaylogo': False})
         
-        # ----------------------------------------------------------------------
-        # 2. 파이 그래프 (도넛 차트 - 제목 없이 바로 렌더링)
-        # ----------------------------------------------------------------------
         cat_pie = exp_df[exp_df['KRW_val'] > 0].groupby('Macro_Category')['KRW_val'].sum().reset_index().sort_values(by='KRW_val', ascending=False)
         
         if not cat_pie.empty:
@@ -4213,9 +4174,6 @@ elif main_tab_choice == "전체요약":
             )
             st.plotly_chart(fig_donut, use_container_width=True)
 
-        # ----------------------------------------------------------------------
-        # 3. 사전결제 (스마트 트리맵)
-        # ----------------------------------------------------------------------
         if not dom_df.empty:
             dom_chart_df = dom_df[dom_df['KRW_val'] > 0].copy()
             if not dom_chart_df.empty:
@@ -4299,9 +4257,6 @@ elif main_tab_choice == "전체요약":
                 )
                 st.plotly_chart(fig_dom, use_container_width=True, config={'displaylogo': False})
 
-        # ----------------------------------------------------------------------
-        # 4. 요약 (사전결제 vs 여행지 지출 2분할 요약 박스)
-        # ----------------------------------------------------------------------
         st.divider()
         st.markdown("<h3 style='margin-bottom: 8px;'>요약</h3>", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
@@ -4318,9 +4273,6 @@ elif main_tab_choice == "전체요약":
                 og = ovr_df.groupby('Category').agg({'KRW_val':'sum', 'Date':'count'}).sort_values(by='KRW_val', ascending=False)
                 for cat_name, row_data in og.iterrows(): st.write(f"• {cat_name}({int(row_data['Date'])}회): {row_data['KRW_val']:,.0f} 원")
 
-        # ----------------------------------------------------------------------
-        # 5. 손실과 보상 (환불 목록)
-        # ----------------------------------------------------------------------
         refund_df = ledger_df[ledger_df['Category'] == '환불']
         if not refund_df.empty:
             st.divider()
@@ -4331,13 +4283,14 @@ elif main_tab_choice == "전체요약":
                 st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True, hide_index=True)
     else:
         st.info("기록된 지출 데이터가 없습니다.")
+
+
 # ------------------------------------------------------------------------------
 # 6.05.00 | Build Version & Real-time Latency Benchmark Footer
 # ------------------------------------------------------------------------------
 t_render_end = time.perf_counter()
 render_latency_ms = (t_render_end - t_render_start) * 1000
 
-# ⏱️ 속도 상태별 뱃지 컬러 (500ms 미만 녹색, 1500ms 이상 경고 오렌지/레드)
 if render_latency_ms < 500:
     perf_badge = f"<span style='color:#10B981; font-weight:bold;'>⚡ {render_latency_ms:,.0f}ms (초고속)</span>"
 elif render_latency_ms < 1500:
