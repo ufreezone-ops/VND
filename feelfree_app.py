@@ -861,35 +861,116 @@ def load_data(sheet_name, force_cloud=False):
     return df
 
 # 2.03.03 | Multi-Trip Global Ledger Consolidator
-@st.cache_data(ttl=600)
-def load_all_trips_data():
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_all_trips_data_cloud():
+    """
+    🌍 모든 여행가계부 원본 데이터의 Streamlit 캐시 계층.
+    - Google Sheets 접근은 여기에서만 수행
+    - 동일 프로세스 내 반복 조회는 cache_data가 흡수
+    """
     all_dfs = []
-    with st.spinner("🌍 모든 여행 기록을 불러오는 중..."):
-        for trip_name, config in TRIP_CONFIGS.items():
-            for attempt in range(3):
-                try:
-                    df_t = conn.read(worksheet=config['sheet'], ttl="10m")
-                    if df_t is not None and not df_t.empty:
-                        df_t['TripName'] = trip_name 
-                        first_node_name = list(config["nodes"].keys())[0]
-                        if 'Country' not in df_t.columns: df_t.insert(1, 'Country', first_node_name)
-                        else: df_t['Country'] = df_t['Country'].astype(str).str.strip().fillna(first_node_name)
-                        all_dfs.append(df_t)
-                    break
-                except Exception as e:
-                    if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
-                        time.sleep(1.5)
-                        continue
-                    break
-    if not all_dfs: return pd.DataFrame(columns=FINAL_COLUMNS + ['TripName'])
+
+    for trip_name, config in TRIP_CONFIGS.items():
+        for attempt in range(3):
+            try:
+                df_t = conn.read(
+                    worksheet=config['sheet'],
+                    ttl="10m"
+                )
+
+                if df_t is not None and not df_t.empty:
+                    df_t = df_t.copy()
+                    df_t['TripName'] = trip_name
+
+                    first_node_name = list(config["nodes"].keys())[0]
+
+                    if 'Country' not in df_t.columns:
+                        df_t.insert(1, 'Country', first_node_name)
+                    else:
+                        df_t['Country'] = (
+                            df_t['Country']
+                            .astype(str)
+                            .str.strip()
+                            .fillna(first_node_name)
+                        )
+
+                    all_dfs.append(df_t)
+
+                break
+
+            except Exception as e:
+                if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+                    time.sleep(1.5)
+                    continue
+
+                break
+
+    if not all_dfs:
+        return pd.DataFrame(columns=FINAL_COLUMNS + ['TripName'])
+
     return pd.concat(all_dfs, ignore_index=True)
+
+
+def load_all_trips_data(force_cloud=False):
+    """
+    🌍 모든 여행가계부 조회 전용 메모리 캐시.
+
+    조회 순서:
+        1. session_state
+        2. Streamlit cache_data
+        3. Google Sheets
+
+    일반적인 화면 조회에서는 Google Sheets를 직접 읽지 않는다.
+    """
+
+    cache_key = 'all_trips_lookup_df'
+
+    # ① 세션 메모리 우선
+    if not force_cloud:
+        cached_df = st.session_state.get(cache_key)
+
+        if cached_df is not None:
+            return cached_df
+
+    # ② Streamlit cache_data
+    df = _load_all_trips_data_cloud()
+
+    if df is None:
+        df = pd.DataFrame(columns=FINAL_COLUMNS + ['TripName'])
+
+    # ③ 세션 메모리에 바인딩
+    st.session_state[cache_key] = df
+
+    return df
+
 
 # 2.03.04 | Precision Cloud Cache Cleaner
 def smart_cache_clear():
-    if 'active_ledger_df' in st.session_state: del st.session_state['active_ledger_df']
-    if 'cached_cash_df' in st.session_state: del st.session_state['cached_cash_df']
-    try: load_all_trips_data.clear()
-    except: pass
+    """
+    🔄 저장/수정 이후 조회 캐시를 정확하게 무효화한다.
+
+    주의:
+    일반 조회에서는 절대로 호출하지 않는다.
+    데이터가 실제로 변경된 경우에만 호출한다.
+    """
+
+    # 현재 여행가계부 메모리 캐시
+    if 'active_ledger_df' in st.session_state:
+        del st.session_state['active_ledger_df']
+
+    # 현금 재고 캐시
+    if 'cached_cash_df' in st.session_state:
+        del st.session_state['cached_cash_df']
+
+    # 전체 여행 조회 캐시
+    if 'all_trips_lookup_df' in st.session_state:
+        del st.session_state['all_trips_lookup_df']
+
+    # Streamlit의 전체 여행 원본 캐시
+    try:
+        _load_all_trips_data_cloud.clear()
+    except Exception:
+        pass
 
 
 # ------------------------------------------------------------------------------
