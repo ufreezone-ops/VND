@@ -3488,7 +3488,10 @@ if main_tab_choice == "가계부":
 
 
 
-            # 6.01.03 | Filter & Ledger Table Engine
+            # 교체 범위: 6.01.03 ~ 6.01.06 전체
+# 기존 6.01.03 ~ 6.01.06을 위에서 아래까지 통째로 교체하세요.
+# 검색결과 영역과 상세 내역 영역을 독립 Fragment로 분리합니다.
+    # 6.01.03 | Filter & Ledger Table Engine
     @st.fragment
     def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
@@ -3510,8 +3513,6 @@ if main_tab_choice == "가계부":
                 if backup_active_ledger_to_cloud():
                     st.toast("🛡️ 현재 메모리 원장을 자동 백업했습니다.", icon="✅")
                     st.rerun(scope="fragment")
-
-        viewer_placeholder = st.empty()
 
         # 🔥 검색결과 표와 행 이동의 단일 메모리 원본
         # 이동 버튼을 누를 때마다 Google Sheets를 읽지 않고, active_ledger_df를 즉시 화면에 반영한다.
@@ -3627,6 +3628,7 @@ if main_tab_choice == "가계부":
             
             df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-cell", on_select="rerun", key="ledger_result_table")
 
+            # 6.01.04 | 선택 행 상태 관리
             # 선택 행은 "표시 위치"가 아니라 실제 ledger index로 기억한다.
             # 행 이동 직후에는 dataframe selection이 이전 화면 위치를 다시 보내올 수 있으므로
             # 한 번만 무시하고, 방금 이동한 행을 계속 선택 상태로 유지한다.
@@ -3652,339 +3654,380 @@ if main_tab_choice == "가계부":
 
                 if event_real_idx is not None:
                     selected_idx = render_df.index.get_loc(event_real_idx)
-                    st.session_state['ledger_selected_real_idx'] = int(event_real_idx)
+                    event_real_idx = int(event_real_idx)
+                    st.session_state['ledger_selected_real_idx'] = event_real_idx
+                    previous_detail_idx = st.session_state.get('ledger_detail_selected_real_idx')
+                    if previous_detail_idx != event_real_idx:
+                        st.session_state['ledger_detail_selected_real_idx'] = event_real_idx
+                        st.rerun()
                 elif saved_real_idx is not None:
                     try:
                         selected_idx = render_df.index.get_loc(saved_real_idx)
                     except (KeyError, TypeError, IndexError):
                         selected_idx = None
 
-            # 6.01.04 & 6.01.05 | Detail Viewer & Inline Editor
-            if selected_idx is not None:
-                real_idx = render_df.index[selected_idx] 
-                row_data = display_df.loc[real_idx]
-                
-                with viewer_placeholder.container():
-                    st.markdown("---")
-                    c_info, c_edit = st.columns([1, 1.2])
+
+            # 6.01.03 | 검색결과 바로 아래 행 순서 조정판
+            # 이동은 active_ledger_df 메모리만 변경하고, 이 검색결과 fragment만 다시 그린다.
+            selected_real_idx_for_move = st.session_state.get('ledger_selected_real_idx')
+            if selected_real_idx_for_move is not None:
+                try:
+                    _move_pos = active_memory_df.index.get_loc(selected_real_idx_for_move)
+                    if isinstance(_move_pos, slice):
+                        _move_pos = _move_pos.start
+                    _move_pos = int(_move_pos)
+                except (KeyError, TypeError, IndexError):
+                    _move_pos = None
+
+                if _move_pos is not None:
+                    st.markdown("**↕️ 선택 행 순서 조정**")
+                    c_up5, c_up1, c_down1, c_down5 = st.columns(4)
+
+                    def _move_ledger_row_from_search(delta):
+                        cur_df = st.session_state.get('active_ledger_df')
+                        if cur_df is None or cur_df.empty:
+                            return False
+
+                        current_real_idx = st.session_state.get('ledger_selected_real_idx')
+                        try:
+                            current_pos = cur_df.index.get_loc(current_real_idx)
+                            if isinstance(current_pos, slice):
+                                current_pos = current_pos.start
+                            current_pos = int(current_pos)
+                        except (KeyError, TypeError, IndexError):
+                            return False
+
+                        new_pos = max(0, min(len(cur_df) - 1, current_pos + delta))
+                        if new_pos == current_pos:
+                            return False
+
+                        cur_df = cur_df.copy()
+                        row_a = cur_df.iloc[current_pos].copy()
+                        row_b = cur_df.iloc[new_pos].copy()
+                        cur_df.iloc[current_pos] = row_b
+                        cur_df.iloc[new_pos] = row_a
+                        cur_df = recalculate_entire_ledger(cur_df)
+
+                        st.session_state.active_ledger_df = cur_df
+                        st.session_state['ledger_selected_real_idx'] = cur_df.index[new_pos]
+                        mark_ledger_dirty()
+                        st.session_state['ledger_ignore_selection_once'] = True
+                        return True
+
+                    with c_up5:
+                        if st.button("⏫ 5칸", key=f"btn_move_up5_search_{selected_real_idx_for_move}", use_container_width=True):
+                            if _move_ledger_row_from_search(-5):
+                                st.rerun(scope="fragment")
+                    with c_up1:
+                        if st.button("🔼 1칸", key=f"btn_move_up1_search_{selected_real_idx_for_move}", use_container_width=True):
+                            if _move_ledger_row_from_search(-1):
+                                st.rerun(scope="fragment")
+                    with c_down1:
+                        if st.button("🔽 1칸", key=f"btn_move_down1_search_{selected_real_idx_for_move}", use_container_width=True):
+                            if _move_ledger_row_from_search(1):
+                                st.rerun(scope="fragment")
+                    with c_down5:
+                        if st.button("⏬ 5칸", key=f"btn_move_down5_search_{selected_real_idx_for_move}", use_container_width=True):
+                            if _move_ledger_row_from_search(5):
+                                st.rerun(scope="fragment")
+
+
+    # 6.01.05 | Detail Viewer & Inline Editor Fragment
+    @st.fragment
+    def _render_ledger_detail_fragment():
+        # 상세 영역은 검색결과 fragment와 독립적으로 동작한다.
+        selected_real_idx = st.session_state.get('ledger_detail_selected_real_idx')
+        if selected_real_idx is None:
+            selected_real_idx = st.session_state.get('ledger_selected_real_idx')
+        active_df = st.session_state.get('active_ledger_df')
+        if active_df is None or active_df.empty or selected_real_idx is None:
+            st.info("💡 위 검색결과에서 행을 클릭하면 상세 내역이 여기에 표시됩니다.")
+            return
+
+        try:
+            if selected_real_idx not in active_df.index:
+                st.info("💡 선택된 내역을 찾을 수 없습니다. 위 검색결과에서 다시 선택해 주세요.")
+                return
+            real_idx = selected_real_idx
+            row_data = active_df.loc[real_idx]
+        except (KeyError, TypeError, IndexError):
+            st.info("💡 선택된 내역을 찾을 수 없습니다. 위 검색결과에서 다시 선택해 주세요.")
+            return
+
+        st.markdown("---")
+        c_info, c_edit = st.columns([1, 1.2])
+        
+        with c_info:
+            st.subheader("🧾 상세 내역 및 영수증 뷰어")
+            amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
+            krw_equivalent = row_data['Amount'] if row_data['Currency'] == 'KRW' else row_data['Amount'] * row_data['AppliedRate']
+            krw_display = f" ➔ <span style='color:#FFD700'>약 {krw_equivalent:,.0f} 원</span>" if row_data['Currency'] != 'KRW' else ""
+            st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}{krw_display})", unsafe_allow_html=True)
+            st.markdown(f"**🏦 결제수단:** `{row_data['PaymentMethod']}`")
+            
+            def smart_krw_translator(text, rate, curr):
+                if rate <= 0 or curr == 'KRW': return text
+                def replacer(match):
+                    raw_num = match.group(1).strip()
+                    suffix = match.group(2).lower() if match.group(2) else ""
                     
-                    with c_info:
-                        st.subheader("🧾 상세 내역 및 영수증 뷰어")
-                        c_up5, c_up1, c_down1, c_down5 = st.columns(4)
+                    if curr in ['VND', 'HUF', 'KRW'] or re.search(r'\.\d{3}(?!\d)', raw_num):
+                        clean_num_str = raw_num.replace('.', '').replace(',', '')
+                    else:
+                        clean_num_str = raw_num.replace(',', '')
 
-                        def move_ledger_row(delta):
-                            cur_df = st.session_state.get('active_ledger_df')
-                            if cur_df is None or cur_df.empty:
-                                return False
+                    try:
+                        v = float(clean_num_str)
+                        if 'k' in suffix: return match.group(0)
+                        is_currency = any(c in suffix for c in ['vnd', 'usd', 'eur', 'cny', 'try', 'rsd', 'huf', 'krw', '원', '동', '달러', 'đ'])
+                        is_unit = any(u in suffix for u in ['ml', 'g', 'kg', 'cm', 'mm', '개', 'x', '입', '장', '명', '박스', 'p', 'l'])
+                        if is_unit and not is_currency: return match.group(0)
+                        if is_currency or (curr in ['VND', 'HUF'] and v >= 1000) or (v > 100) or ('.' in raw_num and curr not in ['VND', 'HUF']):
+                            krw_val = v * rate
+                            return f"{match.group(1)}<span style='font-size:13px;color:#FFD700;font-style:italic;'> (약 {krw_val:,.0f}원)</span>{match.group(2)}"
+                    except: pass
+                    return match.group(0)
+                
+                pattern = re.compile(r'(?<![\d\.])(\d{1,3}(?:[,\.]\d{3})*(?:\.\d+)?|\d+)(?!\d)(\s*[a-zA-Z가-힣đĐ]*)')
+                return pattern.sub(replacer, text)
 
-                            current_real_idx = st.session_state.get('ledger_selected_real_idx', real_idx)
-                            try:
-                                current_pos = cur_df.index.get_loc(current_real_idx)
-                                if isinstance(current_pos, slice):
-                                    current_pos = current_pos.start
-                                else:
-                                    current_pos = int(current_pos)
-                            except (KeyError, TypeError, IndexError):
-                                current_pos = int(real_idx)
+            desc_full = str(row_data['Description'])
+            rate_for_calc = row_data['AppliedRate']
+            curr_for_calc = row_data['Currency']
+            if "-" in desc_full:
+                parts = desc_full.split("-", 1)
+                st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
+                items = parts[1].strip().split("\n") if "\n" in parts[1] else parts[1].strip().split(",")
+                for item in items: 
+                    item_clean = item.strip()
+                    if item_clean:
+                        item_clean = re.sub(r'^[\-\*•\s]+', '', item_clean)
+                        translated_item = smart_krw_translator(item_clean, rate_for_calc, curr_for_calc)
+                        st.markdown(f"- {translated_item}", unsafe_allow_html=True)
+            else:
+                trans_item = smart_krw_translator(desc_full, rate_for_calc, curr_for_calc)
+                st.markdown(f"**📝 내역:** {trans_item}", unsafe_allow_html=True)
+                
+            receipt_data = str(row_data['Receipt_URL']).strip()
+            urls = [u.strip() for u in receipt_data.split(",") if u.strip().startswith("http")]
+            if urls:
+                for idx, url in enumerate(urls):
+                    st.image(url, use_container_width=True, caption=f"영수증 사진 #{idx+1}")
+                    if st.button(f"🗑️ 사진 #{idx+1} 삭제", key=f"btn_del_rcpt_{real_idx}_{idx}", use_container_width=True):
+                        remaining_urls = [u for i, u in enumerate(urls) if i != idx]
+                        new_urls_str = ",".join(remaining_urls)
+                        active_df.at[real_idx, 'Receipt_URL'] = new_urls_str
+                        target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else active_df
+                        if real_idx in target_df.index: target_df.at[real_idx, 'Receipt_URL'] = new_urls_str
+                        if save_data(target_df):
+                            st.toast(f"사진 #{idx+1} 삭제 완료! (메모리 반영)", icon="✅"); time.sleep(0.2); st.rerun(scope="fragment")
+            else: st.info("첨부된 영수증 사진이 없습니다.")
+                
+        with c_edit:
+            st.subheader("✏️ 상세 내역 & 결제정보 수정")
+            all_cats_avail = list(dict.fromkeys(EXPENSE_CATS + ['선물', '상환', '충전', '환전', '입금', '직접환전', '이월잔액', '환불', '개인지출', '재환전', '출국', '귀국', '체크인', '체크아웃']))
+            cur_cat = str(row_data['Category']).strip()
+            cat_idx_sel = all_cats_avail.index(cur_cat) if cur_cat in all_cats_avail else 0
+            
+            ec1, ec2 = st.columns(2)
+            with ec1: edit_cat = st.selectbox("1. 항목(카테고리)", all_cats_avail, index=cat_idx_sel, key=f"edit_cat_sel_{real_idx}")
+            with ec2: edit_amt = st.number_input("2. 결제 금액", value=float(row_data['Amount']), step=1000.0 if row_data['Currency']=="VND" else 1.0, format="%.2f" if row_data['Currency']!="VND" else "%.0f", key=f"edit_amt_val_{real_idx}")
+                
+            cur_method = str(row_data['PaymentMethod']).strip()
+            avail_methods = list(dict.fromkeys([cur_method, f"트래블카드({row_data['Currency']})", f"현금({row_data['Currency']})", f"호텔외상({row_data['Currency']})", "원화계좌(한국)", "해외송금(한국계좌)", "정보"]))
+            method_idx_sel = avail_methods.index(cur_method) if cur_method in avail_methods else 0
+            edit_method = st.selectbox("3. 결제 수단(자산)", avail_methods, index=method_idx_sel, key=f"edit_met_sel_{real_idx}")
+            
+            desc_key = f"edit_desc_{real_idx}"
+            if st.session_state.get('current_edit_idx') != real_idx:
+                st.session_state[desc_key] = str(row_data['Description'])
+                st.session_state['current_edit_idx'] = real_idx
 
-                            if current_pos < 0 or current_pos >= len(cur_df):
-                                return False
-
-                            new_pos = max(0, min(len(cur_df) - 1, current_pos + delta))
-                            if new_pos == current_pos:
-                                return False
-
-                            cur_df = cur_df.copy()
-
-                            # 🔥 dtype 손상을 피하면서 두 행의 전체 데이터를 안전하게 교환한다.
-                            row_a = cur_df.iloc[current_pos].copy()
-                            row_b = cur_df.iloc[new_pos].copy()
-                            cur_df.iloc[current_pos] = row_b
-                            cur_df.iloc[new_pos] = row_a
-
-                            # 순서가 바뀌면 FIFO/누적 계산도 다시 맞춘다. Google Sheets에는 아직 저장하지 않는다.
-                            cur_df = recalculate_entire_ledger(cur_df)
-                            st.session_state.active_ledger_df = cur_df
-                            st.session_state['ledger_selected_real_idx'] = cur_df.index[new_pos]
-                            mark_ledger_dirty()
-
-                            # 다음 fragment rerun에서는 dataframe이 기억하고 있는 옛 선택 위치를 한 번 무시한다.
-                            st.session_state['ledger_ignore_selection_once'] = True
-                            return True
-
-                        with c_up5:
-                            if st.button("⏫ 5칸", key=f"btn_move_up5_{real_idx}", use_container_width=True):
-                                if move_ledger_row(-5):
-                                    st.rerun(scope="fragment")
-                        with c_up1:
-                            if st.button("🔼 1칸", key=f"btn_move_up1_{real_idx}", use_container_width=True):
-                                if move_ledger_row(-1):
-                                    st.rerun(scope="fragment")
-                        with c_down1:
-                            if st.button("🔽 1칸", key=f"btn_move_down1_{real_idx}", use_container_width=True):
-                                if move_ledger_row(1):
-                                    st.rerun(scope="fragment")
-                        with c_down5:
-                            if st.button("⏬ 5칸", key=f"btn_move_down5_{real_idx}", use_container_width=True):
-                                if move_ledger_row(5):
-                                    st.rerun(scope="fragment")
-
-                        amt_fmt2 = "{:,.2f}" if MULTIPLIER == 1 and row_data['Currency'] != 'KRW' else "{:,.0f}"
-                        krw_equivalent = row_data['Amount'] if row_data['Currency'] == 'KRW' else row_data['Amount'] * row_data['AppliedRate']
-                        krw_display = f" ➔ <span style='color:#FFD700'>약 {krw_equivalent:,.0f} 원</span>" if row_data['Currency'] != 'KRW' else ""
-                        st.markdown(f"### 🛒 {row_data['Category']} ({amt_fmt2.format(row_data['Amount'])} {row_data['Currency']}{krw_display})", unsafe_allow_html=True)
-                        st.markdown(f"**🏦 결제수단:** `{row_data['PaymentMethod']}`")
-                        
-                        def smart_krw_translator(text, rate, curr):
-                            if rate <= 0 or curr == 'KRW': return text
-                            def replacer(match):
-                                raw_num = match.group(1).strip()
-                                suffix = match.group(2).lower() if match.group(2) else ""
-                                
-                                if curr in ['VND', 'HUF', 'KRW'] or re.search(r'\.\d{3}(?!\d)', raw_num):
-                                    clean_num_str = raw_num.replace('.', '').replace(',', '')
-                                else:
-                                    clean_num_str = raw_num.replace(',', '')
-
+            new_receipts = st.file_uploader("📸 영수증 사후 업로드 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
+            
+            col_ai1, col_ai2 = st.columns(2)
+            with col_ai1:
+                if new_receipts:
+                    if st.button("🤖 새 영수증 AI 스캔 & 추가", key=f"btn_ai_scan_inline_{real_idx}", use_container_width=True, type="primary"):
+                        with st.spinner("AI가 새 영수증을 분석 중..."):
+                            smart_text, _, _ = summarize_receipt_files_with_gemini(new_receipts)
+                            if smart_text:
+                                cur_val = st.session_state.get(desc_key, '').strip()
+                                st.session_state[desc_key] = f"{cur_val}\n{smart_text}".strip() if cur_val else smart_text
+                                st.toast("영수증 품목 분석 완료!", icon="🤖"); st.rerun(scope="fragment")
+            with col_ai2:
+                if urls:
+                    if st.button("🔄 기존 영수증 AI 재스캔", key=f"btn_ai_rescan_existing_{real_idx}", use_container_width=True):
+                        with st.spinner("기존 영수증 사진을 AI 재분석 중..."):
+                            img_bytes = None
+                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                            for attempt in range(2):
                                 try:
-                                    v = float(clean_num_str)
-                                    if 'k' in suffix: return match.group(0)
-                                    is_currency = any(c in suffix for c in ['vnd', 'usd', 'eur', 'cny', 'try', 'rsd', 'huf', 'krw', '원', '동', '달러', 'đ'])
-                                    is_unit = any(u in suffix for u in ['ml', 'g', 'kg', 'cm', 'mm', '개', 'x', '입', '장', '명', '박스', 'p', 'l'])
-                                    if is_unit and not is_currency: return match.group(0)
-                                    if is_currency or (curr in ['VND', 'HUF'] and v >= 1000) or (v > 100) or ('.' in raw_num and curr not in ['VND', 'HUF']):
-                                        krw_val = v * rate
-                                        return f"{match.group(1)}<span style='font-size:13px;color:#FFD700;font-style:italic;'> (약 {krw_val:,.0f}원)</span>{match.group(2)}"
-                                except: pass
-                                return match.group(0)
-                            
-                            pattern = re.compile(r'(?<![\d\.])(\d{1,3}(?:[,\.]\d{3})*(?:\.\d+)?|\d+)(?!\d)(\s*[a-zA-Z가-힣đĐ]*)')
-                            return pattern.sub(replacer, text)
+                                    img_resp = requests.get(urls[0], headers=headers, timeout=25)
+                                    if img_resp.status_code == 200 and len(img_resp.content) > 1000:
+                                        img_bytes = img_resp.content
+                                        break
+                                except Exception:
+                                    time.sleep(1)
 
-                        desc_full = str(row_data['Description'])
-                        rate_for_calc = row_data['AppliedRate']
-                        curr_for_calc = row_data['Currency']
-                        if "-" in desc_full:
-                            parts = desc_full.split("-", 1)
-                            st.markdown(f"**🏪 상호명:** {parts[0].strip()}")
-                            items = parts[1].strip().split("\n") if "\n" in parts[1] else parts[1].strip().split(",")
-                            for item in items: 
-                                item_clean = item.strip()
-                                if item_clean:
-                                    item_clean = re.sub(r'^[\-\*•\s]+', '', item_clean)
-                                    translated_item = smart_krw_translator(item_clean, rate_for_calc, curr_for_calc)
-                                    st.markdown(f"- {translated_item}", unsafe_allow_html=True)
-                        else:
-                            trans_item = smart_krw_translator(desc_full, rate_for_calc, curr_for_calc)
-                            st.markdown(f"**📝 내역:** {trans_item}", unsafe_allow_html=True)
-                            
-                        receipt_data = str(row_data['Receipt_URL']).strip()
-                        urls = [u.strip() for u in receipt_data.split(",") if u.strip().startswith("http")]
-                        if urls:
-                            for idx, url in enumerate(urls):
-                                st.image(url, use_container_width=True, caption=f"영수증 사진 #{idx+1}")
-                                if st.button(f"🗑️ 사진 #{idx+1} 삭제", key=f"btn_del_rcpt_{real_idx}_{idx}", use_container_width=True):
-                                    remaining_urls = [u for i, u in enumerate(urls) if i != idx]
-                                    new_urls_str = ",".join(remaining_urls)
-                                    display_df.at[real_idx, 'Receipt_URL'] = new_urls_str
-                                    target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else display_df
-                                    if real_idx in target_df.index: target_df.at[real_idx, 'Receipt_URL'] = new_urls_str
-                                    if save_data(target_df):
-                                        st.toast(f"사진 #{idx+1} 삭제 완료! (메모리 반영)", icon="✅"); time.sleep(0.2); st.rerun(scope="fragment")
-                        else: st.info("첨부된 영수증 사진이 없습니다.")
-                            
-                    with c_edit:
-                        st.subheader("✏️ 상세 내역 & 결제정보 수정")
-                        all_cats_avail = list(dict.fromkeys(EXPENSE_CATS + ['선물', '상환', '충전', '환전', '입금', '직접환전', '이월잔액', '환불', '개인지출', '재환전', '출국', '귀국', '체크인', '체크아웃']))
-                        cur_cat = str(row_data['Category']).strip()
-                        cat_idx_sel = all_cats_avail.index(cur_cat) if cur_cat in all_cats_avail else 0
-                        
-                        ec1, ec2 = st.columns(2)
-                        with ec1: edit_cat = st.selectbox("1. 항목(카테고리)", all_cats_avail, index=cat_idx_sel, key=f"edit_cat_sel_{real_idx}")
-                        with ec2: edit_amt = st.number_input("2. 결제 금액", value=float(row_data['Amount']), step=1000.0 if row_data['Currency']=="VND" else 1.0, format="%.2f" if row_data['Currency']!="VND" else "%.0f", key=f"edit_amt_val_{real_idx}")
-                            
-                        cur_method = str(row_data['PaymentMethod']).strip()
-                        avail_methods = list(dict.fromkeys([cur_method, f"트래블카드({row_data['Currency']})", f"현금({row_data['Currency']})", f"호텔외상({row_data['Currency']})", "원화계좌(한국)", "해외송금(한국계좌)", "정보"]))
-                        method_idx_sel = avail_methods.index(cur_method) if cur_method in avail_methods else 0
-                        edit_method = st.selectbox("3. 결제 수단(자산)", avail_methods, index=method_idx_sel, key=f"edit_met_sel_{real_idx}")
-                        
-                        desc_key = f"edit_desc_{real_idx}"
-                        if st.session_state.get('current_edit_idx') != real_idx:
-                            st.session_state[desc_key] = str(row_data['Description'])
-                            st.session_state['current_edit_idx'] = real_idx
+                            if img_bytes:
+                                class TempFileObj:
+                                    def __init__(self, b): self.b = b; self.name = "rescan.jpg"
+                                    def seek(self, pos): pass
+                                    def read(self): return self.b
+                                    def getvalue(self): return self.b
+                                mock_file = TempFileObj(img_bytes)
+                                smart_text, _, tot_amt = summarize_receipt_files_with_gemini([mock_file])
+                                if smart_text:
+                                    st.session_state[desc_key] = smart_text
+                                    st.toast(f"기존 영수증 재스캔 완료! (총액: {tot_amt:,.0f})", icon="🎉")
+                                    st.rerun(scope="fragment")
 
-                        new_receipts = st.file_uploader("📸 영수증 사후 업로드 (사진/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'], key=f"inline_receipt_{real_idx}", accept_multiple_files=True)
-                        
-                        col_ai1, col_ai2 = st.columns(2)
-                        with col_ai1:
-                            if new_receipts:
-                                if st.button("🤖 새 영수증 AI 스캔 & 추가", key=f"btn_ai_scan_inline_{real_idx}", use_container_width=True, type="primary"):
-                                    with st.spinner("AI가 새 영수증을 분석 중..."):
-                                        smart_text, _, _ = summarize_receipt_files_with_gemini(new_receipts)
-                                        if smart_text:
-                                            cur_val = st.session_state.get(desc_key, '').strip()
-                                            st.session_state[desc_key] = f"{cur_val}\n{smart_text}".strip() if cur_val else smart_text
-                                            st.toast("영수증 품목 분석 완료!", icon="🤖"); st.rerun(scope="fragment")
-                        with col_ai2:
-                            if urls:
-                                if st.button("🔄 기존 영수증 AI 재스캔", key=f"btn_ai_rescan_existing_{real_idx}", use_container_width=True):
-                                    with st.spinner("기존 영수증 사진을 AI 재분석 중..."):
-                                        img_bytes = None
-                                        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-                                        for attempt in range(2):
-                                            try:
-                                                img_resp = requests.get(urls[0], headers=headers, timeout=25)
-                                                if img_resp.status_code == 200 and len(img_resp.content) > 1000:
-                                                    img_bytes = img_resp.content
-                                                    break
-                                            except Exception:
-                                                time.sleep(1)
+            new_desc = st.text_area("4. 세부 내역 (수정/추가)", height=110, key=desc_key)
 
-                                        if img_bytes:
-                                            class TempFileObj:
-                                                def __init__(self, b): self.b = b; self.name = "rescan.jpg"
-                                                def seek(self, pos): pass
-                                                def read(self): return self.b
-                                                def getvalue(self): return self.b
-                                            mock_file = TempFileObj(img_bytes)
-                                            smart_text, _, tot_amt = summarize_receipt_files_with_gemini([mock_file])
-                                            if smart_text:
-                                                st.session_state[desc_key] = smart_text
-                                                st.toast(f"기존 영수증 재스캔 완료! (총액: {tot_amt:,.0f})", icon="🎉")
-                                                st.rerun(scope="fragment")
+            gift_items_split = []
+            normal_items_split = []
+            gift_amt_split = 0.0
+            
+            if new_desc and any(ch.isdigit() for ch in new_desc):
+                all_lines = [l.strip() for l in re.sub(r'\[🎁선물:[^\]]+\]', '', new_desc).split("\n") if l.strip()]
+                store_header = ""
+                candidate_item_lines = []
+                
+                if all_lines:
+                    store_header = all_lines[0]
+                    raw_candidates = all_lines[1:]
+                else:
+                    raw_candidates = []
 
-                        new_desc = st.text_area("4. 세부 내역 (수정/추가)", height=110, key=desc_key)
+                for l_text in raw_candidates:
+                    val_chk = parse_amount_from_line(l_text)
+                    if l_text.startswith("-") or l_text.startswith("*") or l_text.startswith("•") or val_chk > 0:
+                        candidate_item_lines.append(l_text)
+                    else:
+                        if not store_header: store_header = l_text
 
-                        gift_items_split = []
-                        normal_items_split = []
-                        gift_amt_split = 0.0
-                        
-                        if new_desc and any(ch.isdigit() for ch in new_desc):
-                            all_lines = [l.strip() for l in re.sub(r'\[🎁선물:[^\]]+\]', '', new_desc).split("\n") if l.strip()]
-                            store_header = ""
-                            candidate_item_lines = []
+                if candidate_item_lines:
+                    with st.expander("🎁 선물/특산품 분리 및 '선물' 항목 신설", expanded=True):
+                        st.caption("💡 아래 품목 중 **선물/특산품**을 체크하시면 해당 품목만 '선물' 항목으로 분리됩니다.")
+                        cols_ge = st.columns(min(3, max(1, len(candidate_item_lines))))
+                        for idx_e, line_e in enumerate(candidate_item_lines):
+                            val_e = parse_amount_from_line(line_e)
+                            disp_name = re.sub(r'^[\-\*•\s]+', '', line_e)
+                            is_already_gift = any(k in line_e for k in ["선물", "기념품", "마그넷", "팔찌", "목걸이", "자석", "캔디", "선물용", "옷", "원피스", "스카프"]) or (cur_cat == "선물")
+                            c_box_e = cols_ge[idx_e % len(cols_ge)].checkbox(f"🎁 {disp_name[:18]}..", value=is_already_gift, key=f"chk_gift_edit_{real_idx}_{idx_e}")
                             
-                            if all_lines:
-                                store_header = all_lines[0]
-                                raw_candidates = all_lines[1:]
+                            if c_box_e:
+                                gift_items_split.append(line_e)
+                                gift_amt_split += val_e
                             else:
-                                raw_candidates = []
+                                normal_items_split.append(line_e)
+                        
+                        total_receipt_amt = float(edit_amt)
+                        remaining_normal_amt = max(0.0, total_receipt_amt - gift_amt_split)
+                        
+                        if gift_amt_split >= total_receipt_amt and total_receipt_amt > 0:
+                            st.info(f"✨ **100% 선물 지출**: 카테고리가 **`선물` ({total_receipt_amt:,.0f} {row_data['Currency']})** 로 전환됩니다.")
+                        elif gift_amt_split > 0 and remaining_normal_amt > 0:
+                            st.success(f"✂️ **2개 행 분할**:\n• 기존 (`{edit_cat}`): **{remaining_normal_amt:,.0f}** {row_data['Currency']}\n• 신설 (`선물`): **{gift_amt_split:,.0f}** {row_data['Currency']}")
 
-                            for l_text in raw_candidates:
-                                val_chk = parse_amount_from_line(l_text)
-                                if l_text.startswith("-") or l_text.startswith("*") or l_text.startswith("•") or val_chk > 0:
-                                    candidate_item_lines.append(l_text)
-                                else:
-                                    if not store_header: store_header = l_text
+            if st.button("💾 이 내역 변경사항 적용 (선물 자동분할 동시적용)", use_container_width=True, type="primary"):
+                updated_rcpt_url = str(row_data.get('Receipt_URL', '')).strip()
+                if new_receipts:
+                    with st.spinner("📸 영수증 클라우드 전송 중..."):
+                        new_urls = []
+                        for f in new_receipts:
+                            _uploaded_url = upload_image_to_imgbb(f)
+                            if _uploaded_url:
+                                new_urls.append(_uploaded_url)
+                        if new_urls:
+                            existing_urls = [x.strip() for x in updated_rcpt_url.split(',') if x.strip().startswith('http')]
+                            updated_rcpt_url = ",".join(existing_urls + new_urls)
 
-                            if candidate_item_lines:
-                                with st.expander("🎁 선물/특산품 분리 및 '선물' 항목 신설", expanded=True):
-                                    st.caption("💡 아래 품목 중 **선물/특산품**을 체크하시면 해당 품목만 '선물' 항목으로 분리됩니다.")
-                                    cols_ge = st.columns(min(3, max(1, len(candidate_item_lines))))
-                                    for idx_e, line_e in enumerate(candidate_item_lines):
-                                        val_e = parse_amount_from_line(line_e)
-                                        disp_name = re.sub(r'^[\-\*•\s]+', '', line_e)
-                                        is_already_gift = any(k in line_e for k in ["선물", "기념품", "마그넷", "팔찌", "목걸이", "자석", "캔디", "선물용", "옷", "원피스", "스카프"]) or (cur_cat == "선물")
-                                        c_box_e = cols_ge[idx_e % len(cols_ge)].checkbox(f"🎁 {disp_name[:18]}..", value=is_already_gift, key=f"chk_gift_edit_{real_idx}_{idx_e}")
-                                        
-                                        if c_box_e:
-                                            gift_items_split.append(line_e)
-                                            gift_amt_split += val_e
-                                        else:
-                                            normal_items_split.append(line_e)
-                                    
-                                    total_receipt_amt = float(edit_amt)
-                                    remaining_normal_amt = max(0.0, total_receipt_amt - gift_amt_split)
-                                    
-                                    if gift_amt_split >= total_receipt_amt and total_receipt_amt > 0:
-                                        st.info(f"✨ **100% 선물 지출**: 카테고리가 **`선물` ({total_receipt_amt:,.0f} {row_data['Currency']})** 로 전환됩니다.")
-                                    elif gift_amt_split > 0 and remaining_normal_amt > 0:
-                                        st.success(f"✂️ **2개 행 분할**:\n• 기존 (`{edit_cat}`): **{remaining_normal_amt:,.0f}** {row_data['Currency']}\n• 신설 (`선물`): **{gift_amt_split:,.0f}** {row_data['Currency']}")
+                target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else ledger_df
+                total_receipt_amt = float(edit_amt)
+                
+                if (gift_amt_split >= total_receipt_amt and total_receipt_amt > 0) or (len(gift_items_split) > 0 and len(normal_items_split) == 0):
+                    target_df.at[real_idx, 'Category'] = "선물"
+                    target_df.at[real_idx, 'Amount'] = total_receipt_amt
+                    target_df.at[real_idx, 'PaymentMethod'] = edit_method
+                    target_df.at[real_idx, 'Description'] = new_desc.strip()
+                    target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
+                    target_df.at[real_idx, 'Note'] = "100% Gift Purchase"
+                    
+                elif gift_amt_split > 0 and len(normal_items_split) > 0:
+                    rem_amt = max(0.0, total_receipt_amt - gift_amt_split)
+                    lines_all = [l.strip() for l in new_desc.split('\n') if l.strip()]
+                    store_hdr = lines_all[0] if lines_all else "상호명미기재"
+                    
+                    norm_desc = f"{store_hdr}\n" + "\n".join(normal_items_split)
+                    gift_desc = f"{store_hdr}\n" + "\n".join(gift_items_split)
+                    
+                    base_cat = edit_cat if edit_cat != "선물" else row_data.get('Category', '마트')
+                    if base_cat == "선물": base_cat = "마트"
+                    
+                    target_df.at[real_idx, 'Category'] = base_cat
+                    target_df.at[real_idx, 'Amount'] = rem_amt
+                    target_df.at[real_idx, 'PaymentMethod'] = edit_method
+                    target_df.at[real_idx, 'Description'] = norm_desc.strip()
+                    target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
+                    
+                    new_gift_row = pd.DataFrame([{
+                        'Date': row_data['Date'],
+                        'Country': row_data['Country'],
+                        'Category': '선물',
+                        'Description': gift_desc.strip(),
+                        'Currency': row_data['Currency'],
+                        'Amount': gift_amt_split,
+                        'PaymentMethod': edit_method,
+                        'IsExpense': 1,
+                        'AppliedRate': row_data['AppliedRate'],
+                        'Note': 'Gift Split',
+                        'Receipt_URL': updated_rcpt_url
+                    }])
+                    target_df = pd.concat([target_df.iloc[:real_idx + 1], new_gift_row, target_df.iloc[real_idx + 1:]], ignore_index=True)
+                    
+                else:
+                    target_df.at[real_idx, 'Category'] = edit_cat
+                    target_df.at[real_idx, 'Amount'] = total_receipt_amt
+                    target_df.at[real_idx, 'PaymentMethod'] = edit_method
+                    target_df.at[real_idx, 'Description'] = new_desc.strip()
+                    target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
 
-                        if st.button("💾 이 내역 변경사항 적용 (선물 자동분할 동시적용)", use_container_width=True, type="primary"):
-                            updated_rcpt_url = str(row_data.get('Receipt_URL', '')).strip()
-                            if new_receipts:
-                                with st.spinner("📸 영수증 클라우드 전송 중..."):
-                                    new_urls = [upload_image_to_imgbb(f) for f in new_receipts if upload_image_to_imgbb(f)]
-                                    if new_urls:
-                                        existing_urls = [x.strip() for x in updated_rcpt_url.split(',') if x.strip().startswith('http')]
-                                        updated_rcpt_url = ",".join(existing_urls + new_urls)
+                final_calc_df = recalculate_entire_ledger(target_df)
+                st.session_state.active_ledger_df = final_calc_df
+                if real_idx in final_calc_df.index:
+                    st.session_state['ledger_detail_selected_real_idx'] = real_idx
+                    st.session_state['ledger_selected_real_idx'] = real_idx
+                elif not final_calc_df.empty:
+                    nearest_idx = min(max(int(real_idx), 0), len(final_calc_df) - 1)
+                    st.session_state['ledger_detail_selected_real_idx'] = final_calc_df.index[nearest_idx]
+                    st.session_state['ledger_selected_real_idx'] = final_calc_df.index[nearest_idx]
+                mark_ledger_dirty()
 
-                            target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else ledger_df
-                            total_receipt_amt = float(edit_amt)
-                            
-                            if (gift_amt_split >= total_receipt_amt and total_receipt_amt > 0) or (len(gift_items_split) > 0 and len(normal_items_split) == 0):
-                                target_df.at[real_idx, 'Category'] = "선물"
-                                target_df.at[real_idx, 'Amount'] = total_receipt_amt
-                                target_df.at[real_idx, 'PaymentMethod'] = edit_method
-                                target_df.at[real_idx, 'Description'] = new_desc.strip()
-                                target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
-                                target_df.at[real_idx, 'Note'] = "100% Gift Purchase"
-                                
-                            elif gift_amt_split > 0 and len(normal_items_split) > 0:
-                                rem_amt = max(0.0, total_receipt_amt - gift_amt_split)
-                                lines_all = [l.strip() for l in new_desc.split('\n') if l.strip()]
-                                store_hdr = lines_all[0] if lines_all else "상호명미기재"
-                                
-                                norm_desc = f"{store_hdr}\n" + "\n".join(normal_items_split)
-                                gift_desc = f"{store_hdr}\n" + "\n".join(gift_items_split)
-                                
-                                base_cat = edit_cat if edit_cat != "선물" else row_data.get('Category', '마트')
-                                if base_cat == "선물": base_cat = "마트"
-                                
-                                target_df.at[real_idx, 'Category'] = base_cat
-                                target_df.at[real_idx, 'Amount'] = rem_amt
-                                target_df.at[real_idx, 'PaymentMethod'] = edit_method
-                                target_df.at[real_idx, 'Description'] = norm_desc.strip()
-                                target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
-                                
-                                new_gift_row = pd.DataFrame([{
-                                    'Date': row_data['Date'],
-                                    'Country': row_data['Country'],
-                                    'Category': '선물',
-                                    'Description': gift_desc.strip(),
-                                    'Currency': row_data['Currency'],
-                                    'Amount': gift_amt_split,
-                                    'PaymentMethod': edit_method,
-                                    'IsExpense': 1,
-                                    'AppliedRate': row_data['AppliedRate'],
-                                    'Note': 'Gift Split',
-                                    'Receipt_URL': updated_rcpt_url
-                                }])
-                                target_df = pd.concat([target_df.iloc[:real_idx + 1], new_gift_row, target_df.iloc[real_idx + 1:]], ignore_index=True)
-                                
-                            else:
-                                target_df.at[real_idx, 'Category'] = edit_cat
-                                target_df.at[real_idx, 'Amount'] = total_receipt_amt
-                                target_df.at[real_idx, 'PaymentMethod'] = edit_method
-                                target_df.at[real_idx, 'Description'] = new_desc.strip()
-                                target_df.at[real_idx, 'Receipt_URL'] = updated_rcpt_url
+                st.toast("🎉 선물 분할 및 정합성 원샷 업데이트 완료! (메모리 반영)", icon="✅")
+                time.sleep(0.2)
+                st.rerun(scope="fragment")
 
-                            final_calc_df = recalculate_entire_ledger(target_df)
-                            st.session_state.active_ledger_df = final_calc_df
-                            mark_ledger_dirty()
+            st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+            if st.button("🚨 이 지출 내역 영구 삭제하기", key=f"btn_delete_row_{real_idx}", use_container_width=True):
+                target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else ledger_df
+                target_df = target_df.drop(real_idx).reset_index(drop=True)
+                final_calc_df = recalculate_entire_ledger(target_df)
+                st.session_state.active_ledger_df = final_calc_df
+                mark_ledger_dirty()
 
-                            st.toast("🎉 선물 분할 및 정합성 원샷 업데이트 완료! (메모리 반영)", icon="✅")
-                            time.sleep(0.2)
-                            st.rerun(scope="fragment")
+                st.toast("🗑️ 해당 지출 내역을 메모리에서 삭제했습니다. (최종 저장 전까지 복구 가능)", icon="🗑️")
+                time.sleep(0.2)
+                st.rerun(scope="fragment")
 
-                        st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-                        if st.button("🚨 이 지출 내역 영구 삭제하기", key=f"btn_delete_row_{real_idx}", use_container_width=True):
-                            target_df = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state else ledger_df
-                            target_df = target_df.drop(real_idx).reset_index(drop=True)
-                            final_calc_df = recalculate_entire_ledger(target_df)
-                            st.session_state.active_ledger_df = final_calc_df
-                            mark_ledger_dirty()
+        st.markdown("---")
 
-                            st.toast("🗑️ 해당 지출 내역을 메모리에서 삭제했습니다. (최종 저장 전까지 복구 가능)", icon="🗑️")
-                            time.sleep(0.2)
-                            st.rerun(scope="fragment")
-
-                    st.markdown("---")
-
-
-
+    # 6.01.06 | Search Result + Detail Entry
     _render_ledger_table_fragment()
+    _render_ledger_detail_fragment()
+
+
 
 # ==============================================================================
 # [Module 6.02.00] Daily Statistics & Time-Series Engine (일일Data 탭)
