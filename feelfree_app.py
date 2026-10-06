@@ -3492,24 +3492,6 @@ if main_tab_choice == "가계부":
     def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
 
-        # ☁️ 원장 저장은 이제 여기 하나로 통합한다. 모든 편집은 먼저 메모리에 반영된다.
-        if st.session_state.get('ledger_dirty', False):
-            c_save, c_backup = st.columns([3, 2])
-            with c_save:
-                st.warning("📝 **저장되지 않은 변경사항이 있습니다.** 현재 작업은 메모리에 안전하게 반영되어 있습니다.")
-                if st.button("☁️ 변경사항 일괄 저장", key="btn_commit_ledger_global", use_container_width=True, type="primary"):
-                    if commit_ledger_to_cloud():
-                        st.toast("☁️ 변경사항을 Google Sheets에 일괄 저장했습니다!", icon="✅")
-                        st.rerun(scope="fragment")
-            with c_backup:
-                backup_at = st.session_state.get('last_auto_backup_at')
-                backup_text = backup_at if backup_at else "아직 없음"
-                st.caption(f"🛡️ 자동 백업: 3분 간격\n\n마지막 백업: **{backup_text}**")
-            if st.button("🛡️ 지금 백업", key="btn_manual_ledger_backup", use_container_width=True):
-                if backup_active_ledger_to_cloud():
-                    st.toast("🛡️ 현재 메모리 원장을 자동 백업했습니다.", icon="✅")
-                    st.rerun(scope="fragment")
-
         # 🔥 검색결과 표와 행 이동의 단일 메모리 원본
         # 이동 버튼을 누를 때마다 Google Sheets를 읽지 않고, active_ledger_df를 즉시 화면에 반영한다.
         active_memory_df = st.session_state.get('active_ledger_df')
@@ -3773,6 +3755,25 @@ if main_tab_choice == "가계부":
                             args=(5,),
                         )
 
+
+        # ☁️ 원장 저장/백업 상태는 검색결과 표 아래에 표시한다.
+        # 첫 행 이동 시 상단에 블록이 새로 삽입되어 표 위치가 밀리는 현상을 막는다.
+        if st.session_state.get('ledger_dirty', False):
+            c_save, c_backup = st.columns([3, 2])
+            with c_save:
+                st.warning("📝 **저장되지 않은 변경사항이 있습니다.** 현재 작업은 메모리에 안전하게 반영되어 있습니다.")
+                if st.button("☁️ 변경사항 일괄 저장", key="btn_commit_ledger_global", use_container_width=True, type="primary"):
+                    if commit_ledger_to_cloud():
+                        st.toast("☁️ 변경사항을 Google Sheets에 일괄 저장했습니다!", icon="✅")
+                        st.rerun(scope="fragment")
+            with c_backup:
+                backup_at = st.session_state.get('last_auto_backup_at')
+                backup_text = backup_at if backup_at else "아직 없음"
+                st.caption(f"🛡️ 자동 백업: 3분 간격\n\n마지막 백업: **{backup_text}**")
+            if st.button("🛡️ 지금 백업", key="btn_manual_ledger_backup", use_container_width=True):
+                if backup_active_ledger_to_cloud():
+                    st.toast("🛡️ 현재 메모리 원장을 자동 백업했습니다.", icon="✅")
+                    st.rerun(scope="fragment")
 
     # 6.01.05 | Detail Viewer & Inline Editor Fragment
     @st.fragment
