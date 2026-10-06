@@ -58,8 +58,11 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # ------------------------------------------------------------------------------
 # 1.03.00 | Cloud Version Control System (구글 시트 버전 로그 갱신)
 # ------------------------------------------------------------------------------
-# 1.03.01 | Google Sheets Auto Version Logger
+# 1.03.01 | Google Sheets Auto Version Logger (Session 1-Time Guard)
 def auto_update_log_to_gsheets():
+    # ⚡ 세션 중 이미 체크했다면 구글 시트 통신 즉시 건너뜀 (0ms)
+    if st.session_state.get('v_logged') == VERSION:
+        return
     for attempt in range(3):
         try:
             log_df = conn.read(worksheet="version_log", ttl="10m") 
@@ -73,6 +76,7 @@ def auto_update_log_to_gsheets():
                 }])
                 log_df = pd.concat([new_log, log_df], ignore_index=True)
                 conn.update(worksheet="version_log", data=log_df)
+            st.session_state['v_logged'] = VERSION
             break
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
@@ -782,13 +786,13 @@ def clean_amount_to_float(val):
     try: return float(cleaned) if cleaned else 0.0
     except: return 0.0
 
-# 2.03.02 | Active Trip Ledger Loader & Normalizer
-@st.cache_data(ttl=120)
+# 2.03.02 | Active Trip Ledger Loader & Normalizer (10m Smart Cache)
+@st.cache_data(ttl=600)
 def load_data(sheet_name):
     df = None
     for attempt in range(3):
         try:
-            df = conn.read(worksheet=sheet_name, ttl="0s")
+            df = conn.read(worksheet=sheet_name, ttl="10m")  # ⚡ 0s ➔ 10m 캐시 전환
             break
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
@@ -803,13 +807,14 @@ def load_data(sheet_name):
         except: pass 
         return df_init
 
-    year_match = re.search(r'\((\d{4})\)', st.session_state.current_trip)
-    trip_year = year_match.group(1) if year_match else "2024"
+    year_match = re.search(r'\((\d{4})\)', st.session_state.get('current_trip', ''))
+    trip_year = year_match.group(1) if year_match else "2026"
 
-    if 'Country' not in df.columns: df.insert(1, 'Country', FIRST_NODE_NAME)
+    first_node_curr = FIRST_NODE_NAME if 'FIRST_NODE_NAME' in globals() else "베트남"
+    if 'Country' not in df.columns: df.insert(1, 'Country', first_node_curr)
     else:
         df['Country'] = df['Country'].astype(str).str.strip().replace(['nan', 'None', ''], None)
-        df['Country'] = df['Country'].fillna(FIRST_NODE_NAME)
+        df['Country'] = df['Country'].fillna(first_node_curr)
     
     if 'Cum_Card_VND' in df.columns: df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
     if 'Cum_Cash_VND' in df.columns: df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
@@ -834,7 +839,7 @@ def load_data(sheet_name):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
     
-    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물']))
+    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물'])) if 'EXPENSE_CATS' in globals() else ['식사', '간식', '마트', '선물']
     def evaluate_is_expense(r):
         cat = str(r['Category']).strip()
         if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출']:
@@ -1095,11 +1100,12 @@ def quick_swap_and_save(df):
         st.error(f"🚨 순서 변경 저장 실패: {e}")
         return False
 
-# 2.05.04 | Cash Inventory Cloud Loader & Saver
+# 2.05.04 | Cash Inventory Cloud Loader & Saver (5m Cached)
+@st.cache_data(ttl=300)
 def load_cash_inventory():
     for attempt in range(3):
         try:
-            df = conn.read(worksheet=CASH_SHEET, ttl="0s")
+            df = conn.read(worksheet=CASH_SHEET, ttl="5m")  # ⚡ 5분 캐시
             if df is not None and not df.empty:
                 return df
             break
@@ -1136,9 +1142,10 @@ def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
             df = pd.concat([df, new_row], ignore_index=True)
             
         conn.update(worksheet=CASH_SHEET, data=df)
+        load_cash_inventory.clear()  # ⚡ 저장 시에만 캐시 클리어
         return True
     except Exception as e:
-        st.error(f"🚨 지폐 실사 동기화 실패 (탭 '{CASH_SHEET}' 존재 여부 확인): {e}")
+        st.error(f"🚨 지폐 실사 동기화 실패: {e}")
         return False
 
 # 2.05.05 | Memory Cache Ledger Binder
@@ -1602,7 +1609,7 @@ with st.sidebar:
         for c in primary_trip_currs:
             render_currency_card(c, is_secondary=False)
 
-        # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync
+        # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync (사이드바 속도 뱃지 포함)
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
         st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
@@ -1612,9 +1619,11 @@ with st.sidebar:
             render_dday_control_tower()
 
         st.divider()
-        st.markdown("<div style='margin-top:15px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
         if st.button("🔄 Cloud Refresh (데이터 동기화)", use_container_width=True, type="primary"): 
             st.cache_data.clear()
+            load_data.clear()
+            load_cash_inventory.clear()
             re_calc_df = recalculate_entire_ledger(ledger_df)
             st.session_state.active_ledger_df = re_calc_df
             try:
@@ -1625,7 +1634,12 @@ with st.sidebar:
             time.sleep(0.5)
             st.rerun()
 
-        # 2. 🌟 보조 통화(사전결제 잔여분 등) 최하단 분리 노출 (밝은 청색 헤더)
+        # ⚡ [사이드바 속도 실시간 표시 배지] 스크롤 없이 바로 확인 가능
+        t_sb_now = (time.perf_counter() - t_render_start) * 1000
+        sb_color = "#10B981" if t_sb_now < 500 else ("#38BDF8" if t_sb_now < 1500 else "#F59E0B")
+        st.markdown(f"<div style='text-align:center; font-size:11.5px; color:#64748B; margin-top:8px;'>실시간 반응: <span style='color:{sb_color}; font-weight:bold;'>⚡ {t_sb_now:,.0f}ms</span></div>", unsafe_allow_html=True)
+
+        # 2. 🌟 보조 통화(사전결제 잔여분 등) 최하단 분리 노출
         if secondary_currs:
             st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
             st.caption("🌐 보조/기타 통화 잔고")
