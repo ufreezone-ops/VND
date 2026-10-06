@@ -3633,13 +3633,13 @@ if main_tab_choice == "가계부":
                         st.session_state.pop('ledger_result_table', None)
                         st.session_state['ledger_result_table'] = {
                             "selection": {
-                                "cells": [[pending_display_row, "Date"]]
+                                "rows": [pending_display_row]
                             }
                         }
                 except (KeyError, TypeError, IndexError):
                     pass
 
-            df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-cell", on_select="rerun", key="ledger_result_table")
+            df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-row", on_select="rerun", key="ledger_result_table")
 
             # 6.01.04 | 선택 행 상태 관리 + 연속 행 이동
             # 선택 행은 "표시 위치"가 아니라 실제 ledger index로 기억한다.
@@ -3656,11 +3656,7 @@ if main_tab_choice == "가계부":
                     selected_idx = None
             else:
                 event_real_idx = None
-                if getattr(df_event.selection, "cells", None) and len(df_event.selection.cells) > 0:
-                    event_row_idx = df_event.selection.cells[0][0]
-                    if 0 <= event_row_idx < len(render_df):
-                        event_real_idx = render_df.index[event_row_idx]
-                elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
+                if getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
                     event_row_idx = df_event.selection.rows[0]
                     if 0 <= event_row_idx < len(render_df):
                         event_real_idx = render_df.index[event_row_idx]
