@@ -2152,17 +2152,14 @@ with st.sidebar:
 # ------------------------------------------------------------------------------
 # 4.02.00 | Top Navigation Router (여행지 선택 및 관제탑 모드 스위처)
 # ------------------------------------------------------------------------------
-# ==============================================================================
-# 4.02.00 | Top Navigation Router (여행지 선택 및 관제탑 모드 스위처)
-# ==============================================================================
-# 4.02.01 | Global View Switcher & Trip Selector (상단 반응속도 뱃지 탑재)
+# 4.02.01 | Global View Switcher & Trip Selector (슬림형 여행지 선택 + 우측 반응속도)
 sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
 
 SPECIAL_MODE_SPI = "📊 모든 여행지 물가비교"
 SPECIAL_MODE_NEW = "➕ 새로운 여행지 개설"
 dropdown_options = sorted_trips + [SPECIAL_MODE_SPI, SPECIAL_MODE_NEW]
 
-if 'show_spi' not in st.session_state: 
+if 'show_spi' not in st.session_state:
     st.session_state.show_spi = False
 if 'show_new_trip' not in st.session_state:
     st.session_state.show_new_trip = False
@@ -2197,26 +2194,36 @@ def on_trip_change():
             del st.query_params["mode"]
     st.rerun()
 
-st.selectbox(
-    "✈️ 내 여행함 (Trip Selector)", 
-    dropdown_options, 
-    index=curr_idx, 
-    key="top_nav_trip_selector", 
-    on_change=on_trip_change,
-    label_visibility="collapsed"
-)
+# 여행지 선택 영역은 화면 폭을 3:1로 나누고,
+# 오른쪽의 남는 공간에 반응속도를 배치합니다.
+nav_trip_col, nav_perf_col = st.columns([3.4, 1], gap="small")
 
-# ⚡ [상단 실시간 반응속도 슬림 배지] 최상단에서 즉각 확인 가능
-t_top_now = (time.perf_counter() - t_render_start) * 1000
-top_color = "#10B981" if t_top_now < 500 else ("#38BDF8" if t_top_now < 1500 else "#F59E0B")
-st.markdown(f"""
-    <div style='display:flex; justify-content:flex-end; align-items:center; margin-top:-6px; margin-bottom:6px;'>
-        <span style='font-size:12px; color:#64748B;'>반응속도: <b style='color:{top_color};'>⚡ {t_top_now:,.0f}ms</b></span>
-    </div>
-""", unsafe_allow_html=True)
+with nav_trip_col:
+    st.selectbox(
+        "✈️ 내 여행함 (Trip Selector)",
+        dropdown_options,
+        index=curr_idx,
+        key="top_nav_trip_selector",
+        on_change=on_trip_change,
+        label_visibility="collapsed"
+    )
+
+with nav_perf_col:
+    t_top_now = (time.perf_counter() - t_render_start) * 1000
+    top_color = "#10B981" if t_top_now < 500 else ("#38BDF8" if t_top_now < 1500 else "#F59E0B")
+    st.markdown(
+        f"""
+        <div style='height:40px; display:flex; align-items:center; justify-content:flex-end; padding:0 4px;'>
+            <span style='font-size:12px; color:#64748B; white-space:nowrap;'>
+                반응속도:
+                <b style='color:{top_color};'>⚡ {t_top_now:,.0f}ms</b>
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 st.divider()
-
 
 # ==============================================================================
 # [Module 5.00.00] Global Comparison Mode (Module F: 다국적 물가 및 단가 비교)
