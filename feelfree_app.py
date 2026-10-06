@@ -5,15 +5,17 @@
 # ------------------------------------------------------------------------------
 # 1.01.00 | Global Setup (라이브러리 임포트, 페이지 및 시간대 설정)
 # ------------------------------------------------------------------------------
-# 1.01.01 | Page Config, Timezone & Core Libraries
+# 1.01.01 | Page Config, Timezone & Core Libraries (Latency Timer Started)
+import time
+t_render_start = time.perf_counter()  # ⏱️ 렌더링 속도 정밀 측정 시작점
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, timezone, date as dt_date
 from streamlit_gsheets import GSheetsConnection
-from streamlit_option_menu import option_menu  # 💡 공식 뱃지 메뉴 라이브러리 추가
-import time
+from streamlit_option_menu import option_menu
 import requests
 import base64
 import re
@@ -4296,6 +4298,22 @@ elif main_tab_choice == "전체요약":
     else:
         st.info("기록된 지출 데이터가 없습니다.")
 # ------------------------------------------------------------------------------
-# 6.05.00 | Build Version & Sync Timestamp Footer
+# 6.05.00 | Build Version & Real-time Latency Benchmark Footer
 # ------------------------------------------------------------------------------
-st.caption(f"GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(TZ_KST).strftime('%Y-%m-%d %H:%M:%S')} | Strategic Partner Gem")
+t_render_end = time.perf_counter()
+render_latency_ms = (t_render_end - t_render_start) * 1000
+
+# ⏱️ 속도 상태별 뱃지 컬러 (500ms 미만 녹색, 1500ms 이상 경고 오렌지/레드)
+if render_latency_ms < 500:
+    perf_badge = f"<span style='color:#10B981; font-weight:bold;'>⚡ {render_latency_ms:,.0f}ms (초고속)</span>"
+elif render_latency_ms < 1500:
+    perf_badge = f"<span style='color:#38BDF8; font-weight:bold;'>⚡ {render_latency_ms:,.0f}ms (보통)</span>"
+else:
+    perf_badge = f"<span style='color:#F59E0B; font-weight:bold;'>🐢 {render_latency_ms:,.0f}ms (통신 지연중)</span>"
+
+st.markdown(f"""
+    <div style='display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#64748B; border-top:1px solid #1E293B; padding-top:8px; margin-top:20px;'>
+        <div>GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(TZ_KST).strftime('%Y-%m-%d %H:%M:%S')}</div>
+        <div>반응속도: {perf_badge}</div>
+    </div>
+""", unsafe_allow_html=True)
