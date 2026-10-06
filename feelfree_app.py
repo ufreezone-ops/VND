@@ -107,9 +107,12 @@ def infer_node_info(c_name, def_c, def_s, def_t, def_m):
     if any(k in c_upper for k in ["사이프러스", "CYPRUS", "키프로스"]): return "EUR", "€", 2, 1
     return def_c, def_s, def_t, def_m
 
-# 1.04.02 | Control Tower Config Loader & Node Assembler
-@st.cache_data(ttl=600)
+# 1.04.02 | Control Tower Config Loader & Node Assembler (Zero-Network Session Isolated)
 def get_trip_configs():
+    # ⚡ 세션 메모리에 이미 관제탑 설정이 있다면 구글 통신 완전 건너뜀 (0ms)
+    if 'cached_trip_configs' in st.session_state and st.session_state.cached_trip_configs:
+        return st.session_state.cached_trip_configs
+
     cfg_df = None
     for attempt in range(3):
         try:
@@ -121,7 +124,6 @@ def get_trip_configs():
                 time.sleep(2.5)
                 continue
             st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}') 로드 실패 (API 과부하).**")
-            st.info("💡 단기간에 많은 접속으로 구글 시트 요청 한도에 도달했습니다. 약 10초 후 새로고침 해주세요.")
             st.stop()
             
     if cfg_df is None or cfg_df.empty:
@@ -142,7 +144,6 @@ def get_trip_configs():
         main_tz = int(row['Timezone']) if pd.notna(row['Timezone']) else 9
         main_mult = int(row['Multiplier']) if pd.notna(row['Multiplier']) else 1
         
-        # 1. Base Node 설정
         nodes = {main_country: {
             "currency": main_curr,
             "symbol": main_sym, 
@@ -150,7 +151,6 @@ def get_trip_configs():
             "multiplier": main_mult
         }}
         
-        # 2. Stay_Mapping을 분석하여 경유하는 다중 국가(Multi-Node) 동적 생성
         if stay_mapping:
             parts = stay_mapping.replace(" ", "").split(",")
             for p in parts:
@@ -172,6 +172,8 @@ def get_trip_configs():
             "travelers": travelers,
             "stay_mapping": stay_mapping
         }
+    
+    st.session_state.cached_trip_configs = dynamic_configs
     return dynamic_configs
 
 TRIP_CONFIGS = get_trip_configs()
@@ -786,13 +788,17 @@ def clean_amount_to_float(val):
     try: return float(cleaned) if cleaned else 0.0
     except: return 0.0
 
-# 2.03.02 | Active Trip Ledger Loader & Normalizer (10m Smart Cache)
-@st.cache_data(ttl=600)
-def load_data(sheet_name):
+# 2.03.02 | Active Trip Ledger Loader (Zero-Network Pure Memory First)
+def load_data(sheet_name, force_cloud=False):
+    # ⚡ 세션 메모리에 해당 시트 데이터가 이미 존재하면 구글 통신 0회 즉시 반환
+    if not force_cloud and 'active_ledger_df' in st.session_state and st.session_state.get('last_loaded_sheet') == sheet_name:
+        if st.session_state.active_ledger_df is not None and not st.session_state.active_ledger_df.empty:
+            return st.session_state.active_ledger_df
+
     df = None
     for attempt in range(3):
         try:
-            df = conn.read(worksheet=sheet_name, ttl="10m")  # ⚡ 0s ➔ 10m 캐시 전환
+            df = conn.read(worksheet=sheet_name, ttl="10m")
             break
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
@@ -850,13 +856,15 @@ def load_data(sheet_name):
     df['Note'] = df['Note'].fillna("").astype(str)
     df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
     
+    st.session_state.active_ledger_df = df
+    st.session_state.last_loaded_sheet = sheet_name
     return df
 
 # 2.03.03 | Multi-Trip Global Ledger Consolidator
 @st.cache_data(ttl=600)
 def load_all_trips_data():
     all_dfs = []
-    with st.spinner("🌍 모든 여행 기록을 불러오는 중... (한 번 불러오면 10분간 보관됩니다)"):
+    with st.spinner("🌍 모든 여행 기록을 불러오는 중..."):
         for trip_name, config in TRIP_CONFIGS.items():
             for attempt in range(3):
                 try:
@@ -878,10 +886,11 @@ def load_all_trips_data():
 
 # 2.03.04 | Precision Cloud Cache Cleaner
 def smart_cache_clear():
-    try: load_data.clear(ACTIVE_SHEET)
-    except: pass
+    if 'active_ledger_df' in st.session_state: del st.session_state['active_ledger_df']
+    if 'cached_cash_df' in st.session_state: del st.session_state['cached_cash_df']
     try: load_all_trips_data.clear()
     except: pass
+
 
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
@@ -1100,13 +1109,17 @@ def quick_swap_and_save(df):
         st.error(f"🚨 순서 변경 저장 실패: {e}")
         return False
 
-# 2.05.04 | Cash Inventory Cloud Loader & Saver (5m Cached)
-@st.cache_data(ttl=300)
-def load_cash_inventory():
+# 2.05.04 | Cash Inventory Cloud Loader & Saver (Memory-First)
+def load_cash_inventory(force_cloud=False):
+    # ⚡ 세션 메모리에 이미 있으면 구글 통신 0회 즉시 반환
+    if not force_cloud and 'cached_cash_df' in st.session_state and st.session_state.cached_cash_df is not None:
+        return st.session_state.cached_cash_df
+
     for attempt in range(3):
         try:
-            df = conn.read(worksheet=CASH_SHEET, ttl="5m")  # ⚡ 5분 캐시
+            df = conn.read(worksheet=CASH_SHEET, ttl="10m")
             if df is not None and not df.empty:
+                st.session_state.cached_cash_df = df
                 return df
             break
         except Exception as e:
@@ -1114,11 +1127,13 @@ def load_cash_inventory():
                 time.sleep(1.5)
                 continue
             break
-    return pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
+    empty_df = pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
+    st.session_state.cached_cash_df = empty_df
+    return empty_df
 
 def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
     try:
-        df = load_cash_inventory()
+        df = load_cash_inventory(force_cloud=True)
         if df is None or df.empty:
             df = pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
             
@@ -1142,19 +1157,18 @@ def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
             df = pd.concat([df, new_row], ignore_index=True)
             
         conn.update(worksheet=CASH_SHEET, data=df)
-        load_cash_inventory.clear()  # ⚡ 저장 시에만 캐시 클리어
+        st.session_state.cached_cash_df = df
         return True
     except Exception as e:
         st.error(f"🚨 지폐 실사 동기화 실패: {e}")
         return False
 
-# 2.05.05 | Memory Cache Ledger Binder
+# 2.05.05 | Pure Memory Cache Binder
 if 'active_ledger_df' not in st.session_state or st.session_state.get('last_loaded_sheet') != ACTIVE_SHEET:
-    st.session_state.active_ledger_df = load_data(ACTIVE_SHEET)
+    st.session_state.active_ledger_df = load_data(ACTIVE_SHEET, force_cloud=False)
     st.session_state.last_loaded_sheet = ACTIVE_SHEET
 
 ledger_df = st.session_state.active_ledger_df
-
 
 # ==============================================================================
 # [Module 3.00.00] URDI Engine (Unified Real-time Deductive Inventory)
@@ -1609,7 +1623,7 @@ with st.sidebar:
         for c in primary_trip_currs:
             render_currency_card(c, is_secondary=False)
 
-        # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync (사이드바 속도 뱃지 포함)
+        # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
         st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
@@ -1620,11 +1634,14 @@ with st.sidebar:
 
         st.divider()
         st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+        # ⚡ 사용자가 수동으로 버튼을 누를 때만 구글 시트에서 강제 최신화(force_cloud=True)
         if st.button("🔄 Cloud Refresh (데이터 동기화)", use_container_width=True, type="primary"): 
             st.cache_data.clear()
-            load_data.clear()
-            load_cash_inventory.clear()
-            re_calc_df = recalculate_entire_ledger(ledger_df)
+            smart_cache_clear()
+            if 'cached_trip_configs' in st.session_state: del st.session_state['cached_trip_configs']
+            pulled_df = load_data(ACTIVE_SHEET, force_cloud=True)
+            load_cash_inventory(force_cloud=True)
+            re_calc_df = recalculate_entire_ledger(pulled_df)
             st.session_state.active_ledger_df = re_calc_df
             try:
                 conn.update(worksheet=ACTIVE_SHEET, data=re_calc_df.reindex(columns=FINAL_COLUMNS))
@@ -1634,12 +1651,11 @@ with st.sidebar:
             time.sleep(0.5)
             st.rerun()
 
-        # ⚡ [사이드바 속도 실시간 표시 배지] 스크롤 없이 바로 확인 가능
+        # ⚡ 사이드바 속도 배지
         t_sb_now = (time.perf_counter() - t_render_start) * 1000
         sb_color = "#10B981" if t_sb_now < 500 else ("#38BDF8" if t_sb_now < 1500 else "#F59E0B")
         st.markdown(f"<div style='text-align:center; font-size:11.5px; color:#64748B; margin-top:8px;'>실시간 반응: <span style='color:{sb_color}; font-weight:bold;'>⚡ {t_sb_now:,.0f}ms</span></div>", unsafe_allow_html=True)
 
-        # 2. 🌟 보조 통화(사전결제 잔여분 등) 최하단 분리 노출
         if secondary_currs:
             st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
             st.caption("🌐 보조/기타 통화 잔고")
