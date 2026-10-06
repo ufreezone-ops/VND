@@ -1649,7 +1649,10 @@ with st.sidebar:
 # ------------------------------------------------------------------------------
 # 4.02.00 | Top Navigation Router (여행지 선택 및 관제탑 모드 스위처)
 # ------------------------------------------------------------------------------
-# 4.02.01 | Global View Switcher & Trip Selector
+# ==============================================================================
+# 4.02.00 | Top Navigation Router (여행지 선택 및 관제탑 모드 스위처)
+# ==============================================================================
+# 4.02.01 | Global View Switcher & Trip Selector (상단 반응속도 뱃지 탑재)
 sorted_trips = sort_trips(list(TRIP_CONFIGS.keys()))
 
 SPECIAL_MODE_SPI = "📊 모든 여행지 물가비교"
@@ -1699,6 +1702,15 @@ st.selectbox(
     on_change=on_trip_change,
     label_visibility="collapsed"
 )
+
+# ⚡ [상단 실시간 반응속도 슬림 배지] 최상단에서 즉각 확인 가능
+t_top_now = (time.perf_counter() - t_render_start) * 1000
+top_color = "#10B981" if t_top_now < 500 else ("#38BDF8" if t_top_now < 1500 else "#F59E0B")
+st.markdown(f"""
+    <div style='display:flex; justify-content:flex-end; align-items:center; margin-top:-6px; margin-bottom:6px;'>
+        <span style='font-size:12px; color:#64748B;'>반응속도: <b style='color:{top_color};'>⚡ {t_top_now:,.0f}ms</b></span>
+    </div>
+""", unsafe_allow_html=True)
 
 st.divider()
 
@@ -3706,7 +3718,7 @@ elif main_tab_choice == "일일Data":
 
 
 # ==============================================================================
-# 6.03.00 | Unified Magnifier Hub (돋보기 탭)
+# [Module 6.03.00] Unified Magnifier Hub (Memory-Cached Regex Optimizer)
 # ==============================================================================
 elif main_tab_choice == "돋보기":
     st.subheader("🔍 여행 소비 돋보기")
@@ -3763,7 +3775,211 @@ elif main_tab_choice == "돋보기":
         if len(lines) > 3: lines = lines[:3]
         return "<br>".join(lines)
 
-    # 돋보기 서브메뉴
+    # ⚡ [고속화 캐시 엔진] 돋보기 3대 데이터셋 전처리 메모이제이션
+    @st.cache_data(ttl=600)
+    def parse_cached_market_items(df_records, travel_curr, war_rate):
+        df_src = pd.DataFrame(df_records)
+        market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '약국', '졸리', '성물', '기념품', '헬로', '한시장', '동바시장', '편의점']
+        exclude_keywords_m = ['마사지', '발마사지', '그랩', 'grab', '미터기', '택시', '교통', '콜택시', '식사', '카페', '레스토랑', '호텔']
+        
+        def is_market(r):
+            cat, desc = str(r['Category']).strip(), str(r['Description']).strip().lower()
+            if cat in ['마트', '시장', '선물']: return True
+            if cat in ['마사지', '택시', '교통', 'Grab', 'VinBus', 'DiDi', '지하철', '버스', '트램', '기차', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료', '통신', '수수료', '팁', '상환', '보증금']: return False
+            if any(ek in desc for ek in exclude_keywords_m): return False
+            return any(mk in desc for mk in market_keywords) or any(mk in cat for mk in market_keywords)
+
+        m_df = df_src[df_src.apply(is_market, axis=1) & (df_src['IsExpense'] == 1)].copy()
+        if m_df.empty: return pd.DataFrame()
+
+        tot_market_raw = m_df['Amount'].sum()
+        parsed_items = []
+        for _, r in m_df.iterrows():
+            desc_raw = str(r['Description'])
+            r_curr, r_amt = str(r['Currency']).strip().upper(), float(r['Amount'])
+            lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
+            store_name = lines[0] if lines else "기타 마트/선물"
+            store_clean = auto_fit_header_label(store_name.split('|')[0], r_amt, tot_market_raw) or "마트/시장"
+            store_lower = store_name.lower()
+
+            if '한시장' in store_lower: bazaar_group = '🧺 한시장 통합'
+            elif '동바시장' in store_lower: bazaar_group = '🧺 동바시장 통합'
+            elif '약국' in store_lower or 'pharmacity' in store_lower or '파마씨티' in store_lower: bazaar_group = '💊 약국 통합'
+            elif any(k in store_lower for k in ['마트', '슈퍼', '편의점', 'lotte', 'big c', '7-eleven', 'circle k', 'jolymart', '졸리']): bazaar_group = '🛒 마트/슈퍼 통합'
+            elif '시장' in store_lower or '야시장' in store_lower: bazaar_group = '🛍️ 기타 전통시장'
+            else: bazaar_group = '🎁 기타 쇼핑/선물샵'
+
+            item_lines = lines[1:] if len(lines) > 1 else lines
+            trash = ['địa chỉ', 'hdon', 'ngay', 'gio', 'hdban', 'mastercard', 'vietcombank', 'tid', 'mid', 'cls', 'toan', 'so lo', 'tên', 'đại lý', 'tổng cộng', 'tổng', 'tiền', 'mã', 'hóa đơn', 'đt:', 'mst:', 'tp.', 'đường', 'phường', 'quận']
+            valid_items = []
+
+            for il in item_lines:
+                il_low = il.lower()
+                if any(tk in il_low for tk in trash) or len(il) < 2 or '---' in il or '===' in il: continue
+                is_bullet = il.startswith('-') or il.startswith('*') or il.startswith('•')
+                if not is_bullet and not (re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il) or re.search(r'\d{2,}', il)): continue
+
+                price_val = 0.0
+                m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
+                if m_k: price_val = float(m_k.group(1)) * 1000
+                else:
+                    comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', il)
+                    if comma_nums:
+                        try: price_val = float(comma_nums[-1].replace(',', ''))
+                        except: pass
+                    else:
+                        plain_nums = re.findall(r'(\d+)', il)
+                        if plain_nums:
+                            try:
+                                for p_str in reversed(plain_nums):
+                                    p_val = float(p_str)
+                                    if p_val > 500: price_val = p_val; break
+                            except: pass
+
+                clean_name = smart_wrap_multiline(il, max_line_len=10)
+                if clean_name and len(clean_name) >= 2 and not clean_name.startswith('로 잘못'):
+                    valid_items.append({'raw_line': il, 'name': clean_name, 'price': price_val})
+
+            if not valid_items or (len(valid_items) == 1 and valid_items[0]['price'] == 0):
+                parsed_items.append({'Bazaar_Group': bazaar_group, 'Store': store_clean, 'Item': store_clean, 'Local_val': r_amt, 'Curr': r_curr})
+            else:
+                sum_p = sum(it['price'] for it in valid_items if it['price'] > 0)
+                scale = (r_amt / sum_p) if (sum_p > 0 and r_amt > 0 and abs(sum_p - r_amt) > 1.0) else 1.0
+                for it in valid_items:
+                    fp = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_items)))
+                    fp = round(fp * scale, -2)
+                    parsed_items.append({'Bazaar_Group': bazaar_group, 'Store': store_clean, 'Item': it['name'], 'Local_val': fp, 'Curr': r_curr})
+
+        res_df = pd.DataFrame(parsed_items)
+        if not res_df.empty:
+            res_df = res_df[res_df['Local_val'] > 0].copy()
+            res_df['KRW_str'] = res_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원") if (war_rate > 0) else ""
+        return res_df
+
+    @st.cache_data(ttl=600)
+    def parse_cached_food_items(df_records, travel_curr, war_rate):
+        df_src = pd.DataFrame(df_records)
+        def is_food(r):
+            cat, desc, met = str(r['Category']).strip(), str(r['Description']).strip().lower(), str(r['PaymentMethod']).strip().lower()
+            if cat in ['식사', '간식']: return True
+            if '외상' in met or 'credit' in met or '호텔외상' in met:
+                if any(k in desc for k in ['맥주', '와인', '음료', '칵테일', '수영장', '조식', '식사', '룸서비스', '카페', '커피', 'bar', 'pool']): return True
+            return False
+
+        f_df = df_src[df_src.apply(is_food, axis=1) & (df_src['IsExpense'] == 1)].copy()
+        if f_df.empty: return pd.DataFrame()
+
+        tot_f_raw = f_df['Amount'].sum()
+        parsed_food = []
+        for _, r in f_df.iterrows():
+            desc_raw, r_curr, r_amt = str(r['Description']), str(r['Currency']).strip().upper(), float(r['Amount'])
+            lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
+            place_name = lines[0] if lines else "기타 식당/카페"
+            place_clean = auto_fit_header_label(place_name.split('|')[0], r_amt, tot_f_raw) or "식당/카페"
+            place_lower = place_name.lower()
+
+            if any(k in place_lower for k in ['카페', '커피', 'coffee', '티', '브런치', '디저트', '반미']): f_group = '☕ 카페/디저트'
+            elif any(k in place_lower for k in ['맥주', 'bar', '펍', 'pub', '라운지', '루프탑']): f_group = '🍻 주류/바(Bar)'
+            else: f_group = '🍽️ 레스토랑/식당'
+
+            item_lines = lines[1:] if len(lines) > 1 else lines
+            valid_items = []
+            for il in item_lines:
+                if len(il) < 1 or '---' in il: continue
+                price_val = 0.0
+                m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
+                if m_k: price_val = float(m_k.group(1)) * 1000
+                else:
+                    comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', il)
+                    if comma_nums:
+                        try: price_val = float(comma_nums[-1].replace(',', ''))
+                        except: pass
+                    else:
+                        plain_nums = re.findall(r'(\d+)', il)
+                        if plain_nums:
+                            try:
+                                for p_str in reversed(plain_nums):
+                                    p_val = float(p_str)
+                                    if p_val > 500: price_val = p_val; break
+                            except: pass
+                clean_iname = smart_wrap_multiline(il, max_line_len=10)
+                if clean_iname and (len(clean_iname) >= 1 or price_val > 0): valid_items.append({'name': clean_iname, 'price': price_val})
+
+            if not valid_items or (len(valid_items) == 1 and valid_items[0]['price'] == 0):
+                parsed_food.append({'Food_Group': f_group, 'Place': place_clean, 'Item': place_clean, 'Local_val': r_amt, 'Curr': r_curr})
+            else:
+                sum_fp = sum(it['price'] for it in valid_items if it['price'] > 0)
+                f_scale = (r_amt / sum_fp) if (sum_fp > 0 and r_amt > 0 and abs(sum_fp - r_amt) > 1.0) else 1.0
+                for it in valid_items:
+                    fp = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_items)))
+                    fp = round(fp * f_scale, -2)
+                    parsed_food.append({'Food_Group': f_group, 'Place': place_clean, 'Item': it['name'], 'Local_val': fp, 'Curr': r_curr})
+
+        res_df = pd.DataFrame(parsed_food)
+        if not res_df.empty:
+            res_df = res_df[res_df['Local_val'] > 0].copy()
+            res_df['KRW_str'] = res_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원") if (war_rate > 0) else ""
+        return res_df
+
+    @st.cache_data(ttl=600)
+    def parse_cached_traffic_items(df_records, travel_curr, war_rate):
+        df_src = pd.DataFrame(df_records)
+        def is_traffic(r):
+            cat, desc, met = str(r['Category']).strip(), str(r['Description']).strip().lower(), str(r['PaymentMethod']).strip()
+            if met in ['원화계좌(한국)', '해외송금(한국계좌)']: return False
+            if cat == '버스': return not any(k in desc for k in ['시외', '고속', '장거리', '슬리핑', 'limousine', 'intercity'])
+            if cat in ['기차', '열차'] or any(k in desc for k in ['헤리티지열차', '헤리티지', 'railway', 'vnr']): return False
+            return cat in ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시', '지하철', '트램']
+
+        t_df = df_src[df_src.apply(is_traffic, axis=1) & (df_src['IsExpense'] == 1)].copy()
+        if t_df.empty: return pd.DataFrame()
+
+        tot_t_raw = t_df['Amount'].sum()
+        parsed_t = []
+        for _, r in t_df.iterrows():
+            cat_r, desc_raw, r_amt = str(r['Category']).strip(), str(r['Description']), float(r['Amount'])
+            r_curr = str(r['Currency']).strip().upper() or travel_curr
+            clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip()
+            lines_t = [l.strip() for l in clean_desc.split('\n') if l.strip()]
+            first_line = lines_t[0] if lines_t else clean_desc
+            first_line = re.sub(r'[\d,\.]+\s*(?:vnd|동|원|\$|[kK])\b.*$', '', first_line, flags=re.IGNORECASE)
+            first_line = re.sub(r'\b\d+(?:\.\d+)?\s*(?:km|분|초|시간)\b.*$', '', first_line, flags=re.IGNORECASE).strip(' ,-')
+
+            p_provider = cat_r if cat_r in ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시'] else "로컬교통"
+            p_prov_clean = auto_fit_header_label(p_provider, r_amt, tot_t_raw) or "이동 수단"
+            p_item_clean = smart_wrap_multiline(first_line, max_line_len=11) or "이동 요금"
+            parsed_t.append({'Traffic_Group': '그랩 및 로컬교통', 'Provider': p_prov_clean, 'Item': p_item_clean, 'Local_val': r_amt, 'Curr': r_curr})
+
+        res_df = pd.DataFrame(parsed_t)
+        if not res_df.empty:
+            res_df = res_df[res_df['Local_val'] > 0].copy()
+            res_df['KRW_str'] = res_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원") if (war_rate > 0) else ""
+        return res_df
+
+    @st.cache_data(ttl=600)
+    def parse_cached_massage_items(df_records, travel_curr, war_rate):
+        df_src = pd.DataFrame(df_records)
+        m_df = df_src[(df_src['Category'] == '마사지') & (df_src['IsExpense'] == 1)].copy()
+        if m_df.empty: return pd.DataFrame()
+
+        tot_m_raw = m_df['Amount'].sum()
+        parsed_m = []
+        for _, r in m_df.iterrows():
+            desc_raw, r_amt = str(r['Description']), float(r['Amount'])
+            r_curr = str(r['Currency']).strip().upper() or travel_curr
+            clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip()
+            p_provider, p_item = clean_desc.split('-', 1) if '-' in clean_desc else (clean_desc, clean_desc)
+            p_prov_clean = auto_fit_header_label(p_provider.strip(), r_amt, tot_m_raw) or "마사지 샵"
+            p_item_clean = smart_wrap_multiline(p_item.strip(), max_line_len=10) or "힐링 마사지"
+            parsed_m.append({'Massage_Group': '마사지', 'Provider': p_prov_clean, 'Item': p_item_clean, 'Local_val': r_amt, 'Curr': r_curr})
+
+        res_df = pd.DataFrame(parsed_m)
+        if not res_df.empty:
+            res_df = res_df[res_df['Local_val'] > 0].copy()
+            res_df['KRW_str'] = res_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원") if (war_rate > 0) else ""
+        return res_df
+
+    # 돋보기 서브 3대 탭 메뉴
     sub_tab_choice = option_menu(
         menu_title=None,
         options=["장바구니", "식당·카페", "마사지·교통"],
@@ -3771,330 +3987,91 @@ elif main_tab_choice == "돋보기":
         default_index=0,
         orientation="horizontal",
         styles={
-            "container": {
-                "padding": "0px !important",
-                "background-color": "transparent",
-                "margin-bottom": "12px",
-                "gap": "6px"
-            },
+            "container": {"padding": "0px !important", "background-color": "transparent", "margin-bottom": "12px", "gap": "6px"},
             "icon": {"color": "#38BDF8", "font-size": "13px", "margin-right": "2px"},
             "nav-link": {
-                "font-size": "13.5px",
-                "font-weight": "600",
-                "text-align": "center",
-                "margin": "0px",
-                "padding": "8px 6px",
-                "white-space": "nowrap",
-                "background-color": "#1E293B",
-                "color": "#38BDF8",
-                "border-radius": "8px",
-                "border": "1.5px solid #475569",
-                "--hover-color": "#334155"
+                "font-size": "13.5px", "font-weight": "600", "text-align": "center", "margin": "0px",
+                "padding": "8px 6px", "white-space": "nowrap", "background-color": "#1E293B", "color": "#38BDF8",
+                "border-radius": "8px", "border": "1.5px solid #475569", "--hover-color": "#334155"
             },
             "nav-link-selected": {
-                "background-color": "#FF9E00",
-                "background-image": "linear-gradient(135deg, #FF9E00 0%, #EA580C 100%)",
-                "color": "#FFFFFF",
-                "font-size": "14px",
-                "font-weight": "800",
-                "border": "1.5px solid #FFA500"
+                "background-color": "#FF9E00", "background-image": "linear-gradient(135deg, #FF9E00 0%, #EA580C 100%)",
+                "color": "#FFFFFF", "font-size": "14px", "font-weight": "800", "border": "1.5px solid #FFA500"
             }
         }
     )
-    
+
     if not ledger_df.empty:
-        # --- 6.03.01 | 장바구니 트리맵 ---
+        raw_records = ledger_df[['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense']].to_dict('records')
+        war_val = get_WAR(TRAVEL_CURRENCY)
+
+        # 1. 🌟 장바구니 트리맵 (캐시 적용)
         if sub_tab_choice == "장바구니":
-            market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '약국', '졸리', '성물', '기념품', '헬로', '한시장', '동바시장', '편의점']
-            exclude_keywords_m = ['마사지', '발마사지', '그랩', 'grab', '미터기', '택시', '교통', '콜택시', '식사', '카페', '레스토랑', '호텔']
-            
-            def is_valid_market_row(row):
-                cat = str(row['Category']).strip()
-                desc = str(row['Description']).strip().lower()
-                if cat in ['마트', '시장', '선물']: return True
-                if cat in ['마사지', '택시', '교통', 'Grab', 'VinBus', 'DiDi', '지하철', '버스', '트램', '기차', '식사', '간식', '호텔', '항공권', '보험', '투어', '입장료', '통신', '수수료', '팁', '상환', '보증금']: return False
-                if any(ek in desc for ek in exclude_keywords_m): return False
-                return any(mk in desc for mk in market_keywords) or any(mk in cat for mk in market_keywords)
+            item_df = parse_cached_market_items(raw_records, TRAVEL_CURRENCY, war_val)
+            if not item_df.empty:
+                base_curr = item_df['Curr'].iloc[0] if 'Curr' in item_df.columns else TRAVEL_CURRENCY
+                tot_market_local = item_df['Local_val'].sum()
+                st.metric(f"장바구니 총 지출액 ({base_curr} 기준)", f"{tot_market_local:,.0f} {base_curr}")
+                fig_market = px.treemap(
+                    item_df, path=['Bazaar_Group', 'Store', 'Item'], values='Local_val', color='Local_val',
+                    color_continuous_scale='Tealgrn', custom_data=['KRW_str'], title=None
+                )
+                cart_tt = "<b>%{label}</b><br>%{value:,.0f} " + base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>" if base_curr != 'KRW' else "<b>%{label}</b><br>%{value:,.0f} KRW"
+                fig_market.update_traces(texttemplate=cart_tt, hovertemplate=f"<b>분류/상호/품목:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16), pathbar=dict(thickness=24, visible=True), tiling=dict(pad=5))
+                fig_market.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=580, coloraxis_showscale=False)
+                st.plotly_chart(fig_market, use_container_width=True, config={'displaylogo': False})
+            else:
+                st.info("기록된 마트, 시장 또는 선물 지출 내역이 없습니다.")
 
-            market_df = ledger_df[ledger_df.apply(is_valid_market_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
-            
-            if not market_df.empty:
-                tot_market_raw = market_df['Amount'].sum()
-                parsed_items = []
-                for _, r in market_df.iterrows():
-                    desc_raw = str(r['Description'])
-                    r_curr = str(r['Currency']).strip().upper()
-                    r_amt = float(r['Amount'])
-                    
-                    lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
-                    store_name = lines[0] if lines else "기타 마트/선물"
-                    store_clean = auto_fit_header_label(store_name.split('|')[0], r_amt, tot_market_raw)
-                    if not store_clean: store_clean = "마트/시장"
-                    
-                    store_lower = store_name.lower()
-                    if '한시장' in store_lower: bazaar_group = '🧺 한시장 통합'
-                    elif '동바시장' in store_lower: bazaar_group = '🧺 동바시장 통합'
-                    elif '약국' in store_lower or 'pharmacity' in store_lower or '파마씨티' in store_lower: bazaar_group = '💊 약국 통합'
-                    elif any(k in store_lower for k in ['마트', '슈퍼', '편의점', 'lotte', 'big c', '7-eleven', 'circle k', 'jolymart', '졸리']): bazaar_group = '🛒 마트/슈퍼 통합'
-                    elif '시장' in store_lower or '야시장' in store_lower: bazaar_group = '🛍️ 기타 전통시장'
-                    else: bazaar_group = '🎁 기타 쇼핑/선물샵'
-                    
-                    item_lines = lines[1:] if len(lines) > 1 else lines
-                    trash_keywords = ['địa chỉ', 'hdon', 'ngay', 'gio', 'hdban', 'mastercard', 'vietcombank', 'tid', 'mid', 'cls', 'toan', 'so lo', 'tên', 'đại lý', 'tổng cộng', 'tổng', 'tiền', 'mã', 'hóa đơn', 'đt:', 'mst:', 'tp.', 'đường', 'phường', 'quận']
-                    
-                    valid_items_in_receipt = []
-                    for il in item_lines:
-                        il_low = il.lower()
-                        if any(tk in il_low for tk in trash_keywords) or len(il) < 2 or '---' in il or '===' in il: continue
-                        
-                        is_bullet_line = il.startswith('-') or il.startswith('*') or il.startswith('•')
-                        if not is_bullet_line:
-                            has_price_pattern = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il) or re.search(r'\d{2,}', il)
-                            if not has_price_pattern: continue 
-                            
-                        price_val = 0.0
-                        m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
-                        if m_k: price_val = float(m_k.group(1)) * 1000
-                        else:
-                            comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', il)
-                            if comma_nums:
-                                try: price_val = float(comma_nums[-1].replace(',', ''))
-                                except: pass
-                            else:
-                                plain_nums = re.findall(r'(\d+)', il)
-                                if plain_nums:
-                                    try:
-                                        for p_str in reversed(plain_nums):
-                                            p_val = float(p_str)
-                                            if p_val > 500: price_val = p_val; break
-                                    except: pass
-                                
-                        clean_name = smart_wrap_multiline(il, max_line_len=10)
-                        if clean_name and len(clean_name) >= 2 and not clean_name.startswith('로 잘못'):
-                            valid_items_in_receipt.append({'raw_line': il, 'name': clean_name, 'price': price_val})
-                            
-                    if not valid_items_in_receipt or (len(valid_items_in_receipt) == 1 and valid_items_in_receipt[0]['price'] == 0):
-                        parsed_items.append({'Bazaar_Group': bazaar_group, 'Store': store_clean, 'Item': store_clean, 'Local_val': r_amt, 'Curr': r_curr})
-                    else:
-                        sum_detected_prices = sum(it['price'] for it in valid_items_in_receipt if it['price'] > 0)
-                        scale_factor = (r_amt / sum_detected_prices) if (sum_detected_prices > 0 and r_amt > 0 and abs(sum_detected_prices - r_amt) > 1.0) else 1.0
-                        for it in valid_items_in_receipt:
-                            final_item_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_items_in_receipt)))
-                            final_item_price = round(final_item_price * scale_factor, -2)
-                            parsed_items.append({'Bazaar_Group': bazaar_group, 'Store': store_clean, 'Item': it['name'], 'Local_val': final_item_price, 'Curr': r_curr})
-                            
-                if parsed_items:
-                    item_df = pd.DataFrame(parsed_items)
-                    item_df = item_df[item_df['Local_val'] > 0].copy()
-                    base_curr = item_df['Curr'].iloc[0] if not item_df.empty else TRAVEL_CURRENCY
-                    tot_market_local = item_df['Local_val'].sum()
-                    
-                    war_rate = get_WAR(base_curr)
-                    if base_curr != 'KRW' and war_rate > 0:
-                        item_df['KRW_str'] = item_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원")
-                    else: item_df['KRW_str'] = ""
-                    
-                    st.metric(f"🛒 장바구니 총 지출액 ({base_curr} 기준)", f"{tot_market_local:,.0f} {base_curr}")
-                    fig_market = px.treemap(
-                        item_df, path=['Bazaar_Group', 'Store', 'Item'], values='Local_val', color='Local_val',
-                        color_continuous_scale='Tealgrn', custom_data=['KRW_str'], title=None
-                    )
-                    cart_tt = "<b>%{label}</b><br>%{value:,.0f} " + base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>" if base_curr != 'KRW' else "<b>%{label}</b><br>%{value:,.0f} KRW"
-                    fig_market.update_traces(texttemplate=cart_tt, hovertemplate=f"<b>분류/상호/품목:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16), pathbar=dict(thickness=24, visible=True), tiling=dict(pad=5))
-                    fig_market.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=580, coloraxis_showscale=False)
-                    st.plotly_chart(fig_market, use_container_width=True, config={'displaylogo': False})
-                else: st.info("정제할 수 있는 장바구니 품목 내역이 없습니다.")
-            else: st.info("기록된 마트, 시장 또는 선물 지출 내역이 없습니다.")
-
-        # --- 6.03.02 | 식당·카페 트리맵 ---
+        # 2. 🌟 식당·카페 트리맵 (캐시 적용)
         elif sub_tab_choice == "식당·카페":
-            def is_valid_food_row(row):
-                cat = str(row['Category']).strip()
-                desc = str(row['Description']).strip().lower()
-                method = str(row['PaymentMethod']).strip().lower()
-                if cat in ['식사', '간식']: return True
-                if '외상' in method or 'credit' in method or '호텔외상' in method:
-                    if any(k in desc for k in ['맥주', '와인', '음료', '칵테일', '수영장', '조식', '식사', '룸서비스', '카페', '커피', 'bar', 'pool']): return True
-                return False
-
-            food_df = ledger_df[ledger_df.apply(is_valid_food_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
+            food_df = parse_cached_food_items(raw_records, TRAVEL_CURRENCY, war_val)
             if not food_df.empty:
-                tot_food_raw = food_df['Amount'].sum()
-                parsed_food = []
-                for _, r in food_df.iterrows():
-                    desc_raw = str(r['Description'])
-                    r_curr = str(r['Currency']).strip().upper()
-                    r_amt = float(r['Amount'])
-                    
-                    lines = [l.strip() for l in desc_raw.split('\n') if l.strip()]
-                    place_name = lines[0] if lines else "기타 식당/카페"
-                    place_clean = auto_fit_header_label(place_name.split('|')[0], r_amt, tot_food_raw)
-                    if not place_clean: place_clean = "식당/카페"
-                    
-                    place_lower = place_name.lower()
-                    if any(k in place_lower for k in ['카페', '커피', 'coffee', '티', '브런치', '디저트', '반미']): food_group = '☕ 카페/디저트'
-                    elif any(k in place_lower for k in ['맥주', 'bar', '펍', 'pub', '라운지', '루프탑']): food_group = '🍻 주류/바(Bar)'
-                    else: food_group = '🍽️ 레스토랑/식당'
-                        
-                    item_lines = lines[1:] if len(lines) > 1 else lines
-                    valid_food_items = []
-                    for il in item_lines:
-                        if len(il) < 1 or '---' in il: continue
-                        price_val = 0.0
-                        m_k = re.search(r'(\d+(?:\.\d+)?)\s*[kK]\b', il)
-                        if m_k: price_val = float(m_k.group(1)) * 1000
-                        else:
-                            comma_nums = re.findall(r'(\d{1,3}(?:,\d{3})+)', il)
-                            if comma_nums:
-                                try: price_val = float(comma_nums[-1].replace(',', ''))
-                                except: pass
-                            else:
-                                plain_nums = re.findall(r'(\d+)', il)
-                                if plain_nums:
-                                    try:
-                                        for p_str in reversed(plain_nums):
-                                            p_val = float(p_str)
-                                            if p_val > 500: price_val = p_val; break
-                                    except: pass
-                        clean_iname = smart_wrap_multiline(il, max_line_len=10)
-                        if clean_iname and (len(clean_iname) >= 1 or price_val > 0): valid_food_items.append({'name': clean_iname, 'price': price_val})
-                            
-                    if not valid_food_items or (len(valid_food_items) == 1 and valid_food_items[0]['price'] == 0):
-                        parsed_food.append({'Food_Group': food_group, 'Place': place_clean, 'Item': place_clean, 'Local_val': r_amt, 'Curr': r_curr})
-                    else:
-                        sum_f_prices = sum(it['price'] for it in valid_food_items if it['price'] > 0)
-                        f_scale = (r_amt / sum_f_prices) if (sum_f_prices > 0 and r_amt > 0 and abs(sum_f_prices - r_amt) > 1.0) else 1.0
-                        for it in valid_food_items:
-                            f_price = it['price'] if it['price'] > 0 else (r_amt / max(1, len(valid_food_items)))
-                            f_price = round(f_price * f_scale, -2)
-                            parsed_food.append({'Food_Group': food_group, 'Place': place_clean, 'Item': it['name'], 'Local_val': f_price, 'Curr': r_curr})
-                            
-                if parsed_food:
-                    food_df = pd.DataFrame(parsed_food)
-                    food_df = food_df[food_df['Local_val'] > 0].copy()
-                    f_base_curr = food_df['Curr'].iloc[0] if not food_df.empty else TRAVEL_CURRENCY
-                    tot_food_local = food_df['Local_val'].sum()
-                    
-                    f_war_rate = get_WAR(f_base_curr)
-                    if f_base_curr != 'KRW' and f_war_rate > 0: food_df['KRW_str'] = food_df['Local_val'].apply(lambda v: f"약 {round(v * f_war_rate, -2):,.0f}원")
-                    else: food_df['KRW_str'] = ""
-                    
-                    st.metric(f"🍔 식당·카페 총 지출액 ({f_base_curr} 기준)", f"{tot_food_local:,.0f} {f_base_curr}")
-                    fig_food = px.treemap(food_df, path=['Food_Group', 'Place', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='YlOrBr', custom_data=['KRW_str'], title=None)
-                    food_tt = "<b>%{label}</b><br>%{value:,.0f} " + f_base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>" if f_base_curr != 'KRW' else "<b>%{label}</b><br>%{value:,.0f} KRW"
-                    fig_food.update_traces(texttemplate=food_tt, hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16), pathbar=dict(thickness=24, visible=True), tiling=dict(pad=5))
-                    fig_food.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=580, coloraxis_showscale=False)
-                    st.plotly_chart(fig_food, use_container_width=True, config={'displaylogo': False})
-                else: st.info("정제할 수 있는 식당/카페 메뉴 내역이 없습니다.")
-            else: st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
+                f_base_curr = food_df['Curr'].iloc[0] if 'Curr' in food_df.columns else TRAVEL_CURRENCY
+                tot_food_local = food_df['Local_val'].sum()
+                st.metric(f"식당·카페 총 지출액 ({f_base_curr} 기준)", f"{tot_food_local:,.0f} {f_base_curr}")
+                fig_food = px.treemap(
+                    food_df, path=['Food_Group', 'Place', 'Item'], values='Local_val', color='Local_val',
+                    color_continuous_scale='YlOrBr', custom_data=['KRW_str'], title=None
+                )
+                food_tt = "<b>%{label}</b><br>%{value:,.0f} " + f_base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>" if f_base_curr != 'KRW' else "<b>%{label}</b><br>%{value:,.0f} KRW"
+                fig_food.update_traces(texttemplate=food_tt, hovertemplate=f"<b>분류/장소/메뉴:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {f_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16), pathbar=dict(thickness=24, visible=True), tiling=dict(pad=5))
+                fig_food.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=580, coloraxis_showscale=False)
+                st.plotly_chart(fig_food, use_container_width=True, config={'displaylogo': False})
+            else:
+                st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
-        # --- 6.03.03 | 마사지 · 교통 듀얼 트리맵 ---
+        # 3. 🌟 마사지·교통 듀얼 트리맵 (캐시 적용)
         elif sub_tab_choice == "마사지·교통":
             st.markdown("<h4 style='margin-bottom: 2px;'>그랩 및 로컬교통</h4>", unsafe_allow_html=True)
-            def is_valid_traffic_row(row):
-                cat = str(row['Category']).strip()
-                desc = str(row['Description']).strip().lower()
-                method = str(row['PaymentMethod']).strip()
-                if method in ['원화계좌(한국)', '해외송금(한국계좌)']: return False
-                allowed_traffic_cats = ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시', '지하철', '트램']
-                if cat == '버스':
-                    if any(k in desc for k in ['시외', '고속', '장거리', '슬리핑', 'limousine', 'intercity']): return False
-                    return True
-                if cat in ['기차', '열차'] or any(k in desc for k in ['헤리티지열차', '헤리티지', 'railway', 'vnr']): return False
-                return cat in allowed_traffic_cats
-
-            traffic_df = ledger_df[ledger_df.apply(is_valid_traffic_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
-            if not traffic_df.empty:
-                tot_traffic_raw = traffic_df['Amount'].sum()
-                parsed_traffic = []
-                for _, r in traffic_df.iterrows():
-                    cat_r = str(r['Category']).strip()
-                    desc_raw = str(r['Description'])
-                    r_curr = str(r['Currency']).strip().upper()
-                    if not r_curr or r_curr == 'NAN' or len(r_curr) != 3: r_curr = TRAVEL_CURRENCY
-                    r_amt = float(r['Amount'])
-                    
-                    clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip()
-                    lines_t = [l.strip() for l in clean_desc.split('\n') if l.strip()]
-                    first_line = lines_t[0] if lines_t else clean_desc
-                    first_line = re.sub(r'[\d,\.]+\s*(?:vnd|동|원|\$|[kK])\b.*$', '', first_line, flags=re.IGNORECASE)
-                    first_line = re.sub(r'\b\d+(?:\.\d+)?\s*(?:km|분|초|시간)\b.*$', '', first_line, flags=re.IGNORECASE).strip(' ,-')
-
-                    p_provider = cat_r if cat_r in ['Grab', 'VinBus', 'DiDi', '택시', '블랙택시'] else "로컬교통"
-                    p_prov_clean = auto_fit_header_label(p_provider, r_amt, tot_traffic_raw)
-                    p_item_clean = smart_wrap_multiline(first_line, max_line_len=11)
-                    if not p_prov_clean: p_prov_clean = "이동 수단"
-                    if not p_item_clean: p_item_clean = "이동 요금"
-
-                    parsed_traffic.append({'Traffic_Group': '그랩 및 로컬교통', 'Provider': p_prov_clean, 'Item': p_item_clean, 'Local_val': r_amt, 'Curr': r_curr})
-                        
-                if parsed_traffic:
-                    traffic_df_final = pd.DataFrame(parsed_traffic)
-                    traffic_df_final = traffic_df_final[traffic_df_final['Local_val'] > 0].copy()
-                    t_base_curr = TRAVEL_CURRENCY
-                    tot_traffic_local = traffic_df_final['Local_val'].sum()
-                    
-                    t_war_rate = get_WAR(t_base_curr)
-                    if t_base_curr != 'KRW' and t_war_rate > 0: traffic_df_final['KRW_str'] = traffic_df_final['Local_val'].apply(lambda v: f"약 {round(v * t_war_rate, -2):,.0f}원")
-                    else: traffic_df_final['KRW_str'] = ""
-                    
-                    st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_traffic_local:,.0f} {t_base_curr}</div>", unsafe_allow_html=True)
-                    fig_traffic = px.treemap(traffic_df_final, path=['Traffic_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', custom_data=['KRW_str'], title=None)
-                    traffic_tt = "<b>%{label}</b><br>%{value:,.0f} " + t_base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>" if t_base_curr != 'KRW' else "<b>%{label}</b><br>%{value:,.0f} KRW"
-                    fig_traffic.update_traces(texttemplate=traffic_tt, hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16), pathbar=dict(thickness=24, visible=True), tiling=dict(pad=5))
-                    fig_traffic.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=460, coloraxis_showscale=False)
-                    st.plotly_chart(fig_traffic, use_container_width=True, config={'displaylogo': False})
-                else: st.info("정제할 수 있는 로컬 교통 내역이 없습니다.")
-            else: st.info("기록된 로컬 교통 지출 내역이 없습니다.")
+            traffic_df_final = parse_cached_traffic_items(raw_records, TRAVEL_CURRENCY, war_val)
+            if not traffic_df_final.empty:
+                t_base_curr = TRAVEL_CURRENCY
+                tot_traffic_local = traffic_df_final['Local_val'].sum()
+                st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_traffic_local:,.0f} {t_base_curr}</div>", unsafe_allow_html=True)
+                fig_traffic = px.treemap(traffic_df_final, path=['Traffic_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', custom_data=['KRW_str'], title=None)
+                traffic_tt = "<b>%{label}</b><br>%{value:,.0f} " + t_base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>" if t_base_curr != 'KRW' else "<b>%{label}</b><br>%{value:,.0f} KRW"
+                fig_traffic.update_traces(texttemplate=traffic_tt, hovertemplate=f"<b>분류/이동수단/내역:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {t_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16), pathbar=dict(thickness=24, visible=True), tiling=dict(pad=5))
+                fig_traffic.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=460, coloraxis_showscale=False)
+                st.plotly_chart(fig_traffic, use_container_width=True, config={'displaylogo': False})
+            else:
+                st.info("기록된 로컬 교통 지출 내역이 없습니다.")
 
             st.markdown("<div style='margin: 30px 0px; border-top: 1px dashed #475569;'></div>", unsafe_allow_html=True)
 
             st.markdown("<h4 style='margin-bottom: 2px;'>마사지</h4>", unsafe_allow_html=True)
-            def is_valid_massage_row(row): return str(row['Category']).strip() == '마사지'
-
-            massage_df = ledger_df[ledger_df.apply(is_valid_massage_row, axis=1) & (ledger_df['IsExpense'] == 1)].copy()
-            if not massage_df.empty:
-                tot_massage_raw = massage_df['Amount'].sum()
-                parsed_massage = []
-                for _, r in massage_df.iterrows():
-                    desc_raw = str(r['Description'])
-                    r_curr = str(r['Currency']).strip().upper()
-                    if not r_curr or r_curr == 'NAN' or len(r_curr) != 3: r_curr = TRAVEL_CURRENCY
-                    r_amt = float(r['Amount'])
-                    
-                    clean_desc = re.sub(r'\[.*?\]\s*', '', desc_raw).strip()
-                    if '-' in clean_desc:
-                        p_provider = clean_desc.split('-', 1)[0].strip()
-                        p_item = clean_desc.split('-', 1)[1].strip()
-                    else:
-                        p_provider = clean_desc
-                        p_item = clean_desc
-                        
-                    p_prov_clean = auto_fit_header_label(p_provider, r_amt, tot_massage_raw)
-                    p_item_clean = smart_wrap_multiline(p_item, max_line_len=10)
-                    if not p_prov_clean: p_prov_clean = "마사지 샵"
-                    if not p_item_clean: p_item_clean = "힐링 마사지"
-
-                    parsed_massage.append({'Massage_Group': '마사지', 'Provider': p_prov_clean, 'Item': p_item_clean, 'Local_val': r_amt, 'Curr': r_curr})
-                        
-                if parsed_massage:
-                    massage_df_final = pd.DataFrame(parsed_massage)
-                    massage_df_final = massage_df_final[massage_df_final['Local_val'] > 0].copy()
-                    m_base_curr = TRAVEL_CURRENCY
-                    tot_massage_local = massage_df_final['Local_val'].sum()
-                    
-                    m_war_rate = get_WAR(m_base_curr)
-                    if m_base_curr != 'KRW' and m_war_rate > 0: massage_df_final['KRW_str'] = massage_df_final['Local_val'].apply(lambda v: f"약 {round(v * m_war_rate, -2):,.0f}원")
-                    else: massage_df_final['KRW_str'] = ""
-                    
-                    st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_massage_local:,.0f} {m_base_curr}</div>", unsafe_allow_html=True)
-                    fig_massage = px.treemap(massage_df_final, path=['Massage_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', custom_data=['KRW_str'], title=None)
-                    massage_tt = "<b>%{label}</b><br>%{value:,.0f} " + m_base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>" if m_base_curr != 'KRW' else "<b>%{label}</b><br>%{value:,.0f} KRW"
-                    fig_massage.update_traces(texttemplate=massage_tt, hovertemplate=f"<b>분류/업체/코스:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {m_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16), pathbar=dict(thickness=24, visible=True), tiling=dict(pad=5))
-                    fig_massage.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=460, coloraxis_showscale=False)
-                    st.plotly_chart(fig_massage, use_container_width=True, config={'displaylogo': False})
-                else: st.info("정제할 수 있는 마사지 내역이 없습니다.")
-            else: st.info("기록된 마사지 지출 내역이 없습니다.")
+            massage_df_final = parse_cached_massage_items(raw_records, TRAVEL_CURRENCY, war_val)
+            if not massage_df_final.empty:
+                m_base_curr = TRAVEL_CURRENCY
+                tot_massage_local = massage_df_final['Local_val'].sum()
+                st.markdown(f"<div style='font-size: 22px; font-weight: bold; color: #4EFEB3; margin-bottom: 8px;'>{tot_massage_local:,.0f} {m_base_curr}</div>", unsafe_allow_html=True)
+                fig_massage = px.treemap(massage_df_final, path=['Massage_Group', 'Provider', 'Item'], values='Local_val', color='Local_val', color_continuous_scale='Tealgrn', custom_data=['KRW_str'], title=None)
+                massage_tt = "<b>%{label}</b><br>%{value:,.0f} " + m_base_curr + "<br><span style='font-size:12px; opacity:0.9;'>%{customdata[0]}</span>" if m_base_curr != 'KRW' else "<b>%{label}</b><br>%{value:,.0f} KRW"
+                fig_massage.update_traces(texttemplate=massage_tt, hovertemplate=f"<b>분류/업체/코스:</b> %{{label}}<br><b>지출액:</b> %{{value:,.0f}} {m_base_curr}<br><b>비중:</b> %{{percentRoot:.1%}}<extra></extra>", textposition='middle center', insidetextfont=dict(size=16), pathbar=dict(thickness=24, visible=True), tiling=dict(pad=5))
+                fig_massage.update_layout(margin=dict(l=0, r=0, t=10, b=10), height=460, coloraxis_showscale=False)
+                st.plotly_chart(fig_massage, use_container_width=True, config={'displaylogo': False})
+            else:
+                st.info("기록된 마사지 지출 내역이 없습니다.")
 
 
 # ==============================================================================
