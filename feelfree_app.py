@@ -1051,67 +1051,89 @@ def recalculate_entire_ledger(df):
         
     return temp_df
 
+# ==============================================================================
+# [Module 2.05.00] Cloud Persistence & Async Background Sync Engine
+# ==============================================================================
+import threading
+
 # ------------------------------------------------------------------------------
-# 2.05.00 | Cloud Persistence & Inventory Synchronization (클라우드 동기화 및 가드)
+# 2.05.01 | Background Thread Workers (백그라운드 구글 시트 비동기 전송 워커)
 # ------------------------------------------------------------------------------
-# 2.05.01 | Anti-Wipe Cloud Committer
-def save_data(df, metrics=None):
-    if df is None or df.empty: 
-        st.error("🚨 저장하려는 데이터가 비어있습니다. 데이터 보호를 위해 저장을 중단합니다.")
-        return False
-    
-    existing_df = None
+def _bg_worker_save_ledger(sheet_name, snapshot_df):
+    """메인 화면을 멈추지 않고 백그라운드에서 구글 시트로 원장을 몰래 전송하는 독립 워커"""
     for attempt in range(3):
         try:
-            existing_df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
+            # 🛡️ 데이터 무결성 가드: 덮어쓰기 참사 방지
+            existing_df = conn.read(worksheet=sheet_name, ttl="0s")
+            if existing_df is not None and len(existing_df) > 5 and len(snapshot_df) <= 3:
+                return  # 비정상 데이터 증발 시도 차단
+
+            conn.update(worksheet=sheet_name, data=snapshot_df.reindex(columns=FINAL_COLUMNS))
             break
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
-                time.sleep(2)
+                time.sleep(2.0)
                 continue
-            st.error(f"🚨 클라우드 상태 확인 실패! 덮어쓰기 참사를 막기 위해 저장을 차단합니다. ({e})")
-            return False
+            break
 
-    if existing_df is not None and len(existing_df) > 5:
-        if len(df) <= 3:
-            st.error(f"🚨 **치명적 데이터 증발(Wipe) 시도 차단됨!** (클라우드: {len(existing_df)}건 -> 저장시도: {len(df)}건)")
-            return False
-
-    final_df = recalculate_entire_ledger(df)
-    
+def _bg_worker_save_cash(sheet_name, snapshot_df):
+    """백그라운드에서 실물현금 카운터 데이터를 몰래 전송하는 독립 워커"""
     for attempt in range(3):
         try:
-            conn.update(worksheet=ACTIVE_SHEET, data=final_df.reindex(columns=FINAL_COLUMNS))
-            smart_cache_clear()
-            return True
+            conn.update(worksheet=sheet_name, data=snapshot_df)
+            break
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
-                time.sleep(2.5)
+                time.sleep(1.5)
                 continue
-            st.error(f"🚨 클라우드 저장 실패: {e}")
-            return False
+            break
 
-# 2.05.02 | Atomic Ledger Appender
+# ------------------------------------------------------------------------------
+# 2.05.02 | Instant Memory Committer & Appender (체감 대기시간 0초)
+# ------------------------------------------------------------------------------
+def save_data(df, metrics=None):
+    """
+    1. 메모리(Session)에 0.01초 만에 즉시 반영 (사용자는 기다리지 않음)
+    2. 무거운 구글 시트 전송은 백그라운드 스레드로 분기
+    """
+    if df is None or df.empty: 
+        st.error("🚨 저장하려는 데이터가 비어있습니다.")
+        return False
+    
+    # ⚡ 1. FIFO 재계산 후 즉시 메모리에 반영 (0.01초 소요)
+    final_df = recalculate_entire_ledger(df)
+    st.session_state.active_ledger_df = final_df
+    
+    # ⚡ 2. 구글 시트 전송은 백그라운드 스레드로 위임 (대기시간 0초!)
+    bg_thread = threading.Thread(
+        target=_bg_worker_save_ledger, 
+        args=(ACTIVE_SHEET, final_df.copy()),
+        daemon=True
+    )
+    bg_thread.start()
+    return True
+
 def append_new_data(new_rows_df):
-    smart_cache_clear()
-    latest_df = load_data(ACTIVE_SHEET)
-    merged_df = pd.concat([latest_df, new_rows_df], ignore_index=True)
+    """새로운 지출/일정을 메모리에 즉각 결합하고 백그라운드 저장"""
+    base_ledger = st.session_state.active_ledger_df if 'active_ledger_df' in st.session_state and not st.session_state.active_ledger_df.empty else load_data(ACTIVE_SHEET)
+    merged_df = pd.concat([base_ledger, new_rows_df], ignore_index=True)
     return save_data(merged_df)
 
-# 2.05.03 | Quick Order Swap Committer
 def quick_swap_and_save(df):
-    try:
-        if df is None or len(df) < 3: return False
-        conn.update(worksheet=ACTIVE_SHEET, data=df.reindex(columns=FINAL_COLUMNS))
-        smart_cache_clear()
-        return True
-    except Exception as e:
-        st.error(f"🚨 순서 변경 저장 실패: {e}")
-        return False
+    """순서 변경 즉시 반영 (체감 0초)"""
+    st.session_state.active_ledger_df = df
+    bg_thread = threading.Thread(
+        target=_bg_worker_save_ledger, 
+        args=(ACTIVE_SHEET, df.copy()),
+        daemon=True
+    )
+    bg_thread.start()
+    return True
 
-# 2.05.04 | Cash Inventory Cloud Loader & Saver (Memory-First)
+# ------------------------------------------------------------------------------
+# 2.05.04 | Cash Inventory Cloud Loader & Instant Async Saver
+# ------------------------------------------------------------------------------
 def load_cash_inventory(force_cloud=False):
-    # ⚡ 세션 메모리에 이미 있으면 구글 통신 0회 즉시 반환
     if not force_cloud and 'cached_cash_df' in st.session_state and st.session_state.cached_cash_df is not None:
         return st.session_state.cached_cash_df
 
@@ -1122,10 +1144,7 @@ def load_cash_inventory(force_cloud=False):
                 st.session_state.cached_cash_df = df
                 return df
             break
-        except Exception as e:
-            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
-                time.sleep(1.5)
-                continue
+        except Exception:
             break
     empty_df = pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
     st.session_state.cached_cash_df = empty_df
@@ -1133,7 +1152,7 @@ def load_cash_inventory(force_cloud=False):
 
 def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
     try:
-        df = load_cash_inventory(force_cloud=True)
+        df = load_cash_inventory().copy()
         if df is None or df.empty:
             df = pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
             
@@ -1156,14 +1175,22 @@ def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
             }])
             df = pd.concat([df, new_row], ignore_index=True)
             
-        conn.update(worksheet=CASH_SHEET, data=df)
+        # ⚡ 메모리 즉시 갱신 + 백그라운드 전송
         st.session_state.cached_cash_df = df
+        bg_thread = threading.Thread(
+            target=_bg_worker_save_cash,
+            args=(CASH_SHEET, df.copy()),
+            daemon=True
+        )
+        bg_thread.start()
         return True
     except Exception as e:
         st.error(f"🚨 지폐 실사 동기화 실패: {e}")
         return False
 
+# ------------------------------------------------------------------------------
 # 2.05.05 | Pure Memory Cache Binder
+# ------------------------------------------------------------------------------
 if 'active_ledger_df' not in st.session_state or st.session_state.get('last_loaded_sheet') != ACTIVE_SHEET:
     st.session_state.active_ledger_df = load_data(ACTIVE_SHEET, force_cloud=False)
     st.session_state.last_loaded_sheet = ACTIVE_SHEET
