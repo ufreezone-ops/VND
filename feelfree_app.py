@@ -1189,10 +1189,14 @@ def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
         return False
 
 # ------------------------------------------------------------------------------
-# 2.05.05 | Pure Memory Cache Binder
+# 2.05.05 | Pure Memory Cache Binder & Lazy Initialization Guard
 # ------------------------------------------------------------------------------
 if 'active_ledger_df' not in st.session_state or st.session_state.get('last_loaded_sheet') != ACTIVE_SHEET:
-    st.session_state.active_ledger_df = load_data(ACTIVE_SHEET, force_cloud=False)
+    if ACTIVE_SHEET in st.cache_data.to_cache_keys(load_data) or True:
+        try:
+            st.session_state.active_ledger_df = load_data(ACTIVE_SHEET, force_cloud=False)
+        except:
+            st.session_state.active_ledger_df = load_data(ACTIVE_SHEET, force_cloud=True)
     st.session_state.last_loaded_sheet = ACTIVE_SHEET
 
 ledger_df = st.session_state.active_ledger_df
