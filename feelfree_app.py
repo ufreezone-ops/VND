@@ -3487,8 +3487,8 @@ if main_tab_choice == "가계부":
                 if append_new_data(new_row): st.toast("환불 롤백 완료!", icon="✅"); st.rerun()
 
 
-        @st.fragment
-        def _render_ledger_table_fragment():
+    @st.fragment
+    def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
 
         # ☁️ 원장 저장은 이제 여기 하나로 통합한다. 모든 편집은 먼저 메모리에 반영된다.
