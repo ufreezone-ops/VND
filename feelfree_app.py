@@ -795,25 +795,53 @@ def clean_amount_to_float(val):
     try: return float(cleaned) if cleaned else 0.0
     except: return 0.0
 
-# 2.03.02 | Active Trip Ledger Loader (Zero-Network Pure Memory First)
+# 2.03.02 | Active Trip Ledger Loader (Zero-Network Pure Memory First + Read Diagnostic)
 def load_data(sheet_name, force_cloud=False):
     # ⚡ 세션 메모리에 해당 시트 데이터가 이미 존재하면 구글 통신 0회 즉시 반환
     if not force_cloud and 'active_ledger_df' in st.session_state and st.session_state.get('last_loaded_sheet') == sheet_name:
         if st.session_state.active_ledger_df is not None and not st.session_state.active_ledger_df.empty:
             return st.session_state.active_ledger_df
 
+    # ------------------------------------------------------------------
+    # 🔎 DIAG | 실제 Google read 발생 여부/소요시간 측정
+    # 기능 변경 없음 / ttl 정책 변경 없음
+    # ------------------------------------------------------------------
+    _read_started_at = time.perf_counter()
+    _read_attempts = 0
+
     df = None
+
     for attempt in range(3):
+        _read_attempts += 1
+
         try:
             df = conn.read(worksheet=sheet_name, ttl="10m")
             break
+
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(2)
                 continue
-            st.error(f"🚨 **치명적 오류:** 클라우드 데이터베이스 연결에 실패했습니다. ({e})")
+
+            st.error(
+                f"🚨 **치명적 오류:** 클라우드 데이터베이스 연결에 실패했습니다. ({e})"
+            )
             st.stop()
 
+    _read_elapsed_ms = (time.perf_counter() - _read_started_at) * 1000
+
+    # 실제 load_data()의 Google read가 실행됐을 때만 진단 메시지 기록
+    st.session_state['last_load_data_read_diag'] = {
+        'sheet': str(sheet_name),
+        'elapsed_ms': round(_read_elapsed_ms, 1),
+        'attempts': _read_attempts,
+        'timestamp': datetime.now(TZ_KST).strftime("%H:%M:%S"),
+        'force_cloud': bool(force_cloud),
+    }
+
+    # ------------------------------------------------------------------
+    # 기존 데이터 후처리
+    # ------------------------------------------------------------------
     if df is None or df.empty:
         df_init = pd.DataFrame(columns=FINAL_COLUMNS)
         try:
@@ -902,7 +930,6 @@ def load_data(sheet_name, force_cloud=False):
     st.session_state.last_loaded_sheet = sheet_name
 
     return df
-
 # 2.03.03 | Multi-Trip Global Ledger Consolidator
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_all_trips_data_cloud():
