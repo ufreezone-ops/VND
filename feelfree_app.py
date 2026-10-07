@@ -2380,14 +2380,18 @@ if 'recalculate_entire_ledger' in globals():
             )
 
 # ============================================================
-# 2.03.07 | FULL REFRESH Finalizer
+# 2.03.07 | FULL REFRESH Finalizer + Diagnostic Viewer
 # ============================================================
 #
-# 반드시 feelfree_app.py의 최종 실행 코드 뒤에 위치한다.
+# 역할:
+#   1. 이번 Streamlit 실행의 FULL REFRESH 시간을 확정
+#   2. /tmp/full_refresh_history.jsonl 에 누적
+#   3. 최근 FULL REFRESH 기록을 화면에 표시
 #
-# 목적:
-#   Streamlit script 전체 실행시간을 확정하고
-#   누적 로그를 남긴다.
+# 주의:
+#   - Google Sheets 접근 없음
+#   - 기존 데이터 처리 로직 변경 없음
+#   - 진단용 코드
 # ============================================================
 
 try:
@@ -2413,7 +2417,6 @@ try:
 
             if profiler is not None:
 
-                # 같은 실행에서 이미 넣은 값이면 중복 기록하지 않는다.
                 if not profiler['stages'].get(
                     'trip_configs'
                 ):
@@ -2424,9 +2427,132 @@ try:
                     )
 
     # --------------------------------------------------------
-    # 최종 확정
+    # FULL REFRESH 최종 확정
     # --------------------------------------------------------
     _frp_finalize()
+
+
+    # ========================================================
+    # FULL REFRESH 누적 기록 화면 표시
+    # ========================================================
+
+    if os.path.exists(
+        _FULL_REFRESH_LOG_PATH
+    ):
+
+        _full_refresh_records = []
+
+        try:
+
+            with open(
+                _FULL_REFRESH_LOG_PATH,
+                'r',
+                encoding='utf-8'
+            ) as _f:
+
+                for _line in _f:
+
+                    _line = _line.strip()
+
+                    if not _line:
+                        continue
+
+                    try:
+                        _full_refresh_records.append(
+                            json.loads(_line)
+                        )
+                    except Exception:
+                        continue
+
+        except Exception as _read_error:
+
+            st.warning(
+                f"⚠️ FULL REFRESH 로그 읽기 실패: {_read_error}"
+            )
+
+            _full_refresh_records = []
+
+
+        # ----------------------------------------------------
+        # 최근 기록 표시
+        # ----------------------------------------------------
+        if _full_refresh_records:
+
+            st.markdown(
+                f"### 🔍 FULL REFRESH 통합 누적 기록 "
+                f"({len(_full_refresh_records)}건)"
+            )
+
+            for _idx, _record in enumerate(
+                reversed(_full_refresh_records[-20:]),
+                start=1
+            ):
+
+                _timestamp = _record.get(
+                    'timestamp',
+                    '-'
+                )
+
+                _total = _record.get(
+                    'total_ms',
+                    0
+                )
+
+                _trip = _record.get(
+                    'trip_configs_ms',
+                    0
+                )
+
+                _load = _record.get(
+                    'load_data_ms',
+                    0
+                )
+
+                _all_trips = _record.get(
+                    'load_all_trips_data_ms',
+                    0
+                )
+
+                _cash = _record.get(
+                    'cash_inventory_ms',
+                    0
+                )
+
+                _recalc = _record.get(
+                    'recalculate_ms',
+                    0
+                )
+
+                _other = _record.get(
+                    'other_ms',
+                    0
+                )
+
+                st.caption(
+                    f"{_idx}. "
+                    f"{_timestamp} | "
+                    f"TOTAL={_total:.1f}ms | "
+                    f"trip_configs={_trip:.1f}ms | "
+                    f"load_data={_load:.1f}ms | "
+                    f"load_all_trips={_all_trips:.1f}ms | "
+                    f"cash={_cash:.1f}ms | "
+                    f"recalculate={_recalc:.1f}ms | "
+                    f"other={_other:.1f}ms"
+                )
+
+        else:
+
+            st.info(
+                "🔍 FULL REFRESH 로그 파일은 존재하지만 "
+                "아직 기록이 없습니다."
+            )
+
+    else:
+
+        st.info(
+            "🔍 FULL REFRESH 로그가 아직 생성되지 않았습니다."
+        )
+
 
 except Exception as _frp_final_error:
 
@@ -2434,6 +2560,10 @@ except Exception as _frp_final_error:
         'full_refresh_profiler_finalize_error'
     ] = str(
         _frp_final_error
+    )
+
+    st.warning(
+        f"⚠️ FULL REFRESH 진단 오류: {_frp_final_error}"
     )
 
 
