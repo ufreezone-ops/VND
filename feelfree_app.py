@@ -61,67 +61,21 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # ----------------------------------------------------------------------
 # 1.03.01 | Google Sheets Auto Version Logger
 # ----------------------------------------------------------------------
-# ⚠️ 성능 진단용 안전 버전
+# ⚠️ 성능 진단/안정화 기간
 #
-# 원칙:
-# 1. 일반 화면 rerun에서는 Google Sheets에 절대 접근하지 않는다.
-# 2. version_log 기록 자체도 일단 완전히 비활성화한다.
-# 3. 대신 v_logged 상태가 실제로 어떻게 유지되는지만 확인할 수 있도록
-#    아주 가벼운 메모리 상태만 기록한다.
+# 일반적인 Streamlit rerun에서는 version_log에 접근하지 않는다.
+# 기존 코드의 auto_update_log_to_gsheets() 호출이 남아 있어도
+# 아무 작업도 하지 않고 즉시 반환한다.
 #
-# 현재 단계에서는 version_log 기능보다
-# "왜 매 rerun마다 Google 접근이 발생했는가"를 먼저 확인한다.
+# 핵심:
+# - Google Sheets 접근 0회
+# - session_state 접근 0회
+# - 외부 변수 참조 0회
+# - NameError 발생 가능성 0
 # ----------------------------------------------------------------------
 
 def auto_update_log_to_gsheets():
-    """
-    🚫 일반 실행에서는 Google Sheets 접근 금지.
-
-    현재는 version_log 기록을 일시적으로 완전히 차단한다.
-    """
-
-    # 현재 세션에서 버전 로그 차단 상태만 표시
-    st.session_state['v_logged'] = current_version
-
     return
-
-
-# ----------------------------------------------------------------------
-# ⚠️ 중요
-#
-# 기존:
-# auto_update_log_to_gsheets()
-#
-# ↓ 반드시 실행하지 않는다.
-# ----------------------------------------------------------------------
-
-# auto_update_log_to_gsheets()
-    
-    # ⚡ 세션 중 이미 체크했다면 구글 시트 통신 즉시 건너뜀 (0ms)
-    if st.session_state.get('v_logged') == VERSION:
-        return
-    for attempt in range(3):
-        try:
-            log_df = conn.read(worksheet="version_log", ttl="10m") 
-            if log_df is None or log_df.empty: 
-                log_df = pd.DataFrame(columns=["Version", "Date", "Log"])
-            if VERSION not in log_df['Version'].values:
-                new_log = pd.DataFrame([{
-                    "Version": VERSION, 
-                    "Date": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"), 
-                    "Log": UPDATE_LOG_TEXT
-                }])
-                log_df = pd.concat([new_log, log_df], ignore_index=True)
-                conn.update(worksheet="version_log", data=log_df)
-            st.session_state['v_logged'] = VERSION
-            break
-        except Exception as e:
-            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
-                time.sleep(2)
-                continue
-            break
-
-auto_update_log_to_gsheets()
 
 # ------------------------------------------------------------------------------
 # 1.04.00 | Dynamic Multi-Node Provisioning (관제탑 로드 및 다중 국가 동적 설정)
