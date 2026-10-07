@@ -2335,6 +2335,12 @@ def _frp_install_wrappers():
         'recalculate'
     )
 
+# 2.03.07 | FULL REFRESH Checkpoint: 2.03 End
+# ------------------------------------------------------------------------------
+
+_frp_checkpoint("2.03 종료")
+
+
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
 # ------------------------------------------------------------------------------
@@ -2668,6 +2674,12 @@ def recalculate_entire_ledger(df):
         )
 
     return temp_df
+
+
+# 2.04.02 | FULL REFRESH Checkpoint: 2.04 End
+# ------------------------------------------------------------------------------
+
+_frp_checkpoint("2.04 종료")
 
 
 # ------------------------------------------------------------------------------
@@ -3608,6 +3620,13 @@ ledger_df = (
 # Google 접근을 하지 않는다.
 _ledger_auto_backup_fragment()
 
+
+# 2.05.07 | FULL REFRESH Checkpoint: 2.05 End
+# ------------------------------------------------------------------------------
+
+_frp_checkpoint("2.05 종료")
+
+
 # ==============================================================================
 # [Module 3.00.00] URDI Engine (Unified Real-time Deductive Inventory)
 # ==============================================================================
@@ -3760,6 +3779,13 @@ def calculate_summary_metrics(df):
         refund_total = 0.0
 
     return float(b_total), float(gross_spent - refund_total)
+
+
+# 3.03.99 | FULL REFRESH Checkpoint: Module 3 End
+# ------------------------------------------------------------------------------
+
+_frp_checkpoint("3 종료")
+
 
 # ------------------------------------------------------------------------------
 # 4.01.00 | Sidebar Dashboard (지갑 잔고, 여정 관제탑, 실물현금 카운터, 보조통화 최하단)
@@ -4175,6 +4201,13 @@ with nav_perf_col:
     )
 
 st.divider()
+
+
+# 4.02.99 | FULL REFRESH Checkpoint: Module 4 End
+# ------------------------------------------------------------------------------
+
+_frp_checkpoint("4 종료")
+
 
 # ==============================================================================
 # [Module 5.00.00] Global Comparison Mode (Module F: 다국적 물가 및 단가 비교)
@@ -4772,6 +4805,13 @@ elif st.session_state.get('show_new_trip', False):
                     st.session_state.current_trip = new_t_name
                     time.sleep(2)
                     st.rerun()
+
+
+# 5.04.99 | FULL REFRESH Checkpoint: Module 5 End
+# ------------------------------------------------------------------------------
+
+_frp_checkpoint("5 종료")
+
 
 # ==============================================================================
 # [Module 6.00.00] Main Ledger & Multi-Tab Analytics Engine
@@ -6993,3 +7033,9 @@ try:
 
 except Exception:
     pass
+
+
+# 6.05.02 | FULL REFRESH Checkpoint: Module 6 End
+# ------------------------------------------------------------------------------
+
+_frp_checkpoint("6 종료")
