@@ -1690,6 +1690,79 @@ ledger_df = st.session_state.active_ledger_df
 # 자동 백업은 현재 화면과 독립적으로 3분마다 동작한다.
 _ledger_auto_backup_fragment()
 
+# ============================================================
+# 🔍 TEMP DIAGNOSTIC | load_data() Google Read 확인
+# ------------------------------------------------------------
+# 목적:
+#   10분 TTL 만료 후 발생하는 Google 접근이
+#   load_data()에서 발생했는지 확인한다.
+#
+# 실험 종료 후:
+#   이 블록 전체를 삭제한다.
+# ============================================================
+
+_diag = st.session_state.get('last_load_data_read_diag')
+
+if _diag:
+    st.caption(
+        f"🔍 load_data READ | "
+        f"Sheet={_diag.get('sheet')} | "
+        f"시간={_diag.get('elapsed_ms')}ms | "
+        f"attempts={_diag.get('attempts')} | "
+        f"force_cloud={_diag.get('force_cloud')} | "
+        f"at={_diag.get('timestamp')}"
+    )
+
+# ============================================================
+# 🔍 TEMP DIAGNOSTIC | load_data() READ 누적 기록
+# ------------------------------------------------------------
+# 목적:
+#   load_data()의 Google READ 진단 결과를 화면에 누적 보존한다.
+# ============================================================
+
+_diag = st.session_state.get('last_load_data_read_diag')
+
+if _diag:
+
+    _diag_signature = (
+        str(_diag.get('sheet')),
+        str(_diag.get('elapsed_ms')),
+        str(_diag.get('attempts')),
+        str(_diag.get('timestamp')),
+        str(_diag.get('force_cloud')),
+    )
+
+    if st.session_state.get('last_saved_load_diag') != _diag_signature:
+
+        if 'load_data_diag_history' not in st.session_state:
+            st.session_state['load_data_diag_history'] = []
+
+        st.session_state['load_data_diag_history'].append({
+            'timestamp': datetime.now(TZ_KST).strftime("%H:%M:%S"),
+            'sheet': str(_diag.get('sheet')),
+            'elapsed_ms': _diag.get('elapsed_ms'),
+            'attempts': _diag.get('attempts'),
+            'force_cloud': _diag.get('force_cloud'),
+        })
+
+        st.session_state['last_saved_load_diag'] = _diag_signature
+
+
+_diag_history = st.session_state.get('load_data_diag_history', [])
+
+if _diag_history:
+    with st.expander("🔍 load_data() Google READ 진단 기록", expanded=False):
+
+        for i, item in enumerate(reversed(_diag_history), 1):
+
+            st.caption(
+                f"{i}. "
+                f"{item['timestamp']} | "
+                f"Sheet={item['sheet']} | "
+                f"READ={item['elapsed_ms']}ms | "
+                f"attempts={item['attempts']} | "
+                f"force_cloud={item['force_cloud']}"
+            )
 
 
 # ==============================================================================
