@@ -2265,28 +2265,29 @@ _frp_start()
 # ------------------------------------------------------------
 # load_data
 # ------------------------------------------------------------
-_original_load_data = load_data
+if 'load_data' in globals():
 
+    _original_load_data = load_data
 
-def load_data(*args, **kwargs):
-    _started_at = time.perf_counter()
+    def load_data(*args, **kwargs):
+        _started_at = time.perf_counter()
 
-    try:
-        return _original_load_data(
-            *args,
-            **kwargs
-        )
+        try:
+            return _original_load_data(
+                *args,
+                **kwargs
+            )
 
-    finally:
-        _elapsed_ms = (
-            time.perf_counter()
-            - _started_at
-        ) * 1000
+        finally:
+            _elapsed_ms = (
+                time.perf_counter()
+                - _started_at
+            ) * 1000
 
-        _frp_record(
-            'load_data',
-            _elapsed_ms
-        )
+            _frp_record(
+                'load_data',
+                _elapsed_ms
+            )
 
 
 # ------------------------------------------------------------
@@ -2322,59 +2323,61 @@ if 'load_all_trips_data' in globals():
 # ------------------------------------------------------------
 # load_cash_inventory
 # ------------------------------------------------------------
-_original_load_cash_inventory = (
-    load_cash_inventory
-)
+if 'load_cash_inventory' in globals():
 
+    _original_load_cash_inventory = (
+        load_cash_inventory
+    )
 
-def load_cash_inventory(*args, **kwargs):
-    _started_at = time.perf_counter()
+    def load_cash_inventory(*args, **kwargs):
+        _started_at = time.perf_counter()
 
-    try:
-        return _original_load_cash_inventory(
-            *args,
-            **kwargs
-        )
+        try:
+            return _original_load_cash_inventory(
+                *args,
+                **kwargs
+            )
 
-    finally:
-        _elapsed_ms = (
-            time.perf_counter()
-            - _started_at
-        ) * 1000
+        finally:
+            _elapsed_ms = (
+                time.perf_counter()
+                - _started_at
+            ) * 1000
 
-        _frp_record(
-            'cash_inventory',
-            _elapsed_ms
-        )
+            _frp_record(
+                'cash_inventory',
+                _elapsed_ms
+            )
 
 
 # ------------------------------------------------------------
 # recalculate_entire_ledger
 # ------------------------------------------------------------
-_original_recalculate_entire_ledger = (
-    recalculate_entire_ledger
-)
+if 'recalculate_entire_ledger' in globals():
 
+    _original_recalculate_entire_ledger = (
+        recalculate_entire_ledger
+    )
 
-def recalculate_entire_ledger(*args, **kwargs):
-    _started_at = time.perf_counter()
+    def recalculate_entire_ledger(*args, **kwargs):
+        _started_at = time.perf_counter()
 
-    try:
-        return _original_recalculate_entire_ledger(
-            *args,
-            **kwargs
-        )
+        try:
+            return _original_recalculate_entire_ledger(
+                *args,
+                **kwargs
+            )
 
-    finally:
-        _elapsed_ms = (
-            time.perf_counter()
-            - _started_at
-        ) * 1000
+        finally:
+            _elapsed_ms = (
+                time.perf_counter()
+                - _started_at
+            ) * 1000
 
-        _frp_record(
-            'recalculate',
-            _elapsed_ms
-        )
+            _frp_record(
+                'recalculate',
+                _elapsed_ms
+            )
 
 # ============================================================
 # 2.03.07 | FULL REFRESH Finalizer
