@@ -3499,6 +3499,24 @@ if main_tab_choice == "가계부":
     def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
 
+        # ☁️ 원장 저장은 이제 여기 하나로 통합한다. 모든 편집은 먼저 메모리에 반영된다.
+        if st.session_state.get('ledger_dirty', False):
+            c_save, c_backup = st.columns([3, 2])
+            with c_save:
+                st.warning("📝 **저장되지 않은 변경사항이 있습니다.** 현재 작업은 메모리에 안전하게 반영되어 있습니다.")
+                if st.button("☁️ 변경사항 일괄 저장", key="btn_commit_ledger_global", use_container_width=True, type="primary"):
+                    if commit_ledger_to_cloud():
+                        st.toast("☁️ 변경사항을 Google Sheets에 일괄 저장했습니다!", icon="✅")
+                        st.rerun(scope="fragment")
+            with c_backup:
+                backup_at = st.session_state.get('last_auto_backup_at')
+                backup_text = backup_at if backup_at else "아직 없음"
+                st.caption(f"🛡️ 자동 백업: 3분 간격\n\n마지막 백업: **{backup_text}**")
+            if st.button("🛡️ 지금 백업", key="btn_manual_ledger_backup", use_container_width=True):
+                if backup_active_ledger_to_cloud():
+                    st.toast("🛡️ 현재 메모리 원장을 자동 백업했습니다.", icon="✅")
+                    st.rerun(scope="fragment")
+
         # 🔥 검색결과 표와 행 이동의 단일 메모리 원본
         # 이동 버튼을 누를 때마다 Google Sheets를 읽지 않고, active_ledger_df를 즉시 화면에 반영한다.
         active_memory_df = st.session_state.get('active_ledger_df')
@@ -3611,34 +3629,14 @@ if main_tab_choice == "가계부":
             styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
             col_cfg = {"Date": st.column_config.TextColumn("날짜", width=120), "Category": st.column_config.TextColumn("항목", width="small"), "Receipt_URL": link_cfg}
 
-            pending_selection_real_idx = st.session_state.pop('ledger_table_pending_selection_real_idx', None)
-            pending_selection_col = st.session_state.get('ledger_selected_column')
-            if pending_selection_real_idx is not None:
-                try:
-                    pending_display_row = render_df.index.get_loc(pending_selection_real_idx)
-                    if isinstance(pending_display_row, slice):
-                        pending_display_row = pending_display_row.start
-                    pending_display_row = int(pending_display_row)
-                    if 0 <= pending_display_row < len(render_df):
-                        if pending_selection_col not in render_df.columns:
-                            pending_selection_col = render_df.columns[0] if len(render_df.columns) > 0 else None
-                        if pending_selection_col is not None:
-                            st.session_state.pop('ledger_result_table', None)
-                            st.session_state['ledger_result_table'] = {
-                                "selection": {
-                                    "cells": [[pending_display_row, pending_selection_col]]
-                                }
-                            }
-                except (KeyError, TypeError, IndexError):
-                    pass
-
             df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-cell", on_select="rerun", key="ledger_result_table")
 
-    # 6.01.04 | 선택 셀 상태 관리 + 연속 행 이동
-            # 선택 행은 "표시 위치"가 아니라 실제 ledger index로 기억하고,
-            # 선택 셀의 열도 함께 기억해서 행 이동 후 같은 열의 커서를 유지한다.
+            # 6.01.04 | 선택 행 상태 관리 + 연속 행 이동
+            # 선택 행은 "표시 위치"가 아니라 실제 ledger index로 기억한다.
+            # 중요: dataframe 위젯의 selection 상태를 session_state에 강제로 주입하지 않는다.
+            #       특히 Description 셀을 다시 선택시키면 모바일에서 가로 스크롤 위치가 튈 수 있다.
             # 행 이동 직후에는 dataframe selection이 이전 화면 위치를 다시 보내올 수 있으므로
-            # 한 번만 무시하고, 방금 이동한 행을 계속 선택 상태로 유지한다.
+            # 한 번만 무시하고, 메모리상의 선택 행만 계속 사용한다.
             selected_idx = None
             saved_real_idx = st.session_state.get('ledger_selected_real_idx')
             ignore_stale_selection = bool(st.session_state.pop('ledger_ignore_selection_once', False))
@@ -3650,21 +3648,19 @@ if main_tab_choice == "가계부":
                     selected_idx = None
             else:
                 event_real_idx = None
-                event_selection_col = None
                 if getattr(df_event.selection, "cells", None) and len(df_event.selection.cells) > 0:
-                    event_cell = df_event.selection.cells[0]
-                    if len(event_cell) >= 2:
-                        event_row_idx = event_cell[0]
-                        event_selection_col = event_cell[1]
-                        if 0 <= event_row_idx < len(render_df):
-                            event_real_idx = render_df.index[event_row_idx]
+                    event_row_idx = df_event.selection.cells[0][0]
+                    if 0 <= event_row_idx < len(render_df):
+                        event_real_idx = render_df.index[event_row_idx]
+                elif getattr(df_event.selection, "rows", None) and len(df_event.selection.rows) > 0:
+                    event_row_idx = df_event.selection.rows[0]
+                    if 0 <= event_row_idx < len(render_df):
+                        event_real_idx = render_df.index[event_row_idx]
 
                 if event_real_idx is not None:
                     selected_idx = render_df.index.get_loc(event_real_idx)
                     event_real_idx = int(event_real_idx)
                     st.session_state['ledger_selected_real_idx'] = event_real_idx
-                    if event_selection_col in render_df.columns:
-                        st.session_state['ledger_selected_column'] = event_selection_col
                     previous_detail_idx = st.session_state.get('ledger_detail_selected_real_idx')
                     if previous_detail_idx != event_real_idx:
                         st.session_state['ledger_detail_selected_real_idx'] = event_real_idx
@@ -3721,66 +3717,27 @@ if main_tab_choice == "가계부":
 
                         st.session_state.active_ledger_df = cur_df
                         st.session_state['ledger_selected_real_idx'] = moved_real_idx
-                        st.session_state['ledger_table_pending_selection_real_idx'] = moved_real_idx
                         mark_ledger_dirty()
                         st.session_state['ledger_ignore_selection_once'] = True
                         return True
 
-                    # 버튼의 on_click 콜백은 Streamlit의 자동 rerun보다 먼저 실행된다.
-                    # 따라서 별도의 st.rerun(scope="fragment")를 호출하지 않아도
-                    # 이동된 메모리 원장이 같은 rerun에서 바로 표에 반영된다.
                     with c_up5:
-                        st.button(
-                            "⏫ 5칸",
-                            key="btn_move_up5_search",
-                            use_container_width=True,
-                            on_click=_move_ledger_row_from_search,
-                            args=(-5,),
-                        )
+                        if st.button("⏫ 5칸", key="btn_move_up5_search", use_container_width=True):
+                            if _move_ledger_row_from_search(-5):
+                                st.rerun(scope="fragment")
                     with c_up1:
-                        st.button(
-                            "🔼 1칸",
-                            key="btn_move_up1_search",
-                            use_container_width=True,
-                            on_click=_move_ledger_row_from_search,
-                            args=(-1,),
-                        )
+                        if st.button("🔼 1칸", key="btn_move_up1_search", use_container_width=True):
+                            if _move_ledger_row_from_search(-1):
+                                st.rerun(scope="fragment")
                     with c_down1:
-                        st.button(
-                            "🔽 1칸",
-                            key="btn_move_down1_search",
-                            use_container_width=True,
-                            on_click=_move_ledger_row_from_search,
-                            args=(1,),
-                        )
+                        if st.button("🔽 1칸", key="btn_move_down1_search", use_container_width=True):
+                            if _move_ledger_row_from_search(1):
+                                st.rerun(scope="fragment")
                     with c_down5:
-                        st.button(
-                            "⏬ 5칸",
-                            key="btn_move_down5_search",
-                            use_container_width=True,
-                            on_click=_move_ledger_row_from_search,
-                            args=(5,),
-                        )
+                        if st.button("⏬ 5칸", key="btn_move_down5_search", use_container_width=True):
+                            if _move_ledger_row_from_search(5):
+                                st.rerun(scope="fragment")
 
-
-        # ☁️ 원장 저장/백업 상태는 검색결과 표 아래에 표시한다.
-        # 첫 행 이동 시 상단에 블록이 새로 삽입되어 표 위치가 밀리는 현상을 막는다.
-        if st.session_state.get('ledger_dirty', False):
-            c_save, c_backup = st.columns([3, 2])
-            with c_save:
-                st.warning("📝 **저장되지 않은 변경사항이 있습니다.** 현재 작업은 메모리에 안전하게 반영되어 있습니다.")
-                if st.button("☁️ 변경사항 일괄 저장", key="btn_commit_ledger_global", use_container_width=True, type="primary"):
-                    if commit_ledger_to_cloud():
-                        st.toast("☁️ 변경사항을 Google Sheets에 일괄 저장했습니다!", icon="✅")
-                        st.rerun(scope="fragment")
-            with c_backup:
-                backup_at = st.session_state.get('last_auto_backup_at')
-                backup_text = backup_at if backup_at else "아직 없음"
-                st.caption(f"🛡️ 자동 백업: 3분 간격\n\n마지막 백업: **{backup_text}**")
-            if st.button("🛡️ 지금 백업", key="btn_manual_ledger_backup", use_container_width=True):
-                if backup_active_ledger_to_cloud():
-                    st.toast("🛡️ 현재 메모리 원장을 자동 백업했습니다.", icon="✅")
-                    st.rerun(scope="fragment")
 
     # 6.01.05 | Detail Viewer & Inline Editor Fragment
     @st.fragment
