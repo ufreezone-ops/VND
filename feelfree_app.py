@@ -1691,37 +1691,32 @@ ledger_df = st.session_state.active_ledger_df
 _ledger_auto_backup_fragment()
 
 # ============================================================
-# 🔍 TEMP DIAGNOSTIC | load_data() Google Read 확인
+# 🔍 TEMP DIAGNOSTIC | load_data() READ 영구 누적 로그
 # ------------------------------------------------------------
 # 목적:
-#   10분 TTL 만료 후 발생하는 Google 접근이
-#   load_data()에서 발생했는지 확인한다.
+#   Streamlit 새로고침으로 session_state가 초기화되어도
+#   load_data()의 Google READ 기록을 계속 보존한다.
 #
-# 실험 종료 후:
-#   이 블록 전체를 삭제한다.
+# 저장 위치:
+#   /tmp/load_data_read_history.jsonl
+#
+# 중요:
+#   - Google Sheets 접근 없음
+#   - conn.read() / conn.update() 없음
+#   - 새로고침 후에도 같은 서버 컨테이너가 살아 있으면 기록 유지
+#   - 실험 종료 후 이 블록 전체 삭제 가능
 # ============================================================
+
+import os
+import json
+
+_DIAG_LOG_PATH = "/tmp/load_data_read_history.jsonl"
 
 _diag = st.session_state.get('last_load_data_read_diag')
 
-if _diag:
-    st.caption(
-        f"🔍 load_data READ | "
-        f"Sheet={_diag.get('sheet')} | "
-        f"시간={_diag.get('elapsed_ms')}ms | "
-        f"attempts={_diag.get('attempts')} | "
-        f"force_cloud={_diag.get('force_cloud')} | "
-        f"at={_diag.get('timestamp')}"
-    )
-
-# ============================================================
-# 🔍 TEMP DIAGNOSTIC | load_data() READ 누적 기록
 # ------------------------------------------------------------
-# 목적:
-#   load_data()의 Google READ 진단 결과를 화면에 누적 보존한다.
-# ============================================================
-
-_diag = st.session_state.get('last_load_data_read_diag')
-
+# 1. 새로운 load_data READ 결과가 발생했는지 확인
+# ------------------------------------------------------------
 if _diag:
 
     _diag_signature = (
@@ -1732,38 +1727,92 @@ if _diag:
         str(_diag.get('force_cloud')),
     )
 
+    # 현재 세션에서 이미 기록한 동일 진단값은 다시 저장하지 않는다.
     if st.session_state.get('last_saved_load_diag') != _diag_signature:
 
-        if 'load_data_diag_history' not in st.session_state:
-            st.session_state['load_data_diag_history'] = []
+        _log_item = {
+            "timestamp": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"),
+            "sheet": str(_diag.get('sheet')),
+            "elapsed_ms": _diag.get('elapsed_ms'),
+            "attempts": _diag.get('attempts'),
+            "force_cloud": _diag.get('force_cloud'),
+            "read_timestamp": str(_diag.get('timestamp')),
+        }
 
-        st.session_state['load_data_diag_history'].append({
-            'timestamp': datetime.now(TZ_KST).strftime("%H:%M:%S"),
-            'sheet': str(_diag.get('sheet')),
-            'elapsed_ms': _diag.get('elapsed_ms'),
-            'attempts': _diag.get('attempts'),
-            'force_cloud': _diag.get('force_cloud'),
-        })
+        try:
+            with open(_DIAG_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        _log_item,
+                        ensure_ascii=False
+                    ) + "\n"
+                )
 
-        st.session_state['last_saved_load_diag'] = _diag_signature
+            st.session_state['last_saved_load_diag'] = _diag_signature
+
+        except Exception as e:
+            st.session_state['load_diag_log_error'] = str(e)
 
 
-_diag_history = st.session_state.get('load_data_diag_history', [])
+# ------------------------------------------------------------
+# 2. 지금까지 누적된 READ 로그 읽기
+# ------------------------------------------------------------
+_diag_history = []
 
+try:
+    if os.path.exists(_DIAG_LOG_PATH):
+
+        with open(_DIAG_LOG_PATH, "r", encoding="utf-8") as f:
+
+            for line in f:
+                line = line.strip()
+
+                if not line:
+                    continue
+
+                try:
+                    _diag_history.append(json.loads(line))
+                except Exception:
+                    continue
+
+except Exception as e:
+    st.session_state['load_diag_log_error'] = str(e)
+
+
+# ------------------------------------------------------------
+# 3. 화면에 누적 기록 표시
+# ------------------------------------------------------------
 if _diag_history:
-    with st.expander("🔍 load_data() Google READ 진단 기록", expanded=False):
 
-        for i, item in enumerate(reversed(_diag_history), 1):
+    with st.expander(
+        f"🔍 load_data() Google READ 누적 기록 ({len(_diag_history)}건)",
+        expanded=False
+    ):
+
+        for i, item in enumerate(
+            reversed(_diag_history),
+            1
+        ):
 
             st.caption(
                 f"{i}. "
-                f"{item['timestamp']} | "
-                f"Sheet={item['sheet']} | "
-                f"READ={item['elapsed_ms']}ms | "
-                f"attempts={item['attempts']} | "
-                f"force_cloud={item['force_cloud']}"
+                f"{item.get('timestamp')} | "
+                f"Sheet={item.get('sheet')} | "
+                f"READ={item.get('elapsed_ms')}ms | "
+                f"attempts={item.get('attempts')} | "
+                f"force_cloud={item.get('force_cloud')}"
             )
 
+
+# ------------------------------------------------------------
+# 4. 로그 파일 오류가 있으면 표시
+# ------------------------------------------------------------
+if st.session_state.get('load_diag_log_error'):
+
+    st.warning(
+        "⚠️ 진단 로그 저장 오류: "
+        + str(st.session_state['load_diag_log_error'])
+    )
 
 # ==============================================================================
 # [Module 3.00.00] URDI Engine (Unified Real-time Deductive Inventory)
