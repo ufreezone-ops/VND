@@ -2024,28 +2024,45 @@ def smart_cache_clear():
 
 
 # ============================================================
-# 2.03.05 | FULL REFRESH Profiler
+# 2.03.05 | FULL REFRESH Profiler + Module Section Profiler
+# ============================================================
+#
+# 목적:
+#   1. 실제 FULL REFRESH 전체 실행시간 측정
+#   2. 기존 함수별 측정 유지
+#   3. 기존에 "other"로 뭉치던 시간을
+#      Module 1 / 2.01~2.02 / 2.03 / 2.04 / 2.05 /
+#      Module 3 / 4 / 5 / 6 으로 분해
+#
+# 핵심:
+#   - 실제 앱 로직은 변경하지 않는다.
+#   - sys.settrace()는 현재 실행 중인 최상위 module frame만 감시한다.
+#   - 함수 내부의 모든 줄을 추적하지 않으므로 진단 오버헤드를 최소화한다.
+#   - 함수 호출 자체가 오래 걸리면 그 호출이 발생한 Module에 시간이 귀속된다.
+#
+# 기록:
+#   /tmp/full_refresh_history.jsonl
+#
 # ============================================================
 
 import os
 import json
 import time
+import re
+import sys
+import bisect
+from functools import wraps
 from datetime import datetime
 
 
 _FULL_REFRESH_LOG_PATH = "/tmp/full_refresh_history.jsonl"
 
 
+# ============================================================
+# ① 기존 FULL REFRESH profiler 시작
+# ============================================================
+
 def _frp_start():
-    """
-    Streamlit 한 번의 전체 실행을 하나의 RUN으로 기록한다.
-
-    시작점:
-        Module 1의 t_render_start
-
-    따라서 2.03 이전에 발생한 작업도
-    전체 실행시간 TOTAL에 포함된다.
-    """
 
     run_no = int(
         st.session_state.get(
@@ -2056,14 +2073,12 @@ def _frp_start():
 
     st.session_state['_full_refresh_run_no'] = run_no
 
-    global_start = globals().get(
-        't_render_start'
+    _global_start_perf = globals().get(
+        't_render_start',
+        time.perf_counter()
     )
 
-    if global_start is None:
-        global_start = time.perf_counter()
-
-    st.session_state['_full_refresh_profiler'] = {
+    profiler = {
         'run_no': run_no,
 
         'started_at': datetime.now(
@@ -2072,7 +2087,7 @@ def _frp_start():
             "%Y-%m-%d %H:%M:%S"
         ),
 
-        'started_perf': global_start,
+        'started_perf': _global_start_perf,
 
         'stages': {
             'trip_configs': [],
@@ -2081,14 +2096,39 @@ def _frp_start():
             'cash_inventory': [],
             'recalculate': [],
             'other_network': []
-        }
+        },
+
+        # ----------------------------------------------------
+        # Module Section Profiler
+        # ----------------------------------------------------
+        'sections': {},
+
+        'section_trace_started_perf': None,
+
+        'section_trace_previous': None,
+
+        'section_last_perf': None,
+
+        'section_last_line': None,
+
+        'section_ranges': [],
+
+        'section_trace_active': False
     }
 
+    st.session_state[
+        '_full_refresh_profiler'
+    ] = profiler
 
-def _frp_record(stage, elapsed_ms):
-    """
-    각 주요 함수의 실행시간을 누적 기록한다.
-    """
+
+# ============================================================
+# ② 기존 함수별 측정값 기록
+# ============================================================
+
+def _frp_record(
+    stage,
+    elapsed_ms
+):
 
     profiler = st.session_state.get(
         '_full_refresh_profiler'
@@ -2108,11 +2148,279 @@ def _frp_record(stage, elapsed_ms):
     )
 
 
-def _frp_finalize():
-    """
-    전체 Streamlit 실행 종료 시
-    FULL_REFRESH 한 건을 영구 누적 저장한다.
-    """
+# ============================================================
+# ③ Module Section 이름 판정
+# ============================================================
+
+def _frs_section_name_from_block(block_no):
+
+    try:
+        x, yy, zz = [
+            int(v)
+            for v in str(
+                block_no
+            ).split('.')
+        ]
+    except Exception:
+        return 'UNKNOWN'
+
+    if x == 1:
+        return 'MODULE_1'
+
+    if x == 2:
+
+        if yy in [1, 2]:
+            return 'MODULE_2.01_2.02'
+
+        if yy == 3:
+            return 'MODULE_2.03'
+
+        if yy == 4:
+            return 'MODULE_2.04'
+
+        if yy == 5:
+            return 'MODULE_2.05'
+
+        return 'MODULE_2_OTHER'
+
+    if x == 3:
+        return 'MODULE_3'
+
+    if x == 4:
+        return 'MODULE_4'
+
+    if x == 5:
+        return 'MODULE_5'
+
+    if x == 6:
+        return 'MODULE_6'
+
+    return f'MODULE_{x}'
+
+
+# ============================================================
+# ④ 현재 소스파일의 x.yy.zz 헤더를 자동 분석
+# ============================================================
+
+def _frs_build_section_ranges():
+
+    profiler = st.session_state.get(
+        '_full_refresh_profiler'
+    )
+
+    if profiler is None:
+        return []
+
+    try:
+
+        source_path = globals().get(
+            '__file__'
+        )
+
+        if not source_path or not os.path.exists(
+            source_path
+        ):
+            return []
+
+        ranges = []
+
+        with open(
+            source_path,
+            'r',
+            encoding='utf-8'
+        ) as f:
+
+            source_lines = f.readlines()
+
+        block_pattern = re.compile(
+            r'^\s*#\s*(\d+\.\d+\.\d+)\s*\|'
+        )
+
+        for line_no, line_text in enumerate(
+            source_lines,
+            start=1
+        ):
+
+            match = block_pattern.match(
+                line_text
+            )
+
+            if not match:
+                continue
+
+            block_no = match.group(1)
+
+            section_name = (
+                _frs_section_name_from_block(
+                    block_no
+                )
+            )
+
+            ranges.append(
+                (
+                    line_no,
+                    section_name,
+                    block_no
+                )
+            )
+
+        ranges.sort(
+            key=lambda x: x[0]
+        )
+
+        profiler[
+            'section_ranges'
+        ] = ranges
+
+        return ranges
+
+    except Exception as e:
+
+        profiler[
+            'section_range_error'
+        ] = str(e)
+
+        return []
+
+
+# ============================================================
+# ⑤ 현재 실행 line → Module Section 변환
+# ============================================================
+
+def _frs_section_for_line(
+    line_no
+):
+
+    profiler = st.session_state.get(
+        '_full_refresh_profiler'
+    )
+
+    if profiler is None:
+        return 'UNKNOWN'
+
+    ranges = profiler.get(
+        'section_ranges',
+        []
+    )
+
+    if not ranges:
+        return 'UNKNOWN'
+
+    line_numbers = [
+        item[0]
+        for item in ranges
+    ]
+
+    idx = bisect.bisect_right(
+        line_numbers,
+        int(line_no)
+    ) - 1
+
+    if idx < 0:
+        return 'PRE_PROFILER'
+
+    return ranges[idx][1]
+
+
+# ============================================================
+# ⑥ 최상위 module frame 전용 Trace
+# ============================================================
+
+def _frs_trace(
+    frame,
+    event,
+    arg
+):
+
+    profiler = st.session_state.get(
+        '_full_refresh_profiler'
+    )
+
+    if profiler is None:
+        return _frs_trace
+
+    if not profiler.get(
+        'section_trace_active',
+        False
+    ):
+        return _frs_trace
+
+    # --------------------------------------------------------
+    # 함수 내부는 추적하지 않는다.
+    # 실제 앱 파일의 최상위 <module> 실행만 감시한다.
+    # --------------------------------------------------------
+    if frame.f_code.co_name != '<module>':
+        return _frs_trace
+
+    if event != 'line':
+        return _frs_trace
+
+    try:
+
+        current_perf = time.perf_counter()
+
+        previous_perf = profiler.get(
+            'section_last_perf'
+        )
+
+        previous_line = profiler.get(
+            'section_last_line'
+        )
+
+        # ----------------------------------------------------
+        # 이전 최상위 실행 line → 현재 line 사이의 시간
+        # ----------------------------------------------------
+        if (
+            previous_perf is not None
+            and
+            previous_line is not None
+        ):
+
+            elapsed_ms = (
+                current_perf
+                - previous_perf
+            ) * 1000
+
+            section_name = (
+                _frs_section_for_line(
+                    previous_line
+                )
+            )
+
+            if elapsed_ms >= 0:
+
+                profiler[
+                    'sections'
+                ][section_name] = round(
+                    profiler[
+                        'sections'
+                    ].get(
+                        section_name,
+                        0.0
+                    )
+                    + elapsed_ms,
+                    1
+                )
+
+        profiler[
+            'section_last_perf'
+        ] = current_perf
+
+        profiler[
+            'section_last_line'
+        ] = frame.f_lineno
+
+    except Exception:
+        pass
+
+    return _frs_trace
+
+
+# ============================================================
+# ⑦ Section Profiler 설치
+# ============================================================
+
+def _frs_install():
 
     profiler = st.session_state.get(
         '_full_refresh_profiler'
@@ -2121,14 +2429,258 @@ def _frp_finalize():
     if profiler is None:
         return
 
+    if profiler.get(
+        'section_trace_active',
+        False
+    ):
+        return
+
+    _frs_build_section_ranges()
+
+    profiler[
+        'section_trace_previous'
+    ] = sys.gettrace()
+
+    profiler[
+        'section_trace_started_perf'
+    ] = time.perf_counter()
+
+    profiler[
+        'section_last_perf'
+    ] = profiler[
+        'section_trace_started_perf'
+    ]
+
+    profiler[
+        'section_last_line'
+    ] = None
+
+    profiler[
+        'section_trace_active'
+    ] = True
+
+    sys.settrace(
+        _frs_trace
+    )
+
+
+# ============================================================
+# ⑧ 기존 함수별 Wrapper
+# ============================================================
+
+def _frp_wrap_function(
+    function_name,
+    stage_name
+):
+
+    fn = globals().get(
+        function_name
+    )
+
+    if fn is None:
+        return
+
+    if getattr(
+        fn,
+        '_frp_wrapped',
+        False
+    ):
+        return
+
+    @wraps(fn)
+    def _wrapped(
+        *args,
+        **kwargs
+    ):
+
+        started_at = time.perf_counter()
+
+        try:
+            return fn(
+                *args,
+                **kwargs
+            )
+
+        finally:
+
+            elapsed_ms = (
+                time.perf_counter()
+                - started_at
+            ) * 1000
+
+            _frp_record(
+                stage_name,
+                elapsed_ms
+            )
+
+    _wrapped._frp_wrapped = True
+
+    globals()[
+        function_name
+    ] = _wrapped
+
+
+# ============================================================
+# ⑨ 기존 Wrapper + Section Profiler 통합 설치
+# ============================================================
+
+def _frp_install_wrappers():
+
+    # --------------------------------------------------------
+    # 함수별 profiler
+    # --------------------------------------------------------
+    _frp_wrap_function(
+        'load_data',
+        'load_data'
+    )
+
+    _frp_wrap_function(
+        'load_all_trips_data',
+        'load_all_trips_data'
+    )
+
+    _frp_wrap_function(
+        'load_cash_inventory',
+        'cash_inventory'
+    )
+
+    _frp_wrap_function(
+        'recalculate_entire_ledger',
+        'recalculate'
+    )
+
+    # --------------------------------------------------------
+    # Module Section profiler
+    #
+    # 현재 2.05.06에서 이 함수를 호출하고 있으므로
+    # 실제 원장 로딩 직전부터 2.04 / 2.05 / 3 / 4 / 5 / 6
+    # 전체를 추적할 수 있다.
+    # --------------------------------------------------------
+    _frs_install()
+
+
+# ============================================================
+# ⑩ FULL REFRESH 시작
+# ============================================================
+
+_frp_start()
+
+
+# ============================================================
+# 중요:
+# 2.05.06의 기존 _frp_install_wrappers() 호출은 그대로 둔다.
+#
+# 따라서 별도의 코드를 다른 블록에 삽입할 필요가 없다.
+# ============================================================
+
+
+# ============================================================
+# ⑪ FULL REFRESH 최종 확정
+# ============================================================
+
+def _frp_finalize():
+
+    profiler = st.session_state.get(
+        '_full_refresh_profiler'
+    )
+
+    if profiler is None:
+        return
+
+    # --------------------------------------------------------
+    # Trace 종료
+    # --------------------------------------------------------
+    if profiler.get(
+        'section_trace_active',
+        False
+    ):
+
+        try:
+
+            current_perf = time.perf_counter()
+
+            previous_perf = profiler.get(
+                'section_last_perf'
+            )
+
+            previous_line = profiler.get(
+                'section_last_line'
+            )
+
+            if (
+                previous_perf is not None
+                and
+                previous_line is not None
+            ):
+
+                elapsed_ms = (
+                    current_perf
+                    - previous_perf
+                ) * 1000
+
+                section_name = (
+                    _frs_section_for_line(
+                        previous_line
+                    )
+                )
+
+                profiler[
+                    'sections'
+                ][section_name] = round(
+                    profiler[
+                        'sections'
+                    ].get(
+                        section_name,
+                        0.0
+                    )
+                    + elapsed_ms,
+                    1
+                )
+
+        except Exception:
+            pass
+
+        try:
+
+            previous_trace = (
+                profiler.get(
+                    'section_trace_previous'
+                )
+            )
+
+            sys.settrace(
+                previous_trace
+            )
+
+        except Exception:
+            try:
+                sys.settrace(None)
+            except Exception:
+                pass
+
+        profiler[
+            'section_trace_active'
+        ] = False
+
+
+    # --------------------------------------------------------
+    # 전체 실행시간
+    # --------------------------------------------------------
     total_ms = (
         time.perf_counter()
-        - profiler['started_perf']
+        - profiler[
+            'started_perf'
+        ]
     ) * 1000
 
-    stages = profiler['stages']
+
+    stages = profiler[
+        'stages'
+    ]
+
 
     def _sum_stage(name):
+
         return round(
             sum(
                 stages.get(
@@ -2138,6 +2690,7 @@ def _frp_finalize():
             ),
             1
         )
+
 
     trip_configs_ms = _sum_stage(
         'trip_configs'
@@ -2159,6 +2712,7 @@ def _frp_finalize():
         'recalculate'
     )
 
+
     measured_ms = (
         trip_configs_ms
         + load_data_ms
@@ -2167,32 +2721,116 @@ def _frp_finalize():
         + recalculate_ms
     )
 
+
     other_ms = max(
         0.0,
-        total_ms - measured_ms
+        total_ms
+        - measured_ms
     )
 
-    result = {
-        'timestamp': datetime.now(
-            TZ_KST
-        ).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
 
-        'event': 'FULL_REFRESH',
-
-        'run_no': profiler[
-            'run_no'
-        ],
-
-        'total_ms': round(
-            total_ms,
+    # --------------------------------------------------------
+    # Section 합계
+    # --------------------------------------------------------
+    sections = {
+        key: round(
+            float(value),
             1
+        )
+        for key, value in (
+            profiler.get(
+                'sections',
+                {}
+            ).items()
+        )
+    }
+
+
+    section_total_ms = round(
+        sum(
+            sections.values()
         ),
+        1
+    )
 
-        'trip_configs_ms': trip_configs_ms,
 
-        'load_data_ms': load_data_ms,
+    # profiler 설치 이전 구간
+    section_trace_started_perf = (
+        profiler.get(
+            'section_trace_started_perf'
+        )
+    )
+
+    if section_trace_started_perf:
+
+        pre_profiler_ms = max(
+            0.0,
+            (
+                section_trace_started_perf
+                - profiler[
+                    'started_perf'
+                ]
+            ) * 1000
+        )
+
+    else:
+
+        pre_profiler_ms = 0.0
+
+
+    pre_profiler_ms = round(
+        pre_profiler_ms,
+        1
+    )
+
+
+    # --------------------------------------------------------
+    # Section profiler에서 설명되지 않은 잔여시간
+    # --------------------------------------------------------
+    section_unattributed_ms = max(
+        0.0,
+        total_ms
+        - pre_profiler_ms
+        - section_total_ms
+    )
+
+    section_unattributed_ms = round(
+        section_unattributed_ms,
+        1
+    )
+
+
+    result = {
+
+        'timestamp':
+            datetime.now(
+                TZ_KST
+            ).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+
+        'event':
+            'FULL_REFRESH',
+
+        'run_no':
+            profiler[
+                'run_no'
+            ],
+
+        'total_ms':
+            round(
+                total_ms,
+                1
+            ),
+
+        # ----------------------------------------------------
+        # 기존 함수별 결과
+        # ----------------------------------------------------
+        'trip_configs_ms':
+            trip_configs_ms,
+
+        'load_data_ms':
+            load_data_ms,
 
         'load_all_trips_data_ms':
             load_all_trips_ms,
@@ -2209,44 +2847,72 @@ def _frp_finalize():
                 1
             ),
 
+        # ----------------------------------------------------
+        # 신규 Module Section 결과
+        # ----------------------------------------------------
+        'sections_ms':
+            sections,
+
+        'section_total_ms':
+            section_total_ms,
+
+        'pre_profiler_ms':
+            pre_profiler_ms,
+
+        'section_unattributed_ms':
+            section_unattributed_ms,
+
+        # ----------------------------------------------------
+        # 호출 횟수
+        # ----------------------------------------------------
         'calls': {
-            'trip_configs': len(
-                stages.get(
-                    'trip_configs',
-                    []
-                )
-            ),
 
-            'load_data': len(
-                stages.get(
-                    'load_data',
-                    []
-                )
-            ),
+            'trip_configs':
+                len(
+                    stages.get(
+                        'trip_configs',
+                        []
+                    )
+                ),
 
-            'load_all_trips_data': len(
-                stages.get(
-                    'load_all_trips_data',
-                    []
-                )
-            ),
+            'load_data':
+                len(
+                    stages.get(
+                        'load_data',
+                        []
+                    )
+                ),
 
-            'cash_inventory': len(
-                stages.get(
-                    'cash_inventory',
-                    []
-                )
-            ),
+            'load_all_trips_data':
+                len(
+                    stages.get(
+                        'load_all_trips_data',
+                        []
+                    )
+                ),
 
-            'recalculate': len(
-                stages.get(
-                    'recalculate',
-                    []
+            'cash_inventory':
+                len(
+                    stages.get(
+                        'cash_inventory',
+                        []
+                    )
+                ),
+
+            'recalculate':
+                len(
+                    stages.get(
+                        'recalculate',
+                        []
+                    )
                 )
-            )
         }
     }
 
+
+    # --------------------------------------------------------
+    # 누적 JSONL 저장
+    # --------------------------------------------------------
     try:
 
         with open(
@@ -2267,6 +2933,7 @@ def _frp_finalize():
         st.session_state[
             'full_refresh_profiler_log_error'
         ] = str(e)
+
 
     st.session_state[
         'last_full_refresh_profile'
@@ -6946,28 +7613,15 @@ st.markdown(f"""
 
 
 # ============================================================
-# 6.05.01 | FULL REFRESH Finalizer + Diagnostic Viewer
-# ============================================================
-#
-# 실행 위치:
-#   6.05.00 이후 / 파일의 최종 실행 코드
-#
-# 역할:
-#   1. 실제 전체 실행시간 확정
-#   2. /tmp/full_refresh_history.jsonl 누적
-#   3. 최근 FULL REFRESH 결과 화면 표시
-#
-# 주의:
-#   - Google Sheets 접근 없음
-#   - 기존 데이터 처리 로직 변경 없음
-#   - 진단용 코드
+# 6.05.01 | FULL REFRESH Finalizer + Module Diagnostic Viewer
 # ============================================================
 
 try:
 
-    # --------------------------------------------------------
-    # get_trip_configs 진단값 연결
-    # --------------------------------------------------------
+    # ========================================================
+    # ① get_trip_configs 진단값 연결
+    # ========================================================
+
     _trip_cfg_diag = st.session_state.get(
         'last_get_trip_configs_diag'
     )
@@ -7017,27 +7671,28 @@ try:
                     "%Y-%m-%d %H:%M:%S"
                 )
 
-                # 현재 RUN 안에서 발생한 진단값만 채택한다.
                 if _diag_dt >= _run_start_dt:
 
                     _frp_record(
                         'trip_configs',
-                        float(_trip_cfg_ms)
+                        float(
+                            _trip_cfg_ms
+                        )
                     )
 
             except Exception:
-
                 pass
 
 
-    # --------------------------------------------------------
-    # FULL REFRESH 최종 확정
-    # --------------------------------------------------------
+    # ========================================================
+    # ② FULL REFRESH 최종 확정
+    # ========================================================
+
     _frp_finalize()
 
 
     # ========================================================
-    # 누적 기록 화면 표시
+    # ③ 누적 기록 로드
     # ========================================================
 
     _full_refresh_records = []
@@ -7064,20 +7719,27 @@ try:
                     try:
 
                         _full_refresh_records.append(
-                            json.loads(_line)
+                            json.loads(
+                                _line
+                            )
                         )
 
                     except Exception:
-
                         continue
 
         except Exception as _read_error:
 
             st.warning(
                 "⚠️ FULL REFRESH 로그 읽기 실패: "
-                + str(_read_error)
+                + str(
+                    _read_error
+                )
             )
 
+
+    # ========================================================
+    # ④ 기존 FULL REFRESH 기록
+    # ========================================================
 
     if _full_refresh_records:
 
@@ -7096,20 +7758,183 @@ try:
             st.caption(
                 f"{_idx}. "
                 f"{_record.get('timestamp')} | "
-                f"TOTAL={_record.get('total_ms', 0):,.1f}ms | "
-                f"trip_configs={_record.get('trip_configs_ms', 0):,.1f}ms | "
-                f"load_data={_record.get('load_data_ms', 0):,.1f}ms | "
-                f"load_all_trips={_record.get('load_all_trips_data_ms', 0):,.1f}ms | "
-                f"cash={_record.get('cash_inventory_ms', 0):,.1f}ms | "
-                f"recalculate={_record.get('recalculate_ms', 0):,.1f}ms | "
-                f"other={_record.get('other_ms', 0):,.1f}ms"
+                f"TOTAL="
+                f"{_record.get('total_ms', 0):,.1f}ms | "
+                f"trip_configs="
+                f"{_record.get('trip_configs_ms', 0):,.1f}ms | "
+                f"load_data="
+                f"{_record.get('load_data_ms', 0):,.1f}ms | "
+                f"load_all_trips="
+                f"{_record.get('load_all_trips_data_ms', 0):,.1f}ms | "
+                f"cash="
+                f"{_record.get('cash_inventory_ms', 0):,.1f}ms | "
+                f"recalculate="
+                f"{_record.get('recalculate_ms', 0):,.1f}ms | "
+                f"other="
+                f"{_record.get('other_ms', 0):,.1f}ms"
             )
+
 
     else:
 
         st.info(
             "🔍 FULL REFRESH 로그가 아직 없습니다."
         )
+
+
+    # ========================================================
+    # ⑤ 최신 실행의 Module Section 분석
+    # ========================================================
+
+    _latest_profile = (
+        st.session_state.get(
+            'last_full_refresh_profile'
+        )
+    )
+
+    if _latest_profile:
+
+        st.markdown(
+            "### 🧭 최신 FULL REFRESH 구간 분석"
+        )
+
+        _total_ms = float(
+            _latest_profile.get(
+                'total_ms',
+                0.0
+            )
+        )
+
+        _sections_ms = (
+            _latest_profile.get(
+                'sections_ms',
+                {}
+            )
+        )
+
+        _section_rows = [
+            (
+                'MODULE_1',
+                'Module 1',
+            ),
+            (
+                'MODULE_2.01_2.02',
+                'Module 2.01~2.02',
+            ),
+            (
+                'MODULE_2.03',
+                'Module 2.03',
+            ),
+            (
+                'MODULE_2.04',
+                'Module 2.04',
+            ),
+            (
+                'MODULE_2.05',
+                'Module 2.05',
+            ),
+            (
+                'MODULE_3',
+                'Module 3',
+            ),
+            (
+                'MODULE_4',
+                'Module 4',
+            ),
+            (
+                'MODULE_5',
+                'Module 5',
+            ),
+            (
+                'MODULE_6',
+                'Module 6',
+            )
+        ]
+
+
+        for (
+            _section_key,
+            _section_label
+        ) in _section_rows:
+
+            _section_ms = float(
+                _sections_ms.get(
+                    _section_key,
+                    0.0
+                )
+            )
+
+            if _section_ms <= 0:
+                continue
+
+            _ratio = (
+                (
+                    _section_ms
+                    / _total_ms
+                    * 100
+                )
+                if _total_ms > 0
+                else 0.0
+            )
+
+            st.caption(
+                f"• {_section_label}: "
+                f"**{_section_ms:,.1f}ms** "
+                f"({(_ratio):.2f}%)"
+            )
+
+
+        _pre_ms = float(
+            _latest_profile.get(
+                'pre_profiler_ms',
+                0.0
+            )
+        )
+
+        _unattributed_ms = float(
+            _latest_profile.get(
+                'section_unattributed_ms',
+                0.0
+            )
+        )
+
+        st.caption(
+            f"• PROFILER 시작 이전: "
+            f"**{_pre_ms:,.1f}ms**"
+        )
+
+        st.caption(
+            f"• Section 미귀속 잔여: "
+            f"**{_unattributed_ms:,.1f}ms**"
+        )
+
+
+        # ----------------------------------------------------
+        # 가장 오래 걸린 Section
+        # ----------------------------------------------------
+
+        _valid_sections = [
+            (
+                _name,
+                float(_ms)
+            )
+            for _name, _ms
+            in _sections_ms.items()
+            if float(_ms) > 0
+        ]
+
+        if _valid_sections:
+
+            _slowest_name, _slowest_ms = max(
+                _valid_sections,
+                key=lambda x: x[1]
+            )
+
+            st.warning(
+                "🎯 **현재 가장 의심되는 구간:** "
+                f"{_slowest_name} — "
+                f"{_slowest_ms:,.1f}ms"
+            )
 
 
 except Exception as _frp_final_error:
@@ -7122,5 +7947,7 @@ except Exception as _frp_final_error:
 
     st.warning(
         "⚠️ FULL REFRESH 진단 오류: "
-        + str(_frp_final_error)
+        + str(
+            _frp_final_error
+        )
     )
