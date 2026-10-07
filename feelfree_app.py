@@ -2026,9 +2026,14 @@ def smart_cache_clear():
 # ============================================================
 # 2.03.05 | FULL REFRESH Profiler
 # ============================================================
+#
 # 목적:
-#   Streamlit 한 번의 전체 실행 시간을 하나의 RUN으로 묶어
-#   주요 단계별 소요시간을 영구 누적 기록한다.
+#   Streamlit 한 번의 실제 전체 실행 시간을 하나의 RUN으로 묶는다.
+#
+# 핵심:
+#   - 시작 시점은 Module 1의 t_render_start를 사용한다.
+#   - 따라서 2.03.05 이전에 실행된 get_trip_configs() 등도
+#     전체 TOTAL에 포함된다.
 #
 # 기록 대상:
 #   - trip_configs
@@ -2053,14 +2058,11 @@ import json
 import time
 from datetime import datetime
 
+
 _FULL_REFRESH_LOG_PATH = "/tmp/full_refresh_history.jsonl"
 
 
 def _frp_start():
-    """
-    FULL REFRESH 한 번의 시작점.
-    Streamlit script rerun마다 새로운 RUN을 만든다.
-    """
 
     run_no = int(
         st.session_state.get(
@@ -2071,14 +2073,23 @@ def _frp_start():
 
     st.session_state['_full_refresh_run_no'] = run_no
 
+    # Module 1에서 이미 시작한 전체 실행 타이머를 사용한다.
+    # 없으면 현재 시점을 fallback으로 사용한다.
+    _global_start_perf = globals().get(
+        't_render_start',
+        time.perf_counter()
+    )
+
     profiler = {
         'run_no': run_no,
+
         'started_at': datetime.now(
             TZ_KST
         ).strftime(
             "%Y-%m-%d %H:%M:%S"
         ),
-        'started_perf': time.perf_counter(),
+
+        'started_perf': _global_start_perf,
 
         'stages': {
             'trip_configs': [],
@@ -2090,14 +2101,15 @@ def _frp_start():
         }
     }
 
-    st.session_state['_full_refresh_profiler'] = profiler
+    st.session_state[
+        '_full_refresh_profiler'
+    ] = profiler
 
 
-def _frp_record(stage, elapsed_ms):
-    """
-    특정 단계의 실행시간을 누적한다.
-    같은 함수가 여러 번 호출되더라도 모두 기록한다.
-    """
+def _frp_record(
+    stage,
+    elapsed_ms
+):
 
     profiler = st.session_state.get(
         '_full_refresh_profiler'
@@ -2110,15 +2122,14 @@ def _frp_record(stage, elapsed_ms):
         profiler['stages'][stage] = []
 
     profiler['stages'][stage].append(
-        round(float(elapsed_ms), 1)
+        round(
+            float(elapsed_ms),
+            1
+        )
     )
 
 
 def _frp_finalize():
-    """
-    Streamlit script 실행 마지막에 호출.
-    FULL REFRESH 전체 시간을 계산하고 JSONL에 누적 저장한다.
-    """
 
     profiler = st.session_state.get(
         '_full_refresh_profiler'
@@ -2135,8 +2146,14 @@ def _frp_finalize():
     stages = profiler['stages']
 
     def _sum_stage(name):
+
         return round(
-            sum(stages.get(name, [])),
+            sum(
+                stages.get(
+                    name,
+                    []
+                )
+            ),
             1
         )
 
@@ -2179,8 +2196,12 @@ def _frp_finalize():
         ).strftime(
             "%Y-%m-%d %H:%M:%S"
         ),
+
         'event': 'FULL_REFRESH',
-        'run_no': profiler['run_no'],
+
+        'run_no': profiler[
+            'run_no'
+        ],
 
         'total_ms': round(
             total_ms,
@@ -2188,11 +2209,23 @@ def _frp_finalize():
         ),
 
         'trip_configs_ms': trip_configs_ms,
+
         'load_data_ms': load_data_ms,
-        'load_all_trips_data_ms': load_all_trips_ms,
-        'cash_inventory_ms': cash_inventory_ms,
-        'recalculate_ms': recalculate_ms,
-        'other_ms': other_ms,
+
+        'load_all_trips_data_ms':
+            load_all_trips_ms,
+
+        'cash_inventory_ms':
+            cash_inventory_ms,
+
+        'recalculate_ms':
+            recalculate_ms,
+
+        'other_ms':
+            round(
+                other_ms,
+                1
+            ),
 
         'calls': {
             'trip_configs': len(
@@ -2201,24 +2234,28 @@ def _frp_finalize():
                     []
                 )
             ),
+
             'load_data': len(
                 stages.get(
                     'load_data',
                     []
                 )
             ),
+
             'load_all_trips_data': len(
                 stages.get(
                     'load_all_trips_data',
                     []
                 )
             ),
+
             'cash_inventory': len(
                 stages.get(
                     'cash_inventory',
                     []
                 )
             ),
+
             'recalculate': len(
                 stages.get(
                     'recalculate',
@@ -2229,6 +2266,7 @@ def _frp_finalize():
     }
 
     try:
+
         with open(
             _FULL_REFRESH_LOG_PATH,
             'a',
@@ -2243,6 +2281,7 @@ def _frp_finalize():
             )
 
     except Exception as e:
+
         st.session_state[
             'full_refresh_profiler_log_error'
         ] = str(e)
@@ -2258,313 +2297,108 @@ def _frp_finalize():
 _frp_start()
 
 
-# ============================================================
-# 2.03.06 | FULL REFRESH Function Timing Wrappers
-# ============================================================
+# 2.05.06 | Pure Memory Cache Binder + Safe Trip Context
 
-# ------------------------------------------------------------
-# load_data
-# ------------------------------------------------------------
-if 'load_data' in globals():
+if 'ledger_dirty' not in st.session_state:
+    st.session_state['ledger_dirty'] = False
 
-    _original_load_data = load_data
-
-    def load_data(*args, **kwargs):
-        _started_at = time.perf_counter()
-
-        try:
-            return _original_load_data(
-                *args,
-                **kwargs
-            )
-
-        finally:
-            _elapsed_ms = (
-                time.perf_counter()
-                - _started_at
-            ) * 1000
-
-            _frp_record(
-                'load_data',
-                _elapsed_ms
-            )
+if 'ledger_mutation_count' not in st.session_state:
+    st.session_state['ledger_mutation_count'] = 0
 
 
-# ------------------------------------------------------------
-# load_all_trips_data
-# ------------------------------------------------------------
-if 'load_all_trips_data' in globals():
+_previous_working_sheet = (
+    st.session_state.get(
+        'ledger_working_sheet'
+    )
+)
 
-    _original_load_all_trips_data = (
-        load_all_trips_data
+
+if (
+    _previous_working_sheet
+    and
+    _previous_working_sheet != ACTIVE_SHEET
+    and
+    st.session_state.get(
+        'ledger_dirty',
+        False
+    )
+):
+
+    _write_auto_backup_snapshot(
+        st.session_state.get(
+            'active_ledger_df'
+        ),
+        sheet_name=_previous_working_sheet,
+        trip_name=_trip_name_for_sheet(
+            _previous_working_sheet
+        ),
     )
 
-    def load_all_trips_data(*args, **kwargs):
-        _started_at = time.perf_counter()
-
-        try:
-            return _original_load_all_trips_data(
-                *args,
-                **kwargs
-            )
-
-        finally:
-            _elapsed_ms = (
-                time.perf_counter()
-                - _started_at
-            ) * 1000
-
-            _frp_record(
-                'load_all_trips_data',
-                _elapsed_ms
-            )
-
-
-# ------------------------------------------------------------
-# load_cash_inventory
-# ------------------------------------------------------------
-if 'load_cash_inventory' in globals():
-
-    _original_load_cash_inventory = (
-        load_cash_inventory
-    )
-
-    def load_cash_inventory(*args, **kwargs):
-        _started_at = time.perf_counter()
-
-        try:
-            return _original_load_cash_inventory(
-                *args,
-                **kwargs
-            )
-
-        finally:
-            _elapsed_ms = (
-                time.perf_counter()
-                - _started_at
-            ) * 1000
-
-            _frp_record(
-                'cash_inventory',
-                _elapsed_ms
-            )
-
-
-# ------------------------------------------------------------
-# recalculate_entire_ledger
-# ------------------------------------------------------------
-if 'recalculate_entire_ledger' in globals():
-
-    _original_recalculate_entire_ledger = (
-        recalculate_entire_ledger
-    )
-
-    def recalculate_entire_ledger(*args, **kwargs):
-        _started_at = time.perf_counter()
-
-        try:
-            return _original_recalculate_entire_ledger(
-                *args,
-                **kwargs
-            )
-
-        finally:
-            _elapsed_ms = (
-                time.perf_counter()
-                - _started_at
-            ) * 1000
-
-            _frp_record(
-                'recalculate',
-                _elapsed_ms
-            )
 
 # ============================================================
-# 2.03.07 | FULL REFRESH Finalizer + Diagnostic Viewer
-# ============================================================
+# 🔍 FULL REFRESH PROFILER
+# ------------------------------------------------------------
+# 이 시점에는 다음 함수들이 모두 정의되어 있다.
 #
-# 역할:
-#   1. 이번 Streamlit 실행의 FULL REFRESH 시간을 확정
-#   2. /tmp/full_refresh_history.jsonl 에 누적
-#   3. 최근 FULL REFRESH 기록을 화면에 표시
+#   load_data
+#   load_all_trips_data
+#   load_cash_inventory
+#   recalculate_entire_ledger
 #
-# 주의:
-#   - Google Sheets 접근 없음
-#   - 기존 데이터 처리 로직 변경 없음
-#   - 진단용 코드
+# 따라서 여기서 래퍼를 설치한다.
 # ============================================================
 
-try:
+_frp_install_wrappers()
 
-    # --------------------------------------------------------
-    # get_trip_configs 기존 진단값 연결
-    # --------------------------------------------------------
-    _trip_cfg_diag = st.session_state.get(
-        'last_get_trip_configs_diag'
+
+# ============================================================
+# 실제 원장 로딩
+# ============================================================
+
+if (
+    'active_ledger_df' not in st.session_state
+    or
+    st.session_state.get(
+        'last_loaded_sheet'
+    ) != ACTIVE_SHEET
+):
+
+    st.session_state.active_ledger_df = (
+        load_data(
+            ACTIVE_SHEET,
+            force_cloud=False
+        )
     )
 
-    if _trip_cfg_diag:
-
-        _trip_cfg_ms = _trip_cfg_diag.get(
-            'function_elapsed_ms'
-        )
-
-        if _trip_cfg_ms is not None:
-
-            profiler = st.session_state.get(
-                '_full_refresh_profiler'
-            )
-
-            if profiler is not None:
-
-                if not profiler['stages'].get(
-                    'trip_configs'
-                ):
-
-                    _frp_record(
-                        'trip_configs',
-                        float(_trip_cfg_ms)
-                    )
-
-    # --------------------------------------------------------
-    # FULL REFRESH 최종 확정
-    # --------------------------------------------------------
-    _frp_finalize()
-
-
-    # ========================================================
-    # FULL REFRESH 누적 기록 화면 표시
-    # ========================================================
-
-    if os.path.exists(
-        _FULL_REFRESH_LOG_PATH
-    ):
-
-        _full_refresh_records = []
-
-        try:
-
-            with open(
-                _FULL_REFRESH_LOG_PATH,
-                'r',
-                encoding='utf-8'
-            ) as _f:
-
-                for _line in _f:
-
-                    _line = _line.strip()
-
-                    if not _line:
-                        continue
-
-                    try:
-                        _full_refresh_records.append(
-                            json.loads(_line)
-                        )
-                    except Exception:
-                        continue
-
-        except Exception as _read_error:
-
-            st.warning(
-                f"⚠️ FULL REFRESH 로그 읽기 실패: {_read_error}"
-            )
-
-            _full_refresh_records = []
-
-
-        # ----------------------------------------------------
-        # 최근 기록 표시
-        # ----------------------------------------------------
-        if _full_refresh_records:
-
-            st.markdown(
-                f"### 🔍 FULL REFRESH 통합 누적 기록 "
-                f"({len(_full_refresh_records)}건)"
-            )
-
-            for _idx, _record in enumerate(
-                reversed(_full_refresh_records[-20:]),
-                start=1
-            ):
-
-                _timestamp = _record.get(
-                    'timestamp',
-                    '-'
-                )
-
-                _total = _record.get(
-                    'total_ms',
-                    0
-                )
-
-                _trip = _record.get(
-                    'trip_configs_ms',
-                    0
-                )
-
-                _load = _record.get(
-                    'load_data_ms',
-                    0
-                )
-
-                _all_trips = _record.get(
-                    'load_all_trips_data_ms',
-                    0
-                )
-
-                _cash = _record.get(
-                    'cash_inventory_ms',
-                    0
-                )
-
-                _recalc = _record.get(
-                    'recalculate_ms',
-                    0
-                )
-
-                _other = _record.get(
-                    'other_ms',
-                    0
-                )
-
-                st.caption(
-                    f"{_idx}. "
-                    f"{_timestamp} | "
-                    f"TOTAL={_total:.1f}ms | "
-                    f"trip_configs={_trip:.1f}ms | "
-                    f"load_data={_load:.1f}ms | "
-                    f"load_all_trips={_all_trips:.1f}ms | "
-                    f"cash={_cash:.1f}ms | "
-                    f"recalculate={_recalc:.1f}ms | "
-                    f"other={_other:.1f}ms"
-                )
-
-        else:
-
-            st.info(
-                "🔍 FULL REFRESH 로그 파일은 존재하지만 "
-                "아직 기록이 없습니다."
-            )
-
-    else:
-
-        st.info(
-            "🔍 FULL REFRESH 로그가 아직 생성되지 않았습니다."
-        )
-
-
-except Exception as _frp_final_error:
+    st.session_state.last_loaded_sheet = (
+        ACTIVE_SHEET
+    )
 
     st.session_state[
-        'full_refresh_profiler_finalize_error'
-    ] = str(
-        _frp_final_error
-    )
+        'ledger_dirty'
+    ] = False
 
-    st.warning(
-        f"⚠️ FULL REFRESH 진단 오류: {_frp_final_error}"
-    )
+    st.session_state[
+        'ledger_order_dirty'
+    ] = False
+
+    st.session_state[
+        'ledger_mutation_count'
+    ] = 0
+
+
+st.session_state[
+    'ledger_working_sheet'
+] = ACTIVE_SHEET
+
+
+ledger_df = (
+    st.session_state.active_ledger_df
+)
+
+
+# 자동 백업은 현재 화면과 독립적으로 동작한다.
+_ledger_auto_backup_fragment()
 
 
 # ------------------------------------------------------------------------------
@@ -6635,3 +6469,184 @@ st.markdown(f"""
         <div>반응속도: {perf_badge}</div>
     </div>
 """, unsafe_allow_html=True)
+
+
+# ============================================================
+# 6.05.01 | FULL REFRESH Finalizer + Diagnostic Viewer
+# ============================================================
+#
+# 실행 위치:
+#   6.05.00 이후 / 파일의 최종 실행 코드
+#
+# 역할:
+#   1. 실제 전체 실행시간 확정
+#   2. /tmp/full_refresh_history.jsonl 누적
+#   3. 최근 FULL REFRESH 결과 화면 표시
+#
+# 주의:
+#   - Google Sheets 접근 없음
+#   - 기존 데이터 처리 로직 변경 없음
+#   - 진단용 코드
+# ============================================================
+
+try:
+
+    # --------------------------------------------------------
+    # get_trip_configs 진단값 연결
+    # --------------------------------------------------------
+    _trip_cfg_diag = st.session_state.get(
+        'last_get_trip_configs_diag'
+    )
+
+    if _trip_cfg_diag:
+
+        _trip_cfg_ms = _trip_cfg_diag.get(
+            'function_elapsed_ms'
+        )
+
+        _trip_cfg_timestamp = str(
+            _trip_cfg_diag.get(
+                'timestamp',
+                ''
+            )
+        )
+
+        profiler = st.session_state.get(
+            '_full_refresh_profiler'
+        )
+
+        if (
+            profiler is not None
+            and
+            _trip_cfg_ms is not None
+            and
+            _trip_cfg_timestamp
+        ):
+
+            try:
+
+                _run_date = datetime.now(
+                    TZ_KST
+                ).strftime(
+                    "%Y-%m-%d"
+                )
+
+                _diag_dt = datetime.strptime(
+                    f"{_run_date} {_trip_cfg_timestamp}",
+                    "%Y-%m-%d %H:%M:%S"
+                )
+
+                _run_start_dt = datetime.strptime(
+                    profiler[
+                        'started_at'
+                    ],
+                    "%Y-%m-%d %H:%M:%S"
+                )
+
+                # 현재 RUN 안에서 발생한 진단값만 채택한다.
+                if _diag_dt >= _run_start_dt:
+
+                    _frp_record(
+                        'trip_configs',
+                        float(_trip_cfg_ms)
+                    )
+
+            except Exception:
+
+                pass
+
+
+    # --------------------------------------------------------
+    # FULL REFRESH 최종 확정
+    # --------------------------------------------------------
+    _frp_finalize()
+
+
+    # ========================================================
+    # 누적 기록 화면 표시
+    # ========================================================
+
+    _full_refresh_records = []
+
+    if os.path.exists(
+        _FULL_REFRESH_LOG_PATH
+    ):
+
+        try:
+
+            with open(
+                _FULL_REFRESH_LOG_PATH,
+                'r',
+                encoding='utf-8'
+            ) as _f:
+
+                for _line in _f:
+
+                    _line = _line.strip()
+
+                    if not _line:
+                        continue
+
+                    try:
+
+                        _full_refresh_records.append(
+                            json.loads(_line)
+                        )
+
+                    except Exception:
+
+                        continue
+
+        except Exception as _read_error:
+
+            st.warning(
+                "⚠️ FULL REFRESH 로그 읽기 실패: "
+                + str(_read_error)
+            )
+
+
+    if _full_refresh_records:
+
+        st.markdown(
+            "### 🔍 FULL REFRESH 통합 누적 기록 "
+            f"({len(_full_refresh_records)}건)"
+        )
+
+        for _idx, _record in enumerate(
+            reversed(
+                _full_refresh_records[-20:]
+            ),
+            start=1
+        ):
+
+            st.caption(
+                f"{_idx}. "
+                f"{_record.get('timestamp')} | "
+                f"TOTAL={_record.get('total_ms', 0):,.1f}ms | "
+                f"trip_configs={_record.get('trip_configs_ms', 0):,.1f}ms | "
+                f"load_data={_record.get('load_data_ms', 0):,.1f}ms | "
+                f"load_all_trips={_record.get('load_all_trips_data_ms', 0):,.1f}ms | "
+                f"cash={_record.get('cash_inventory_ms', 0):,.1f}ms | "
+                f"recalculate={_record.get('recalculate_ms', 0):,.1f}ms | "
+                f"other={_record.get('other_ms', 0):,.1f}ms"
+            )
+
+    else:
+
+        st.info(
+            "🔍 FULL REFRESH 로그가 아직 없습니다."
+        )
+
+
+except Exception as _frp_final_error:
+
+    st.session_state[
+        'full_refresh_profiler_finalize_error'
+    ] = str(
+        _frp_final_error
+    )
+
+    st.warning(
+        "⚠️ FULL REFRESH 진단 오류: "
+        + str(_frp_final_error)
+    )
