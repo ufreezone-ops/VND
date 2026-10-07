@@ -114,75 +114,273 @@ def infer_node_info(c_name, def_c, def_s, def_t, def_m):
     if any(k in c_upper for k in ["사이프러스", "CYPRUS", "키프로스"]): return "EUR", "€", 2, 1
     return def_c, def_s, def_t, def_m
 
-# 1.04.02 | Control Tower Config Loader & Node Assembler (Zero-Network Session Isolated)
+# ============================================================
+# 1.04.02 | Control Tower Config Loader & Node Assembler
+# 🔍 TEMP DIAGNOSTIC VERSION
+#
+# 목적:
+#   10분 TTL 만료 후 발생하는 대규모 Google 지연이
+#   CONFIG_SHEET의 get_trip_configs()에서 발생하는지 측정한다.
+#
+# 기록:
+#   /tmp/get_trip_configs_diagnostic.jsonl
+#
+# Google 진단 로그 저장을 위해 Google Sheets에는 접근하지 않는다.
+# ============================================================
+
 def get_trip_configs():
-    # ⚡ 세션 메모리에 이미 관제탑 설정이 있다면 구글 통신 완전 건너뜀 (0ms)
+
+    _func_started_at = time.perf_counter()
+
+    _diag_path = "/tmp/get_trip_configs_diagnostic.jsonl"
+
+    # --------------------------------------------------------
+    # 1. Session Memory Cache Hit
+    # --------------------------------------------------------
     if 'cached_trip_configs' in st.session_state and st.session_state.cached_trip_configs:
+
+        _elapsed_ms = (time.perf_counter() - _func_started_at) * 1000
+
+        _diag_item = {
+            "timestamp": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"),
+            "event": "session_cache_hit",
+            "sheet": str(CONFIG_SHEET),
+            "read_elapsed_ms": 0.0,
+            "function_elapsed_ms": round(_elapsed_ms, 1),
+            "attempts": 0,
+        }
+
+        try:
+            with open(_diag_path, "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        _diag_item,
+                        ensure_ascii=False
+                    ) + "\n"
+                )
+        except Exception:
+            pass
+
         return st.session_state.cached_trip_configs
 
+
+    # --------------------------------------------------------
+    # 2. Google CONFIG_SHEET READ
+    # --------------------------------------------------------
+    _read_started_at = time.perf_counter()
+
     cfg_df = None
+    _read_attempts = 0
+
     for attempt in range(3):
+
+        _read_attempts += 1
+
         try:
-            cfg_df = conn.read(worksheet=CONFIG_SHEET, ttl="10m")
+            cfg_df = conn.read(
+                worksheet=CONFIG_SHEET,
+                ttl="10m"
+            )
+
             if cfg_df is not None and not cfg_df.empty:
                 break
+
         except Exception as e:
-            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+
+            if attempt < 2 and (
+                "429" in str(e)
+                or "Quota" in str(e)
+            ):
                 time.sleep(2.5)
                 continue
-            st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}') 로드 실패 (API 과부하).**")
+
+            st.error(
+                f"🚨 **관제탑 설정('{CONFIG_SHEET}') "
+                f"로드 실패 (API 과부하).**"
+            )
             st.stop()
-            
+
+
+    _read_elapsed_ms = (
+        time.perf_counter() - _read_started_at
+    ) * 1000
+
+
+    # --------------------------------------------------------
+    # 3. Empty Config Protection
+    # --------------------------------------------------------
     if cfg_df is None or cfg_df.empty:
-        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}')이 비어있습니다.**")
+
+        st.error(
+            f"🚨 **관제탑 설정('{CONFIG_SHEET}')이 비어있습니다.**"
+        )
+
         st.stop()
-        
+
+
+    # --------------------------------------------------------
+    # 4. Dynamic Config Assembly
+    # --------------------------------------------------------
     dynamic_configs = {}
+
     for _, row in cfg_df.iterrows():
-        raw_cats = str(row['Categories']).replace("，", ",").split(",") 
-        cats = [c.strip() for c in raw_cats if c.strip()]
-        
-        travelers = int(row['Travelers']) if 'Travelers' in row and pd.notna(row['Travelers']) else 2
-        stay_mapping = str(row['Stay_Mapping']).strip() if 'Stay_Mapping' in row and pd.notna(row['Stay_Mapping']) else ""
-        
-        main_country = str(row['MainCountry']).strip()
-        main_curr = str(row['Currency']).strip().upper()
-        main_sym = str(row['Symbol']).strip()
-        main_tz = int(row['Timezone']) if pd.notna(row['Timezone']) else 9
-        main_mult = int(row['Multiplier']) if pd.notna(row['Multiplier']) else 1
-        
-        nodes = {main_country: {
-            "currency": main_curr,
-            "symbol": main_sym, 
-            "timezone": main_tz, 
-            "multiplier": main_mult
-        }}
-        
+
+        raw_cats = str(
+            row['Categories']
+        ).replace("，", ",").split(",")
+
+        cats = [
+            c.strip()
+            for c in raw_cats
+            if c.strip()
+        ]
+
+        travelers = (
+            int(row['Travelers'])
+            if 'Travelers' in row
+            and pd.notna(row['Travelers'])
+            else 2
+        )
+
+        stay_mapping = (
+            str(row['Stay_Mapping']).strip()
+            if 'Stay_Mapping' in row
+            and pd.notna(row['Stay_Mapping'])
+            else ""
+        )
+
+        main_country = str(
+            row['MainCountry']
+        ).strip()
+
+        main_curr = str(
+            row['Currency']
+        ).strip().upper()
+
+        main_sym = str(
+            row['Symbol']
+        ).strip()
+
+        main_tz = (
+            int(row['Timezone'])
+            if pd.notna(row['Timezone'])
+            else 9
+        )
+
+        main_mult = (
+            int(row['Multiplier'])
+            if pd.notna(row['Multiplier'])
+            else 1
+        )
+
+        nodes = {
+            main_country: {
+                "currency": main_curr,
+                "symbol": main_sym,
+                "timezone": main_tz,
+                "multiplier": main_mult
+            }
+        }
+
         if stay_mapping:
-            parts = stay_mapping.replace(" ", "").split(",")
+
+            parts = (
+                stay_mapping
+                .replace(" ", "")
+                .split(",")
+            )
+
             for p in parts:
+
                 if ":" in p:
-                    c_name = p.split(":")[0].strip()
+
+                    c_name = (
+                        p.split(":")[0]
+                        .strip()
+                    )
+
                     if c_name and c_name not in nodes:
-                        inf_c, inf_s, inf_t, inf_m = infer_node_info(c_name, main_curr, main_sym, main_tz, main_mult)
+
+                        inf_c, inf_s, inf_t, inf_m = (
+                            infer_node_info(
+                                c_name,
+                                main_curr,
+                                main_sym,
+                                main_tz,
+                                main_mult
+                            )
+                        )
+
                         nodes[c_name] = {
                             "currency": inf_c,
                             "symbol": inf_s,
                             "timezone": inf_t,
                             "multiplier": inf_m
                         }
-        
-        dynamic_configs[str(row['TripName'])] = {
+
+        dynamic_configs[
+            str(row['TripName'])
+        ] = {
             "sheet": str(row['SheetName']),
             "nodes": nodes,
             "cats": cats,
             "travelers": travelers,
             "stay_mapping": stay_mapping
         }
-    
+
+
+    # --------------------------------------------------------
+    # 5. Session Cache 저장
+    # --------------------------------------------------------
     st.session_state.cached_trip_configs = dynamic_configs
+
+
+    # --------------------------------------------------------
+    # 6. 진단 로그 기록
+    # --------------------------------------------------------
+    _function_elapsed_ms = (
+        time.perf_counter() - _func_started_at
+    ) * 1000
+
+    _diag_item = {
+        "timestamp": datetime.now(TZ_KST).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+        "event": "google_read",
+        "sheet": str(CONFIG_SHEET),
+        "read_elapsed_ms": round(
+            _read_elapsed_ms,
+            1
+        ),
+        "function_elapsed_ms": round(
+            _function_elapsed_ms,
+            1
+        ),
+        "attempts": _read_attempts,
+    }
+
+    try:
+        with open(
+            _diag_path,
+            "a",
+            encoding="utf-8"
+        ) as f:
+
+            f.write(
+                json.dumps(
+                    _diag_item,
+                    ensure_ascii=False
+                ) + "\n"
+            )
+
+    except Exception:
+        pass
+
+
     return dynamic_configs
 
+
+# ⚠️ 이 줄은 기존 그대로 유지
 TRIP_CONFIGS = get_trip_configs()
 
 # ------------------------------------------------------------------------------
