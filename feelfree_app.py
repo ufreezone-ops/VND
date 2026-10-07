@@ -2023,6 +2023,360 @@ def smart_cache_clear():
         pass
 
 
+# ============================================================
+# 2.03.05 | FULL REFRESH Profiler
+# ============================================================
+# 목적:
+#   Streamlit 한 번의 전체 실행 시간을 하나의 RUN으로 묶어
+#   주요 단계별 소요시간을 영구 누적 기록한다.
+#
+# 기록 대상:
+#   - trip_configs
+#   - load_data
+#   - load_all_trips_data
+#   - cash_inventory
+#   - recalculate
+#   - other
+#   - total
+#
+# 저장:
+#   /tmp/full_refresh_history.jsonl
+#
+# 주의:
+#   - Google Sheets 접근 없음
+#   - 기존 데이터 처리 로직 변경 없음
+#   - 진단용 코드
+# ============================================================
+
+import os
+import json
+import time
+from datetime import datetime
+
+_FULL_REFRESH_LOG_PATH = "/tmp/full_refresh_history.jsonl"
+
+
+def _frp_start():
+    """
+    FULL REFRESH 한 번의 시작점.
+    Streamlit script rerun마다 새로운 RUN을 만든다.
+    """
+
+    run_no = int(
+        st.session_state.get(
+            '_full_refresh_run_no',
+            0
+        )
+    ) + 1
+
+    st.session_state['_full_refresh_run_no'] = run_no
+
+    profiler = {
+        'run_no': run_no,
+        'started_at': datetime.now(
+            TZ_KST
+        ).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+        'started_perf': time.perf_counter(),
+
+        'stages': {
+            'trip_configs': [],
+            'load_data': [],
+            'load_all_trips_data': [],
+            'cash_inventory': [],
+            'recalculate': [],
+            'other_network': []
+        }
+    }
+
+    st.session_state['_full_refresh_profiler'] = profiler
+
+
+def _frp_record(stage, elapsed_ms):
+    """
+    특정 단계의 실행시간을 누적한다.
+    같은 함수가 여러 번 호출되더라도 모두 기록한다.
+    """
+
+    profiler = st.session_state.get(
+        '_full_refresh_profiler'
+    )
+
+    if profiler is None:
+        return
+
+    if stage not in profiler['stages']:
+        profiler['stages'][stage] = []
+
+    profiler['stages'][stage].append(
+        round(float(elapsed_ms), 1)
+    )
+
+
+def _frp_finalize():
+    """
+    Streamlit script 실행 마지막에 호출.
+    FULL REFRESH 전체 시간을 계산하고 JSONL에 누적 저장한다.
+    """
+
+    profiler = st.session_state.get(
+        '_full_refresh_profiler'
+    )
+
+    if profiler is None:
+        return
+
+    total_ms = (
+        time.perf_counter()
+        - profiler['started_perf']
+    ) * 1000
+
+    stages = profiler['stages']
+
+    def _sum_stage(name):
+        return round(
+            sum(stages.get(name, [])),
+            1
+        )
+
+    trip_configs_ms = _sum_stage(
+        'trip_configs'
+    )
+
+    load_data_ms = _sum_stage(
+        'load_data'
+    )
+
+    load_all_trips_ms = _sum_stage(
+        'load_all_trips_data'
+    )
+
+    cash_inventory_ms = _sum_stage(
+        'cash_inventory'
+    )
+
+    recalculate_ms = _sum_stage(
+        'recalculate'
+    )
+
+    measured_ms = (
+        trip_configs_ms
+        + load_data_ms
+        + load_all_trips_ms
+        + cash_inventory_ms
+        + recalculate_ms
+    )
+
+    other_ms = max(
+        0.0,
+        total_ms - measured_ms
+    )
+
+    result = {
+        'timestamp': datetime.now(
+            TZ_KST
+        ).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+        'event': 'FULL_REFRESH',
+        'run_no': profiler['run_no'],
+
+        'total_ms': round(
+            total_ms,
+            1
+        ),
+
+        'trip_configs_ms': trip_configs_ms,
+        'load_data_ms': load_data_ms,
+        'load_all_trips_data_ms': load_all_trips_ms,
+        'cash_inventory_ms': cash_inventory_ms,
+        'recalculate_ms': recalculate_ms,
+        'other_ms': other_ms,
+
+        'calls': {
+            'trip_configs': len(
+                stages.get(
+                    'trip_configs',
+                    []
+                )
+            ),
+            'load_data': len(
+                stages.get(
+                    'load_data',
+                    []
+                )
+            ),
+            'load_all_trips_data': len(
+                stages.get(
+                    'load_all_trips_data',
+                    []
+                )
+            ),
+            'cash_inventory': len(
+                stages.get(
+                    'cash_inventory',
+                    []
+                )
+            ),
+            'recalculate': len(
+                stages.get(
+                    'recalculate',
+                    []
+                )
+            )
+        }
+    }
+
+    try:
+        with open(
+            _FULL_REFRESH_LOG_PATH,
+            'a',
+            encoding='utf-8'
+        ) as f:
+
+            f.write(
+                json.dumps(
+                    result,
+                    ensure_ascii=False
+                ) + '\n'
+            )
+
+    except Exception as e:
+        st.session_state[
+            'full_refresh_profiler_log_error'
+        ] = str(e)
+
+    st.session_state[
+        'last_full_refresh_profile'
+    ] = result
+
+
+# ------------------------------------------------------------
+# FULL REFRESH 시작
+# ------------------------------------------------------------
+_frp_start()
+
+
+# ============================================================
+# 2.03.06 | FULL REFRESH Function Timing Wrappers
+# ============================================================
+
+# ------------------------------------------------------------
+# load_data
+# ------------------------------------------------------------
+_original_load_data = load_data
+
+
+def load_data(*args, **kwargs):
+    _started_at = time.perf_counter()
+
+    try:
+        return _original_load_data(
+            *args,
+            **kwargs
+        )
+
+    finally:
+        _elapsed_ms = (
+            time.perf_counter()
+            - _started_at
+        ) * 1000
+
+        _frp_record(
+            'load_data',
+            _elapsed_ms
+        )
+
+
+# ------------------------------------------------------------
+# load_all_trips_data
+# ------------------------------------------------------------
+if 'load_all_trips_data' in globals():
+
+    _original_load_all_trips_data = (
+        load_all_trips_data
+    )
+
+    def load_all_trips_data(*args, **kwargs):
+        _started_at = time.perf_counter()
+
+        try:
+            return _original_load_all_trips_data(
+                *args,
+                **kwargs
+            )
+
+        finally:
+            _elapsed_ms = (
+                time.perf_counter()
+                - _started_at
+            ) * 1000
+
+            _frp_record(
+                'load_all_trips_data',
+                _elapsed_ms
+            )
+
+
+# ------------------------------------------------------------
+# load_cash_inventory
+# ------------------------------------------------------------
+_original_load_cash_inventory = (
+    load_cash_inventory
+)
+
+
+def load_cash_inventory(*args, **kwargs):
+    _started_at = time.perf_counter()
+
+    try:
+        return _original_load_cash_inventory(
+            *args,
+            **kwargs
+        )
+
+    finally:
+        _elapsed_ms = (
+            time.perf_counter()
+            - _started_at
+        ) * 1000
+
+        _frp_record(
+            'cash_inventory',
+            _elapsed_ms
+        )
+
+
+# ------------------------------------------------------------
+# recalculate_entire_ledger
+# ------------------------------------------------------------
+_original_recalculate_entire_ledger = (
+    recalculate_entire_ledger
+)
+
+
+def recalculate_entire_ledger(*args, **kwargs):
+    _started_at = time.perf_counter()
+
+    try:
+        return _original_recalculate_entire_ledger(
+            *args,
+            **kwargs
+        )
+
+    finally:
+        _elapsed_ms = (
+            time.perf_counter()
+            - _started_at
+        ) * 1000
+
+        _frp_record(
+            'recalculate',
+            _elapsed_ms
+        )
+
+
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
 # ------------------------------------------------------------------------------
@@ -2356,6 +2710,66 @@ def recalculate_entire_ledger(df):
         )
 
     return temp_df
+
+
+# ============================================================
+# 2.03.07 | FULL REFRESH Finalizer
+# ============================================================
+#
+# 반드시 feelfree_app.py의 최종 실행 코드 뒤에 위치한다.
+#
+# 목적:
+#   Streamlit script 전체 실행시간을 확정하고
+#   누적 로그를 남긴다.
+# ============================================================
+
+try:
+
+    # --------------------------------------------------------
+    # get_trip_configs 기존 진단값 연결
+    # --------------------------------------------------------
+    _trip_cfg_diag = st.session_state.get(
+        'last_get_trip_configs_diag'
+    )
+
+    if _trip_cfg_diag:
+
+        _trip_cfg_ms = _trip_cfg_diag.get(
+            'function_elapsed_ms'
+        )
+
+        if _trip_cfg_ms is not None:
+
+            profiler = st.session_state.get(
+                '_full_refresh_profiler'
+            )
+
+            if profiler is not None:
+
+                # 같은 실행에서 이미 넣은 값이면 중복 기록하지 않는다.
+                if not profiler['stages'].get(
+                    'trip_configs'
+                ):
+
+                    _frp_record(
+                        'trip_configs',
+                        float(_trip_cfg_ms)
+                    )
+
+    # --------------------------------------------------------
+    # 최종 확정
+    # --------------------------------------------------------
+    _frp_finalize()
+
+except Exception as _frp_final_error:
+
+    st.session_state[
+        'full_refresh_profiler_finalize_error'
+    ] = str(
+        _frp_final_error
+    )
+
+
 
 # ------------------------------------------------------------------------------
 # 2.05.00 | Cloud Persistence & Inventory Synchronization (클라우드 동기화 및 가드)
