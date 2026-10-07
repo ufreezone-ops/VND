@@ -993,31 +993,58 @@ def clean_amount_to_float(val):
     try: return float(cleaned) if cleaned else 0.0
     except: return 0.0
 
-# 2.03.02 | Active Trip Ledger Loader (Zero-Network Pure Memory First + Read Diagnostic)
+# ============================================================
+# 2.03.02 | Active Trip Ledger Loader
+#           (Zero-Network Pure Memory First + Integrated READ Diagnostic)
+# ============================================================
+
 def load_data(sheet_name, force_cloud=False):
-    # ⚡ 세션 메모리에 해당 시트 데이터가 이미 존재하면 구글 통신 0회 즉시 반환
-    if not force_cloud and 'active_ledger_df' in st.session_state and st.session_state.get('last_loaded_sheet') == sheet_name:
-        if st.session_state.active_ledger_df is not None and not st.session_state.active_ledger_df.empty:
+
+    # ⚡ 세션 메모리에 해당 시트 데이터가 이미 존재하면
+    #    구글 통신 0회 즉시 반환
+    if (
+        not force_cloud
+        and 'active_ledger_df' in st.session_state
+        and st.session_state.get('last_loaded_sheet') == sheet_name
+    ):
+        if (
+            st.session_state.active_ledger_df is not None
+            and not st.session_state.active_ledger_df.empty
+        ):
             return st.session_state.active_ledger_df
 
-    # ------------------------------------------------------------------
-    # 🔎 DIAG | 실제 Google read 발생 여부/소요시간 측정
+    # --------------------------------------------------------
+    # 🔎 DIAG | 실제 Google READ 발생 여부 / 소요시간 측정
     # 기능 변경 없음 / ttl 정책 변경 없음
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------
+
     _read_started_at = time.perf_counter()
     _read_attempts = 0
 
     df = None
 
     for attempt in range(3):
+
         _read_attempts += 1
 
         try:
-            df = conn.read(worksheet=sheet_name, ttl="10m")
+
+            df = conn.read(
+                worksheet=sheet_name,
+                ttl="10m"
+            )
+
             break
 
         except Exception as e:
-            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+
+            if (
+                attempt < 2
+                and (
+                    "429" in str(e)
+                    or "Quota" in str(e)
+                )
+            ):
                 time.sleep(2)
                 continue
 
@@ -1026,9 +1053,15 @@ def load_data(sheet_name, force_cloud=False):
             )
             st.stop()
 
-    _read_elapsed_ms = (time.perf_counter() - _read_started_at) * 1000
+    _read_elapsed_ms = (
+        time.perf_counter() - _read_started_at
+    ) * 1000
 
-    # 실제 load_data()의 Google read가 실행됐을 때만 진단 메시지 기록
+    # --------------------------------------------------------
+    # 실제 load_data()의 Google READ가 실행됐을 때만
+    # 진단 메시지 기록
+    # --------------------------------------------------------
+
     st.session_state['last_load_data_read_diag'] = {
         'sheet': str(sheet_name),
         'elapsed_ms': round(_read_elapsed_ms, 1),
@@ -1037,51 +1070,147 @@ def load_data(sheet_name, force_cloud=False):
         'force_cloud': bool(force_cloud),
     }
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------
     # 기존 데이터 후처리
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------
+
     if df is None or df.empty:
-        df_init = pd.DataFrame(columns=FINAL_COLUMNS)
+
+        df_init = pd.DataFrame(
+            columns=FINAL_COLUMNS
+        )
+
         try:
-            conn.update(worksheet=ACTIVE_SHEET, data=df_init)
+            conn.update(
+                worksheet=ACTIVE_SHEET,
+                data=df_init
+            )
         except:
             pass
+
         return df_init
 
-    year_match = re.search(r'\((\d{4})\)', st.session_state.get('current_trip', ''))
-    trip_year = year_match.group(1) if year_match else "2026"
+    year_match = re.search(
+        r'\((\d{4})\)',
+        st.session_state.get(
+            'current_trip',
+            ''
+        )
+    )
 
-    first_node_curr = FIRST_NODE_NAME if 'FIRST_NODE_NAME' in globals() else "베트남"
+    trip_year = (
+        year_match.group(1)
+        if year_match
+        else "2026"
+    )
+
+    first_node_curr = (
+        FIRST_NODE_NAME
+        if 'FIRST_NODE_NAME' in globals()
+        else "베트남"
+    )
 
     if 'Country' not in df.columns:
-        df.insert(1, 'Country', first_node_curr)
+
+        df.insert(
+            1,
+            'Country',
+            first_node_curr
+        )
+
     else:
-        df['Country'] = df['Country'].astype(str).str.strip().replace(['nan', 'None', ''], None)
-        df['Country'] = df['Country'].fillna(first_node_curr)
+
+        df['Country'] = (
+            df['Country']
+            .astype(str)
+            .str.strip()
+            .replace(
+                ['nan', 'None', ''],
+                None
+            )
+        )
+
+        df['Country'] = (
+            df['Country']
+            .fillna(first_node_curr)
+        )
 
     if 'Cum_Card_VND' in df.columns:
-        df.rename(columns={'Cum_Card_VND': 'Cum_Card_Local'}, inplace=True)
+
+        df.rename(
+            columns={
+                'Cum_Card_VND': 'Cum_Card_Local'
+            },
+            inplace=True
+        )
 
     if 'Cum_Cash_VND' in df.columns:
-        df.rename(columns={'Cum_Cash_VND': 'Cum_Cash_Local'}, inplace=True)
+
+        df.rename(
+            columns={
+                'Cum_Cash_VND': 'Cum_Cash_Local'
+            },
+            inplace=True
+        )
 
     if 'Receipt_URL' not in df.columns:
+
         df['Receipt_URL'] = ""
 
-    df = df.dropna(subset=['Date', 'Category'], how='any')
-    df['Category'] = df['Category'].astype(str).str.strip()
-    df['PaymentMethod'] = df['PaymentMethod'].astype(str).str.strip().str.replace('트래블로그', '트래블카드')
-    df['Currency'] = df['Currency'].astype(str).str.strip().str.upper()
+    df = df.dropna(
+        subset=['Date', 'Category'],
+        how='any'
+    )
+
+    df['Category'] = (
+        df['Category']
+        .astype(str)
+        .str.strip()
+    )
+
+    df['PaymentMethod'] = (
+        df['PaymentMethod']
+        .astype(str)
+        .str.strip()
+        .str.replace(
+            '트래블로그',
+            '트래블카드'
+        )
+    )
+
+    df['Currency'] = (
+        df['Currency']
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
     def fix_legacy_date(d):
+
         d = str(d).strip()
+
         if d and not re.match(r'^\d{4}', d):
-            return f"{trip_year}-{d.replace('/', '-')}"
+
+            return (
+                f"{trip_year}-"
+                f"{d.replace('/', '-')}"
+            )
+
         return d
 
-    df['Date'] = df['Date'].apply(fix_legacy_date)
-    df['Date'] = df['Date'].apply(normalize_date)
-    df = df.reindex(columns=FINAL_COLUMNS)
+    df['Date'] = (
+        df['Date']
+        .apply(fix_legacy_date)
+    )
+
+    df['Date'] = (
+        df['Date']
+        .apply(normalize_date)
+    )
+
+    df = df.reindex(
+        columns=FINAL_COLUMNS
+    )
 
     numeric_cols = [
         'Amount',
@@ -1092,42 +1221,547 @@ def load_data(sheet_name, force_cloud=False):
     ]
 
     for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
 
-    # ------------------------------------------------------------------
+        if col in df.columns:
+
+            df[col] = (
+                pd.to_numeric(
+                    df[col],
+                    errors='coerce'
+                )
+                .fillna(0.0)
+            )
+
+    # --------------------------------------------------------
     # 🛡️ IsExpense 판정
-    # - 실제 결제가 발생한 일반 지출은 1
-    # - 호텔외상(CREDIT)은 아직 실제 결제가 아니므로 0
-    # - 상환은 실제 결제가 발생한 것이므로 1
-    # ------------------------------------------------------------------
+    #
+    # - 실제 결제가 발생한 일반 지출 = 1
+    # - 호텔외상(CREDIT) = 0
+    # - 상환 = 실제 결제이므로 1
+    # --------------------------------------------------------
+
     clean_expense_cats = list(
-        set([c.strip() for c in EXPENSE_CATS] + ['선물', '상환'])
-    ) if 'EXPENSE_CATS' in globals() else ['식사', '간식', '마트', '선물', '상환']
+        set(
+            [c.strip() for c in EXPENSE_CATS]
+            + ['선물', '상환']
+        )
+    ) if 'EXPENSE_CATS' in globals() else [
+        '식사',
+        '간식',
+        '마트',
+        '선물',
+        '상환'
+    ]
 
     def evaluate_is_expense(r):
-        cat = str(r['Category']).strip()
-        method = str(r['PaymentMethod']).strip()
 
-        # 호텔외상/외상 등 신용성 결제는 실제 지출 시점이 아니므로 제외
+        cat = str(
+            r['Category']
+        ).strip()
+
+        method = str(
+            r['PaymentMethod']
+        ).strip()
+
+        # 호텔외상/외상 등 신용성 결제는
+        # 실제 지출 시점이 아니므로 제외
         if get_asset_class(method) == "CREDIT":
+
             return 0
 
         # 실제 결제된 지출
-        if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '개인지출']:
+        if (
+            cat in clean_expense_cats
+            and cat not in [
+                '환불',
+                '보증금',
+                '재환전',
+                '개인지출'
+            ]
+        ):
+
             return 1
 
         return 0
 
-    df['IsExpense'] = df.apply(evaluate_is_expense, axis=1)
+    df['IsExpense'] = (
+        df.apply(
+            evaluate_is_expense,
+            axis=1
+        )
+    )
 
-    df['Note'] = df['Note'].fillna("").astype(str)
-    df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
+    df['Note'] = (
+        df['Note']
+        .fillna("")
+        .astype(str)
+    )
+
+    df['Receipt_URL'] = (
+        df['Receipt_URL']
+        .fillna("")
+        .astype(str)
+    )
 
     st.session_state.active_ledger_df = df
     st.session_state.last_loaded_sheet = sheet_name
 
     return df
+
+
+# ============================================================
+# 2.03.02-DIAG | Google READ 통합 누적 진단
+#
+# 주의:
+# - 별도의 블록 번호를 부여하지 않는다.
+# - load_data()와 get_trip_configs()의 진단 로그만 읽는다.
+# - Google Sheets에는 접근하지 않는다.
+# ============================================================
+
+import os
+import json
+
+
+# ------------------------------------------------------------
+# 1. 진단 로그 파일 경로
+# ------------------------------------------------------------
+
+_LOAD_DATA_DIAG_PATH = (
+    "/tmp/load_data_read_history.jsonl"
+)
+
+_GET_TRIP_CONFIG_DIAG_PATH = (
+    "/tmp/get_trip_configs_diagnostic.jsonl"
+)
+
+
+# ------------------------------------------------------------
+# 2. 새 load_data() READ 결과를 누적 저장
+# ------------------------------------------------------------
+
+_load_diag = st.session_state.get(
+    'last_load_data_read_diag'
+)
+
+if _load_diag:
+
+    _load_diag_signature = (
+        str(_load_diag.get('sheet')),
+        str(_load_diag.get('elapsed_ms')),
+        str(_load_diag.get('attempts')),
+        str(_load_diag.get('timestamp')),
+        str(_load_diag.get('force_cloud')),
+    )
+
+    # 현재 세션에서 이미 저장한
+    # 동일 결과는 다시 저장하지 않는다.
+    if (
+        st.session_state.get(
+            'last_saved_load_diag'
+        )
+        != _load_diag_signature
+    ):
+
+        _load_log_item = {
+
+            "timestamp": (
+                datetime.now(TZ_KST)
+                .strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            ),
+
+            "event": "load_data",
+
+            "sheet": str(
+                _load_diag.get('sheet')
+            ),
+
+            "read_elapsed_ms": (
+                _load_diag.get(
+                    'elapsed_ms'
+                )
+            ),
+
+            "function_elapsed_ms": None,
+
+            "attempts": (
+                _load_diag.get(
+                    'attempts'
+                )
+            ),
+
+            "force_cloud": (
+                _load_diag.get(
+                    'force_cloud'
+                )
+            ),
+        }
+
+        try:
+
+            with open(
+                _LOAD_DATA_DIAG_PATH,
+                "a",
+                encoding="utf-8"
+            ) as f:
+
+                f.write(
+                    json.dumps(
+                        _load_log_item,
+                        ensure_ascii=False
+                    ) + "\n"
+                )
+
+            st.session_state[
+                'last_saved_load_diag'
+            ] = _load_diag_signature
+
+        except Exception as e:
+
+            st.session_state[
+                'load_diag_log_error'
+            ] = str(e)
+
+
+# ------------------------------------------------------------
+# 3. load_data() 누적 로그 읽기
+# ------------------------------------------------------------
+
+_load_data_history = []
+
+try:
+
+    if os.path.exists(
+        _LOAD_DATA_DIAG_PATH
+    ):
+
+        with open(
+            _LOAD_DATA_DIAG_PATH,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            for line in f:
+
+                line = line.strip()
+
+                if not line:
+                    continue
+
+                try:
+
+                    item = json.loads(line)
+
+                    if isinstance(
+                        item,
+                        dict
+                    ):
+                        _load_data_history.append(
+                            item
+                        )
+
+                except Exception:
+                    continue
+
+except Exception as e:
+
+    st.session_state[
+        'load_diag_log_error'
+    ] = str(e)
+
+
+# ------------------------------------------------------------
+# 4. get_trip_configs() 누적 로그 읽기
+# ------------------------------------------------------------
+
+_get_trip_config_history = []
+
+try:
+
+    if os.path.exists(
+        _GET_TRIP_CONFIG_DIAG_PATH
+    ):
+
+        with open(
+            _GET_TRIP_CONFIG_DIAG_PATH,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            for line in f:
+
+                line = line.strip()
+
+                if not line:
+                    continue
+
+                try:
+
+                    item = json.loads(line)
+
+                    if isinstance(
+                        item,
+                        dict
+                    ):
+                        _get_trip_config_history.append(
+                            item
+                        )
+
+                except Exception:
+                    continue
+
+except Exception as e:
+
+    st.session_state[
+        'get_trip_config_diag_log_error'
+    ] = str(e)
+
+
+# ------------------------------------------------------------
+# 5. 두 진단 로그 통합
+# ------------------------------------------------------------
+
+_unified_diag_history = []
+
+
+# load_data()
+for item in _load_data_history:
+
+    _unified_diag_history.append({
+
+        "timestamp": item.get(
+            "timestamp",
+            ""
+        ),
+
+        "event": "load_data",
+
+        "sheet": item.get(
+            "sheet",
+            ""
+        ),
+
+        "read_elapsed_ms": item.get(
+            "read_elapsed_ms",
+            item.get(
+                "elapsed_ms",
+                0
+            )
+        ),
+
+        "function_elapsed_ms": None,
+
+        "attempts": item.get(
+            "attempts",
+            0
+        ),
+
+        "force_cloud": item.get(
+            "force_cloud",
+            False
+        ),
+    })
+
+
+# get_trip_configs()
+for item in _get_trip_config_history:
+
+    _unified_diag_history.append({
+
+        "timestamp": item.get(
+            "timestamp",
+            ""
+        ),
+
+        "event": "get_trip_configs",
+
+        "sheet": item.get(
+            "sheet",
+            ""
+        ),
+
+        "read_elapsed_ms": item.get(
+            "read_elapsed_ms",
+            0
+        ),
+
+        "function_elapsed_ms": item.get(
+            "function_elapsed_ms",
+            0
+        ),
+
+        "attempts": item.get(
+            "attempts",
+            0
+        ),
+
+        "force_cloud": None,
+    })
+
+
+# ------------------------------------------------------------
+# 6. 최신 기록부터 표시
+# ------------------------------------------------------------
+
+_unified_diag_history.sort(
+    key=lambda x: str(
+        x.get(
+            "timestamp",
+            ""
+        )
+    ),
+    reverse=True
+)
+
+
+# ------------------------------------------------------------
+# 7. 통합 진단 화면
+# ------------------------------------------------------------
+
+if _unified_diag_history:
+
+    with st.expander(
+        f"🔍 Google READ 통합 누적 기록 "
+        f"({_unified_diag_history.__len__()}건)",
+        expanded=False
+    ):
+
+        for i, item in enumerate(
+            _unified_diag_history[:50],
+            1
+        ):
+
+            _timestamp = str(
+                item.get(
+                    "timestamp",
+                    ""
+                )
+            )
+
+            _event = str(
+                item.get(
+                    "event",
+                    ""
+                )
+            )
+
+            _sheet = str(
+                item.get(
+                    "sheet",
+                    ""
+                )
+            )
+
+            try:
+
+                _read_ms = float(
+                    item.get(
+                        "read_elapsed_ms",
+                        0
+                    ) or 0
+                )
+
+            except Exception:
+
+                _read_ms = 0.0
+
+            try:
+
+                _attempts = int(
+                    item.get(
+                        "attempts",
+                        0
+                    ) or 0
+                )
+
+            except Exception:
+
+                _attempts = 0
+
+
+            # --------------------------------------------
+            # get_trip_configs()
+            # --------------------------------------------
+
+            if _event == "get_trip_configs":
+
+                try:
+
+                    _function_ms = float(
+                        item.get(
+                            "function_elapsed_ms",
+                            0
+                        ) or 0
+                    )
+
+                except Exception:
+
+                    _function_ms = 0.0
+
+                st.caption(
+                    f"{i}. {_timestamp} | "
+                    f"🧩 get_trip_configs | "
+                    f"Sheet={_sheet} | "
+                    f"READ={_read_ms:.1f}ms | "
+                    f"함수전체={_function_ms:.1f}ms | "
+                    f"attempts={_attempts}"
+                )
+
+
+            # --------------------------------------------
+            # load_data()
+            # --------------------------------------------
+
+            else:
+
+                _force_cloud = item.get(
+                    "force_cloud",
+                    False
+                )
+
+                st.caption(
+                    f"{i}. {_timestamp} | "
+                    f"📥 load_data | "
+                    f"Sheet={_sheet} | "
+                    f"READ={_read_ms:.1f}ms | "
+                    f"attempts={_attempts} | "
+                    f"force_cloud={_force_cloud}"
+                )
+
+
+# ------------------------------------------------------------
+# 8. 진단 로그 오류 표시
+# ------------------------------------------------------------
+
+if st.session_state.get(
+    'load_diag_log_error'
+):
+
+    st.warning(
+        "⚠️ load_data 진단 로그 저장 오류: "
+        + str(
+            st.session_state[
+                'load_diag_log_error'
+            ]
+        )
+    )
+
+
+if st.session_state.get(
+    'get_trip_config_diag_log_error'
+):
+
+    st.warning(
+        "⚠️ get_trip_configs 진단 로그 읽기 오류: "
+        + str(
+            st.session_state[
+                'get_trip_config_diag_log_error'
+            ]
+        )
+    )
+
+
 # 2.03.03 | Multi-Trip Global Ledger Consolidator
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_all_trips_data_cloud():
