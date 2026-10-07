@@ -1762,55 +1762,183 @@ if st.session_state.get(
     )
 
 
-# 2.03.03 | Multi-Trip Global Ledger Consolidator
+# ============================================================
+# 2.03.03 | Multi-Trip Global Ledger Consolidator + READ Diagnostic
+# ============================================================
+
+import json
+import os
+
+
+_ALL_TRIPS_DIAG_PATH = "/tmp/load_all_trips_diagnostic.jsonl"
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_all_trips_data_cloud():
     """
     🌍 모든 여행가계부 원본 데이터의 Streamlit 캐시 계층.
+
     - Google Sheets 접근은 여기에서만 수행
     - 동일 프로세스 내 반복 조회는 cache_data가 흡수
+    - 실제 Google READ별 소요시간을 진단 로그에 기록
     """
+
+    _cloud_started_at = time.perf_counter()
+
     all_dfs = []
+    _read_history = []
 
     for trip_name, config in TRIP_CONFIGS.items():
+
+        _read_started_at = time.perf_counter()
+        _read_attempts = 0
+        _read_success = False
+        _read_elapsed_ms = 0.0
+
+        df_t = None
+
         for attempt in range(3):
+
+            _read_attempts += 1
+
             try:
+
                 df_t = conn.read(
                     worksheet=config['sheet'],
                     ttl="10m"
                 )
 
-                if df_t is not None and not df_t.empty:
-                    df_t = df_t.copy()
-                    df_t['TripName'] = trip_name
-
-                    first_node_name = list(config["nodes"].keys())[0]
-
-                    if 'Country' not in df_t.columns:
-                        df_t.insert(1, 'Country', first_node_name)
-                    else:
-                        df_t['Country'] = (
-                            df_t['Country']
-                            .astype(str)
-                            .str.strip()
-                            .fillna(first_node_name)
-                        )
-
-                    all_dfs.append(df_t)
-
+                _read_success = True
                 break
 
             except Exception as e:
-                if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+
+                if attempt < 2 and (
+                    "429" in str(e)
+                    or "Quota" in str(e)
+                ):
                     time.sleep(1.5)
                     continue
 
                 break
 
-    if not all_dfs:
-        return pd.DataFrame(columns=FINAL_COLUMNS + ['TripName'])
+        _read_elapsed_ms = (
+            time.perf_counter() - _read_started_at
+        ) * 1000
 
-    return pd.concat(all_dfs, ignore_index=True)
+        _read_history.append({
+            "trip_name": str(trip_name),
+            "sheet": str(config.get('sheet', '')),
+            "read_elapsed_ms": round(
+                _read_elapsed_ms,
+                1
+            ),
+            "attempts": _read_attempts,
+            "success": _read_success,
+        })
+
+        # --------------------------------------------------------
+        # 기존 데이터 처리
+        # --------------------------------------------------------
+
+        if df_t is not None and not df_t.empty:
+
+            df_t = df_t.copy()
+            df_t['TripName'] = trip_name
+
+            first_node_name = list(
+                config["nodes"].keys()
+            )[0]
+
+            if 'Country' not in df_t.columns:
+
+                df_t.insert(
+                    1,
+                    'Country',
+                    first_node_name
+                )
+
+            else:
+
+                df_t['Country'] = (
+                    df_t['Country']
+                    .astype(str)
+                    .str.strip()
+                    .fillna(first_node_name)
+                )
+
+            all_dfs.append(df_t)
+
+    # ============================================================
+    # 전체 함수 소요시간
+    # ============================================================
+
+    _cloud_elapsed_ms = (
+        time.perf_counter() - _cloud_started_at
+    ) * 1000
+
+    # ============================================================
+    # 영구 진단 로그 기록
+    # ============================================================
+
+    _diag_item = {
+        "timestamp": datetime.now(
+            TZ_KST
+        ).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+        "event": "load_all_trips_data_cloud",
+        "function_elapsed_ms": round(
+            _cloud_elapsed_ms,
+            1
+        ),
+        "read_count": len(_read_history),
+        "reads": _read_history,
+    }
+
+    try:
+
+        with open(
+            _ALL_TRIPS_DIAG_PATH,
+            "a",
+            encoding="utf-8"
+        ) as f:
+
+            f.write(
+                json.dumps(
+                    _diag_item,
+                    ensure_ascii=False
+                ) + "\n"
+            )
+
+    except Exception as e:
+
+        st.session_state[
+            'all_trips_diag_log_error'
+        ] = str(e)
+
+    # ============================================================
+    # 화면 표시용 최신 진단 정보
+    # ============================================================
+
+    st.session_state[
+        'last_load_all_trips_diag'
+    ] = _diag_item
+
+    # ============================================================
+    # 기존 반환 구조
+    # ============================================================
+
+    if not all_dfs:
+
+        return pd.DataFrame(
+            columns=FINAL_COLUMNS + ['TripName']
+        )
+
+    return pd.concat(
+        all_dfs,
+        ignore_index=True
+    )
 
 
 def load_all_trips_data(force_cloud=False):
@@ -1827,21 +1955,39 @@ def load_all_trips_data(force_cloud=False):
 
     cache_key = 'all_trips_lookup_df'
 
+    # ============================================================
     # ① 세션 메모리 우선
+    # ============================================================
+
     if not force_cloud:
-        cached_df = st.session_state.get(cache_key)
+
+        cached_df = st.session_state.get(
+            cache_key
+        )
 
         if cached_df is not None:
+
             return cached_df
 
+    # ============================================================
     # ② Streamlit cache_data
+    # ============================================================
+
     df = _load_all_trips_data_cloud()
 
     if df is None:
-        df = pd.DataFrame(columns=FINAL_COLUMNS + ['TripName'])
 
+        df = pd.DataFrame(
+            columns=FINAL_COLUMNS + ['TripName']
+        )
+
+    # ============================================================
     # ③ 세션 메모리에 바인딩
-    st.session_state[cache_key] = df
+    # ============================================================
+
+    st.session_state[
+        cache_key
+    ] = df
 
     return df
 
