@@ -983,26 +983,28 @@ def load_all_trips_data(force_cloud=False):
 # 2.03.04 | Precision Cloud Cache Cleaner
 def smart_cache_clear():
     """
-    🔄 저장/수정 이후 조회 캐시를 정확하게 무효화한다.
+    저장/수정 후 '조회용 캐시'만 무효화한다.
 
-    주의:
-    일반 조회에서는 절대로 호출하지 않는다.
-    데이터가 실제로 변경된 경우에만 호출한다.
+    핵심 원칙:
+    - active_ledger_df는 절대 삭제하지 않는다.
+    - 일반 화면 전환에서 Google 재조회가 발생하지 않도록 한다.
+    - 현재 원장은 session_state 메모리를 단일 원본으로 유지한다.
     """
 
-    # 현재 여행가계부 메모리 캐시
-    if 'active_ledger_df' in st.session_state:
-        del st.session_state['active_ledger_df']
+    # ❌ active_ledger_df 삭제 금지
+    # 현재 여행 원장은 항상 메모리에 유지한다.
+    #
+    # if 'active_ledger_df' in st.session_state:
+    #     del st.session_state['active_ledger_df']
 
-    # 현금 재고 캐시
-    if 'cached_cash_df' in st.session_state:
-        del st.session_state['cached_cash_df']
+    # 현금 재고도 일반적인 저장 후에는 유지한다.
+    # 실제 현금 저장 시 save_cash_inventory()가 직접 갱신한다.
 
-    # 전체 여행 조회 캐시
+    # 전체 여행 조회 캐시만 무효화
     if 'all_trips_lookup_df' in st.session_state:
         del st.session_state['all_trips_lookup_df']
 
-    # Streamlit의 전체 여행 원본 캐시
+    # 전체 여행 조회용 cloud cache만 무효화
     try:
         _load_all_trips_data_cloud.clear()
     except Exception:
@@ -1468,7 +1470,6 @@ def commit_ledger_to_cloud():
 
 
 # 2.05.04 | Cash Inventory Cloud Loader & Saver (Memory-First)
-# 2.05.04 | Cash Inventory Cloud Loader & Saver (Memory-First)
 def load_cash_inventory(force_cloud=False):
     # ⚡ 세션 메모리에 이미 있으면 구글 통신 0회 즉시 반환
     if not force_cloud and 'cached_cash_df' in st.session_state and st.session_state.cached_cash_df is not None:
@@ -1618,14 +1619,14 @@ def restore_auto_backup_from_cloud():
         return False
 
 
-@st.fragment(run_every="3m")
+# 2.05.05 | Auto Backup
+#
+# ⚠️ 진단/안정화 기간에는 자동 Google 접근을 하지 않는다.
+# 사용자가 직접 "지금 백업"을 누르거나
+# "변경사항 일괄 저장"을 누른 경우에만 Google에 접근한다.
+
 def _ledger_auto_backup_fragment():
-    """3분마다 메모리 변경사항을 별도 백업 시트에 저장한다."""
-    if not st.session_state.get('ledger_dirty', False):
-        return
-
-    backup_active_ledger_to_cloud()
-
+    return
 
 # 2.05.06 | Pure Memory Cache Binder + Safe Trip Context
 if 'ledger_dirty' not in st.session_state:
