@@ -2026,32 +2026,6 @@ def smart_cache_clear():
 # ============================================================
 # 2.03.05 | FULL REFRESH Profiler
 # ============================================================
-#
-# 목적:
-#   Streamlit 한 번의 실제 전체 실행 시간을 하나의 RUN으로 묶는다.
-#
-# 핵심:
-#   - 시작 시점은 Module 1의 t_render_start를 사용한다.
-#   - 따라서 2.03.05 이전에 실행된 get_trip_configs() 등도
-#     전체 TOTAL에 포함된다.
-#
-# 기록 대상:
-#   - trip_configs
-#   - load_data
-#   - load_all_trips_data
-#   - cash_inventory
-#   - recalculate
-#   - other
-#   - total
-#
-# 저장:
-#   /tmp/full_refresh_history.jsonl
-#
-# 주의:
-#   - Google Sheets 접근 없음
-#   - 기존 데이터 처리 로직 변경 없음
-#   - 진단용 코드
-# ============================================================
 
 import os
 import json
@@ -2063,6 +2037,15 @@ _FULL_REFRESH_LOG_PATH = "/tmp/full_refresh_history.jsonl"
 
 
 def _frp_start():
+    """
+    Streamlit 한 번의 전체 실행을 하나의 RUN으로 기록한다.
+
+    시작점:
+        Module 1의 t_render_start
+
+    따라서 2.03 이전에 발생한 작업도
+    전체 실행시간 TOTAL에 포함된다.
+    """
 
     run_no = int(
         st.session_state.get(
@@ -2073,14 +2056,14 @@ def _frp_start():
 
     st.session_state['_full_refresh_run_no'] = run_no
 
-    # Module 1에서 이미 시작한 전체 실행 타이머를 사용한다.
-    # 없으면 현재 시점을 fallback으로 사용한다.
-    _global_start_perf = globals().get(
-        't_render_start',
-        time.perf_counter()
+    global_start = globals().get(
+        't_render_start'
     )
 
-    profiler = {
+    if global_start is None:
+        global_start = time.perf_counter()
+
+    st.session_state['_full_refresh_profiler'] = {
         'run_no': run_no,
 
         'started_at': datetime.now(
@@ -2089,7 +2072,7 @@ def _frp_start():
             "%Y-%m-%d %H:%M:%S"
         ),
 
-        'started_perf': _global_start_perf,
+        'started_perf': global_start,
 
         'stages': {
             'trip_configs': [],
@@ -2101,15 +2084,11 @@ def _frp_start():
         }
     }
 
-    st.session_state[
-        '_full_refresh_profiler'
-    ] = profiler
 
-
-def _frp_record(
-    stage,
-    elapsed_ms
-):
+def _frp_record(stage, elapsed_ms):
+    """
+    각 주요 함수의 실행시간을 누적 기록한다.
+    """
 
     profiler = st.session_state.get(
         '_full_refresh_profiler'
@@ -2130,6 +2109,10 @@ def _frp_record(
 
 
 def _frp_finalize():
+    """
+    전체 Streamlit 실행 종료 시
+    FULL_REFRESH 한 건을 영구 누적 저장한다.
+    """
 
     profiler = st.session_state.get(
         '_full_refresh_profiler'
@@ -2146,7 +2129,6 @@ def _frp_finalize():
     stages = profiler['stages']
 
     def _sum_stage(name):
-
         return round(
             sum(
                 stages.get(
@@ -2290,116 +2272,105 @@ def _frp_finalize():
         'last_full_refresh_profile'
     ] = result
 
+# ============================================================
+# 2.03.06 | FULL REFRESH Function Timing Wrappers
+# ============================================================
 
-# ------------------------------------------------------------
-# FULL REFRESH 시작
-# ------------------------------------------------------------
-_frp_start()
+def _frp_wrap_function(
+    function_name,
+    stage_name
+):
+    """
+    이미 정의된 함수를 실행시간 측정용 wrapper로 감싼다.
 
+    중요한 점:
+    - 함수 자체의 기능은 변경하지 않는다.
+    - Google 접근도 새로 만들지 않는다.
+    - 실행시간만 측정한다.
+    """
 
-# 2.05.06 | Pure Memory Cache Binder + Safe Trip Context
-
-if 'ledger_dirty' not in st.session_state:
-    st.session_state['ledger_dirty'] = False
-
-if 'ledger_mutation_count' not in st.session_state:
-    st.session_state['ledger_mutation_count'] = 0
-
-
-_previous_working_sheet = (
-    st.session_state.get(
-        'ledger_working_sheet'
+    original = globals().get(
+        function_name
     )
-)
 
+    if original is None:
+        return
 
-if (
-    _previous_working_sheet
-    and
-    _previous_working_sheet != ACTIVE_SHEET
-    and
-    st.session_state.get(
-        'ledger_dirty',
+    if getattr(
+        original,
+        '_frp_wrapped',
         False
-    )
-):
+    ):
+        return
 
-    _write_auto_backup_snapshot(
-        st.session_state.get(
-            'active_ledger_df'
-        ),
-        sheet_name=_previous_working_sheet,
-        trip_name=_trip_name_for_sheet(
-            _previous_working_sheet
-        ),
-    )
+    def wrapped(*args, **kwargs):
 
+        started_at = time.perf_counter()
 
-# ============================================================
-# 🔍 FULL REFRESH PROFILER
-# ------------------------------------------------------------
-# 이 시점에는 다음 함수들이 모두 정의되어 있다.
-#
-#   load_data
-#   load_all_trips_data
-#   load_cash_inventory
-#   recalculate_entire_ledger
-#
-# 따라서 여기서 래퍼를 설치한다.
-# ============================================================
+        try:
+            return original(
+                *args,
+                **kwargs
+            )
 
-_frp_install_wrappers()
+        finally:
+            elapsed_ms = (
+                time.perf_counter()
+                - started_at
+            ) * 1000
 
+            _frp_record(
+                stage_name,
+                elapsed_ms
+            )
 
-# ============================================================
-# 실제 원장 로딩
-# ============================================================
-
-if (
-    'active_ledger_df' not in st.session_state
-    or
-    st.session_state.get(
-        'last_loaded_sheet'
-    ) != ACTIVE_SHEET
-):
-
-    st.session_state.active_ledger_df = (
-        load_data(
-            ACTIVE_SHEET,
-            force_cloud=False
-        )
+    wrapped.__name__ = getattr(
+        original,
+        '__name__',
+        function_name
     )
 
-    st.session_state.last_loaded_sheet = (
-        ACTIVE_SHEET
+    wrapped.__doc__ = getattr(
+        original,
+        '__doc__',
+        None
     )
 
-    st.session_state[
-        'ledger_dirty'
-    ] = False
+    wrapped._frp_wrapped = True
+    wrapped._frp_original = original
 
-    st.session_state[
-        'ledger_order_dirty'
-    ] = False
-
-    st.session_state[
-        'ledger_mutation_count'
-    ] = 0
+    globals()[
+        function_name
+    ] = wrapped
 
 
-st.session_state[
-    'ledger_working_sheet'
-] = ACTIVE_SHEET
+def _frp_install_wrappers():
+    """
+    모든 주요 병목 함수에 실행시간 측정 wrapper를 설치한다.
 
+    이 함수는 실제 함수들이 모두 정의된 뒤
+    2.05.06에서 호출한다.
+    """
 
-ledger_df = (
-    st.session_state.active_ledger_df
-)
+    _frp_wrap_function(
+        'load_data',
+        'load_data'
+    )
 
+    _frp_wrap_function(
+        'load_all_trips_data',
+        'load_all_trips_data'
+    )
 
-# 자동 백업은 현재 화면과 독립적으로 동작한다.
-_ledger_auto_backup_fragment()
+    _frp_wrap_function(
+        'load_cash_inventory',
+        'cash_inventory'
+    )
 
+    _frp_wrap_function(
+        'recalculate_entire_ledger',
+        'recalculate'
+    )
 
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
@@ -2737,439 +2708,942 @@ def recalculate_entire_ledger(df):
 
 
 # ------------------------------------------------------------------------------
-# 2.05.00 | Cloud Persistence & Inventory Synchronization (클라우드 동기화 및 가드)
+# 2.05.00 | Cloud Persistence & Inventory Synchronization
+# ------------------------------------------------------------------------------
+
+
 # ------------------------------------------------------------------------------
 # 2.05.01 | Memory Mutation & Dirty-State Manager
-LEDGER_BACKUP_INTERVAL_SECONDS = 180  # 3분
+# ------------------------------------------------------------------------------
+
+LEDGER_BACKUP_INTERVAL_SECONDS = 180
+
 
 def mark_ledger_dirty():
-    """원장 변경을 메모리에만 반영했음을 표시한다. Google Sheets에는 접근하지 않는다."""
-    st.session_state['ledger_dirty'] = True
-    st.session_state['ledger_mutation_count'] = int(st.session_state.get('ledger_mutation_count', 0)) + 1
-    st.session_state['ledger_order_dirty'] = True
+    """
+    원장 변경을 메모리에만 반영했음을 표시한다.
+    Google Sheets에는 접근하지 않는다.
+    """
+
+    st.session_state[
+        'ledger_dirty'
+    ] = True
+
+    st.session_state[
+        'ledger_mutation_count'
+    ] = int(
+        st.session_state.get(
+            'ledger_mutation_count',
+            0
+        )
+    ) + 1
+
+    st.session_state[
+        'ledger_order_dirty'
+    ] = True
 
 
 def _invalidate_post_commit_lookup_caches():
-    """정식 저장 후 다른 화면의 조회 캐시만 무효화한다. active_ledger_df는 유지한다."""
-    st.session_state.pop('all_trips_lookup_df', None)
-    for fn_name in ['_load_all_trips_data_cloud', 'load_all_trips_data']:
+    """
+    정식 저장 후 조회용 캐시만 무효화한다.
+
+    active_ledger_df는 유지한다.
+    """
+
+    st.session_state.pop(
+        'all_trips_lookup_df',
+        None
+    )
+
+    for fn_name in [
+        '_load_all_trips_data_cloud',
+        'load_all_trips_data'
+    ]:
+
         try:
-            fn = globals().get(fn_name)
-            if fn is not None and hasattr(fn, 'clear'):
+
+            fn = globals().get(
+                fn_name
+            )
+
+            if (
+                fn is not None
+                and hasattr(fn, 'clear')
+            ):
                 fn.clear()
+
         except Exception:
             pass
 
 
 def save_data(df, metrics=None):
     """
-    기존 save_data의 이름은 유지하되, 이제는 '메모리 저장'만 담당한다.
-    Google Sheets 저장은 commit_ledger_to_cloud()에서 한 번에 수행한다.
+    기존 호출부 호환용.
+
+    실제 Google Sheets 저장은 하지 않는다.
+    메모리 원장만 갱신한다.
     """
+
     if df is None or df.empty:
-        st.error("🚨 저장하려는 데이터가 비어있습니다. 데이터 보호를 위해 저장을 중단합니다.")
+
+        st.error(
+            "🚨 저장하려는 데이터가 비어있습니다. "
+            "데이터 보호를 위해 저장을 중단합니다."
+        )
+
         return False
 
-    final_df = recalculate_entire_ledger(df)
-    st.session_state.active_ledger_df = final_df
-    st.session_state.last_loaded_sheet = ACTIVE_SHEET
+    final_df = recalculate_entire_ledger(
+        df
+    )
+
+    st.session_state.active_ledger_df = (
+        final_df
+    )
+
+    st.session_state[
+        'last_loaded_sheet'
+    ] = ACTIVE_SHEET
+
     mark_ledger_dirty()
+
     return True
 
 
+# ------------------------------------------------------------------------------
 # 2.05.02 | Atomic Ledger Appender (Memory-First)
+# ------------------------------------------------------------------------------
+
 def append_new_data(new_rows_df):
-    """새 내역을 active_ledger_df에 추가하고 전체 정합성을 메모리에서 계산한다."""
-    if new_rows_df is None or new_rows_df.empty:
+    """
+    새 내역을 메모리 원장에 추가한다.
+    """
+
+    if (
+        new_rows_df is None
+        or new_rows_df.empty
+    ):
         return False
 
-    latest_df = st.session_state.get('active_ledger_df')
-    if latest_df is None:
-        latest_df = load_data(ACTIVE_SHEET)
+    latest_df = st.session_state.get(
+        'active_ledger_df'
+    )
 
-    merged_df = pd.concat([latest_df, new_rows_df], ignore_index=True)
-    final_df = recalculate_entire_ledger(merged_df)
-    st.session_state.active_ledger_df = final_df
-    st.session_state.last_loaded_sheet = ACTIVE_SHEET
+    if latest_df is None:
+
+        latest_df = load_data(
+            ACTIVE_SHEET
+        )
+
+    merged_df = pd.concat(
+        [
+            latest_df,
+            new_rows_df
+        ],
+        ignore_index=True
+    )
+
+    final_df = recalculate_entire_ledger(
+        merged_df
+    )
+
+    st.session_state.active_ledger_df = (
+        final_df
+    )
+
+    st.session_state[
+        'last_loaded_sheet'
+    ] = ACTIVE_SHEET
+
     mark_ledger_dirty()
+
     return True
 
 
+# ------------------------------------------------------------------------------
 # 2.05.03 | Quick Order Swap Committer (Memory-First)
+# ------------------------------------------------------------------------------
+
 def quick_swap_and_save(df):
-    """기존 호출부 호환용. 실제 클라우드 저장은 하지 않고 메모리만 갱신한다."""
+    """
+    기존 호출부 호환용.
+
+    실제 클라우드 저장은 하지 않고
+    메모리 원장만 갱신한다.
+    """
+
     try:
-        if df is None or len(df) < 1:
+
+        if (
+            df is None
+            or len(df) < 1
+        ):
             return False
-        final_df = recalculate_entire_ledger(df)
-        st.session_state.active_ledger_df = final_df
-        st.session_state.last_loaded_sheet = ACTIVE_SHEET
+
+        final_df = recalculate_entire_ledger(
+            df
+        )
+
+        st.session_state.active_ledger_df = (
+            final_df
+        )
+
+        st.session_state[
+            'last_loaded_sheet'
+        ] = ACTIVE_SHEET
+
         mark_ledger_dirty()
+
         return True
+
     except Exception as e:
-        st.error(f"🚨 메모리 순서 변경 실패: {e}")
+
+        st.error(
+            f"🚨 메모리 순서 변경 실패: {e}"
+        )
+
         return False
 
 
+# ------------------------------------------------------------------------------
 # 2.05.03A | Explicit Cloud Committer (Single Final Save)
+# ------------------------------------------------------------------------------
+
 def commit_ledger_to_cloud():
-    """현재 메모리 원장을 최종 계산한 뒤 Google Sheets에 단 한 번 확정 저장한다."""
-    df = st.session_state.get('active_ledger_df')
+    """
+    현재 메모리 원장을 최종 계산한 뒤
+    Google Sheets에 단 한 번 확정 저장한다.
+    """
+
+    df = st.session_state.get(
+        'active_ledger_df'
+    )
+
     if df is None or df.empty:
-        st.error("🚨 저장할 원장 데이터가 없습니다.")
+
+        st.error(
+            "🚨 저장할 원장 데이터가 없습니다."
+        )
+
         return False
 
-    # 기존 Anti-Wipe 보호장치는 '최종 저장'에서만 실행한다.
+    # ----------------------------------------------------------
+    # Anti-Wipe 보호
+    # ----------------------------------------------------------
+
     existing_df = None
+
     for attempt in range(3):
+
         try:
-            existing_df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
+
+            existing_df = conn.read(
+                worksheet=ACTIVE_SHEET,
+                ttl="0s"
+            )
+
             break
+
         except Exception as e:
-            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+
+            if (
+                attempt < 2
+                and (
+                    "429" in str(e)
+                    or "Quota" in str(e)
+                )
+            ):
+
                 time.sleep(2)
                 continue
-            st.error(f"🚨 클라우드 상태 확인 실패! 안전을 위해 최종 저장을 중단합니다. ({e})")
+
+            st.error(
+                "🚨 클라우드 상태 확인 실패! "
+                f"안전을 위해 최종 저장을 중단합니다. ({e})"
+            )
+
             return False
 
-    if existing_df is not None and len(existing_df) > 5 and len(df) <= 3:
+    if (
+        existing_df is not None
+        and len(existing_df) > 5
+        and len(df) <= 3
+    ):
+
         st.error(
-            f"🚨 **치명적 데이터 증발(Wipe) 시도 차단됨!** "
-            f"(클라우드: {len(existing_df)}건 -> 저장시도: {len(df)}건)"
+            "🚨 **치명적 데이터 증발(Wipe) 시도 차단됨!** "
+            f"(클라우드: {len(existing_df)}건 "
+            f"-> 저장시도: {len(df)}건)"
         )
+
         return False
 
-    final_df = recalculate_entire_ledger(df).reindex(columns=FINAL_COLUMNS).copy()
+    # ----------------------------------------------------------
+    # 최종 계산
+    # ----------------------------------------------------------
+
+    final_df = (
+        recalculate_entire_ledger(df)
+        .reindex(columns=FINAL_COLUMNS)
+        .copy()
+    )
+
+    # ----------------------------------------------------------
+    # 실제 Google 저장
+    # ----------------------------------------------------------
 
     for attempt in range(3):
+
         try:
-            conn.update(worksheet=ACTIVE_SHEET, data=final_df)
-            st.session_state.active_ledger_df = final_df
-            st.session_state.last_loaded_sheet = ACTIVE_SHEET
-            st.session_state['ledger_dirty'] = False
-            st.session_state['ledger_order_dirty'] = False
-            st.session_state['ledger_mutation_count'] = 0
-            st.session_state['last_cloud_commit_at'] = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
+
+            conn.update(
+                worksheet=ACTIVE_SHEET,
+                data=final_df
+            )
+
+            st.session_state.active_ledger_df = (
+                final_df
+            )
+
+            st.session_state[
+                'last_loaded_sheet'
+            ] = ACTIVE_SHEET
+
+            st.session_state[
+                'ledger_dirty'
+            ] = False
+
+            st.session_state[
+                'ledger_order_dirty'
+            ] = False
+
+            st.session_state[
+                'ledger_mutation_count'
+            ] = 0
+
+            st.session_state[
+                'last_cloud_commit_at'
+            ] = datetime.now(
+                TZ_KST
+            ).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
             _invalidate_post_commit_lookup_caches()
+
             return True
+
         except Exception as e:
-            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+
+            if (
+                attempt < 2
+                and (
+                    "429" in str(e)
+                    or "Quota" in str(e)
+                )
+            ):
+
                 time.sleep(2.5)
                 continue
-            st.error(f"🚨 Google Sheets 최종 저장 실패: {e}")
+
+            st.error(
+                f"🚨 Google Sheets 최종 저장 실패: {e}"
+            )
+
             return False
 
+    return False
 
+
+# ------------------------------------------------------------------------------
 # 2.05.04 | Cash Inventory Cloud Loader & Saver (Memory-First)
-def load_cash_inventory(force_cloud=False):
-    # ⚡ 세션 메모리에 이미 있으면 구글 통신 0회 즉시 반환
-    if not force_cloud and 'cached_cash_df' in st.session_state and st.session_state.cached_cash_df is not None:
+# ------------------------------------------------------------------------------
+
+def load_cash_inventory(
+    force_cloud=False
+):
+
+    if (
+        not force_cloud
+        and 'cached_cash_df'
+        in st.session_state
+        and st.session_state.cached_cash_df
+        is not None
+    ):
+
         return st.session_state.cached_cash_df
 
     for attempt in range(3):
+
         try:
-            df = conn.read(worksheet=CASH_SHEET, ttl="10m")
-            if df is not None and not df.empty:
-                st.session_state.cached_cash_df = df
+
+            df = conn.read(
+                worksheet=CASH_SHEET,
+                ttl="10m"
+            )
+
+            if (
+                df is not None
+                and not df.empty
+            ):
+
+                st.session_state.cached_cash_df = (
+                    df
+                )
+
                 return df
+
             break
+
         except Exception as e:
-            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
+
+            if (
+                attempt < 2
+                and (
+                    "429" in str(e)
+                    or "Quota" in str(e)
+                )
+            ):
+
                 time.sleep(1.5)
                 continue
+
             break
-    empty_df = pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
-    st.session_state.cached_cash_df = empty_df
+
+    empty_df = pd.DataFrame(
+        columns=[
+            'TripName',
+            'Currency',
+            'Bill_Counts',
+            'Total_Amount',
+            'Updated_At'
+        ]
+    )
+
+    st.session_state.cached_cash_df = (
+        empty_df
+    )
+
     return empty_df
 
-def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
+
+def save_cash_inventory(
+    trip_name,
+    currency,
+    counts_dict,
+    total_amt
+):
+
     try:
-        df = load_cash_inventory(force_cloud=True)
-        if df is None or df.empty:
-            df = pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
-            
-        counts_str = ";".join([f"{k}:{v}" for k, v in counts_dict.items()])
-        now_str = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
-        
-        mask = (df['TripName'] == trip_name) & (df['Currency'] == currency)
+
+        df = load_cash_inventory(
+            force_cloud=True
+        )
+
+        if (
+            df is None
+            or df.empty
+        ):
+
+            df = pd.DataFrame(
+                columns=[
+                    'TripName',
+                    'Currency',
+                    'Bill_Counts',
+                    'Total_Amount',
+                    'Updated_At'
+                ]
+            )
+
+        counts_str = ";".join(
+            [
+                f"{k}:{v}"
+                for k, v
+                in counts_dict.items()
+            ]
+        )
+
+        now_str = datetime.now(
+            TZ_KST
+        ).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        mask = (
+            (df['TripName'] == trip_name)
+            &
+            (df['Currency'] == currency)
+        )
+
         if mask.any():
+
             idx = df[mask].index[0]
-            df.at[idx, 'Bill_Counts'] = counts_str
-            df.at[idx, 'Total_Amount'] = total_amt
-            df.at[idx, 'Updated_At'] = now_str
+
+            df.at[
+                idx,
+                'Bill_Counts'
+            ] = counts_str
+
+            df.at[
+                idx,
+                'Total_Amount'
+            ] = total_amt
+
+            df.at[
+                idx,
+                'Updated_At'
+            ] = now_str
+
         else:
-            new_row = pd.DataFrame([{
-                'TripName': trip_name,
-                'Currency': currency,
-                'Bill_Counts': counts_str,
-                'Total_Amount': total_amt,
-                'Updated_At': now_str
-            }])
-            df = pd.concat([df, new_row], ignore_index=True)
-            
-        conn.update(worksheet=CASH_SHEET, data=df)
-        st.session_state.cached_cash_df = df
+
+            new_row = pd.DataFrame(
+                [{
+                    'TripName': trip_name,
+                    'Currency': currency,
+                    'Bill_Counts': counts_str,
+                    'Total_Amount': total_amt,
+                    'Updated_At': now_str
+                }]
+            )
+
+            df = pd.concat(
+                [
+                    df,
+                    new_row
+                ],
+                ignore_index=True
+            )
+
+        conn.update(
+            worksheet=CASH_SHEET,
+            data=df
+        )
+
+        st.session_state.cached_cash_df = (
+            df
+        )
+
         return True
+
     except Exception as e:
-        st.error(f"🚨 지폐 실사 동기화 실패: {e}")
+
+        st.error(
+            f"🚨 지폐 실사 동기화 실패: {e}"
+        )
+
         return False
 
 
+# ------------------------------------------------------------------------------
 # 2.05.05 | Ledger Auto-Backup & Recovery Guard
+# ------------------------------------------------------------------------------
+
 AUTO_BACKUP_PREFIX = "AUTO_BACKUP_"
 
 
 def _backup_sheet_name(sheet_name):
-    safe = re.sub(r"[^0-9A-Za-z가-힣_-]+", "_", str(sheet_name)).strip("_")
-    return (AUTO_BACKUP_PREFIX + safe)[:90]
+
+    safe = re.sub(
+        r"[^0-9A-Za-z가-힣_-]+",
+        "_",
+        str(sheet_name)
+    ).strip("_")
+
+    return (
+        AUTO_BACKUP_PREFIX
+        + safe
+    )[:90]
 
 
 def _trip_name_for_sheet(sheet_name):
+
     for trip_name, config in TRIP_CONFIGS.items():
-        if str(config.get('sheet')) == str(sheet_name):
+
+        if str(
+            config.get('sheet')
+        ) == str(sheet_name):
+
             return trip_name
+
     return str(sheet_name)
 
 
-def _write_auto_backup_snapshot(df, sheet_name=None, trip_name=None):
-    """현재 메모리 원장을 별도 AUTO_BACKUP worksheet에 스냅샷으로 저장한다."""
+def _write_auto_backup_snapshot(
+    df,
+    sheet_name=None,
+    trip_name=None
+):
+
     if df is None or df.empty:
         return False
 
-    target_sheet = str(sheet_name or ACTIVE_SHEET)
-    target_trip = str(trip_name or _trip_name_for_sheet(target_sheet))
-    backup_sheet = _backup_sheet_name(target_sheet)
-    backup_time = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
+    target_sheet = str(
+        sheet_name
+        or ACTIVE_SHEET
+    )
 
-    snapshot = df.reindex(columns=FINAL_COLUMNS).copy()
-    snapshot.insert(0, 'BackupTime', backup_time)
-    snapshot.insert(1, 'ActiveSheet', target_sheet)
-    snapshot.insert(2, 'TripName', target_trip)
-    snapshot.insert(3, 'RowCount', len(df))
+    target_trip = str(
+        trip_name
+        or _trip_name_for_sheet(
+            target_sheet
+        )
+    )
+
+    backup_sheet = _backup_sheet_name(
+        target_sheet
+    )
+
+    backup_time = datetime.now(
+        TZ_KST
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    snapshot = (
+        df.reindex(
+            columns=FINAL_COLUMNS
+        ).copy()
+    )
+
+    snapshot.insert(
+        0,
+        'BackupTime',
+        backup_time
+    )
+
+    snapshot.insert(
+        1,
+        'ActiveSheet',
+        target_sheet
+    )
+
+    snapshot.insert(
+        2,
+        'TripName',
+        target_trip
+    )
+
+    snapshot.insert(
+        3,
+        'RowCount',
+        len(df)
+    )
 
     try:
+
         try:
-            conn.update(worksheet=backup_sheet, data=snapshot)
+
+            conn.update(
+                worksheet=backup_sheet,
+                data=snapshot
+            )
+
         except Exception as e_update:
-            msg = str(e_update).lower()
-            if 'not found' in msg or 'worksheet' in msg and ('404' in msg or 'does not exist' in msg):
-                conn.create(worksheet=backup_sheet, data=snapshot)
+
+            msg = str(
+                e_update
+            ).lower()
+
+            if (
+                'not found' in msg
+                or (
+                    'worksheet' in msg
+                    and (
+                        '404' in msg
+                        or 'does not exist'
+                        in msg
+                    )
+                )
+            ):
+
+                conn.create(
+                    worksheet=backup_sheet,
+                    data=snapshot
+                )
+
             else:
                 raise
+
         return True
+
     except Exception as e:
-        st.session_state['last_auto_backup_error'] = str(e)
+
+        st.session_state[
+            'last_auto_backup_error'
+        ] = str(e)
+
         return False
 
 
 def backup_active_ledger_to_cloud():
-    """현재 메모리 원장의 자동 백업을 즉시 실행한다. 정식 원장은 변경하지 않는다."""
-    df = st.session_state.get('active_ledger_df')
+
+    df = st.session_state.get(
+        'active_ledger_df'
+    )
+
     if df is None or df.empty:
         return False
 
-    ok = _write_auto_backup_snapshot(df)
+    ok = _write_auto_backup_snapshot(
+        df
+    )
+
     if ok:
-        now_str = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
-        st.session_state['last_auto_backup_at'] = now_str
-        st.session_state['last_auto_backup_sheet'] = ACTIVE_SHEET
-        st.session_state['last_auto_backup_error'] = ''
+
+        now_str = datetime.now(
+            TZ_KST
+        ).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        st.session_state[
+            'last_auto_backup_at'
+        ] = now_str
+
+        st.session_state[
+            'last_auto_backup_sheet'
+        ] = ACTIVE_SHEET
+
+        st.session_state[
+            'last_auto_backup_error'
+        ] = ''
+
     return ok
 
 
 def restore_auto_backup_from_cloud():
-    """현재 여행의 AUTO_BACKUP 스냅샷을 메모리로 복원한다. 복원 후에는 다시 최종 저장이 필요하다."""
-    backup_sheet = _backup_sheet_name(ACTIVE_SHEET)
+
+    backup_sheet = _backup_sheet_name(
+        ACTIVE_SHEET
+    )
+
     try:
-        backup_df = conn.read(worksheet=backup_sheet, ttl="0s")
-        if backup_df is None or backup_df.empty:
-            st.error("🛡️ 복원할 자동 백업이 없습니다.")
+
+        backup_df = conn.read(
+            worksheet=backup_sheet,
+            ttl="0s"
+        )
+
+        if (
+            backup_df is None
+            or backup_df.empty
+        ):
+
+            st.error(
+                "🛡️ 복원할 자동 백업이 없습니다."
+            )
+
             return False
 
-        backup_df = backup_df[backup_df['ActiveSheet'].astype(str) == str(ACTIVE_SHEET)].copy() if 'ActiveSheet' in backup_df.columns else backup_df
+        if 'ActiveSheet' in backup_df.columns:
+
+            backup_df = backup_df[
+                backup_df[
+                    'ActiveSheet'
+                ].astype(str)
+                == str(ACTIVE_SHEET)
+            ].copy()
+
         if backup_df.empty:
-            st.error("🛡️ 현재 여행가계부와 일치하는 자동 백업이 없습니다.")
+
+            st.error(
+                "🛡️ 현재 여행가계부와 일치하는 "
+                "자동 백업이 없습니다."
+            )
+
             return False
 
-        data_df = backup_df.reindex(columns=FINAL_COLUMNS).copy()
-        data_df = data_df.dropna(how='all').reset_index(drop=True)
+        data_df = (
+            backup_df
+            .reindex(columns=FINAL_COLUMNS)
+            .copy()
+        )
+
+        data_df = (
+            data_df
+            .dropna(how='all')
+            .reset_index(drop=True)
+        )
+
         if data_df.empty:
-            st.error("🛡️ 자동 백업 데이터가 비어 있습니다.")
+
+            st.error(
+                "🛡️ 자동 백업 데이터가 비어 있습니다."
+            )
+
             return False
 
-        final_df = recalculate_entire_ledger(data_df)
-        st.session_state.active_ledger_df = final_df
-        st.session_state.last_loaded_sheet = ACTIVE_SHEET
-        st.session_state['ledger_dirty'] = True
-        st.session_state['ledger_order_dirty'] = True
-        st.session_state['ledger_mutation_count'] = int(st.session_state.get('ledger_mutation_count', 0)) + 1
-        st.toast("🛡️ 자동 백업을 메모리로 복원했습니다. 확인 후 '변경사항 일괄 저장'을 눌러주세요.", icon="🔄")
+        final_df = recalculate_entire_ledger(
+            data_df
+        )
+
+        st.session_state.active_ledger_df = (
+            final_df
+        )
+
+        st.session_state[
+            'last_loaded_sheet'
+        ] = ACTIVE_SHEET
+
+        st.session_state[
+            'ledger_dirty'
+        ] = True
+
+        st.session_state[
+            'ledger_order_dirty'
+        ] = True
+
+        st.session_state[
+            'ledger_mutation_count'
+        ] = int(
+            st.session_state.get(
+                'ledger_mutation_count',
+                0
+            )
+        ) + 1
+
+        st.toast(
+            "🛡️ 자동 백업을 메모리로 복원했습니다. "
+            "확인 후 '변경사항 일괄 저장'을 눌러주세요.",
+            icon="🔄"
+        )
+
         return True
+
     except Exception as e:
-        st.error(f"🚨 자동 백업 복원 실패: {e}")
+
+        st.error(
+            f"🚨 자동 백업 복원 실패: {e}"
+        )
+
         return False
 
 
-# 2.05.05 | Auto Backup
-#
-# ⚠️ 진단/안정화 기간에는 자동 Google 접근을 하지 않는다.
-# 사용자가 직접 "지금 백업"을 누르거나
-# "변경사항 일괄 저장"을 누른 경우에만 Google에 접근한다.
-
 def _ledger_auto_backup_fragment():
+    """
+    현재 진단 기간에는 자동 Google 접근을 하지 않는다.
+
+    사용자가 직접 백업하거나
+    최종 저장을 누른 경우에만 Google에 접근한다.
+    """
+
     return
 
+
+# ------------------------------------------------------------------------------
 # 2.05.06 | Pure Memory Cache Binder + Safe Trip Context
+# ------------------------------------------------------------------------------
+
 if 'ledger_dirty' not in st.session_state:
-    st.session_state['ledger_dirty'] = False
+
+    st.session_state[
+        'ledger_dirty'
+    ] = False
+
+
 if 'ledger_mutation_count' not in st.session_state:
-    st.session_state['ledger_mutation_count'] = 0
 
-_previous_working_sheet = st.session_state.get('ledger_working_sheet')
-if _previous_working_sheet and _previous_working_sheet != ACTIVE_SHEET and st.session_state.get('ledger_dirty', False):
-    # 여행가계부를 바꾸기 전에 현재 메모리 작업본을 먼저 안전 백업한다.
+    st.session_state[
+        'ledger_mutation_count'
+    ] = 0
+
+
+_previous_working_sheet = (
+    st.session_state.get(
+        'ledger_working_sheet'
+    )
+)
+
+
+if (
+    _previous_working_sheet
+    and
+    _previous_working_sheet
+    != ACTIVE_SHEET
+    and
+    st.session_state.get(
+        'ledger_dirty',
+        False
+    )
+):
+
     _write_auto_backup_snapshot(
-        st.session_state.get('active_ledger_df'),
+        st.session_state.get(
+            'active_ledger_df'
+        ),
         sheet_name=_previous_working_sheet,
-        trip_name=_trip_name_for_sheet(_previous_working_sheet),
+        trip_name=_trip_name_for_sheet(
+            _previous_working_sheet
+        ),
     )
 
-if 'active_ledger_df' not in st.session_state or st.session_state.get('last_loaded_sheet') != ACTIVE_SHEET:
-    st.session_state.active_ledger_df = load_data(ACTIVE_SHEET, force_cloud=False)
-    st.session_state.last_loaded_sheet = ACTIVE_SHEET
-    st.session_state['ledger_dirty'] = False
-    st.session_state['ledger_order_dirty'] = False
-    st.session_state['ledger_mutation_count'] = 0
 
-st.session_state['ledger_working_sheet'] = ACTIVE_SHEET
-ledger_df = st.session_state.active_ledger_df
+# ------------------------------------------------------------
+# FULL REFRESH profiler wrapper 설치
+#
+# 이 시점에는
+# load_data
+# load_all_trips_data
+# load_cash_inventory
+# recalculate_entire_ledger
+#
+# 네 함수가 모두 정의되어 있다.
+# ------------------------------------------------------------
 
-# 자동 백업은 현재 화면과 독립적으로 3분마다 동작한다.
+_frp_install_wrappers()
+
+
+# ------------------------------------------------------------
+# 실제 원장 로딩
+# ------------------------------------------------------------
+
+if (
+    'active_ledger_df'
+    not in st.session_state
+    or
+    st.session_state.get(
+        'last_loaded_sheet'
+    )
+    != ACTIVE_SHEET
+):
+
+    st.session_state.active_ledger_df = (
+        load_data(
+            ACTIVE_SHEET,
+            force_cloud=False
+        )
+    )
+
+    st.session_state[
+        'last_loaded_sheet'
+    ] = ACTIVE_SHEET
+
+    st.session_state[
+        'ledger_dirty'
+    ] = False
+
+    st.session_state[
+        'ledger_order_dirty'
+    ] = False
+
+    st.session_state[
+        'ledger_mutation_count'
+    ] = 0
+
+
+st.session_state[
+    'ledger_working_sheet'
+] = ACTIVE_SHEET
+
+
+ledger_df = (
+    st.session_state.active_ledger_df
+)
+
+
+# 자동 백업은 현재 진단 기간에는
+# Google 접근을 하지 않는다.
 _ledger_auto_backup_fragment()
-
-# ============================================================
-# 🔍 TEMP DIAGNOSTIC | load_data() READ 영구 누적 로그
-# ------------------------------------------------------------
-# 목적:
-#   Streamlit 새로고침으로 session_state가 초기화되어도
-#   load_data()의 Google READ 기록을 계속 보존한다.
-#
-# 저장 위치:
-#   /tmp/load_data_read_history.jsonl
-#
-# 중요:
-#   - Google Sheets 접근 없음
-#   - conn.read() / conn.update() 없음
-#   - 새로고침 후에도 같은 서버 컨테이너가 살아 있으면 기록 유지
-#   - 실험 종료 후 이 블록 전체 삭제 가능
-# ============================================================
-
-import os
-import json
-
-_DIAG_LOG_PATH = "/tmp/load_data_read_history.jsonl"
-
-_diag = st.session_state.get('last_load_data_read_diag')
-
-# ------------------------------------------------------------
-# 1. 새로운 load_data READ 결과가 발생했는지 확인
-# ------------------------------------------------------------
-if _diag:
-
-    _diag_signature = (
-        str(_diag.get('sheet')),
-        str(_diag.get('elapsed_ms')),
-        str(_diag.get('attempts')),
-        str(_diag.get('timestamp')),
-        str(_diag.get('force_cloud')),
-    )
-
-    # 현재 세션에서 이미 기록한 동일 진단값은 다시 저장하지 않는다.
-    if st.session_state.get('last_saved_load_diag') != _diag_signature:
-
-        _log_item = {
-            "timestamp": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"),
-            "sheet": str(_diag.get('sheet')),
-            "elapsed_ms": _diag.get('elapsed_ms'),
-            "attempts": _diag.get('attempts'),
-            "force_cloud": _diag.get('force_cloud'),
-            "read_timestamp": str(_diag.get('timestamp')),
-        }
-
-        try:
-            with open(_DIAG_LOG_PATH, "a", encoding="utf-8") as f:
-                f.write(
-                    json.dumps(
-                        _log_item,
-                        ensure_ascii=False
-                    ) + "\n"
-                )
-
-            st.session_state['last_saved_load_diag'] = _diag_signature
-
-        except Exception as e:
-            st.session_state['load_diag_log_error'] = str(e)
-
-
-# ------------------------------------------------------------
-# 2. 지금까지 누적된 READ 로그 읽기
-# ------------------------------------------------------------
-_diag_history = []
-
-try:
-    if os.path.exists(_DIAG_LOG_PATH):
-
-        with open(_DIAG_LOG_PATH, "r", encoding="utf-8") as f:
-
-            for line in f:
-                line = line.strip()
-
-                if not line:
-                    continue
-
-                try:
-                    _diag_history.append(json.loads(line))
-                except Exception:
-                    continue
-
-except Exception as e:
-    st.session_state['load_diag_log_error'] = str(e)
-
-
-# ------------------------------------------------------------
-# 3. 화면에 누적 기록 표시
-# ------------------------------------------------------------
-if _diag_history:
-
-    with st.expander(
-        f"🔍 load_data() Google READ 누적 기록 ({len(_diag_history)}건)",
-        expanded=False
-    ):
-
-        for i, item in enumerate(
-            reversed(_diag_history),
-            1
-        ):
-
-            st.caption(
-                f"{i}. "
-                f"{item.get('timestamp')} | "
-                f"Sheet={item.get('sheet')} | "
-                f"READ={item.get('elapsed_ms')}ms | "
-                f"attempts={item.get('attempts')} | "
-                f"force_cloud={item.get('force_cloud')}"
-            )
-
-
-# ------------------------------------------------------------
-# 4. 로그 파일 오류가 있으면 표시
-# ------------------------------------------------------------
-if st.session_state.get('load_diag_log_error'):
-
-    st.warning(
-        "⚠️ 진단 로그 저장 오류: "
-        + str(st.session_state['load_diag_log_error'])
-    )
 
 # ==============================================================================
 # [Module 3.00.00] URDI Engine (Unified Real-time Deductive Inventory)
