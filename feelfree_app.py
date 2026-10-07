@@ -61,21 +61,37 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # ----------------------------------------------------------------------
 # 1.03.01 | Google Sheets Auto Version Logger
 # ----------------------------------------------------------------------
-# ⚠️ 성능 진단/안정화 기간
+# 🔬 진단 단계 2
 #
-# 일반적인 Streamlit rerun에서는 version_log에 접근하지 않는다.
-# 기존 코드의 auto_update_log_to_gsheets() 호출이 남아 있어도
-# 아무 작업도 하지 않고 즉시 반환한다.
+# 목적:
+#   version_log Google 접근은 계속 차단한다.
+#   대신 Streamlit session_state가 유지되고 있는지만 확인한다.
 #
-# 핵심:
-# - Google Sheets 접근 0회
-# - session_state 접근 0회
-# - 외부 변수 참조 0회
-# - NameError 발생 가능성 0
+# 중요:
+#   - Google Sheets 접근 0회
+#   - 기존 호출 auto_update_log_to_gsheets() 유지 가능
+#   - 성능 기준선 100ms를 훼손하지 않는다.
 # ----------------------------------------------------------------------
 
 def auto_update_log_to_gsheets():
+    """
+    현재는 Google Sheets version_log 접근을 완전히 차단한다.
+
+    대신 v_logged 상태를 메모리에 기록하여
+    다음 rerun에서도 session_state가 유지되는지 확인한다.
+    """
+
+    # VERSION은 이 함수에서 직접 참조하지 않는다.
+    # 전역 변수 의존으로 인한 NameError를 방지한다.
+    if 'version_logger_diag_count' not in st.session_state:
+        st.session_state['version_logger_diag_count'] = 0
+
+    st.session_state['version_logger_diag_count'] += 1
+
     return
+
+# 기존 호출은 그대로 둬도 안전하다.
+auto_update_log_to_gsheets()
 
 # ------------------------------------------------------------------------------
 # 1.04.00 | Dynamic Multi-Node Provisioning (관제탑 로드 및 다중 국가 동적 설정)
