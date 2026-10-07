@@ -2376,6 +2376,63 @@ def recalculate_entire_ledger(*args, **kwargs):
             _elapsed_ms
         )
 
+# ============================================================
+# 2.03.07 | FULL REFRESH Finalizer
+# ============================================================
+#
+# 반드시 feelfree_app.py의 최종 실행 코드 뒤에 위치한다.
+#
+# 목적:
+#   Streamlit script 전체 실행시간을 확정하고
+#   누적 로그를 남긴다.
+# ============================================================
+
+try:
+
+    # --------------------------------------------------------
+    # get_trip_configs 기존 진단값 연결
+    # --------------------------------------------------------
+    _trip_cfg_diag = st.session_state.get(
+        'last_get_trip_configs_diag'
+    )
+
+    if _trip_cfg_diag:
+
+        _trip_cfg_ms = _trip_cfg_diag.get(
+            'function_elapsed_ms'
+        )
+
+        if _trip_cfg_ms is not None:
+
+            profiler = st.session_state.get(
+                '_full_refresh_profiler'
+            )
+
+            if profiler is not None:
+
+                # 같은 실행에서 이미 넣은 값이면 중복 기록하지 않는다.
+                if not profiler['stages'].get(
+                    'trip_configs'
+                ):
+
+                    _frp_record(
+                        'trip_configs',
+                        float(_trip_cfg_ms)
+                    )
+
+    # --------------------------------------------------------
+    # 최종 확정
+    # --------------------------------------------------------
+    _frp_finalize()
+
+except Exception as _frp_final_error:
+
+    st.session_state[
+        'full_refresh_profiler_finalize_error'
+    ] = str(
+        _frp_final_error
+    )
+
 
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
@@ -2710,65 +2767,6 @@ def recalculate_entire_ledger(df):
         )
 
     return temp_df
-
-
-# ============================================================
-# 2.03.07 | FULL REFRESH Finalizer
-# ============================================================
-#
-# 반드시 feelfree_app.py의 최종 실행 코드 뒤에 위치한다.
-#
-# 목적:
-#   Streamlit script 전체 실행시간을 확정하고
-#   누적 로그를 남긴다.
-# ============================================================
-
-try:
-
-    # --------------------------------------------------------
-    # get_trip_configs 기존 진단값 연결
-    # --------------------------------------------------------
-    _trip_cfg_diag = st.session_state.get(
-        'last_get_trip_configs_diag'
-    )
-
-    if _trip_cfg_diag:
-
-        _trip_cfg_ms = _trip_cfg_diag.get(
-            'function_elapsed_ms'
-        )
-
-        if _trip_cfg_ms is not None:
-
-            profiler = st.session_state.get(
-                '_full_refresh_profiler'
-            )
-
-            if profiler is not None:
-
-                # 같은 실행에서 이미 넣은 값이면 중복 기록하지 않는다.
-                if not profiler['stages'].get(
-                    'trip_configs'
-                ):
-
-                    _frp_record(
-                        'trip_configs',
-                        float(_trip_cfg_ms)
-                    )
-
-    # --------------------------------------------------------
-    # 최종 확정
-    # --------------------------------------------------------
-    _frp_finalize()
-
-except Exception as _frp_final_error:
-
-    st.session_state[
-        'full_refresh_profiler_finalize_error'
-    ] = str(
-        _frp_final_error
-    )
-
 
 
 # ------------------------------------------------------------------------------
