@@ -58,8 +58,19 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # ------------------------------------------------------------------------------
 # 1.03.00 | Cloud Version Control System (구글 시트 버전 로그 갱신)
 # ------------------------------------------------------------------------------
-# 1.03.01 | Google Sheets Auto Version Logger (Session 1-Time Guard)
+# ----------------------------------------------------------------------
+# 1.03.01 | Google Sheets Auto Version Logger
+# ----------------------------------------------------------------------
+# ⚠️ 진단 기간:
+# 앱의 일반 rerun에서는 version_log에 절대 접근하지 않는다.
+# 버전 로그는 기능적으로 화면 렌더링과 무관하므로 완전 차단한다.
+
 def auto_update_log_to_gsheets():
+    return
+
+# 일반 실행 시 Google Sheets version_log 접근 금지
+# auto_update_log_to_gsheets()
+    
     # ⚡ 세션 중 이미 체크했다면 구글 시트 통신 즉시 건너뜀 (0ms)
     if st.session_state.get('v_logged') == VERSION:
         return
