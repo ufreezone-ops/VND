@@ -2495,34 +2495,25 @@ if _load_path_diag:
     )
 
 
-# ============================================================
 # 2.03.09 | Streamlit Session Lifecycle Diagnostic
 # ============================================================
 # 목적:
-#   Session State 재생성과 Streamlit 프로세스 재시작을 구분한다.
+# 1. 새로운 Streamlit session 생성 여부 확인
+# 2. Streamlit app-instance/cache 생명주기 변화 여부 확인
 #
-# 판정:
-#   session_id 변경 + process_instance_id 동일
-#       → 세션/WebSocket 재연결
+# 해석:
+# - session_id 변경 + process_instance_id 동일
+#   → 세션/WebSocket 재연결 가능성
 #
-#   session_id 변경 + process_instance_id 변경
-#       → Streamlit 프로세스 재시작
-#
-# Google Sheets 접근:
-#   0회
+# - session_id 변경 + process_instance_id 변경
+#   → Streamlit app-instance/cache 재시작 가능성
 # ============================================================
 
 import os
 import uuid
 
 
-# ============================================================
-# 1. 프로세스 생명주기 식별자
-# ============================================================
-
-@st.cache_resource(
-    show_spinner=False
-)
+@st.cache_resource(show_spinner=False)
 def _get_gtl_process_instance_id():
 
     return str(
@@ -2534,10 +2525,6 @@ _gtl_process_instance_id = (
     _get_gtl_process_instance_id()
 )
 
-
-# ============================================================
-# 2. Streamlit Session 식별자
-# ============================================================
 
 if (
     'gtl_session_instance_id'
@@ -2563,10 +2550,6 @@ if (
     ] = 0
 
 
-# ============================================================
-# 3. Session rerun 횟수
-# ============================================================
-
 st.session_state[
     'gtl_session_rerun_count'
 ] = (
@@ -2577,10 +2560,6 @@ st.session_state[
     + 1
 )
 
-
-# ============================================================
-# 4. 통합 진단
-# ============================================================
 
 _gtl_session_diag = {
 
@@ -2622,10 +2601,6 @@ _gtl_session_diag = {
         ),
 }
 
-
-# ============================================================
-# 5. 화면 표시
-# ============================================================
 
 st.markdown(
     "### 🧬 Streamlit 세션 생명주기 진단"
