@@ -1,21 +1,22 @@
 # ==============================================================================
-# EXPERIMENT B-2 | Real Streamlit Document Round Trip Probe
-# 목적:
-#   GTL / Google Sheets / 외부 API / 대형 데이터 없이
-#   현재 실제 Streamlit 앱 URL에 HTTP 요청을 보내
-#   브라우저 ↔ Streamlit 플랫폼의 왕복시간을 측정한다.
+# EXPERIMENT B-3 | Real Streamlit App URL Round Trip Probe
+# ==============================================================================
 #
-# B-1의 /_stcore/health 는 HTTP 404였으므로 폐기한다.
+# 목적
+#   ① Python 서버 코드 실행시간
+#   ② 실제 Streamlit 앱 URL의 브라우저 HTTP 왕복시간
 #
-# 핵심:
-#   - 404 / 500 등 비정상 응답은 유효 측정값으로 인정하지 않는다.
-#   - HTTP 200인 경우에만 RTT를 기록한다.
-#   - Python 실행시간도 동시에 측정한다.
+# 을 분리해서 측정한다.
+#
+# B-2의 document.referrer 방식은 폐기한다.
+# B-3에서는 st.context.url을 사용한다.
+#
+# Streamlit 공식:
+#   st.context.url = 사용자가 브라우저에서 접근하는 실제 앱 URL
+#
+# 정상 HTTP 200만 유효한 측정값으로 인정한다.
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 0.00.00 | Imports
-# ------------------------------------------------------------------------------
 import json
 import os
 import time
@@ -26,25 +27,33 @@ import streamlit.components.v1 as components
 
 
 # ------------------------------------------------------------------------------
-# 0.01.00 | Basic Page
+# 0.00.00 | Page Configuration
 # ------------------------------------------------------------------------------
 st.set_page_config(
-    page_title="EMPTY Streamlit Probe B-2",
+    page_title="EMPTY Streamlit Probe B-3",
     layout="centered",
 )
 
-_run_started = time.perf_counter()
-_run_wall = datetime.now().astimezone()
 
-_HISTORY_FILE = "/tmp/empty_streamlit_probe_b2_history.jsonl"
+# ------------------------------------------------------------------------------
+# 0.01.00 | Server Execution Timer
+# ------------------------------------------------------------------------------
+_server_started_at = time.perf_counter()
+_server_started_wall = datetime.now().astimezone()
+
+_HISTORY_FILE = "/tmp/empty_streamlit_probe_b3_history.jsonl"
 
 
 # ------------------------------------------------------------------------------
-# 0.02.00 | History Writer
+# 0.02.00 | History Functions
 # ------------------------------------------------------------------------------
-def _save_probe_b2_record(record):
+def _save_probe_b3_record(record):
     try:
-        with open(_HISTORY_FILE, "a", encoding="utf-8") as f:
+        with open(
+            _HISTORY_FILE,
+            "a",
+            encoding="utf-8"
+        ) as f:
             f.write(
                 json.dumps(
                     record,
@@ -55,17 +64,25 @@ def _save_probe_b2_record(record):
         pass
 
 
-def _load_probe_b2_history(limit=20):
+def _load_probe_b3_history(limit=20):
     try:
         if not os.path.exists(_HISTORY_FILE):
             return []
 
         rows = []
 
-        with open(_HISTORY_FILE, "r", encoding="utf-8") as f:
+        with open(
+            _HISTORY_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
             for line in f.readlines()[-limit:]:
+
                 try:
-                    rows.append(json.loads(line))
+                    rows.append(
+                        json.loads(line)
+                    )
                 except Exception:
                     pass
 
@@ -78,43 +95,65 @@ def _load_probe_b2_history(limit=20):
 # ------------------------------------------------------------------------------
 # 0.03.00 | Pure Python Sensor
 # ------------------------------------------------------------------------------
-_sensor_started = time.perf_counter()
+_sensor_started_at = time.perf_counter()
 
 _probe_value = 1 + 1
 
-_sensor_ms = (
-    time.perf_counter() - _sensor_started
+_sensor_elapsed_ms = (
+    time.perf_counter()
+    - _sensor_started_at
 ) * 1000
 
 
 # ------------------------------------------------------------------------------
-# 0.04.00 | Python Total Sensor
+# 0.04.00 | Python Server Execution Measurement
 # ------------------------------------------------------------------------------
-_server_total_ms = (
-    time.perf_counter() - _run_started
+_server_elapsed_ms = (
+    time.perf_counter()
+    - _server_started_at
 ) * 1000
 
 
-_save_probe_b2_record({
-    "timestamp": _run_wall.strftime("%Y-%m-%d %H:%M:%S"),
-    "server_total_ms": round(_server_total_ms, 1),
-    "python_sensor_ms": round(_sensor_ms, 1),
+_save_probe_b3_record({
+    "timestamp": _server_started_wall.strftime(
+        "%Y-%m-%d %H:%M:%S"
+    ),
+    "server_total_ms": round(
+        _server_elapsed_ms,
+        1
+    ),
+    "python_sensor_ms": round(
+        _sensor_elapsed_ms,
+        1
+    ),
 })
 
 
 # ------------------------------------------------------------------------------
-# 0.05.00 | Minimal UI
+# 0.05.00 | Obtain Real Streamlit App URL
 # ------------------------------------------------------------------------------
-st.title("🧪 EMPTY Streamlit Probe B-2")
+try:
+    _app_url = str(
+        st.context.url
+    ).strip()
+
+except Exception:
+    _app_url = ""
+
+
+# ------------------------------------------------------------------------------
+# 0.06.00 | Main UI
+# ------------------------------------------------------------------------------
+st.title("🧪 EMPTY Streamlit Probe B-3")
 
 st.metric(
     "Python 서버 실행시간",
-    f"{_server_total_ms:.1f} ms",
+    f"{_server_elapsed_ms:.1f} ms",
 )
 
 st.metric(
     "Python 센서 구간",
-    f"{_sensor_ms:.1f} ms",
+    f"{_sensor_elapsed_ms:.1f} ms",
 )
 
 st.caption(
@@ -124,157 +163,158 @@ st.caption(
 
 
 # ------------------------------------------------------------------------------
-# 0.06.00 | Real App URL HTTP Round Trip Sensor
+# 0.07.00 | Browser HTTP Round Trip Sensor
 # ------------------------------------------------------------------------------
-components.html(
-    """
-    <div id="probe_b2"
-         style="
-            font-family:sans-serif;
-            font-size:16px;
-            padding:12px 0;
-            color:#888;
-         ">
-        🌐 실제 Streamlit 앱 왕복 측정 중...
-    </div>
+if _app_url:
 
-    <script>
-    (async () => {
+    # JavaScript 문자열에서 안전하게 사용할 수 있도록 JSON encoding
+    _app_url_js = json.dumps(
+        _app_url,
+        ensure_ascii=False
+    )
 
-        const box =
-            document.getElementById("probe_b2");
+    components.html(
+        f"""
+        <div id="probe_b3"
+             style="
+                 font-family:sans-serif;
+                 font-size:16px;
+                 padding:12px 0;
+                 color:#888;
+             ">
+            🌐 실제 Streamlit 앱 HTTP 왕복 측정 중...
+        </div>
 
-        /*
-         * components.html()은 iframe이므로
-         * 현재 iframe URL이 아니라 부모 Streamlit 앱 URL을 사용한다.
-         *
-         * document.referrer가 부모 앱 URL을 제공한다.
-         */
-        let target =
-            document.referrer;
+        <script>
 
-        if (!target) {
-            box.innerText =
-                "❌ 부모 Streamlit URL을 확인할 수 없습니다.";
-            return;
-        }
+        (async () => {{
 
-        /*
-         * 캐시를 피하기 위해 timestamp query parameter 추가.
-         */
-        const separator =
-            target.includes("?")
-                ? "&"
-                : "?";
-
-        target =
-            target
-            + separator
-            + "_probe_b2="
-            + Date.now();
-
-        const started =
-            performance.now();
-
-        try {
-
-            const response =
-                await fetch(
-                    target,
-                    {
-                        method: "GET",
-                        cache: "no-store",
-                        credentials: "include"
-                    }
-                );
-
-            const elapsed =
-                performance.now()
-                - started;
+            const box =
+                document.getElementById("probe_b3");
 
             /*
-             * HTTP 200만 정상 측정으로 인정.
+             * Python의 st.context.url로부터
+             * 실제 사용자가 접근 중인 Streamlit 앱 URL을 받는다.
              */
-            if (response.status === 200) {
+            const target =
+                {_app_url_js};
 
-                box.style.color = "#00c878";
+            const started =
+                performance.now();
+
+            try {{
+
+                const response =
+                    await fetch(
+                        target
+                        + "?_probe_b3="
+                        + Date.now(),
+                        {{
+                            method: "GET",
+                            cache: "no-store",
+                            credentials: "include"
+                        }}
+                    );
+
+                const elapsed =
+                    performance.now()
+                    - started;
+
+                /*
+                 * HTTP 200만 유효한 센서값으로 인정한다.
+                 */
+                if (response.status === 200) {{
+
+                    box.style.color =
+                        "#00c878";
+
+                    box.innerText =
+                        "🌐 Streamlit HTTP 왕복: "
+                        + elapsed.toFixed(1)
+                        + " ms"
+                        + " | HTTP 200";
+
+                    console.log(
+                        "[EMPTY PROBE B-3] "
+                        + "VALID RTT = "
+                        + elapsed.toFixed(1)
+                        + " ms"
+                    );
+
+                }} else {{
+
+                    box.style.color =
+                        "#ff6b6b";
+
+                    box.innerText =
+                        "❌ 측정 무효: HTTP "
+                        + response.status
+                        + " | "
+                        + elapsed.toFixed(1)
+                        + " ms";
+
+                    console.warn(
+                        "[EMPTY PROBE B-3] "
+                        + "INVALID HTTP = "
+                        + response.status
+                        + " | "
+                        + elapsed.toFixed(1)
+                        + " ms"
+                    );
+                }}
+
+            }} catch (error) {{
+
+                const elapsed =
+                    performance.now()
+                    - started;
+
+                box.style.color =
+                    "#ff6b6b";
 
                 box.innerText =
-                    "🌐 Streamlit HTTP 왕복: "
-                    + elapsed.toFixed(1)
-                    + " ms"
-                    + " | HTTP 200";
-
-                console.log(
-                    "[EMPTY PROBE B-2] "
-                    + "VALID RTT = "
-                    + elapsed.toFixed(1)
-                    + " ms"
-                );
-
-            } else {
-
-                box.style.color = "#ff6b6b";
-
-                box.innerText =
-                    "❌ 측정 무효: HTTP "
-                    + response.status
-                    + " | "
+                    "❌ HTTP 왕복 측정 실패 | "
                     + elapsed.toFixed(1)
                     + " ms";
 
-                console.warn(
-                    "[EMPTY PROBE B-2] "
-                    + "INVALID HTTP = "
-                    + response.status
-                    + " | "
-                    + elapsed.toFixed(1)
-                    + " ms"
+                console.error(
+                    "[EMPTY PROBE B-3] ERROR",
+                    error
                 );
-            }
+            }}
 
-        } catch (error) {
+        }})();
+        </script>
+        """,
+        height=55,
+    )
 
-            const elapsed =
-                performance.now()
-                - started;
+else:
 
-            box.style.color = "#ff6b6b";
+    st.error(
+        "❌ st.context.url을 확인할 수 없습니다."
+    )
 
-            box.innerText =
-                "❌ HTTP 왕복 측정 실패 | "
-                + elapsed.toFixed(1)
-                + " ms";
 
-            console.error(
-                "[EMPTY PROBE B-2] ERROR",
-                error
-            );
-        }
+# ------------------------------------------------------------------------------
+# 0.08.00 | Accumulated Server History
+# ------------------------------------------------------------------------------
+st.subheader("🔍 EMPTY B-3 누적 기록")
 
-    })();
-    </script>
-    """,
-    height=55,
+_history = _load_probe_b3_history(
+    limit=20
 )
 
-
-# ------------------------------------------------------------------------------
-# 0.07.00 | Accumulated Server History
-# ------------------------------------------------------------------------------
-st.subheader("🔍 EMPTY B-2 누적 기록")
-
-history = _load_probe_b2_history(limit=20)
-
-if history:
+if _history:
 
     for idx, item in enumerate(
-        reversed(history),
+        reversed(_history),
         start=1
     ):
 
         st.write(
-            f"{idx}. {item['timestamp']} | "
+            f"{idx}. "
+            f"{item['timestamp']} | "
             f"SERVER={item['server_total_ms']}ms | "
             f"PYTHON={item['python_sensor_ms']}ms"
         )
@@ -287,15 +327,15 @@ else:
 
 
 # ------------------------------------------------------------------------------
-# 0.08.00 | Experiment Guide
+# 0.09.00 | Experiment Guide
 # ------------------------------------------------------------------------------
 st.divider()
 
 st.markdown(
     """
-### 🧪 B-2 실험
+### 🧪 B-3 실험
 
-이번 실험에서는 두 시간을 분리해서 봅니다.
+이번 실험은 두 시간을 분리합니다.
 
 **① Python 서버 실행시간**
 
@@ -304,34 +344,39 @@ st.markdown(
 
 **② Streamlit HTTP 왕복**
 
-→ 현재 실제로 열려 있는 Streamlit 앱 URL에
-브라우저가 HTTP GET을 보내고 HTTP 200 응답을 받을 때까지의 시간
+→ 현재 실제 Streamlit 앱 URL에 브라우저가 GET 요청을 보내고
+HTTP 200 응답을 받을 때까지의 시간
 
 
 ### ⚠️ 유효성
 
 `HTTP 200`만 정상 측정값입니다.
 
-`404`, `500`, 기타 오류는 **측정값으로 인정하지 않습니다.**
+`404`, `500`, 기타 오류는 측정값으로 인정하지 않습니다.
 
 
 ### 판정
 
-**Python은 0ms인데 HTTP 왕복이 3~4초로 증가**
+**Python은 매우 빠른데 HTTP 왕복만 수초**
 
-→ GTL Python 계산보다는
-플랫폼 / 네트워크 / Streamlit Cloud 계층을 의심.
+→ Python 코드보다
+Streamlit Cloud / 플랫폼 / 네트워크 계층을 우선 의심
 
 
 **Python과 HTTP 왕복 모두 빠름**
 
-→ EMPTY 환경 자체는 정상.
-→ 다음 단계에서 GTL을 단계적으로 복원.
+→ EMPTY 환경은 정상
 
 
 **10분 후 HTTP 왕복만 증가**
 
-→ 우리가 찾고 있던 "10분 장벽"이
-플랫폼 계층에서 재현되는지 확인할 수 있음.
+→ 기존 GTL에서 발견했던 "10분 장벽"이
+EMPTY 환경에서도 재현되는지 확인
+
+
+**10분 후에도 둘 다 빠름**
+
+→ 플랫폼의 일반적인 10분 지연 가능성이 낮아짐.
+→ 그 다음 GTL을 단계적으로 복원해서 범인을 찾는다.
 """
 )
