@@ -607,6 +607,93 @@ if 'current_tz' not in st.session_state: st.session_state.current_tz = TZ_KST
 if 'last_cat_name' not in st.session_state: st.session_state.last_cat_name = "식사"
 
 
+# ==============================================================================
+# 2.05.06 | Pure Memory Cache Binder + Safe Trip Context
+# ==============================================================================
+
+if 'ledger_dirty' not in st.session_state:
+    st.session_state['ledger_dirty'] = False
+
+if 'ledger_mutation_count' not in st.session_state:
+    st.session_state['ledger_mutation_count'] = 0
+
+if 'ledger_order_dirty' not in st.session_state:
+    st.session_state['ledger_order_dirty'] = False
+
+
+_previous_working_sheet = (
+    st.session_state.get(
+        'ledger_working_sheet'
+    )
+)
+
+if (
+    _previous_working_sheet
+    and _previous_working_sheet != ACTIVE_SHEET
+    and st.session_state.get(
+        'ledger_dirty',
+        False
+    )
+):
+    _write_auto_backup_snapshot(
+        st.session_state.get(
+            'active_ledger_df'
+        ),
+        sheet_name=_previous_working_sheet,
+        trip_name=_trip_name_for_sheet(
+            _previous_working_sheet
+        ),
+    )
+
+
+_frp_install_wrappers()
+
+
+if (
+    'active_ledger_df'
+    not in st.session_state
+    or
+    st.session_state.get(
+        'last_loaded_sheet'
+    )
+    != ACTIVE_SHEET
+):
+
+    st.session_state.active_ledger_df = (
+        load_data(
+            ACTIVE_SHEET,
+            force_cloud=False
+        )
+    )
+
+    st.session_state[
+        'last_loaded_sheet'
+    ] = ACTIVE_SHEET
+
+    st.session_state[
+        'ledger_dirty'
+    ] = False
+
+    st.session_state[
+        'ledger_order_dirty'
+    ] = False
+
+    st.session_state[
+        'ledger_mutation_count'
+    ] = 0
+
+
+st.session_state[
+    'ledger_working_sheet'
+] = ACTIVE_SHEET
+
+
+ledger_df = (
+    st.session_state.active_ledger_df
+)
+
+
+_ledger_auto_backup_fragment()
 
 
 # ==============================================================================
