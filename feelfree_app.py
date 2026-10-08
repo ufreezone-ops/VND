@@ -616,90 +616,323 @@ if 'last_cat_name' not in st.session_state: st.session_state.last_cat_name = "�
 # ------------------------------------------------------------------------------
 # 3.01.00 | Real-time Inventory Audit (실시간 인벤토리 차감 및 상태 평가)
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # 3.01.01 | Batch-level Multi-Wallet Inventory Evaluator
 def get_inventory_status(df):
     from collections import defaultdict
-    temp_df = df.sort_values(by='Date', kind='mergesort', ignore_index=True) if not df.empty else df
+
+    temp_df = (
+        df.sort_values(
+            by='Date',
+            kind='mergesort',
+            ignore_index=True
+        )
+        if not df.empty
+        else df
+    )
+
     inv_batches = defaultdict(list)
-    
+
     def get_local_WAR(currency_account):
-        sw_df = df[(df['Category'].str.strip().isin(['충전','환전','입금','직접환전'])) & (df['Currency'].str.strip() == currency_account)]
-        if not sw_df.empty and sw_df['Amount'].sum() > 0: 
-            return (sw_df['Amount'] * sw_df['AppliedRate']).sum() / sw_df['Amount'].sum()
+        sw_df = df[
+            (
+                df['Category']
+                .str.strip()
+                .isin([
+                    '충전',
+                    '환전',
+                    '입금',
+                    '직접환전'
+                ])
+            )
+            &
+            (
+                df['Currency']
+                .str.strip()
+                == currency_account
+            )
+        ]
+
+        if (
+            not sw_df.empty
+            and sw_df['Amount'].sum() > 0
+        ):
+            return (
+                sw_df['Amount']
+                * sw_df['AppliedRate']
+            ).sum() / sw_df['Amount'].sum()
+
         return get_default_rate(currency_account)
 
-    if temp_df.empty: return dict(inv_batches)
-    clean_expense_cats = list(set([c.strip() for c in EXPENSE_CATS] + ['선물']))
-    
+    if temp_df.empty:
+        return dict(inv_batches)
+
+    clean_expense_cats = list(
+        set(
+            [c.strip() for c in EXPENSE_CATS]
+            + ['선물']
+        )
+    )
+
     for _, row in temp_df.iterrows():
-        qty, curr = row['Amount'], row['Currency']
-        cat = str(row['Category']).strip()
-        method = str(row['PaymentMethod']).strip()
-        desc = str(row['Description']).strip()
+
+        qty = row['Amount']
+        curr = row['Currency']
+
+        cat = str(
+            row['Category']
+        ).strip()
+
+        method = str(
+            row['PaymentMethod']
+        ).strip()
+
+        desc = str(
+            row['Description']
+        ).strip()
+
         rate = row['AppliedRate']
-        
-        is_exp = 1 if cat in clean_expense_cats and cat not in ['환불', '보증금', '재환전', '상환', '개인지출'] else 0
-        is_deductible = 1 if (is_exp == 1 or cat in ['보증금', '상환']) else 0
+
+        is_exp = (
+            1
+            if (
+                cat in clean_expense_cats
+                and cat not in [
+                    '환불',
+                    '보증금',
+                    '재환전',
+                    '상환',
+                    '개인지출'
+                ]
+            )
+            else 0
+        )
+
+        is_deductible = (
+            1
+            if (
+                is_exp == 1
+                or cat in [
+                    '보증금',
+                    '상환'
+                ]
+            )
+            else 0
+        )
+
         asset_cls = get_asset_class(method)
-        
-        if cat in ['충전', '환전', '입금', '직접환전', '이월잔액']:
-            if cat == '이월잔액': final_dest_cls = "CASH"
-            elif cat == '충전': final_dest_cls = "PREPAID"
-            elif cat in ['환전', '직접환전']: final_dest_cls = "CASH"
-            else: final_dest_cls = get_asset_class(desc + method)
-            
-            target = f"트래블카드({curr})" if final_dest_cls == "PREPAID" else f"현금({curr})"
-            if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty, 'initial': qty})
-            
+
+        if cat in [
+            '충전',
+            '환전',
+            '입금',
+            '직접환전',
+            '이월잔액'
+        ]:
+
+            if cat == '이월잔액':
+                final_dest_cls = "CASH"
+
+            elif cat == '충전':
+                final_dest_cls = "PREPAID"
+
+            elif cat in [
+                '환전',
+                '직접환전'
+            ]:
+                final_dest_cls = "CASH"
+
+            else:
+                final_dest_cls = get_asset_class(
+                    desc + method
+                )
+
+            target = (
+                f"트래블카드({curr})"
+                if final_dest_cls == "PREPAID"
+                else f"현금({curr})"
+            )
+
+            if curr != 'KRW':
+                inv_batches[target].append(
+                    {
+                        'rate': rate,
+                        'qty': qty,
+                        'initial': qty
+                    }
+                )
+
         elif cat == '환불':
+
             if asset_cls != "DOMESTIC":
-                target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
-                if curr != 'KRW': inv_batches[target].append({'rate': rate, 'qty': qty, 'initial': qty})
-                
+
+                target = (
+                    f"트래블카드({curr})"
+                    if asset_cls == "PREPAID"
+                    else f"현금({curr})"
+                )
+
+                if curr != 'KRW':
+                    inv_batches[target].append(
+                        {
+                            'rate': rate,
+                            'qty': qty,
+                            'initial': qty
+                        }
+                    )
+
         elif cat == 'ATM출금':
-            temp_qty = qty; target_from = f"트래블카드({curr})"; target_to = f"현금({curr})"
+
+            temp_qty = qty
+
+            target_from = (
+                f"트래블카드({curr})"
+            )
+
+            target_to = (
+                f"현금({curr})"
+            )
+
             if target_from in inv_batches:
+
                 for batch in inv_batches[target_from]:
-                    if temp_qty <= 0: break
-                    if batch['qty'] <= 0: continue
-                    take = min(temp_qty, batch['qty']); batch['qty'] -= take
-                    inv_batches[target_to].append({'rate': batch['rate'], 'qty': take, 'initial': take}); temp_qty -= take
+
+                    if temp_qty <= 0:
+                        break
+
+                    if batch['qty'] <= 0:
+                        continue
+
+                    take = min(
+                        temp_qty,
+                        batch['qty']
+                    )
+
+                    batch['qty'] -= take
+
+                    inv_batches[target_to].append(
+                        {
+                            'rate': batch['rate'],
+                            'qty': take,
+                            'initial': take
+                        }
+                    )
+
+                    temp_qty -= take
+
             if temp_qty > 0:
-                inv_batches[target_to].append({'rate': get_local_WAR(curr), 'qty': temp_qty, 'initial': temp_qty})
-                
-        elif cat in ['재환전', '개인지출']:
+
+                inv_batches[target_to].append(
+                    {
+                        'rate': get_local_WAR(curr),
+                        'qty': temp_qty,
+                        'initial': temp_qty
+                    }
+                )
+
+        elif cat in [
+            '재환전',
+            '개인지출'
+        ]:
+
             if curr != 'KRW':
-                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+
+                target_from = (
+                    f"트래블카드({curr})"
+                    if asset_cls == "PREPAID"
+                    else f"현금({curr})"
+                )
+
                 temp_qty = qty
+
                 if target_from in inv_batches:
+
                     for batch in inv_batches[target_from]:
-                        if temp_qty <= 0: break
-                        if batch['qty'] <= 0: continue
-                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
-                        
+
+                        if temp_qty <= 0:
+                            break
+
+                        if batch['qty'] <= 0:
+                            continue
+
+                        take = min(
+                            temp_qty,
+                            batch['qty']
+                        )
+
+                        batch['qty'] -= take
+                        temp_qty -= take
+
         elif cat == '이종환전':
+
             if curr != 'KRW':
-                target_from = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+
+                target_from = (
+                    f"트래블카드({curr})"
+                    if asset_cls == "PREPAID"
+                    else f"현금({curr})"
+                )
+
                 temp_qty = qty
+
                 if target_from in inv_batches:
+
                     for batch in inv_batches[target_from]:
-                        if temp_qty <= 0: break
-                        if batch['qty'] <= 0: continue
-                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
-                        
+
+                        if temp_qty <= 0:
+                            break
+
+                        if batch['qty'] <= 0:
+                            continue
+
+                        take = min(
+                            temp_qty,
+                            batch['qty']
+                        )
+
+                        batch['qty'] -= take
+                        temp_qty -= take
+
         elif is_deductible == 1:
-            if asset_cls != "DOMESTIC" and asset_cls != "CREDIT" and curr != 'KRW':
-                target = f"트래블카드({curr})" if asset_cls == "PREPAID" else f"현금({curr})"
+
+            if (
+                asset_cls != "DOMESTIC"
+                and asset_cls != "CREDIT"
+                and curr != 'KRW'
+            ):
+
+                target = (
+                    f"트래블카드({curr})"
+                    if asset_cls == "PREPAID"
+                    else f"현금({curr})"
+                )
+
                 temp_qty = qty
+
                 if target in inv_batches:
+
                     for batch in inv_batches[target]:
-                        if temp_qty <= 0: break
-                        if batch['qty'] <= 0: continue
-                        take = min(temp_qty, batch['qty']); batch['qty'] -= take; temp_qty -= take
-                        
+
+                        if temp_qty <= 0:
+                            break
+
+                        if batch['qty'] <= 0:
+                            continue
+
+                        take = min(
+                            temp_qty,
+                            batch['qty']
+                        )
+
+                        batch['qty'] -= take
+                        temp_qty -= take
+
     return dict(inv_batches)
 
-current_inventory_batches = get_inventory_status(ledger_df)
+
+current_inventory_batches = get_inventory_status(
+    ledger_df
+)
 
 # ------------------------------------------------------------------------------
 # 3.02.00 | Foreign Exchange Valuation (가중 평균 환율 및 FIFO 비용 계산)
