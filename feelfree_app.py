@@ -993,34 +993,167 @@ def clean_amount_to_float(val):
     try: return float(cleaned) if cleaned else 0.0
     except: return 0.0
 
-# ============================================================
 # 2.03.02 | Active Trip Ledger Loader
-#           (Zero-Network Pure Memory First + Integrated READ Diagnostic)
-# ============================================================
+# Zero-Network Pure Memory First + Google READ Diagnostic + Memory Path Sensor
 
 def load_data(sheet_name, force_cloud=False):
 
-    # ⚡ 세션 메모리에 해당 시트 데이터가 이미 존재하면
-    #    구글 통신 0회 즉시 반환
-    if (
-        not force_cloud
-        and 'active_ledger_df' in st.session_state
-        and st.session_state.get('last_loaded_sheet') == sheet_name
-    ):
-        if (
-            st.session_state.active_ledger_df is not None
-            and not st.session_state.active_ledger_df.empty
-        ):
-            return st.session_state.active_ledger_df
+    # ============================================================
+    # 0. 메모리 경로 진입 조건 진단
+    # ============================================================
 
-    # --------------------------------------------------------
-    # 🔎 DIAG | 실제 Google READ 발생 여부 / 소요시간 측정
-    # 기능 변경 없음 / ttl 정책 변경 없음
-    # --------------------------------------------------------
+    _memory_has_key = (
+        'active_ledger_df'
+        in st.session_state
+    )
+
+    _memory_df = (
+        st.session_state.get(
+            'active_ledger_df'
+        )
+        if _memory_has_key
+        else None
+    )
+
+    _memory_is_none = (
+        _memory_df is None
+    )
+
+    _memory_is_empty = (
+        True
+        if _memory_df is None
+        else _memory_df.empty
+    )
+
+    _last_loaded_sheet = (
+        st.session_state.get(
+            'last_loaded_sheet'
+        )
+    )
+
+    _sheet_matches = (
+        _last_loaded_sheet
+        == sheet_name
+    )
+
+    _memory_path_valid = (
+        not force_cloud
+        and _memory_has_key
+        and not _memory_is_none
+        and not _memory_is_empty
+        and _sheet_matches
+    )
+
+    # ============================================================
+    # 1. ⭐ Pure Memory Fast Path
+    # ============================================================
+
+    if _memory_path_valid:
+
+        st.session_state[
+            'last_load_data_path_diag'
+        ] = {
+            'timestamp': datetime.now(
+                TZ_KST
+            ).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+            'sheet': str(sheet_name),
+            'active_sheet': str(
+                globals().get(
+                    'ACTIVE_SHEET',
+                    ''
+                )
+            ),
+            'active_ledger_df_exists': True,
+            'active_ledger_df_is_none': False,
+            'active_ledger_df_empty': False,
+            'last_loaded_sheet': str(
+                _last_loaded_sheet
+            ),
+            'sheet_match': True,
+            'force_cloud': bool(
+                force_cloud
+            ),
+            'path': 'MEMORY_RETURN',
+        }
+
+        return _memory_df
+
+    # ============================================================
+    # 2. 메모리 경로 탈락 원인 기록
+    # ============================================================
+
+    _memory_fail_reasons = []
+
+    if force_cloud:
+        _memory_fail_reasons.append(
+            'FORCE_CLOUD'
+        )
+
+    if not _memory_has_key:
+        _memory_fail_reasons.append(
+            'NO_ACTIVE_LEDGER_DF'
+        )
+
+    elif _memory_is_none:
+        _memory_fail_reasons.append(
+            'ACTIVE_LEDGER_DF_IS_NONE'
+        )
+
+    elif _memory_is_empty:
+        _memory_fail_reasons.append(
+            'ACTIVE_LEDGER_DF_EMPTY'
+        )
+
+    if not _sheet_matches:
+        _memory_fail_reasons.append(
+            'SHEET_MISMATCH'
+        )
+
+    st.session_state[
+        'last_load_data_path_diag'
+    ] = {
+        'timestamp': datetime.now(
+            TZ_KST
+        ).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+        'sheet': str(sheet_name),
+        'active_sheet': str(
+            globals().get(
+                'ACTIVE_SHEET',
+                ''
+            )
+        ),
+        'active_ledger_df_exists': bool(
+            _memory_has_key
+        ),
+        'active_ledger_df_is_none': bool(
+            _memory_is_none
+        ),
+        'active_ledger_df_empty': bool(
+            _memory_is_empty
+        ),
+        'last_loaded_sheet': str(
+            _last_loaded_sheet
+        ),
+        'sheet_match': bool(
+            _sheet_matches
+        ),
+        'force_cloud': bool(
+            force_cloud
+        ),
+        'path': 'CLOUD_READ',
+        'memory_fail_reasons': _memory_fail_reasons,
+    }
+
+    # ============================================================
+    # 3. Google Sheets READ
+    # ============================================================
 
     _read_started_at = time.perf_counter()
     _read_attempts = 0
-
     df = None
 
     for attempt in range(3):
@@ -1045,34 +1178,89 @@ def load_data(sheet_name, force_cloud=False):
                     or "Quota" in str(e)
                 )
             ):
+
                 time.sleep(2)
+
                 continue
 
             st.error(
-                f"🚨 **치명적 오류:** 클라우드 데이터베이스 연결에 실패했습니다. ({e})"
+                "🚨 **치명적 오류:** "
+                "클라우드 데이터베이스 연결에 실패했습니다. "
+                f"({e})"
             )
+
             st.stop()
 
     _read_elapsed_ms = (
-        time.perf_counter() - _read_started_at
+        time.perf_counter()
+        - _read_started_at
     ) * 1000
 
-    # --------------------------------------------------------
-    # 실제 load_data()의 Google READ가 실행됐을 때만
-    # 진단 메시지 기록
-    # --------------------------------------------------------
+    # ============================================================
+    # 4. Google READ 결과 진단
+    # ============================================================
 
-    st.session_state['last_load_data_read_diag'] = {
+    _path_diag = (
+        st.session_state.get(
+            'last_load_data_path_diag',
+            {}
+        )
+    )
+
+    _path_diag.update(
+        {
+            'read_elapsed_ms': round(
+                _read_elapsed_ms,
+                1
+            ),
+            'read_attempts': _read_attempts,
+            'read_completed': True,
+        }
+    )
+
+    st.session_state[
+        'last_load_data_path_diag'
+    ] = _path_diag
+
+    st.session_state[
+        'last_load_data_read_diag'
+    ] = {
         'sheet': str(sheet_name),
-        'elapsed_ms': round(_read_elapsed_ms, 1),
+        'elapsed_ms': round(
+            _read_elapsed_ms,
+            1
+        ),
         'attempts': _read_attempts,
-        'timestamp': datetime.now(TZ_KST).strftime("%H:%M:%S"),
-        'force_cloud': bool(force_cloud),
+        'timestamp': datetime.now(
+            TZ_KST
+        ).strftime(
+            "%H:%M:%S"
+        ),
+        'force_cloud': bool(
+            force_cloud
+        ),
+        'path': 'CLOUD_READ',
+        'memory_has_key': bool(
+            _memory_has_key
+        ),
+        'memory_is_none': bool(
+            _memory_is_none
+        ),
+        'memory_is_empty': bool(
+            _memory_is_empty
+        ),
+        'last_loaded_sheet': str(
+            _last_loaded_sheet
+        ),
+        'sheet_match': bool(
+            _sheet_matches
+        ),
+        'memory_fail_reasons': _memory_fail_reasons,
     }
 
-    # --------------------------------------------------------
-    # 기존 데이터 후처리
-    # --------------------------------------------------------
+    # ============================================================
+    # 5. 빈 Google 데이터 처리
+    # ============================================================
 
     if df is None or df.empty:
 
@@ -1081,14 +1269,21 @@ def load_data(sheet_name, force_cloud=False):
         )
 
         try:
+
             conn.update(
                 worksheet=ACTIVE_SHEET,
                 data=df_init
             )
+
         except:
+
             pass
 
         return df_init
+
+    # ============================================================
+    # 6. 여행 연도 / 국가 기본값
+    # ============================================================
 
     year_match = re.search(
         r'\((\d{4})\)',
@@ -1106,9 +1301,14 @@ def load_data(sheet_name, force_cloud=False):
 
     first_node_curr = (
         FIRST_NODE_NAME
-        if 'FIRST_NODE_NAME' in globals()
+        if 'FIRST_NODE_NAME'
+        in globals()
         else "베트남"
     )
+
+    # ============================================================
+    # 7. Country 정규화
+    # ============================================================
 
     if 'Country' not in df.columns:
 
@@ -1125,21 +1325,32 @@ def load_data(sheet_name, force_cloud=False):
             .astype(str)
             .str.strip()
             .replace(
-                ['nan', 'None', ''],
+                [
+                    'nan',
+                    'None',
+                    ''
+                ],
                 None
             )
         )
 
         df['Country'] = (
             df['Country']
-            .fillna(first_node_curr)
+            .fillna(
+                first_node_curr
+            )
         )
+
+    # ============================================================
+    # 8. Legacy 컬럼명 정리
+    # ============================================================
 
     if 'Cum_Card_VND' in df.columns:
 
         df.rename(
             columns={
-                'Cum_Card_VND': 'Cum_Card_Local'
+                'Cum_Card_VND':
+                    'Cum_Card_Local'
             },
             inplace=True
         )
@@ -1148,7 +1359,8 @@ def load_data(sheet_name, force_cloud=False):
 
         df.rename(
             columns={
-                'Cum_Cash_VND': 'Cum_Cash_Local'
+                'Cum_Cash_VND':
+                    'Cum_Cash_Local'
             },
             inplace=True
         )
@@ -1157,8 +1369,15 @@ def load_data(sheet_name, force_cloud=False):
 
         df['Receipt_URL'] = ""
 
+    # ============================================================
+    # 9. 기본 데이터 정규화
+    # ============================================================
+
     df = df.dropna(
-        subset=['Date', 'Category'],
+        subset=[
+            'Date',
+            'Category'
+        ],
         how='any'
     )
 
@@ -1185,11 +1404,21 @@ def load_data(sheet_name, force_cloud=False):
         .str.upper()
     )
 
+    # ============================================================
+    # 10. Legacy 날짜 보정
+    # ============================================================
+
     def fix_legacy_date(d):
 
         d = str(d).strip()
 
-        if d and not re.match(r'^\d{4}', d):
+        if (
+            d
+            and not re.match(
+                r'^\d{4}',
+                d
+            )
+        ):
 
             return (
                 f"{trip_year}-"
@@ -1212,6 +1441,10 @@ def load_data(sheet_name, force_cloud=False):
         columns=FINAL_COLUMNS
     )
 
+    # ============================================================
+    # 11. 숫자 컬럼 정규화
+    # ============================================================
+
     numeric_cols = [
         'Amount',
         'AppliedRate',
@@ -1232,26 +1465,33 @@ def load_data(sheet_name, force_cloud=False):
                 .fillna(0.0)
             )
 
-    # --------------------------------------------------------
-    # 🛡️ IsExpense 판정
-    #
-    # - 실제 결제가 발생한 일반 지출 = 1
-    # - 호텔외상(CREDIT) = 0
-    # - 상환 = 실제 결제이므로 1
-    # --------------------------------------------------------
+    # ============================================================
+    # 12. 지출 카테고리 판정
+    # ============================================================
 
-    clean_expense_cats = list(
-        set(
-            [c.strip() for c in EXPENSE_CATS]
-            + ['선물', '상환']
+    clean_expense_cats = (
+        list(
+            set(
+                [
+                    c.strip()
+                    for c in EXPENSE_CATS
+                ]
+                + [
+                    '선물',
+                    '상환'
+                ]
+            )
         )
-    ) if 'EXPENSE_CATS' in globals() else [
-        '식사',
-        '간식',
-        '마트',
-        '선물',
-        '상환'
-    ]
+        if 'EXPENSE_CATS'
+        in globals()
+        else [
+            '식사',
+            '간식',
+            '마트',
+            '선물',
+            '상환'
+        ]
+    )
 
     def evaluate_is_expense(r):
 
@@ -1263,13 +1503,15 @@ def load_data(sheet_name, force_cloud=False):
             r['PaymentMethod']
         ).strip()
 
-        # 호텔외상/외상 등 신용성 결제는
-        # 실제 지출 시점이 아니므로 제외
-        if get_asset_class(method) == "CREDIT":
+        if (
+            get_asset_class(
+                method
+            )
+            == "CREDIT"
+        ):
 
             return 0
 
-        # 실제 결제된 지출
         if (
             cat in clean_expense_cats
             and cat not in [
@@ -1303,8 +1545,15 @@ def load_data(sheet_name, force_cloud=False):
         .astype(str)
     )
 
+    # ============================================================
+    # 13. 최종 메모리 원장 등록
+    # ============================================================
+
     st.session_state.active_ledger_df = df
-    st.session_state.last_loaded_sheet = sheet_name
+
+    st.session_state.last_loaded_sheet = (
+        sheet_name
+    )
 
     return df
 
