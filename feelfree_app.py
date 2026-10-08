@@ -2499,13 +2499,17 @@ if _load_path_diag:
 # 2.03.09 | Streamlit Session Lifecycle Diagnostic
 # ============================================================
 # 목적:
-#   active_ledger_df가 사라지는 시점에
-#   Streamlit session 자체가 새로 만들어졌는지 확인한다.
+#   Session State 재생성과 Streamlit 프로세스 재시작을 구분한다.
 #
-# 핵심:
-#   session_state가 유지되면 session_id / rerun_count가 계속 유지된다.
-#   session_state가 새로 만들어지면 session_id가 새로 생성되고
-#   rerun_count가 1부터 다시 시작된다.
+# 판정:
+#   session_id 변경 + process_instance_id 동일
+#       → 세션/WebSocket 재연결
+#
+#   session_id 변경 + process_instance_id 변경
+#       → Streamlit 프로세스 재시작
+#
+# Google Sheets 접근:
+#   0회
 # ============================================================
 
 import os
@@ -2513,7 +2517,26 @@ import uuid
 
 
 # ============================================================
-# 1. Session 최초 생성 감지
+# 1. 프로세스 생명주기 식별자
+# ============================================================
+
+@st.cache_resource(
+    show_spinner=False
+)
+def _get_gtl_process_instance_id():
+
+    return str(
+        uuid.uuid4()
+    )
+
+
+_gtl_process_instance_id = (
+    _get_gtl_process_instance_id()
+)
+
+
+# ============================================================
+# 2. Streamlit Session 식별자
 # ============================================================
 
 if (
@@ -2541,7 +2564,7 @@ if (
 
 
 # ============================================================
-# 2. Rerun 횟수 누적
+# 3. Session rerun 횟수
 # ============================================================
 
 st.session_state[
@@ -2556,7 +2579,7 @@ st.session_state[
 
 
 # ============================================================
-# 3. 현재 세션 정보
+# 4. 통합 진단
 # ============================================================
 
 _gtl_session_diag = {
@@ -2575,6 +2598,9 @@ _gtl_session_diag = {
         st.session_state.get(
             'gtl_session_rerun_count'
         ),
+
+    'process_instance_id':
+        _gtl_process_instance_id,
 
     'process_id':
         os.getpid(),
@@ -2598,7 +2624,7 @@ _gtl_session_diag = {
 
 
 # ============================================================
-# 4. 화면 표시
+# 5. 화면 표시
 # ============================================================
 
 st.markdown(
@@ -2608,8 +2634,6 @@ st.markdown(
 st.json(
     _gtl_session_diag
 )
-
-
 
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
