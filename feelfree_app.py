@@ -1312,10 +1312,11 @@ def load_data(sheet_name, force_cloud=False):
 # ============================================================
 # 2.03.02-DIAG | Google READ 통합 누적 진단
 #
-# 주의:
-# - 별도의 블록 번호를 부여하지 않는다.
-# - load_data()와 get_trip_configs()의 진단 로그만 읽는다.
-# - Google Sheets에는 접근하지 않는다.
+# - load_data() READ 진단 로그 수집/보관
+# - get_trip_configs() READ 진단 로그 수집/보관
+# - 두 로그를 통합하여 _unified_diag_history에 유지
+# - Google Sheets에는 추가 접근하지 않음
+# - 진단 로그를 화면에 표시하지 않음
 # ============================================================
 
 import os
@@ -1353,8 +1354,6 @@ if _load_diag:
         str(_load_diag.get('force_cloud')),
     )
 
-    # 현재 세션에서 이미 저장한
-    # 동일 결과는 다시 저장하지 않는다.
     if (
         st.session_state.get(
             'last_saved_load_diag'
@@ -1457,6 +1456,7 @@ try:
                         item,
                         dict
                     ):
+
                         _load_data_history.append(
                             item
                         )
@@ -1504,6 +1504,7 @@ try:
                         item,
                         dict
                     ):
+
                         _get_trip_config_history.append(
                             item
                         )
@@ -1526,6 +1527,7 @@ _unified_diag_history = []
 
 
 # load_data()
+
 for item in _load_data_history:
 
     _unified_diag_history.append({
@@ -1565,6 +1567,7 @@ for item in _load_data_history:
 
 
 # get_trip_configs()
+
 for item in _get_trip_config_history:
 
     _unified_diag_history.append({
@@ -1601,7 +1604,11 @@ for item in _get_trip_config_history:
 
 
 # ------------------------------------------------------------
-# 6. 최신 기록부터 표시
+# 6. 최신 기록부터 정렬
+#
+# 화면 출력은 하지 않는다.
+# _unified_diag_history는 이후 필요할 경우
+# 내부 진단용으로 사용할 수 있도록 유지한다.
 # ------------------------------------------------------------
 
 _unified_diag_history.sort(
@@ -1616,150 +1623,29 @@ _unified_diag_history.sort(
 
 
 # ------------------------------------------------------------
-# 7. 통합 진단 화면
+# 7. 진단 로그 오류만 내부 상태에 유지
+#
+# Google READ 통합 누적 기록 자체는 화면에 표시하지 않는다.
 # ------------------------------------------------------------
 
-if _unified_diag_history:
-
-    with st.expander(
-        f"🔍 Google READ 통합 누적 기록 "
-        f"({_unified_diag_history.__len__()}건)",
-        expanded=False
-    ):
-
-        for i, item in enumerate(
-            _unified_diag_history[:50],
-            1
-        ):
-
-            _timestamp = str(
-                item.get(
-                    "timestamp",
-                    ""
-                )
-            )
-
-            _event = str(
-                item.get(
-                    "event",
-                    ""
-                )
-            )
-
-            _sheet = str(
-                item.get(
-                    "sheet",
-                    ""
-                )
-            )
-
-            try:
-
-                _read_ms = float(
-                    item.get(
-                        "read_elapsed_ms",
-                        0
-                    ) or 0
-                )
-
-            except Exception:
-
-                _read_ms = 0.0
-
-            try:
-
-                _attempts = int(
-                    item.get(
-                        "attempts",
-                        0
-                    ) or 0
-                )
-
-            except Exception:
-
-                _attempts = 0
-
-
-            # --------------------------------------------
-            # get_trip_configs()
-            # --------------------------------------------
-
-            if _event == "get_trip_configs":
-
-                try:
-
-                    _function_ms = float(
-                        item.get(
-                            "function_elapsed_ms",
-                            0
-                        ) or 0
-                    )
-
-                except Exception:
-
-                    _function_ms = 0.0
-
-                st.caption(
-                    f"{i}. {_timestamp} | "
-                    f"🧩 get_trip_configs | "
-                    f"Sheet={_sheet} | "
-                    f"READ={_read_ms:.1f}ms | "
-                    f"함수전체={_function_ms:.1f}ms | "
-                    f"attempts={_attempts}"
-                )
-
-
-            # --------------------------------------------
-            # load_data()
-            # --------------------------------------------
-
-            else:
-
-                _force_cloud = item.get(
-                    "force_cloud",
-                    False
-                )
-
-                st.caption(
-                    f"{i}. {_timestamp} | "
-                    f"📥 load_data | "
-                    f"Sheet={_sheet} | "
-                    f"READ={_read_ms:.1f}ms | "
-                    f"attempts={_attempts} | "
-                    f"force_cloud={_force_cloud}"
-                )
-
-
-# ------------------------------------------------------------
-# 8. 진단 로그 오류 표시
-# ------------------------------------------------------------
-
-if st.session_state.get(
+if (
     'load_diag_log_error'
+    not in st.session_state
 ):
 
-    st.warning(
-        "⚠️ load_data 진단 로그 저장 오류: "
-        + str(
-            st.session_state[
-                'load_diag_log_error'
-            ]
-        )
-    )
+    st.session_state[
+        'load_diag_log_error'
+    ] = None
 
 
-if st.session_state.get(
+if (
     'get_trip_config_diag_log_error'
+    not in st.session_state
 ):
 
-    st.warning(
-        "⚠️ get_trip_configs 진단 로그 읽기 오류: "
-        + str(
-            st.session_state[
-                'get_trip_config_diag_log_error'
-            ]
-        )
-    )
+    st.session_state[
+        'get_trip_config_diag_log_error'
+    ] = None
 
 
 # ============================================================
