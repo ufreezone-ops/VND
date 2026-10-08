@@ -4088,43 +4088,80 @@ with st.sidebar:
             render_currency_card(c, is_secondary=False)
 
         # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync
-        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
-        st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
-        st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
+st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
+st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
 
-        if not is_upcoming:
-            st.divider()
-            render_dday_control_tower()
+if not is_upcoming:
+    st.divider()
+    render_dday_control_tower()
 
-        st.divider()
-        st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
-        # ⚡ 사용자가 수동으로 버튼을 누를 때만 구글 시트에서 강제 최신화(force_cloud=True)
-        if st.button("🔄 Cloud Refresh (데이터 동기화)", use_container_width=True, type="primary"): 
-            st.cache_data.clear()
-            smart_cache_clear()
-            if 'cached_trip_configs' in st.session_state: del st.session_state['cached_trip_configs']
-            pulled_df = load_data(ACTIVE_SHEET, force_cloud=True)
-            load_cash_inventory(force_cloud=True)
-            re_calc_df = recalculate_entire_ledger(pulled_df)
-            st.session_state.active_ledger_df = re_calc_df
-            try:
-                conn.update(worksheet=ACTIVE_SHEET, data=re_calc_df.reindex(columns=FINAL_COLUMNS))
-                st.toast("✅ 클라우드 동기화 및 지출 정합성 복구 완료!", icon="🎉")
-            except Exception as e_cr:
-                st.error(f"동기화 에러: {e_cr}")
-            time.sleep(0.5)
-            st.rerun()
+st.divider()
+st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
 
-        # ⚡ 사이드바 속도 배지
-        t_sb_now = (time.perf_counter() - t_render_start) * 1000
-        sb_color = "#10B981" if t_sb_now < 500 else ("#38BDF8" if t_sb_now < 1500 else "#F59E0B")
-        st.markdown(f"<div style='text-align:center; font-size:11.5px; color:#64748B; margin-top:8px;'>실시간 반응: <span style='color:{sb_color}; font-weight:bold;'>⚡ {t_sb_now:,.0f}ms</span></div>", unsafe_allow_html=True)
+# ⚡ 사용자가 수동으로 버튼을 누를 때만 구글 시트에서 강제 최신화(force_cloud=True)
+if st.button(
+    "🔄 Cloud Refresh (데이터 동기화)",
+    use_container_width=True,
+    type="primary"
+):
+    st.cache_data.clear()
+    smart_cache_clear()
 
-        if secondary_currs:
-            st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-            st.caption("🌐 보조/기타 통화 잔고")
-            for c in secondary_currs:
-                render_currency_card(c, is_secondary=True)
+    if 'cached_trip_configs' in st.session_state:
+        del st.session_state['cached_trip_configs']
+
+    pulled_df = load_data(
+        ACTIVE_SHEET,
+        force_cloud=True
+    )
+
+    load_cash_inventory(
+        force_cloud=True
+    )
+
+    re_calc_df = recalculate_entire_ledger(
+        pulled_df
+    )
+
+    st.session_state.active_ledger_df = re_calc_df
+
+    try:
+        conn.update(
+            worksheet=ACTIVE_SHEET,
+            data=re_calc_df.reindex(
+                columns=FINAL_COLUMNS
+            )
+        )
+
+        st.toast(
+            "✅ 클라우드 동기화 및 지출 정합성 복구 완료!",
+            icon="🎉"
+        )
+
+    except Exception as e_cr:
+        st.error(
+            f"동기화 에러: {e_cr}"
+        )
+
+    time.sleep(0.5)
+    st.rerun()
+
+if secondary_currs:
+    st.markdown(
+        "<div style='margin-top: 15px;'></div>",
+        unsafe_allow_html=True
+    )
+
+    st.caption(
+        "🌐 보조/기타 통화 잔고"
+    )
+
+    for c in secondary_currs:
+        render_currency_card(
+            c,
+            is_secondary=True
+        )
 
 # ------------------------------------------------------------------------------
 # 4.02.00 | Top Navigation Router (여행지 선택 및 관제탑 모드 스위처)
@@ -6927,29 +6964,28 @@ elif main_tab_choice == "전체요약":
     else:
         st.info("기록된 지출 데이터가 없습니다.")
 # ------------------------------------------------------------------------------
-# 6.05.00 | Build Version & Real-time Latency Benchmark Footer
+# 6.05.00 | Build Version & Sync Footer
 # ------------------------------------------------------------------------------
-t_render_end = time.perf_counter()
-render_latency_ms = (t_render_end - t_render_start) * 1000
 
-# ⏱️ 속도 상태별 뱃지 컬러 (500ms 미만 녹색, 1500ms 이상 경고 오렌지/레드)
-if render_latency_ms < 500:
-    perf_badge = f"<span style='color:#10B981; font-weight:bold;'>⚡ {render_latency_ms:,.0f}ms (초고속)</span>"
-elif render_latency_ms < 1500:
-    perf_badge = f"<span style='color:#38BDF8; font-weight:bold;'>⚡ {render_latency_ms:,.0f}ms (보통)</span>"
-else:
-    perf_badge = f"<span style='color:#F59E0B; font-weight:bold;'>🐢 {render_latency_ms:,.0f}ms (통신 지연중)</span>"
-
-st.markdown(f"""
-    <div style='display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#64748B; border-top:1px solid #1E293B; padding-top:8px; margin-top:20px;'>
-        <div>GTL Platform {VERSION} | Volume Guard: ~ 70 KB | Sync: {datetime.now(TZ_KST).strftime('%Y-%m-%d %H:%M:%S')}</div>
-        <div>반응속도: {perf_badge}</div>
+st.markdown(
+    f"""
+    <div style='display:flex; justify-content:flex-end; align-items:center;
+                font-size:12px; color:#64748B;
+                border-top:1px solid #1E293B;
+                padding-top:8px; margin-top:20px;'>
+        <div>
+            GTL Platform {VERSION}
+            | Volume Guard: ~ 70 KB
+            | Sync: {datetime.now(TZ_KST).strftime('%Y-%m-%d %H:%M:%S')}
+        </div>
     </div>
-""", unsafe_allow_html=True)
-
+    """,
+    unsafe_allow_html=True
+)
 
 # 6.05.01 | FULL REFRESH Finalizer + Direct Checkpoint Diagnostic
 # ------------------------------------------------------------------------------
+
 _frp_finalize()
 
 
@@ -6958,37 +6994,48 @@ _frp_finalize()
 # ------------------------------------------------------------------
 
 try:
-    if os.path.exists(_FULL_REFRESH_HISTORY_FILE):
+
+    if os.path.exists(
+        _FULL_REFRESH_HISTORY_FILE
+    ):
 
         with open(
             _FULL_REFRESH_HISTORY_FILE,
             "r",
             encoding="utf-8"
         ) as f:
+
             _frp_lines = [
                 line.strip()
                 for line in f
                 if line.strip()
             ]
 
+
         _frp_records = []
 
         for line in _frp_lines:
+
             try:
                 _frp_records.append(
                     json.loads(line)
                 )
+
             except Exception:
                 continue
 
+
         if _frp_records:
 
-            _frp_records = _frp_records[-12:]
+            # 최근 5건만 화면에 표시
+            _frp_records = _frp_records[-5:]
+
 
             st.markdown(
-                "### 🔍 FULL REFRESH 통합 누적 기록 "
+                "### 🔍 FULL REFRESH 최근 기록 "
                 f"({len(_frp_records)}건)"
             )
+
 
             for idx, r in enumerate(
                 reversed(_frp_records),
@@ -6999,37 +7046,40 @@ try:
                     f"{idx}. "
                     f"{r.get('timestamp', '-')}"
                     f" | TOTAL={r.get('total_ms', 0):,.1f}ms"
-                    f" | trip_configs={r.get('trip_configs_ms', 0):,.1f}ms"
                     f" | load_data={r.get('load_data_ms', 0):,.1f}ms"
-                    f" | load_all_trips={r.get('load_all_trips_ms', 0):,.1f}ms"
-                    f" | cash={r.get('cash_ms', 0):,.1f}ms"
-                    f" | recalculate={r.get('recalculate_ms', 0):,.1f}ms"
                     f" | other={r.get('other_ms', 0):,.1f}ms"
                 )
 
+
             _latest = _frp_records[-1]
+
 
             st.markdown(
                 "### 🧭 최신 FULL REFRESH 직접 구간 분석"
             )
+
 
             _latest_checkpoints = _latest.get(
                 "checkpoints",
                 []
             )
 
+
             if _latest_checkpoints:
 
                 for cp in _latest_checkpoints:
+
                     st.write(
                         f"• {cp.get('label', '-')}: "
                         f"**{cp.get('elapsed_ms', 0):,.1f}ms**"
                     )
 
+
                 st.write(
                     "• 체크포인트 미측정 잔여: "
                     f"**{_latest.get('checkpoint_unattributed_ms', 0):,.1f}ms**"
                 )
+
 
 except Exception:
     pass
