@@ -1031,7 +1031,7 @@ def load_data(sheet_name, force_cloud=False):
 
             df = conn.read(
                 worksheet=sheet_name,
-                ttl="1m"
+                ttl="100m"
             )
 
             break
