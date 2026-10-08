@@ -380,6 +380,174 @@ def get_trip_configs():
     return dynamic_configs
 
 
+# ==============================================================================
+# 1.04.03 | Google READ Global Tracer
+# ==============================================================================
+# 목적:
+# 한 번의 Streamlit rerun 동안 실제 conn.read()가
+# 몇 번 호출되는지 전부 계측한다.
+#
+# 기록 항목:
+#   - 순번
+#   - worksheet
+#   - ttl
+#   - 소요시간
+#   - 성공/실패
+#   - 오류 메시지
+#
+# 중요:
+#   이 블록은 데이터 동작을 변경하지 않는다.
+#   기존 conn.read()를 감싸서 시간과 호출 횟수만 측정한다.
+# ==============================================================================
+
+# ------------------------------------------------------------
+# 1. 이번 rerun의 Google READ 진단 버퍼 초기화
+# ------------------------------------------------------------
+
+st.session_state[
+    '_gtl_google_read_trace_current'
+] = []
+
+st.session_state[
+    '_gtl_google_read_trace_started_at'
+] = datetime.now(
+    TZ_KST
+).strftime(
+    "%Y-%m-%d %H:%M:%S"
+)
+
+
+# ------------------------------------------------------------
+# 2. conn.read()가 아직 tracer로 감싸지지 않은 경우에만 설치
+# ------------------------------------------------------------
+
+_current_conn_read = getattr(
+    conn,
+    'read',
+    None
+)
+
+if (
+    _current_conn_read is not None
+    and not getattr(
+        _current_conn_read,
+        '_gtl_google_read_trace_wrapped',
+        False
+    )
+):
+
+    _original_conn_read = (
+        _current_conn_read
+    )
+
+    def _gtl_traced_conn_read(
+        *args,
+        **kwargs
+    ):
+
+        _seq = (
+            len(
+                st.session_state.get(
+                    '_gtl_google_read_trace_current',
+                    []
+                )
+            )
+            + 1
+        )
+
+        _started_at = (
+            time.perf_counter()
+        )
+
+        _worksheet = kwargs.get(
+            'worksheet',
+            None
+        )
+
+        _ttl = kwargs.get(
+            'ttl',
+            None
+        )
+
+        _success = False
+        _error = ''
+        _result = None
+
+        try:
+
+            _result = _original_conn_read(
+                *args,
+                **kwargs
+            )
+
+            _success = True
+
+            return _result
+
+        except Exception as e:
+
+            _error = str(e)
+
+            raise
+
+        finally:
+
+            _elapsed_ms = (
+                time.perf_counter()
+                - _started_at
+            ) * 1000
+
+            _trace_item = {
+                'seq': _seq,
+                'timestamp': datetime.now(
+                    TZ_KST
+                ).strftime(
+                    "%H:%M:%S.%f"
+                )[:-3],
+                'worksheet': str(
+                    _worksheet
+                ),
+                'ttl': str(
+                    _ttl
+                ),
+                'elapsed_ms': round(
+                    _elapsed_ms,
+                    1
+                ),
+                'success': bool(
+                    _success
+                ),
+                'error': _error[:300],
+            }
+
+            st.session_state[
+                '_gtl_google_read_trace_current'
+            ].append(
+                _trace_item
+            )
+
+
+    _gtl_traced_conn_read.__name__ = (
+        getattr(
+            _original_conn_read,
+            '__name__',
+            'read'
+        )
+    )
+
+    _gtl_traced_conn_read._gtl_google_read_trace_wrapped = True
+
+    _gtl_traced_conn_read._gtl_google_read_trace_original = (
+        _original_conn_read
+    )
+
+    conn.read = (
+        _gtl_traced_conn_read
+    )
+
+# ==============================================================================
+# 1.04.04 | TRIP_CONFIGS = get_trip_configs() 실행부
+# ==============================================================================
 # ⚠️ 이 줄은 기존 그대로 유지
 TRIP_CONFIGS = get_trip_configs()
 
@@ -7357,3 +7525,91 @@ except Exception:
 # ------------------------------------------------------------------------------
 
 _frp_checkpoint("6 종료")
+
+
+# ==============================================================================
+# 6.05.03 | Google READ 호출 결과 표시
+# ==============================================================================
+# 목적:
+# 현재 rerun에서 실제 발생한 conn.read() 호출을 화면에 표시한다.
+# ==============================================================================
+
+try:
+
+    _google_read_trace = (
+        st.session_state.get(
+            '_gtl_google_read_trace_current',
+            []
+        )
+    )
+
+    _google_read_total_ms = sum(
+        float(
+            item.get(
+                'elapsed_ms',
+                0
+            )
+        )
+        for item in _google_read_trace
+    )
+
+    st.markdown(
+        "### 🔬 Google READ 호출 진단"
+    )
+
+    st.write(
+        f"**현재 rerun 실제 Google READ: "
+        f"{len(_google_read_trace)}회**"
+        f" | 합계: "
+        f"**{_google_read_total_ms:,.1f}ms**"
+    )
+
+    if not _google_read_trace:
+
+        st.info(
+            "이번 rerun에서는 실제 conn.read()가 호출되지 않았습니다. "
+            "메모리 또는 캐시 경로입니다."
+        )
+
+    else:
+
+        for item in _google_read_trace:
+
+            _status = (
+                "✅"
+                if item.get(
+                    'success',
+                    False
+                )
+                else "❌"
+            )
+
+            st.write(
+                f"{_status} "
+                f"#{item.get('seq', '-')}"
+                f" | "
+                f"{item.get('timestamp', '-')}"
+                f" | "
+                f"Sheet="
+                f"`{item.get('worksheet', '-')}`"
+                f" | TTL="
+                f"`{item.get('ttl', '-')}`"
+                f" | "
+                f"**{item.get('elapsed_ms', 0):,.1f}ms**"
+            )
+
+            if item.get(
+                'error'
+            ):
+
+                st.caption(
+                    f"오류: "
+                    f"{item.get('error')}"
+                )
+
+except Exception as _google_read_diag_error:
+
+    st.caption(
+        "Google READ 진단 표시 실패: "
+        f"{_google_read_diag_error}"
+    )
