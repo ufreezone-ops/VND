@@ -2495,6 +2495,73 @@ if _load_path_diag:
     )
 
 
+# ============================================================
+# 2.03.09 | Streamlit Session Lifecycle Diagnostic
+# ============================================================
+# 목적:
+#   active_ledger_df가 사라지는 원인이
+#   ① Streamlit session 재생성인지
+#   ② 서버 프로세스 재시작인지
+#   구분한다.
+#
+# Google Sheets 접근:
+#   0회
+#
+# 기록:
+#   /tmp/gtl_session_lifecycle.log
+# ============================================================
+
+import os
+import uuid
+
+_SESSION_LIFECYCLE_LOG = (
+    "/tmp/gtl_session_lifecycle.log"
+)
+
+if (
+    'gtl_session_instance_id'
+    not in st.session_state
+):
+
+    st.session_state[
+        'gtl_session_instance_id'
+    ] = str(
+        uuid.uuid4()
+    )
+
+    _session_event = {
+        'event': 'NEW_STREAMLIT_SESSION',
+        'timestamp': datetime.now(
+            TZ_KST
+        ).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+        'pid': os.getpid(),
+        'session_id': st.session_state[
+            'gtl_session_instance_id'
+        ],
+    }
+
+    try:
+
+        with open(
+            _SESSION_LIFECYCLE_LOG,
+            'a',
+            encoding='utf-8'
+        ) as f:
+
+            f.write(
+                json.dumps(
+                    _session_event,
+                    ensure_ascii=False
+                )
+                + "\n"
+            )
+
+    except Exception:
+        pass
+
+
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
 # ------------------------------------------------------------------------------
