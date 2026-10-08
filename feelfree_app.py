@@ -4088,80 +4088,79 @@ with st.sidebar:
             render_currency_card(c, is_secondary=False)
 
         # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync
-st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
-st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
-st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+        st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
+        st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
 
-if not is_upcoming:
-    st.divider()
-    render_dday_control_tower()
+        if not is_upcoming:
+            st.divider()
+            render_dday_control_tower()
 
-st.divider()
-st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+        st.divider()
+        st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
 
-# ⚡ 사용자가 수동으로 버튼을 누를 때만 구글 시트에서 강제 최신화(force_cloud=True)
-if st.button(
-    "🔄 Cloud Refresh (데이터 동기화)",
-    use_container_width=True,
-    type="primary"
-):
-    st.cache_data.clear()
-    smart_cache_clear()
+        # ⚡ 사용자가 수동으로 버튼을 누를 때만 구글 시트에서 강제 최신화(force_cloud=True)
+        if st.button(
+            "🔄 Cloud Refresh (데이터 동기화)",
+            use_container_width=True,
+            type="primary"
+        ):
+            st.cache_data.clear()
+            smart_cache_clear()
 
-    if 'cached_trip_configs' in st.session_state:
-        del st.session_state['cached_trip_configs']
+            if 'cached_trip_configs' in st.session_state:
+                del st.session_state['cached_trip_configs']
 
-    pulled_df = load_data(
-        ACTIVE_SHEET,
-        force_cloud=True
-    )
-
-    load_cash_inventory(
-        force_cloud=True
-    )
-
-    re_calc_df = recalculate_entire_ledger(
-        pulled_df
-    )
-
-    st.session_state.active_ledger_df = re_calc_df
-
-    try:
-        conn.update(
-            worksheet=ACTIVE_SHEET,
-            data=re_calc_df.reindex(
-                columns=FINAL_COLUMNS
+            pulled_df = load_data(
+                ACTIVE_SHEET,
+                force_cloud=True
             )
-        )
 
-        st.toast(
-            "✅ 클라우드 동기화 및 지출 정합성 복구 완료!",
-            icon="🎉"
-        )
+            load_cash_inventory(
+                force_cloud=True
+            )
 
-    except Exception as e_cr:
-        st.error(
-            f"동기화 에러: {e_cr}"
-        )
+            re_calc_df = recalculate_entire_ledger(
+                pulled_df
+            )
 
-    time.sleep(0.5)
-    st.rerun()
+            st.session_state.active_ledger_df = re_calc_df
 
-if secondary_currs:
-    st.markdown(
-        "<div style='margin-top: 15px;'></div>",
-        unsafe_allow_html=True
-    )
+            try:
+                conn.update(
+                    worksheet=ACTIVE_SHEET,
+                    data=re_calc_df.reindex(
+                        columns=FINAL_COLUMNS
+                    )
+                )
 
-    st.caption(
-        "🌐 보조/기타 통화 잔고"
-    )
+                st.toast(
+                    "✅ 클라우드 동기화 및 지출 정합성 복구 완료!",
+                    icon="🎉"
+                )
 
-    for c in secondary_currs:
-        render_currency_card(
-            c,
-            is_secondary=True
-        )
+            except Exception as e_cr:
+                st.error(
+                    f"동기화 에러: {e_cr}"
+                )
+
+            time.sleep(0.5)
+            st.rerun()
+
+        # 사이드바 하단의 보조/기타 통화 잔고
+        if secondary_currs:
+            st.markdown(
+                "<div style='margin-top: 15px;'></div>",
+                unsafe_allow_html=True
+            )
+
+            st.caption("🌐 보조/기타 통화 잔고")
+
+            for c in secondary_currs:
+                render_currency_card(
+                    c,
+                    is_secondary=True
+                )
 
 # ------------------------------------------------------------------------------
 # 4.02.00 | Top Navigation Router (여행지 선택 및 관제탑 모드 스위처)
