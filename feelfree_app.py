@@ -114,59 +114,40 @@ def infer_node_info(c_name, def_c, def_s, def_t, def_m):
     if any(k in c_upper for k in ["사이프러스", "CYPRUS", "키프로스"]): return "EUR", "€", 2, 1
     return def_c, def_s, def_t, def_m
 
-# ============================================================
+# ==============================================================================
 # 1.04.02 | Control Tower Config Loader & Node Assembler
-# 🔍 TEMP DIAGNOSTIC VERSION
-#
+# ==============================================================================
 # 목적:
-#   10분 TTL 만료 후 발생하는 대규모 Google 지연이
-#   CONFIG_SHEET의 get_trip_configs()에서 발생하는지 측정한다.
+#   _GTL_CONFIG_는 여행 생성 시 만들어진 후 거의 변경되지 않는
+#   정적 설정 데이터이므로 Session State가 아니라 앱 전체 Cache를 사용한다.
 #
-# 기록:
-#   /tmp/get_trip_configs_diagnostic.jsonl
+# 동작:
+#   - 최초 1회: Google READ
+#   - 이후 모든 Session: Cache 사용
+#   - TTL 없음
+#   - 새 여행 생성 / Cloud Refresh에서 st.cache_data.clear()가 실행되면
+#     다음 접근 시 다시 Google READ
 #
-# Google 진단 로그 저장을 위해 Google Sheets에는 접근하지 않는다.
-# ============================================================
+# 중요:
+#   CONFIG_SHEET 자체의 conn.read()에는 ttl=0s를 사용한다.
+#   실제 재조회 여부는 바깥의 @st.cache_data가 결정한다.
+# ==============================================================================
 
+@st.cache_data(
+    show_spinner=False
+)
 def get_trip_configs():
 
     _func_started_at = time.perf_counter()
 
-    _diag_path = "/tmp/get_trip_configs_diagnostic.jsonl"
+    _diag_path = (
+        "/tmp/get_trip_configs_diagnostic.jsonl"
+    )
 
     # --------------------------------------------------------
-    # 1. Session Memory Cache Hit
+    # 1. Google CONFIG_SHEET READ
     # --------------------------------------------------------
-    if 'cached_trip_configs' in st.session_state and st.session_state.cached_trip_configs:
 
-        _elapsed_ms = (time.perf_counter() - _func_started_at) * 1000
-
-        _diag_item = {
-            "timestamp": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"),
-            "event": "session_cache_hit",
-            "sheet": str(CONFIG_SHEET),
-            "read_elapsed_ms": 0.0,
-            "function_elapsed_ms": round(_elapsed_ms, 1),
-            "attempts": 0,
-        }
-
-        try:
-            with open(_diag_path, "a", encoding="utf-8") as f:
-                f.write(
-                    json.dumps(
-                        _diag_item,
-                        ensure_ascii=False
-                    ) + "\n"
-                )
-        except Exception:
-            pass
-
-        return st.session_state.cached_trip_configs
-
-
-    # --------------------------------------------------------
-    # 2. Google CONFIG_SHEET READ
-    # --------------------------------------------------------
     _read_started_at = time.perf_counter()
 
     cfg_df = None
@@ -177,57 +158,81 @@ def get_trip_configs():
         _read_attempts += 1
 
         try:
+
             cfg_df = conn.read(
                 worksheet=CONFIG_SHEET,
-                ttl="10m"
+                ttl="0s"
             )
 
-            if cfg_df is not None and not cfg_df.empty:
+            if (
+                cfg_df is not None
+                and not cfg_df.empty
+            ):
+
                 break
 
         except Exception as e:
 
-            if attempt < 2 and (
-                "429" in str(e)
-                or "Quota" in str(e)
+            if (
+                attempt < 2
+                and (
+                    "429" in str(e)
+                    or "Quota" in str(e)
+                )
             ):
+
                 time.sleep(2.5)
+
                 continue
 
             st.error(
-                f"🚨 **관제탑 설정('{CONFIG_SHEET}') "
+                f"🚨 **관제탑 설정("
+                f"'{CONFIG_SHEET}') "
                 f"로드 실패 (API 과부하).**"
             )
+
             st.stop()
 
-
     _read_elapsed_ms = (
-        time.perf_counter() - _read_started_at
+        time.perf_counter()
+        - _read_started_at
     ) * 1000
 
+    # --------------------------------------------------------
+    # 2. Empty Config Protection
+    # --------------------------------------------------------
 
-    # --------------------------------------------------------
-    # 3. Empty Config Protection
-    # --------------------------------------------------------
-    if cfg_df is None or cfg_df.empty:
+    if (
+        cfg_df is None
+        or cfg_df.empty
+    ):
 
         st.error(
-            f"🚨 **관제탑 설정('{CONFIG_SHEET}')이 비어있습니다.**"
+            f"🚨 **관제탑 설정("
+            f"'{CONFIG_SHEET}')이 "
+            f"비어있습니다.**"
         )
 
         st.stop()
 
+    # --------------------------------------------------------
+    # 3. Dynamic Config Assembly
+    # --------------------------------------------------------
 
-    # --------------------------------------------------------
-    # 4. Dynamic Config Assembly
-    # --------------------------------------------------------
     dynamic_configs = {}
 
     for _, row in cfg_df.iterrows():
 
-        raw_cats = str(
-            row['Categories']
-        ).replace("，", ",").split(",")
+        raw_cats = (
+            str(
+                row['Categories']
+            )
+            .replace(
+                "，",
+                ","
+            )
+            .split(",")
+        )
 
         cats = [
             c.strip()
@@ -236,16 +241,30 @@ def get_trip_configs():
         ]
 
         travelers = (
-            int(row['Travelers'])
-            if 'Travelers' in row
-            and pd.notna(row['Travelers'])
+            int(
+                row['Travelers']
+            )
+            if (
+                'Travelers'
+                in row
+                and pd.notna(
+                    row['Travelers']
+                )
+            )
             else 2
         )
 
         stay_mapping = (
-            str(row['Stay_Mapping']).strip()
-            if 'Stay_Mapping' in row
-            and pd.notna(row['Stay_Mapping'])
+            str(
+                row['Stay_Mapping']
+            ).strip()
+            if (
+                'Stay_Mapping'
+                in row
+                and pd.notna(
+                    row['Stay_Mapping']
+                )
+            )
             else ""
         )
 
@@ -262,14 +281,22 @@ def get_trip_configs():
         ).strip()
 
         main_tz = (
-            int(row['Timezone'])
-            if pd.notna(row['Timezone'])
+            int(
+                row['Timezone']
+            )
+            if pd.notna(
+                row['Timezone']
+            )
             else 9
         )
 
         main_mult = (
-            int(row['Multiplier'])
-            if pd.notna(row['Multiplier'])
+            int(
+                row['Multiplier']
+            )
+            if pd.notna(
+                row['Multiplier']
+            )
             else 1
         )
 
@@ -286,7 +313,10 @@ def get_trip_configs():
 
             parts = (
                 stay_mapping
-                .replace(" ", "")
+                .replace(
+                    " ",
+                    ""
+                )
                 .split(",")
             )
 
@@ -299,16 +329,23 @@ def get_trip_configs():
                         .strip()
                     )
 
-                    if c_name and c_name not in nodes:
+                    if (
+                        c_name
+                        and c_name
+                        not in nodes
+                    ):
 
-                        inf_c, inf_s, inf_t, inf_m = (
-                            infer_node_info(
-                                c_name,
-                                main_curr,
-                                main_sym,
-                                main_tz,
-                                main_mult
-                            )
+                        (
+                            inf_c,
+                            inf_s,
+                            inf_t,
+                            inf_m
+                        ) = infer_node_info(
+                            c_name,
+                            main_curr,
+                            main_sym,
+                            main_tz,
+                            main_mult
                         )
 
                         nodes[c_name] = {
@@ -319,35 +356,38 @@ def get_trip_configs():
                         }
 
         dynamic_configs[
-            str(row['TripName'])
+            str(
+                row['TripName']
+            )
         ] = {
-            "sheet": str(row['SheetName']),
+            "sheet": str(
+                row['SheetName']
+            ),
             "nodes": nodes,
             "cats": cats,
             "travelers": travelers,
             "stay_mapping": stay_mapping
         }
 
+    # --------------------------------------------------------
+    # 4. Diagnostic Log
+    # --------------------------------------------------------
 
-    # --------------------------------------------------------
-    # 5. Session Cache 저장
-    # --------------------------------------------------------
-    st.session_state.cached_trip_configs = dynamic_configs
-
-
-    # --------------------------------------------------------
-    # 6. 진단 로그 기록
-    # --------------------------------------------------------
     _function_elapsed_ms = (
-        time.perf_counter() - _func_started_at
+        time.perf_counter()
+        - _func_started_at
     ) * 1000
 
     _diag_item = {
-        "timestamp": datetime.now(TZ_KST).strftime(
+        "timestamp": datetime.now(
+            TZ_KST
+        ).strftime(
             "%Y-%m-%d %H:%M:%S"
         ),
         "event": "google_read",
-        "sheet": str(CONFIG_SHEET),
+        "sheet": str(
+            CONFIG_SHEET
+        ),
         "read_elapsed_ms": round(
             _read_elapsed_ms,
             1
@@ -357,9 +397,12 @@ def get_trip_configs():
             1
         ),
         "attempts": _read_attempts,
+        "cache_type": "st.cache_data",
+        "ttl": "NONE",
     }
 
     try:
+
         with open(
             _diag_path,
             "a",
@@ -370,14 +413,21 @@ def get_trip_configs():
                 json.dumps(
                     _diag_item,
                     ensure_ascii=False
-                ) + "\n"
+                )
+                + "\n"
             )
 
     except Exception:
         pass
 
-
     return dynamic_configs
+
+
+# ------------------------------------------------------------------------------
+# Global Trip Config
+# ------------------------------------------------------------------------------
+
+TRIP_CONFIGS = get_trip_configs()
 
 
 # ==============================================================================
@@ -3467,23 +3517,30 @@ def commit_ledger_to_cloud():
     return False
 
 
-# ------------------------------------------------------------------------------
-# 2.05.04 | Cash Inventory Cloud Loader & Saver (Memory-First)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 2.05.04 | Cash Inventory Cloud Loader & Saver
+# ==============================================================================
+# 목적:
+#   _CASH_INVENTORY_는 하루 마감용 데이터이므로
+#   Session State가 아닌 앱 전체 Cache를 사용한다.
+#
+# 동작:
+#   - 최초 접근: Google READ 1회
+#   - 이후 모든 Session: Cache 사용
+#   - TTL 없음
+#   - force_cloud=True: Cache 무효화 후 Google 최신값 READ
+#   - 저장 성공 후: Google WRITE + Cache 무효화 + 현재 Session 갱신
+#
+# 중요:
+#   CASH는 일반적인 화면 이동/Session 재생성 때문에
+#   매번 Google READ하지 않는다.
+# ==============================================================================
 
-def load_cash_inventory(
-    force_cloud=False
-):
 
-    if (
-        not force_cloud
-        and 'cached_cash_df'
-        in st.session_state
-        and st.session_state.cached_cash_df
-        is not None
-    ):
-
-        return st.session_state.cached_cash_df
+@st.cache_data(
+    show_spinner=False
+)
+def _load_cash_inventory_cloud():
 
     for attempt in range(3):
 
@@ -3491,7 +3548,7 @@ def load_cash_inventory(
 
             df = conn.read(
                 worksheet=CASH_SHEET,
-                ttl="10m"
+                ttl="0s"
             )
 
             if (
@@ -3499,13 +3556,17 @@ def load_cash_inventory(
                 and not df.empty
             ):
 
-                st.session_state.cached_cash_df = (
-                    df
-                )
+                return df.copy()
 
-                return df
-
-            break
+            return pd.DataFrame(
+                columns=[
+                    'TripName',
+                    'Currency',
+                    'Bill_Counts',
+                    'Total_Amount',
+                    'Updated_At'
+                ]
+            )
 
         except Exception as e:
 
@@ -3518,11 +3579,12 @@ def load_cash_inventory(
             ):
 
                 time.sleep(1.5)
+
                 continue
 
             break
 
-    empty_df = pd.DataFrame(
+    return pd.DataFrame(
         columns=[
             'TripName',
             'Currency',
@@ -3532,11 +3594,54 @@ def load_cash_inventory(
         ]
     )
 
+
+def load_cash_inventory(
+    force_cloud=False
+):
+
+    # --------------------------------------------------------
+    # 1. 강제 Cloud Refresh
+    # --------------------------------------------------------
+
+    if force_cloud:
+
+        try:
+
+            _load_cash_inventory_cloud.clear()
+
+        except Exception:
+
+            pass
+
+    # --------------------------------------------------------
+    # 2. Session Memory 우선
+    # --------------------------------------------------------
+
+    if (
+        not force_cloud
+        and
+        'cached_cash_df'
+        in st.session_state
+        and
+        st.session_state.cached_cash_df
+        is not None
+    ):
+
+        return (
+            st.session_state.cached_cash_df
+        )
+
+    # --------------------------------------------------------
+    # 3. App-wide Cache
+    # --------------------------------------------------------
+
+    df = _load_cash_inventory_cloud()
+
     st.session_state.cached_cash_df = (
-        empty_df
+        df
     )
 
-    return empty_df
+    return df
 
 
 def save_cash_inventory(
@@ -3547,6 +3652,10 @@ def save_cash_inventory(
 ):
 
     try:
+
+        # ----------------------------------------------------
+        # 1. 최신 Cloud 데이터를 확보
+        # ----------------------------------------------------
 
         df = load_cash_inventory(
             force_cloud=True
@@ -3567,6 +3676,10 @@ def save_cash_inventory(
                 ]
             )
 
+        # ----------------------------------------------------
+        # 2. 저장 문자열 구성
+        # ----------------------------------------------------
+
         counts_str = ";".join(
             [
                 f"{k}:{v}"
@@ -3581,6 +3694,10 @@ def save_cash_inventory(
             "%Y-%m-%d %H:%M:%S"
         )
 
+        # ----------------------------------------------------
+        # 3. 기존 여행/통화 행 수정
+        # ----------------------------------------------------
+
         mask = (
             (df['TripName'] == trip_name)
             &
@@ -3589,7 +3706,9 @@ def save_cash_inventory(
 
         if mask.any():
 
-            idx = df[mask].index[0]
+            idx = df[
+                mask
+            ].index[0]
 
             df.at[
                 idx,
@@ -3626,10 +3745,30 @@ def save_cash_inventory(
                 ignore_index=True
             )
 
+        # ----------------------------------------------------
+        # 4. Google WRITE
+        # ----------------------------------------------------
+
         conn.update(
             worksheet=CASH_SHEET,
             data=df
         )
+
+        # ----------------------------------------------------
+        # 5. App-wide Cache 무효화
+        # ----------------------------------------------------
+
+        try:
+
+            _load_cash_inventory_cloud.clear()
+
+        except Exception:
+
+            pass
+
+        # ----------------------------------------------------
+        # 6. 현재 Session은 방금 저장한 데이터 유지
+        # ----------------------------------------------------
 
         st.session_state.cached_cash_df = (
             df
