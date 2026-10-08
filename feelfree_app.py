@@ -2499,24 +2499,22 @@ if _load_path_diag:
 # 2.03.09 | Streamlit Session Lifecycle Diagnostic
 # ============================================================
 # 목적:
-#   active_ledger_df가 사라지는 원인이
-#   ① Streamlit session 재생성인지
-#   ② 서버 프로세스 재시작인지
-#   구분한다.
+#   active_ledger_df가 사라지는 시점에
+#   Streamlit session 자체가 새로 만들어졌는지 확인한다.
 #
-# Google Sheets 접근:
-#   0회
-#
-# 기록:
-#   /tmp/gtl_session_lifecycle.log
+# 핵심:
+#   session_state가 유지되면 session_id / rerun_count가 계속 유지된다.
+#   session_state가 새로 만들어지면 session_id가 새로 생성되고
+#   rerun_count가 1부터 다시 시작된다.
 # ============================================================
 
 import os
 import uuid
 
-_SESSION_LIFECYCLE_LOG = (
-    "/tmp/gtl_session_lifecycle.log"
-)
+
+# ============================================================
+# 1. Session 최초 생성 감지
+# ============================================================
 
 if (
     'gtl_session_instance_id'
@@ -2529,37 +2527,88 @@ if (
         uuid.uuid4()
     )
 
-    _session_event = {
-        'event': 'NEW_STREAMLIT_SESSION',
-        'timestamp': datetime.now(
+    st.session_state[
+        'gtl_session_created_at'
+    ] = datetime.now(
+        TZ_KST
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    st.session_state[
+        'gtl_session_rerun_count'
+    ] = 0
+
+
+# ============================================================
+# 2. Rerun 횟수 누적
+# ============================================================
+
+st.session_state[
+    'gtl_session_rerun_count'
+] = (
+    st.session_state.get(
+        'gtl_session_rerun_count',
+        0
+    )
+    + 1
+)
+
+
+# ============================================================
+# 3. 현재 세션 정보
+# ============================================================
+
+_gtl_session_diag = {
+
+    'session_id':
+        st.session_state.get(
+            'gtl_session_instance_id'
+        ),
+
+    'session_created_at':
+        st.session_state.get(
+            'gtl_session_created_at'
+        ),
+
+    'rerun_count':
+        st.session_state.get(
+            'gtl_session_rerun_count'
+        ),
+
+    'process_id':
+        os.getpid(),
+
+    'active_ledger_df_exists':
+        'active_ledger_df'
+        in st.session_state,
+
+    'last_loaded_sheet':
+        st.session_state.get(
+            'last_loaded_sheet'
+        ),
+
+    'timestamp':
+        datetime.now(
             TZ_KST
         ).strftime(
             "%Y-%m-%d %H:%M:%S"
         ),
-        'pid': os.getpid(),
-        'session_id': st.session_state[
-            'gtl_session_instance_id'
-        ],
-    }
+}
 
-    try:
 
-        with open(
-            _SESSION_LIFECYCLE_LOG,
-            'a',
-            encoding='utf-8'
-        ) as f:
+# ============================================================
+# 4. 화면 표시
+# ============================================================
 
-            f.write(
-                json.dumps(
-                    _session_event,
-                    ensure_ascii=False
-                )
-                + "\n"
-            )
+st.markdown(
+    "### 🧬 Streamlit 세션 생명주기 진단"
+)
 
-    except Exception:
-        pass
+st.json(
+    _gtl_session_diag
+)
+
 
 
 # ------------------------------------------------------------------------------
