@@ -428,6 +428,145 @@ with tab1:
     # - 필수 생활비, 대출 원리금, 숨겨진 생필품 마트 소비비 입력기
     st.info("🚧 **[Tab 1 뼈대 준비 완공]** 이곳에 'ESBI 경제사분면 자가 선택기'와 '소득/지출 상세 입력 슬라이더'가 이식될 예정입니다. 편안한 마음으로 다음 탭들을 차례로 구경해 보세요.")
 
+# ==============================================================================
+# 6.01.00 | Tab 1: 나의 현재 좌표 (ESBI 사분면 및 자산 현황 상세 입력)
+# ==============================================================================
+with tab1:
+    st.markdown("### 💼 나의 현재 수입 구조와 재무 현황")
+    
+    st.markdown("""
+        <div class='compassion-card'>
+            <h4>⚖️ 그동안 참 성실하고 치열하게 삶을 가꾸어 오셨습니다.</h4>
+            <p>
+                매달 가정을 지키기 위해 흘리는 땀과 에너지는 어떤 성격을 띠고 있을까요? 
+                나의 주 소득원이 머무는 사분면을 응시하고, 매달 들어오고 나가는 현금의 흐름을 슬라이더를 통해 거울 보듯 조용히 마주해보는 시간입니다.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 6.01.01 | 로버트 기요사키 ESBI 4사분면 현황 미니 맵
+    # --------------------------------------------------------------------------
+    st.markdown("#### 🧭 나의 에너지가 머무는 소득 사분면")
+    
+    col_e, col_s, col_b, col_i = st.columns(4)
+    
+    # 선택된 사분면 하이라이트 함수
+    def get_quad_style(q_code):
+        is_primary = (q_code in st.session_state.primary_quadrant)
+        is_side = (st.session_state.has_side_gig and q_code in st.session_state.side_quadrant)
+        
+        if is_primary:
+            return "border: 2px solid #F59E0B; background: rgba(245, 158, 11, 0.12);", "🌟 주 소득원"
+        elif is_side:
+            return "border: 2px dashed #38BDF8; background: rgba(56, 189, 248, 0.10);", "➕ 부업/N잡"
+        else:
+            return "border: 1px solid #334155; background: rgba(30, 41, 59, 0.4); opacity: 0.6;", ""
+
+    for col, (q_code, q_info) in zip([col_e, col_s, col_b, col_i], ESBI_QUADRANTS.items()):
+        border_style, tag = get_quad_style(q_code)
+        tag_html = f"<div style='font-size:11px; font-weight:800; color:#FBBF24; margin-bottom:4px;'>{tag}</div>" if tag else "<div style='height:18px;'></div>"
+        
+        col.markdown(f"""
+            <div style='{border_style} border-radius:10px; padding:12px 10px; min-height:130px; text-align:center;'>
+                {tag_html}
+                <div style='font-size:14px; font-weight:bold; color:#F8FAFC;'>{q_info['badge'].split(' ')[1]} ({q_code})</div>
+                <div style='font-size:11.5px; color:#94A3B8; margin-top:6px; line-height:1.4;'>{q_info['desc']}</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
+    st.divider()
+
+    # --------------------------------------------------------------------------
+    # 6.01.02 | 수입 & 지출 슬라이더 컨트롤러 (키패드 0% 터치 인터랙션)
+    # --------------------------------------------------------------------------
+    c_in, c_out = st.columns([1, 1], gap="large")
+    
+    with c_in:
+        st.markdown("#### 📥 매달 들어오는 수입 (월 단위)")
+        
+        # 1. 본인 노동소득
+        st.session_state.monthly_labor_income = st.slider(
+            "1. 본인 월 소득 (급여 / 사업소득)",
+            min_value=0, max_value=2000, value=int(st.session_state.monthly_labor_income), step=10, format="%d만 원"
+        )
+        
+        # 2. 배우자 소득
+        st.session_state.monthly_spouse_income = st.slider(
+            "2. 배우자 월 소득 (맞벌이 등)",
+            min_value=0, max_value=1500, value=int(st.session_state.monthly_spouse_income), step=10, format="%d만 원"
+        )
+        
+        # 3. 자산/권리 소득 (일하지 않아도 나오는 돈)
+        st.session_state.monthly_asset_income = st.slider(
+            "3. 일하지 않아도 나오는 소득 (연금/배당/임대/로열티)",
+            min_value=0, max_value=1000, value=int(st.session_state.monthly_asset_income), step=10, format="%d만 원"
+        )
+
+        total_income = st.session_state.monthly_labor_income + st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income
+        st.markdown(f"""
+            <div style='background:rgba(30, 41, 59, 0.6); padding:10px 14px; border-radius:8px; border:1px solid #334155; margin-top:14px;'>
+                <span style='font-size:13px; color:#94A3B8;'>가정 총 월수입 합계:</span> 
+                <b style='font-size:18px; color:#38BDF8; float:right;'>{total_income:,.0f}만 원</b>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with c_out:
+        st.markdown("#### 📤 매달 나가는 지출 & 보유 자산")
+        
+        # 1. 필수 생활비
+        st.session_state.monthly_living_cost = st.slider(
+            "1. 필수 생활비 (식비, 공과금, 보육/교육비 등)",
+            min_value=50, max_value=1500, value=int(st.session_state.monthly_living_cost), step=10, format="%d만 원"
+        )
+        
+        # 2. 대출 상환액
+        st.session_state.monthly_debt_payment = st.slider(
+            "2. 대출 원리금 상환액 (주담대, 신용대출 등)",
+            min_value=0, max_value=1000, value=int(st.session_state.monthly_debt_payment), step=10, format="%d만 원"
+        )
+        
+        # 3. 💡 [핵심 복선] 매달 마트/쿠팡에 지불하는 생필품비
+        st.session_state.monthly_consumable_spend = st.slider(
+            "3. 어차피 마트/쿠팡에서 쓰는 생필품비 (세제, 치약, 영양제 등)",
+            min_value=10, max_value=200, value=int(st.session_state.monthly_consumable_spend), step=5, format="%d만 원"
+        )
+        st.caption("💡 이 생필품비는 필수 생활비 안에 이미 포함되어 있으나, 나중에 '자산의 씨앗'이 될 소중한 금액입니다.")
+
+        # 4. 비상금
+        st.session_state.liquid_emergency_cash = st.slider(
+            "4. 당장 인출 가능한 비상 현금 / 예적금",
+            min_value=0, max_value=10000, value=int(st.session_state.liquid_emergency_cash), step=50, format="%d만 원"
+        )
+
+        total_expense = st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment
+        st.markdown(f"""
+            <div style='background:rgba(30, 41, 59, 0.6); padding:10px 14px; border-radius:8px; border:1px solid #334155; margin-top:14px;'>
+                <span style='font-size:13px; color:#94A3B8;'>매달 빠져나가는 고정지출 합계:</span> 
+                <b style='font-size:18px; color:#F87171; float:right;'>{total_expense:,.0f}만 원</b>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 6.01.03 | 실시간 현금흐름 요약 밸런스 카드
+    # --------------------------------------------------------------------------
+    st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
+    monthly_surplus = total_income - total_expense
+    
+    surplus_color = "#34D399" if monthly_surplus >= 0 else "#F87171"
+    surplus_text = f"+{monthly_surplus:,.0f}만 원 (흑자 흐름)" if monthly_surplus >= 0 else f"{monthly_surplus:,.0f}만 원 (적자 흐름)"
+    
+    st.markdown(f"""
+        <div style='background:linear-gradient(135deg, #1E293B 0%, #0F172A 100%); border:1.5px solid #334155; border-radius:12px; padding:16px 20px; text-align:center;'>
+            <span style='font-size:14px; color:#94A3B8; font-weight:600;'>매달 가계에 남는 순수 여유 자금 (월 현금흐름 밸런스)</span>
+            <div style='font-size:26px; font-weight:800; color:{surplus_color}; margin-top:4px;'>{surplus_text}</div>
+            <div style='font-size:12px; color:#64748B; margin-top:6px;'>
+                수입 슬라이더나 지출 슬라이더를 조절하시면 왼쪽 사이드바의 <b>'안심 버퍼 시간(개월 수)'</b>이 실시간으로 함께 변화합니다.
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
 
 # ------------------------------------------------------------------------------
 # 6.02.00 | Tab 2: 시간과 쉼표 (노동수입 한계 자각 및 숨고르기 시간 관제)
