@@ -2959,270 +2959,99 @@ def commit_ledger_to_cloud():
 
 
 # ==============================================================================
-# 2.05.04 | Cash Inventory Cloud Loader & Saver
+# 2.05.04 | Cash Inventory Cloud Loader & Optimized Single-Write Saver
 # ==============================================================================
 # 목적:
-#   _CASH_INVENTORY_는 하루 마감용 데이터이므로
-#   Session State가 아닌 앱 전체 Cache를 사용한다.
-#
-# 동작:
-#   - 최초 접근: Google READ 1회
-#   - 이후 모든 Session: Cache 사용
-#   - TTL 없음
-#   - force_cloud=True: Cache 무효화 후 Google 최신값 READ
-#   - 저장 성공 후: Google WRITE + Cache 무효화 + 현재 Session 갱신
-#
-# 중요:
-#   CASH는 일반적인 화면 이동/Session 재생성 때문에
-#   매번 Google READ하지 않는다.
+#   1. 지연 로딩용 영구 캐시 로더
+#   2. 저장 시 불필요한 구글 READ(force_cloud) 완전 제거 -> 구글 WRITE 딱 1회만 전송
+#   3. 저장 시간 수직 단축
 # ==============================================================================
 
-
-@st.cache_data(
-    show_spinner=False
-)
+@st.cache_data(show_spinner=False)
 def _load_cash_inventory_cloud():
-
     for attempt in range(3):
-
         try:
-
-            df = conn.read(
-                worksheet=CASH_SHEET,
-                ttl="0s"
-            )
-
-            if (
-                df is not None
-                and not df.empty
-            ):
-
+            df = conn.read(worksheet=CASH_SHEET)
+            if df is not None and not df.empty:
                 return df.copy()
-
             return pd.DataFrame(
-                columns=[
-                    'TripName',
-                    'Currency',
-                    'Bill_Counts',
-                    'Total_Amount',
-                    'Updated_At'
-                ]
+                columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At']
             )
-
         except Exception as e:
-
-            if (
-                attempt < 2
-                and (
-                    "429" in str(e)
-                    or "Quota" in str(e)
-                )
-            ):
-
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(1.5)
-
                 continue
-
             break
 
     return pd.DataFrame(
-        columns=[
-            'TripName',
-            'Currency',
-            'Bill_Counts',
-            'Total_Amount',
-            'Updated_At'
-        ]
+        columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At']
     )
 
 
-def load_cash_inventory(
-    force_cloud=False
-):
-
-    # --------------------------------------------------------
-    # 1. 강제 Cloud Refresh
-    # --------------------------------------------------------
-
+def load_cash_inventory(force_cloud=False):
     if force_cloud:
-
         try:
-
             _load_cash_inventory_cloud.clear()
-
         except Exception:
-
             pass
-
-    # --------------------------------------------------------
-    # 2. Session Memory 우선
-    # --------------------------------------------------------
 
     if (
         not force_cloud
-        and
-        'cached_cash_df'
-        in st.session_state
-        and
-        st.session_state.cached_cash_df
-        is not None
+        and 'cached_cash_df' in st.session_state
+        and st.session_state.cached_cash_df is not None
     ):
-
-        return (
-            st.session_state.cached_cash_df
-        )
-
-    # --------------------------------------------------------
-    # 3. App-wide Cache
-    # --------------------------------------------------------
+        return st.session_state.cached_cash_df
 
     df = _load_cash_inventory_cloud()
-
-    st.session_state.cached_cash_df = (
-        df
-    )
-
+    st.session_state.cached_cash_df = df
     return df
 
 
-def save_cash_inventory(
-    trip_name,
-    currency,
-    counts_dict,
-    total_amt
-):
-
+def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
+    """
+    ⚡ 최적화된 단일 쓰기(Single WRITE):
+    저장 전 구글 재조회(READ)를 제거하고, 메모리 데이터로 즉시 1회 쓰기 수행
+    """
     try:
+        # 1. 💡 구글 재조회 없이 현재 메모리에 있는 캐시 사용
+        df = st.session_state.get('cached_cash_df')
+        if df is None or df.empty:
+            df = load_cash_inventory(force_cloud=False)
 
-        # ----------------------------------------------------
-        # 1. 최신 Cloud 데이터를 확보
-        # ----------------------------------------------------
+        counts_str = ";".join([f"{k}:{v}" for k, v in counts_dict.items()])
+        now_str = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
 
-        df = load_cash_inventory(
-            force_cloud=True
-        )
-
-        if (
-            df is None
-            or df.empty
-        ):
-
-            df = pd.DataFrame(
-                columns=[
-                    'TripName',
-                    'Currency',
-                    'Bill_Counts',
-                    'Total_Amount',
-                    'Updated_At'
-                ]
-            )
-
-        # ----------------------------------------------------
-        # 2. 저장 문자열 구성
-        # ----------------------------------------------------
-
-        counts_str = ";".join(
-            [
-                f"{k}:{v}"
-                for k, v
-                in counts_dict.items()
-            ]
-        )
-
-        now_str = datetime.now(
-            TZ_KST
-        ).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-
-        # ----------------------------------------------------
-        # 3. 기존 여행/통화 행 수정
-        # ----------------------------------------------------
-
-        mask = (
-            (df['TripName'] == trip_name)
-            &
-            (df['Currency'] == currency)
-        )
-
+        # 2. 행 갱신 또는 추가
+        mask = (df['TripName'] == trip_name) & (df['Currency'] == currency)
         if mask.any():
-
-            idx = df[
-                mask
-            ].index[0]
-
-            df.at[
-                idx,
-                'Bill_Counts'
-            ] = counts_str
-
-            df.at[
-                idx,
-                'Total_Amount'
-            ] = total_amt
-
-            df.at[
-                idx,
-                'Updated_At'
-            ] = now_str
-
+            idx = df[mask].index[0]
+            df.at[idx, 'Bill_Counts'] = counts_str
+            df.at[idx, 'Total_Amount'] = total_amt
+            df.at[idx, 'Updated_At'] = now_str
         else:
+            new_row = pd.DataFrame([{
+                'TripName': trip_name,
+                'Currency': currency,
+                'Bill_Counts': counts_str,
+                'Total_Amount': total_amt,
+                'Updated_At': now_str
+            }])
+            df = pd.concat([df, new_row], ignore_index=True)
 
-            new_row = pd.DataFrame(
-                [{
-                    'TripName': trip_name,
-                    'Currency': currency,
-                    'Bill_Counts': counts_str,
-                    'Total_Amount': total_amt,
-                    'Updated_At': now_str
-                }]
-            )
+        # 3. 🚀 구글에 딱 1번만 쓰기(WRITE) 전송
+        conn.update(worksheet=CASH_SHEET, data=df)
 
-            df = pd.concat(
-                [
-                    df,
-                    new_row
-                ],
-                ignore_index=True
-            )
-
-        # ----------------------------------------------------
-        # 4. Google WRITE
-        # ----------------------------------------------------
-
-        conn.update(
-            worksheet=CASH_SHEET,
-            data=df
-        )
-
-        # ----------------------------------------------------
-        # 5. App-wide Cache 무효화
-        # ----------------------------------------------------
-
+        # 4. 메모리 캐시 갱신
+        st.session_state.cached_cash_df = df
         try:
-
             _load_cash_inventory_cloud.clear()
-
         except Exception:
-
             pass
-
-        # ----------------------------------------------------
-        # 6. 현재 Session은 방금 저장한 데이터 유지
-        # ----------------------------------------------------
-
-        st.session_state.cached_cash_df = (
-            df
-        )
 
         return True
 
     except Exception as e:
-
-        st.error(
-            f"🚨 지폐 실사 동기화 실패: {e}"
-        )
-
+        st.error(f"🚨 지폐 실사 동기화 실패: {e}")
         return False
 
 
