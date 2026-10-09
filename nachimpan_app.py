@@ -492,16 +492,72 @@ with tab1:
     st.divider()
 
     # --------------------------------------------------------------------------
-    # 6.01.03 | 비선형 맞춤 슬라이더(300~500만 중심) + 직접입력 양방향 동기화
+    # 6.01.03 | 슬라이더 전용 CSS (두께 5배 + 금액 라벨 손잡이 안쪽 완벽 안착)
     # --------------------------------------------------------------------------
-    # 💡 300~500만 원 구간이 정중앙에 오도록 설계된 비선형 자석 눈금 옵션들
-    INCOME_OPTIONS = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1200, 1500, 2000]
-    SPOUSE_OPTIONS = [0, 50, 100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000, 1500]
-    ASSET_OPTIONS  = [0, 10, 20, 30, 50, 70, 100, 150, 200, 300, 500, 1000]
+    st.markdown("""
+        <style>
+        /* 💡 1. 슬라이더 바 트랙 두께 5배 확대 (24px 도톰한 알약 형태) */
+        div[data-baseweb="slider"] {
+            margin-top: 8px !important;
+            margin-bottom: 8px !important;
+        }
+        div[data-baseweb="slider"] > div {
+            height: 24px !important;
+            border-radius: 12px !important;
+            background-color: #1E293B !important;
+            border: 1.5px solid #334155 !important;
+        }
+        /* 채워지는 활성 트랙 (오렌지 그라데이션) */
+        div[data-baseweb="slider"] > div > div:first-child {
+            height: 24px !important;
+            border-radius: 12px !important;
+            background: linear-gradient(90deg, #F59E0B 0%, #EA580C 100%) !important;
+        }
+        /* 💡 2. 슬라이더 손잡이를 70px 와이드 캡슐로 확장하여 금액이 쏙 들어가게 디자인 */
+        div[data-baseweb="slider"] div[role="slider"] {
+            height: 26px !important;
+            min-width: 72px !important;
+            border-radius: 13px !important;
+            background: #EA580C !important;
+            border: 2px solid #FFFFFF !important;
+            top: -2px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.5) !important;
+            cursor: grab !important;
+        }
+        div[data-baseweb="slider"] div[role="slider"]:active {
+            cursor: grabbing !important;
+            background: #C2410C !important;
+        }
+        /* 💡 3. 위에 떠다니던 금액 텍스트를 손잡이 캡슐 안쪽 중앙에 화이트 볼드로 고정 */
+        div[data-baseweb="slider"] div[role="slider"] > div {
+            position: static !important;
+            bottom: auto !important;
+            transform: none !important;
+            color: #FFFFFF !important;
+            font-size: 11px !important;
+            font-weight: 800 !important;
+            padding: 0 4px !important;
+            margin: 0 !important;
+            white-space: nowrap !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    LIVING_OPTIONS = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1500]
-    DEBT_OPTIONS   = [0, 30, 50, 70, 90, 100, 120, 150, 200, 250, 300, 400, 500, 700, 1000]
-    CASH_OPTIONS   = [0, 100, 300, 500, 800, 1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000, 7000, 10000]
+    # --------------------------------------------------------------------------
+    # 6.01.04 | 수입 & 지출 비선형 눈금 옵션 (월수입·월지출 전 항목 100% 동일 눈금)
+    # --------------------------------------------------------------------------
+    # 💡 [요청 반영] 300~500만이 정중앙에 오는 0~2,000만 원 표준 통일 눈금 (본인, 배우자, 자산, 생활비, 대출 모두 동일!)
+    MONTHLY_FLOW_OPTIONS = [
+        0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 
+        600, 700, 800, 1000, 1200, 1500, 2000
+    ]
+    # 보유 자산(비상금)은 축적 자산 특성에 맞춘 고유 눈금 (1,000~1,500만 원 중심)
+    CASH_OPTIONS = [
+        0, 100, 300, 500, 800, 1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000, 7000, 10000
+    ]
 
     def _sync_from_slider(key):
         val = st.session_state[f"sld_{key}"]
@@ -511,7 +567,6 @@ with tab1:
     def _sync_from_num(key, options):
         val = st.session_state[f"num_{key}"]
         st.session_state[key] = val
-        # 직접 친 숫자와 가장 가까운 슬라이더 눈금 위치로 자석 이동
         nearest = min(options, key=lambda x: abs(x - val))
         st.session_state[f"sld_{key}"] = nearest
 
@@ -520,7 +575,6 @@ with tab1:
             st.session_state[key_name] = default_v
         cur_val = int(st.session_state[key_name])
         
-        # 슬라이더 눈금에 현재 값이 없으면 가장 가까운 눈금으로 맞춤
         if f"sld_{key_name}" not in st.session_state:
             nearest_opt = min(options, key=lambda x: abs(x - cur_val))
             st.session_state[f"sld_{key_name}"] = nearest_opt
@@ -528,10 +582,9 @@ with tab1:
             st.session_state[f"num_{key_name}"] = cur_val
 
         st.markdown(f"<div style='font-size:13.5px; font-weight:600; color:#E2E8F0; margin-bottom:2px;'>{label_text}</div>", unsafe_allow_html=True)
-        col_slider, col_box = st.columns([3.2, 1.3], gap="small")
+        col_slider, col_box = st.columns([3.1, 1.3], gap="small")
         
         with col_slider:
-            # 💡 [핵심] 비선형 비균일 간격 슬라이더 (st.select_slider)
             st.select_slider(
                 label=label_text,
                 options=options,
@@ -542,7 +595,6 @@ with tab1:
                 label_visibility="collapsed"
             )
         with col_box:
-            # 💡 정밀 타이핑 입력칸
             st.number_input(
                 label=f"{label_text}_빈칸",
                 min_value=options[0],
@@ -554,62 +606,54 @@ with tab1:
                 label_visibility="collapsed"
             )
 
+    # 1. 입력 슬라이더 영역 (좌: 월수입 / 우: 월지출)
     c_in, c_out = st.columns([1, 1], gap="large")
     
     with c_in:
         st.markdown("#### 📥 월수입")
         
-        # 본인 월 소득: 300~500만 원이 정확히 슬라이더 정중앙에 위치!
         render_custom_input(
             "1. 본인 월 소득 (급여 / 사업소득)",
             "monthly_labor_income",
-            options=INCOME_OPTIONS,
+            options=MONTHLY_FLOW_OPTIONS,
             default_v=350,
             max_limit=2000
         )
         
+        # 💡 배우자 소득도 동일하게 최대 2000만 원까지 동일 눈금 적용!
         render_custom_input(
             "2. 배우자 월 소득 (맞벌이 등)",
             "monthly_spouse_income",
-            options=SPOUSE_OPTIONS,
+            options=MONTHLY_FLOW_OPTIONS,
             default_v=150,
-            max_limit=1500
+            max_limit=2000
         )
         
         render_custom_input(
             "3. 일하지 않아도 나오는 소득 (연금/배당/임대/로열티)",
             "monthly_asset_income",
-            options=ASSET_OPTIONS,
+            options=MONTHLY_FLOW_OPTIONS,
             default_v=0,
-            max_limit=1000
+            max_limit=2000
         )
-
-        total_income = st.session_state.monthly_labor_income + st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income
-        st.markdown(f"""
-            <div style='background:rgba(30, 41, 59, 0.6); padding:10px 14px; border-radius:8px; border:1px solid #334155; margin-top:10px;'>
-                <span style='font-size:13px; color:#94A3B8;'>가정 총 월수입 합계:</span> 
-                <b style='font-size:18px; color:#38BDF8; float:right;'>{total_income:,.0f}만 원</b>
-            </div>
-        """, unsafe_allow_html=True)
 
     with c_out:
         st.markdown("#### 📤 월지출")
         
-        # 필수 생활비: 250~350만 원이 슬라이더 정중앙에 위치!
         render_custom_input(
             "1. 필수 생활비 (식비, 공과금, 보육/교육비 등)",
             "monthly_living_cost",
-            options=LIVING_OPTIONS,
+            options=MONTHLY_FLOW_OPTIONS,
             default_v=280,
-            max_limit=1500
+            max_limit=2000
         )
         
         render_custom_input(
             "2. 대출 원리금 상환액 (주담대, 신용대출 등)",
             "monthly_debt_payment",
-            options=DEBT_OPTIONS,
+            options=MONTHLY_FLOW_OPTIONS,
             default_v=90,
-            max_limit=1000
+            max_limit=2000
         )
 
         render_custom_input(
@@ -620,18 +664,35 @@ with tab1:
             max_limit=10000
         )
 
-        total_expense = st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment
+    total_income = st.session_state.monthly_labor_income + st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income
+    total_expense = st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment
+
+    # --------------------------------------------------------------------------
+    # 6.01.05 | 💡 [수평 위치 100% 일치] 월수입 합계 & 월지출 합계 요약 박스
+    # --------------------------------------------------------------------------
+    st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+    c_sum_in, c_sum_out = st.columns([1, 1], gap="large")
+    
+    with c_sum_in:
         st.markdown(f"""
-            <div style='background:rgba(30, 41, 59, 0.6); padding:10px 14px; border-radius:8px; border:1px solid #334155; margin-top:10px;'>
-                <span style='font-size:13px; color:#94A3B8;'>매달 빠져나가는 고정지출 합계:</span> 
-                <b style='font-size:18px; color:#F87171; float:right;'>{total_expense:,.0f}만 원</b>
+            <div style='background:rgba(30, 41, 59, 0.6); padding:12px 16px; border-radius:10px; border:1px solid #334155; min-height:54px; display:flex; align-items:center; justify-content:space-between;'>
+                <span style='font-size:13.5px; color:#94A3B8; font-weight:600;'>가정 총 월수입 합계:</span> 
+                <b style='font-size:19px; color:#38BDF8;'>{total_income:,.0f}만 원</b>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with c_sum_out:
+        st.markdown(f"""
+            <div style='background:rgba(30, 41, 59, 0.6); padding:12px 16px; border-radius:10px; border:1px solid #334155; min-height:54px; display:flex; align-items:center; justify-content:space-between;'>
+                <span style='font-size:13.5px; color:#94A3B8; font-weight:600;'>매달 빠져나가는 고정지출 합계:</span> 
+                <b style='font-size:19px; color:#F87171;'>{total_expense:,.0f}만 원</b>
             </div>
         """, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.01.04 | 실시간 현금흐름 요약 밸런스 카드
+    # 6.01.06 | 실시간 현금흐름 요약 밸런스 카드
     # --------------------------------------------------------------------------
-    st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
     monthly_surplus = total_income - total_expense
     
     surplus_color = "#34D399" if monthly_surplus >= 0 else "#F87171"
