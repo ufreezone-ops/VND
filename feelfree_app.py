@@ -6495,8 +6495,8 @@ elif main_tab_choice == "돋보기":
             if len(lines) > 3: lines = lines[:3]
             return "<br>".join(lines)
 
-        # ⚡ [고속화 캐시 엔진] 돋보기 3대 데이터셋 전처리 메모이제이션
-        @st.cache_data(ttl=600)
+        # ⚡ [고속화 캐시 엔진] 돋보기 4대 데이터셋 전처리 메모이제이션 (ttl 제거 / 영구 캐시)
+        @st.cache_data(show_spinner=False)
         def parse_cached_market_items(df_records, travel_curr, war_rate):
             df_src = pd.DataFrame(df_records)
             market_keywords = ['마트', '시장', 'market', 'lotte', 'big c', 'go!', 'vinmart', 'winmart', 'coop', '야시장', '면세점', '파마씨티', 'pharmacity', '약국', '졸리', '성물', '기념품', '헬로', '한시장', '동바시장', '편의점']
@@ -6576,7 +6576,7 @@ elif main_tab_choice == "돋보기":
                 res_df['KRW_str'] = res_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원") if (war_rate > 0) else ""
             return res_df
 
-        @st.cache_data(ttl=600)
+        @st.cache_data(show_spinner=False)
         def parse_cached_food_items(df_records, travel_curr, war_rate):
             df_src = pd.DataFrame(df_records)
             def is_food(r):
@@ -6641,7 +6641,7 @@ elif main_tab_choice == "돋보기":
                 res_df['KRW_str'] = res_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원") if (war_rate > 0) else ""
             return res_df
 
-        @st.cache_data(ttl=600)
+        @st.cache_data(show_spinner=False)
         def parse_cached_traffic_items(df_records, travel_curr, war_rate):
             df_src = pd.DataFrame(df_records)
             def is_traffic(r):
@@ -6676,7 +6676,7 @@ elif main_tab_choice == "돋보기":
                 res_df['KRW_str'] = res_df['Local_val'].apply(lambda v: f"약 {round(v * war_rate, -2):,.0f}원") if (war_rate > 0) else ""
             return res_df
 
-        @st.cache_data(ttl=600)
+        @st.cache_data(show_spinner=False)
         def parse_cached_massage_items(df_records, travel_curr, war_rate):
             df_src = pd.DataFrame(df_records)
             m_df = df_src[(df_src['Category'] == '마사지') & (df_src['IsExpense'] == 1)].copy()
@@ -6725,7 +6725,7 @@ elif main_tab_choice == "돋보기":
             raw_records = ledger_df[['Date', 'Category', 'Description', 'Currency', 'Amount', 'PaymentMethod', 'IsExpense']].to_dict('records')
             war_val = get_WAR(TRAVEL_CURRENCY)
 
-            # 1. 🌟 장바구니 트리맵 (캐시 적용)
+            # 1. 🌟 장바구니 트리맵 (영구 캐시 적용)
             if sub_tab_choice == "장바구니":
                 item_df = parse_cached_market_items(raw_records, TRAVEL_CURRENCY, war_val)
                 if not item_df.empty:
@@ -6743,7 +6743,7 @@ elif main_tab_choice == "돋보기":
                 else:
                     st.info("기록된 마트, 시장 또는 선물 지출 내역이 없습니다.")
 
-            # 2. 🌟 식당·카페 트리맵 (캐시 적용)
+            # 2. 🌟 식당·카페 트리맵 (영구 캐시 적용)
             elif sub_tab_choice == "식당·카페":
                 food_df = parse_cached_food_items(raw_records, TRAVEL_CURRENCY, war_val)
                 if not food_df.empty:
@@ -6761,7 +6761,7 @@ elif main_tab_choice == "돋보기":
                 else:
                     st.info("기록된 식사 또는 간식 지출 내역이 없습니다.")
 
-            # 3. 🌟 마사지·교통 듀얼 트리맵 (캐시 적용)
+            # 3. 🌟 마사지·교통 듀얼 트리맵 (영구 캐시 적용)
             elif sub_tab_choice == "마사지·교통":
                 st.markdown("<h4 style='margin-bottom: 2px;'>그랩 및 로컬교통</h4>", unsafe_allow_html=True)
                 traffic_df_final = parse_cached_traffic_items(raw_records, TRAVEL_CURRENCY, war_val)
@@ -6793,10 +6793,6 @@ elif main_tab_choice == "돋보기":
                 else:
                     st.info("기록된 마사지 지출 내역이 없습니다.")
     render_magnifier_fragment()
-
-# ==============================================================================
-
-
 
 # ==============================================================================
 # 6.04.00 | Final Settlement Dashboard (전체요약 탭 - 원스톱 정산 / No Emoji)
