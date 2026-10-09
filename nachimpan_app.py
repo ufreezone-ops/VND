@@ -406,80 +406,95 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # [Module 6.00.00] 4-Step Interactive Tabs (메인 인터뷰 4대 캔버스)
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 6.01.00 | Tab 1: 나의 현재 좌표 (ESBI 사분면 및 자산 현황 상세 입력)
-# ------------------------------------------------------------------------------
-with tab1:
-    st.markdown("### 💼 나의 현재 수입 구조와 재무 현황")
-    
-    st.markdown("""
-        <div class='compassion-card'>
-            <h4>⚖️ 그동안 참 열심히 성실하게 삶을 가꾸어 오셨습니다.</h4>
-            <p>
-                우리가 매달 가정을 위해 얻는 소득은 어떤 성격을 띠고 있을까요? 
-                자신의 에너지가 주로 머무는 소득 영역(사분면)을 들여다보고, 숨 가쁘게 지나치던 소득원과 지출의 크기를 거울 보듯 조용히 적어보는 단계입니다.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # 💡 [앞으로 구현될 Tab 1 스케치]:
-    # - 로버트 기요사키 사분면(E/S/B/I) 선택 라디오 버튼
-    # - 본인 소득, 배우자 소득, 자산 소득 슬라이더 입력기
-    # - 필수 생활비, 대출 원리금, 숨겨진 생필품 마트 소비비 입력기
-    st.info("🚧 **[Tab 1 뼈대 준비 완공]** 이곳에 'ESBI 경제사분면 자가 선택기'와 '소득/지출 상세 입력 슬라이더'가 이식될 예정입니다. 편안한 마음으로 다음 탭들을 차례로 구경해 보세요.")
-
 # ==============================================================================
 # 6.01.00 | Tab 1: 나의 현재 좌표 (ESBI 사분면 및 자산 현황 상세 입력)
 # ==============================================================================
 with tab1:
+    # --------------------------------------------------------------------------
+    # 6.01.01 | 오프닝 위로의 카드 (중복 문구 완전 삭제 및 단일화)
+    # --------------------------------------------------------------------------
     st.markdown("### 💼 나의 현재 수입 구조와 재무 현황")
     
     st.markdown("""
         <div class='compassion-card'>
             <h4>⚖️ 그동안 참 성실하고 치열하게 삶을 가꾸어 오셨습니다.</h4>
             <p>
-                매달 가정을 지키기 위해 흘리는 땀과 에너지는 어떤 성격을 띠고 있을까요? 
-                나의 주 소득원이 머무는 사분면을 응시하고, 매달 들어오고 나가는 현금의 흐름을 슬라이더를 통해 거울 보듯 조용히 마주해보는 시간입니다.
+                매달 가정을 지키기 위해 쏟아붓는 땀과 에너지는 과연 어떤 성격의 소득일까요? 
+                나의 주 소득원이 머무는 사분면을 응시하고, 매달 들어오고 나가는 현금의 흐름을 거울 보듯 조용히 마주해보는 시간입니다.
             </p>
         </div>
     """, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.01.01 | 로버트 기요사키 ESBI 4사분면 현황 미니 맵
+    # 6.01.02 | 로버트 기요사키 2×2 십자 좌표계 (Cashflow Quadrant Matrix)
     # --------------------------------------------------------------------------
-    st.markdown("#### 🧭 나의 에너지가 머무는 소득 사분면")
-    
-    col_e, col_s, col_b, col_i = st.columns(4)
-    
-    # 선택된 사분면 하이라이트 함수
-    def get_quad_style(q_code):
+    st.markdown("#### 🧭 나의 에너지가 머무는 소득 사분면 (ESBI)")
+
+    # 선택 상태에 따른 동적 카드 스타일 계산 함수
+    def get_quad_box_html(q_code, title, core_phrase, sub_desc):
         is_primary = (q_code in st.session_state.primary_quadrant)
         is_side = (st.session_state.has_side_gig and q_code in st.session_state.side_quadrant)
         
         if is_primary:
-            return "border: 2px solid #F59E0B; background: rgba(245, 158, 11, 0.12);", "🌟 주 소득원"
+            border_css = "border: 2px solid #F59E0B; background: rgba(245, 158, 11, 0.16); box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25);"
+            tag_badge = "<span style='background:#F59E0B; color:#0B1120; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:4px;'>🌟 주 소득원</span>"
         elif is_side:
-            return "border: 2px dashed #38BDF8; background: rgba(56, 189, 248, 0.10);", "➕ 부업/N잡"
+            border_css = "border: 2px dashed #38BDF8; background: rgba(56, 189, 248, 0.12); box-shadow: 0 4px 14px rgba(56, 189, 248, 0.15);"
+            tag_badge = "<span style='background:#38BDF8; color:#0B1120; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:4px;'>➕ 부업 / N잡</span>"
         else:
-            return "border: 1px solid #334155; background: rgba(30, 41, 59, 0.4); opacity: 0.6;", ""
+            border_css = "border: 1px solid #334155; background: rgba(30, 41, 59, 0.45); opacity: 0.7;"
+            tag_badge = "<span style='visibility:hidden; font-size:10.5px;'>빈칸</span>"
 
-    for col, (q_code, q_info) in zip([col_e, col_s, col_b, col_i], ESBI_QUADRANTS.items()):
-        border_style, tag = get_quad_style(q_code)
-        tag_html = f"<div style='font-size:11px; font-weight:800; color:#FBBF24; margin-bottom:4px;'>{tag}</div>" if tag else "<div style='height:18px;'></div>"
-        
-        col.markdown(f"""
-            <div style='{border_style} border-radius:10px; padding:12px 10px; min-height:130px; text-align:center;'>
-                {tag_html}
-                <div style='font-size:14px; font-weight:bold; color:#F8FAFC;'>{q_info['badge'].split(' ')[1]} ({q_code})</div>
-                <div style='font-size:11.5px; color:#94A3B8; margin-top:6px; line-height:1.4;'>{q_info['desc']}</div>
+        return f"""
+            <div style='{border_css} border-radius: 12px; padding: 14px 16px; min-height: 120px; transition: all 0.2s;'>
+                <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;'>
+                    <span style='font-size: 20px; font-weight: 900; color: #F8FAFC; font-family: serif, sans-serif;'>{q_code}</span>
+                    {tag_badge}
+                </div>
+                <div style='font-size: 14px; font-weight: bold; color: #E2E8F0; margin-bottom: 3px;'>{title}</div>
+                <div style='font-size: 12px; font-weight: 600; color: #FBBF24; margin-bottom: 4px;'>"{core_phrase}"</div>
+                <div style='font-size: 11px; color: #94A3B8; line-height: 1.4;'>{sub_desc}</div>
             </div>
-        """, unsafe_allow_html=True)
+        """
 
-    st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
+    # 💡 [요청사항 반영] 수학 x-y 좌표계 2x2 대칭 배치
+    # Row 1: 좌측 상단 [S 자영업]  |  우측 상단 [B 사업가]
+    r1_col1, r1_col2 = st.columns(2, gap="medium")
+    with r1_col1:
+        st.markdown(get_quad_box_html(
+            "S", "자영업자 / 전문직", 
+            "일자리를 소유하고 있다", 
+            "내가 곧 시스템. 일할 때 고소득이나 내가 멈추면 수입도 멈춤"
+        ), unsafe_allow_html=True)
+    with r1_col2:
+        st.markdown(get_quad_box_html(
+            "B", "사업가 (자산소유)", 
+            "시스템을 소유하고 있다", 
+            "나를 위해 일하는 시스템과 자산이 있어 시간과 소득이 분리됨"
+        ), unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+
+    # Row 2: 좌측 하단 [E 직장인]  |  우측 하단 [I 투자가]
+    r2_col1, r2_col2 = st.columns(2, gap="medium")
+    with r2_col1:
+        st.markdown(get_quad_box_html(
+            "E", "직장인 / 봉급생활자", 
+            "직장에 다닌다", 
+            "나의 시간과 체력을 급여와 1:1로 정직하게 맞바꾸는 영역"
+        ), unsafe_allow_html=True)
+    with r2_col2:
+        st.markdown(get_quad_box_html(
+            "I", "투자가", 
+            "돈이 당신을 위해 일한다", 
+            "돈이 돈을 벌도록 자본을 레버리지하는 영역"
+        ), unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
     st.divider()
 
     # --------------------------------------------------------------------------
-    # 6.01.02 | 수입 & 지출 슬라이더 컨트롤러 (키패드 0% 터치 인터랙션)
+    # 6.01.03 | 수입 & 지출 슬라이더 컨트롤러 (키패드 0% 터치 인터랙션)
     # --------------------------------------------------------------------------
     c_in, c_out = st.columns([1, 1], gap="large")
     
@@ -549,7 +564,7 @@ with tab1:
         """, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.01.03 | 실시간 현금흐름 요약 밸런스 카드
+    # 6.01.04 | 실시간 현금흐름 요약 밸런스 카드
     # --------------------------------------------------------------------------
     st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
     monthly_surplus = total_income - total_expense
