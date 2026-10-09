@@ -3748,9 +3748,9 @@ with st.sidebar:
 # 4.01.04 | Currency Wallet Cards & Lazy-Loaded Physical Cash Counter
 # ==============================================================================
 # 목적:
-#   1. 지갑 잔고 및 환율 배치 실시간 렌더링
-#   2. 평소에는 _CASH_INVENTORY_ 조회를 완전 차단 (앱 부팅 시 구글 통신 0회)
-#   3. 사용자가 저녁에 '실사 카운터 열기'를 눌렀을 때만 On-Demand 지연 로딩
+#   1. 실물현금 카운터 열기 시 저장된 지폐 수량 100% 무손실 복원 (0 초기화 차단)
+#   2. 불필요한 time.sleep(0.6) 삭제로 저장 체감속도 단축
+#   3. 평소 앱 부팅 시 구글 통신 0회 유지
 # ==============================================================================
 
         st.subheader("💰 지갑 잔고")
@@ -3832,7 +3832,7 @@ with st.sidebar:
                             if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_prec}}")
 
             # ------------------------------------------------------------------
-            # 🪙 실물현금 카운터 (지연 로딩: 평소에는 호출 차단)
+            # 🪙 실물현금 카운터 (지연 로딩 & 확실한 수량 동기화)
             # ------------------------------------------------------------------
             bills_to_count = CURR_BILLS.get(c, [])
             if bills_to_count and (c_cash > 0 or (is_trip_active and not is_secondary)):
@@ -3844,6 +3844,8 @@ with st.sidebar:
                         st.caption("💡 하루 일과 마감 시 실물 지폐/동전을 정산하려면 아래를 누르세요.")
                         if st.button(f"🪙 {c} 실사 카운터 열기", key=f"btn_open_counter_{c}", use_container_width=True):
                             st.session_state[counter_active_key] = True
+                            # 💡 열릴 때마다 캐시된 최신 지폐 수량을 입력창에 주입하도록 동기화 트리거
+                            st.session_state[f"force_sync_cash_{c}"] = True
                             st.rerun()
                     else:
                         c_hdr1, c_hdr2 = st.columns([2.5, 1])
@@ -3874,8 +3876,10 @@ with st.sidebar:
                                         try: cloud_counts[float(b_v)] = int(b_c)
                                         except: pass
 
+                        # 💡 카운터를 열었거나 최초 진입 시, 저장된 수량을 100% 무손실 주입 (0 초기화 방지)
+                        sync_needed = st.session_state.pop(f"force_sync_cash_{c}", False)
                         init_key = f"init_cash_{st.session_state.current_trip}_{c}"
-                        if init_key not in st.session_state:
+                        if sync_needed or (init_key not in st.session_state):
                             for b in bills_to_count:
                                 val_loaded = cloud_counts.get(float(b), 0)
                                 b_key_id = str(b).replace('.', '_')
@@ -3947,22 +3951,26 @@ with st.sidebar:
                                 if st.button("⚠️ 현재값 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True):
                                     with st.spinner("클라우드 저장 중..."):
                                         if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
-                                            st.success("덮어쓰기 완료!")
-                                            time.sleep(0.6); st.rerun()
+                                            st.toast("덮어쓰기 완료!", icon="✅")
+                                            st.rerun()
                         else:
                             if cloud_total > 0: st.caption(f"클라우드 동기완료 ({cloud_time})")
                             if st.button(f"💾 {c} 실물현금 저장", key=f"btn_save_normal_{c}", use_container_width=True):
                                 with st.spinner("구글 시트 저장 중..."):
                                     if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
-                                        st.success("🎉 저장 완료!")
-                                        time.sleep(0.6); st.rerun()
+                                        st.toast("🎉 구글 시트 저장 완료!", icon="💾")
+                                        # 💡 time.sleep(0.6) 제거
+                                        st.rerun()
             st.divider()
 
         # 1. 🌟 메인 여행 통화 우선 상단 노출 (오렌지 헤더)
         for c in primary_trip_currs:
             render_currency_card(c, is_secondary=False)
+        
+# ==============================================================================
+# 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync
+# ==============================================================================
 
-        # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
         st.metric("💸 지출총액", f"{float(spent_val):,.0f} 원")
