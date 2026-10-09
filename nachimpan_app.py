@@ -160,7 +160,6 @@ def init_interviewee_session():
     """
     서버 DB 0회! 키패드 입력 없이 터치만으로 완성되는 익명 세션 오케스트레이터
     """
-    # 💡 스타벅스 주문번호 스타일의 친근하고 익명성 높은 고유 진단 번호 자동 생성 (예: #C-408)
     if "starbucks_order_id" not in st.session_state:
         tag_letter = random.choice(["A", "B", "C", "D", "E"])
         tag_num = random.randint(101, 999)
@@ -174,19 +173,25 @@ def init_interviewee_session():
         "children_status": "자녀 1명 👶",
         "parents_support": "독립 / 비부양",
         
-        # 2. 로버트 기요사키 경제사분면 (주 소득원 & 부업)
+        # 2. 로버트 기요사키 경제사분면
         "primary_quadrant": "💼 직장인 (E)",
         "has_side_gig": False,
         "side_quadrant": "자영업 / N잡 (S)",
         
         # 3. 소득 및 지출 흐름 (월 / 만원 단위)
-        "monthly_labor_income": 380,
+        "monthly_labor_income": 350,
         "monthly_spouse_income": 150,
         "monthly_asset_income": 0,
         "monthly_living_cost": 280,
         "monthly_debt_payment": 90,
-        "monthly_consumable_spend": 35,
         "liquid_emergency_cash": 1200,
+
+        # 4. 보유 자산 및 부채 (단위: 만원)
+        "asset_invest": 3000,
+        "asset_real_estate": 35000,
+        "asset_other": 0,             # 💡 [신설] 암웨이 등 사업 파이프라인 / 기타 자산 가치
+        "debt_mortgage": 15000,
+        "debt_credit": 2000,
     }
     
     for k, v in defaults.items():
@@ -396,11 +401,12 @@ st.markdown(f"""
 # ==============================================================================
 # 5.01.02 | 4대 핵심 현실점검 탭 네비게이션 생성
 # ==============================================================================
+# 💡 숫자와 이모티콘을 제거하여 군더더기 없는 단정한 텍스트 탭 구성
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🏡 1. 우리집 가계부",
-    "⏳ 2. 삶과 시간",
-    "🍂 3. 인생의 사계절 (생애주기)",
-    "🧭 4. 나침판의 제안 (전략대안)"
+    "우리집 가계부",
+    "삶과 시간",
+    "인생의 사계절",
+    "나침판의 제안"
 ])
 
 
@@ -679,9 +685,9 @@ with tab1:
     st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
     st.divider()
 
-    # --------------------------------------------------------------------------
-    # 6.01.07 | 대차대조표: 보유 자산 vs 보유 부채 (1천만 원 자석 스텝 로그 스케일)
-    # --------------------------------------------------------------------------
+# ==============================================================================
+# 6.01.07 | 대차대조표: 보유 자산 vs 보유 부채 (기타 자산 / 사업 파이프라인 신설)
+# ==============================================================================
     st.markdown("#### 🏛️ 가계 자산 및 부채 현황 (대차대조표)")
 
     c_asset, c_debt = st.columns([1, 1], gap="large")
@@ -691,17 +697,22 @@ with tab1:
         render_log_input("1. 비상 현금 / 예·적금 (최대 10억)", "liquid_emergency_cash", CASH_OPTIONS, default_v=1200, max_limit=100000)
         render_log_input("2. 주식 / 채권 / 펀드 (최대 10억)", "asset_invest", INVEST_OPTIONS, default_v=3000, max_limit=100000)
         render_log_input("3. 부동산 / 주택 시세 (최대 100억)", "asset_real_estate", REALESTATE_OPTIONS, default_v=35000, max_limit=1000000)
+        # 💡 [신설] 암웨이 사업소득 등 지속적 로열티/자산 가치 입력 항목
+        render_log_input("4. 기타 자산 / 사업·파이프라인 가치 (최대 100억)", "asset_other", REALESTATE_OPTIONS, default_v=0, max_limit=1000000)
 
     with c_debt:
         st.markdown("##### 💳 보유 부채 (Liabilities)")
         render_log_input("1. 주택담보대출 / 전세대출 원금 (최대 10억)", "debt_mortgage", MORTGAGE_OPTIONS, default_v=15000, max_limit=100000)
         render_log_input("2. 신용대출 / 마이너스통장 (최대 1억)", "debt_credit", CREDIT_OPTIONS, default_v=2000, max_limit=10000)
-        st.markdown("<div style='height: 48px;'></div>", unsafe_allow_html=True)
+        # 좌우 대칭 높이 맞춤 여백
+        st.markdown("<div style='height: 120px;'></div>", unsafe_allow_html=True)
 
+    # 💡 총자산 합계에 asset_other(기타 자산 / 사업 파이프라인) 완벽 합산
     total_assets = (
         st.session_state.get('liquid_emergency_cash', 0) +
         st.session_state.get('asset_invest', 0) +
-        st.session_state.get('asset_real_estate', 0)
+        st.session_state.get('asset_real_estate', 0) +
+        st.session_state.get('asset_other', 0)
     )
     total_debts = (
         st.session_state.get('debt_mortgage', 0) +
@@ -993,19 +1004,28 @@ with tab2:
     st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
     st.divider()
 
-    # --------------------------------------------------------------------------
-    # 6.02.02 | 🛑 '잠시 멈춤' 시뮬레이션 (몸이 멈추면 수입은?)
-    # --------------------------------------------------------------------------
+# ==============================================================================
+# 6.02.02 | 🛑 '잠시 멈춤' 시뮬레이션 (스위치 우측 배치 레이아웃)
+# ==============================================================================
     st.markdown("#### 🛑 만약 내일 당장 노동을 멈춘다면? (수입 셧다운 시뮬레이션)")
     
-    stop_simulation = st.toggle("👉 '내일 아침 출근을 잠시 멈추고 1년간 푹 쉰다면?' 시뮬레이션 가동", value=False)
+    # 💡 텍스트는 좌측에 넓게 배치하고, 토글 스위치를 우측 끝에 직관적으로 배치
+    c_tog_txt, c_tog_btn = st.columns([4.2, 1], gap="small")
+    with c_tog_txt:
+        st.markdown(
+            "<div style='font-size:14.5px; font-weight:700; color:#F8FAFC; padding-top:6px;'>"
+            "👉 '내일 아침 출근을 잠시 멈추고 1년간 푹 쉰다면?' 시뮬레이션 가동"
+            "</div>", 
+            unsafe_allow_html=True
+        )
+    with c_tog_btn:
+        stop_simulation = st.toggle("시뮬레이션 가동 스위치", value=False, label_visibility="collapsed")
     
-    # 지출과 수입의 대비 계산
     monthly_fixed_outgo = float(st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment)
     normal_income = float(st.session_state.monthly_labor_income + st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income)
     
     if stop_simulation:
-        # 노동 중단 시: 본인 노동소득 0원! (배우자 소득 + 자산 소득만 잔존)
+        # 노동 중단 시: 본인 노동소득 0원 소멸! (배우자 소득 + 자산 소득만 잔존)
         stopped_income = float(st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income)
         stopped_deficit = stopped_income - monthly_fixed_outgo
         
