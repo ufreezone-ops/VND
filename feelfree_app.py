@@ -4041,7 +4041,15 @@ with st.sidebar:
         if is_upcoming:
             render_dday_control_tower()
 
-        # 4.01.04 | 지갑 카드 렌더러 정의
+# ==============================================================================
+# 4.01.04 | Currency Wallet Cards & Lazy-Loaded Physical Cash Counter
+# ==============================================================================
+# 목적:
+#   1. 지갑 잔고 및 환율 배치 실시간 렌더링
+#   2. 평소에는 _CASH_INVENTORY_ 조회를 완전 차단 (앱 부팅 시 구글 통신 0회)
+#   3. 사용자가 저녁에 '실사 카운터 열기'를 눌렀을 때만 On-Demand 지연 로딩
+# ==============================================================================
+
         st.subheader("💰 지갑 잔고")
         b_val, spent_val = calculate_summary_metrics(ledger_df)
         
@@ -4120,110 +4128,131 @@ with st.sidebar:
                         for b in cash_batches:
                             if b['qty'] > 0: st.caption(f"• {fmt.format(b['qty'])} @{b['rate']:{r_prec}}")
 
+            # ------------------------------------------------------------------
+            # 🪙 실물현금 카운터 (지연 로딩: 평소에는 호출 차단)
+            # ------------------------------------------------------------------
             bills_to_count = CURR_BILLS.get(c, [])
             if bills_to_count and (c_cash > 0 or (is_trip_active and not is_secondary)):
-                with st.expander("🪙 실물현금 카운터", expanded=False):
-                    cash_df = load_cash_inventory()
-                    cloud_total, cloud_time, cloud_counts = 0.0, "", {}
-                    
-                    if not cash_df.empty:
-                        m_sync = (cash_df['TripName'] == st.session_state.current_trip) & (cash_df['Currency'] == c)
-                        if m_sync.any():
-                            row_sync = cash_df[m_sync].iloc[0]
-                            cloud_total = float(row_sync.get('Total_Amount', 0))
-                            raw_t = str(row_sync.get('Updated_At', '')).strip()
-                            m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
-                            if m_t: cloud_time = f"{m_t.group(1)} {int(m_t.group(2)):02d}:{m_t.group(3)}"
-                            else: cloud_time = raw_t[5:16].rstrip(':')
-                                
-                            for item in str(row_sync.get('Bill_Counts', '')).split(";"):
-                                if ":" in item:
-                                    b_v, b_c = item.split(":")
-                                    try: cloud_counts[float(b_v)] = int(b_c)
-                                    except: pass
+                counter_active_key = f"active_cash_counter_{st.session_state.current_trip}_{c}"
+                is_counter_active = st.session_state.get(counter_active_key, False)
 
-                    init_key = f"init_cash_{st.session_state.current_trip}_{c}"
-                    if init_key not in st.session_state:
-                        for b in bills_to_count:
-                            val_loaded = cloud_counts.get(float(b), 0)
-                            b_key_id = str(b).replace('.', '_')
-                            st.session_state[f"cnt_{c}_{b_key_id}"] = int(val_loaded) if val_loaded > 0 else None
-                        st.session_state[init_key] = True
+                with st.expander("🪙 실물현금 카운터", expanded=is_counter_active):
+                    if not is_counter_active:
+                        st.caption("💡 하루 일과 마감 시 실물 지폐/동전을 정산하려면 아래를 누르세요.")
+                        if st.button(f"🪙 {c} 실사 카운터 열기", key=f"btn_open_counter_{c}", use_container_width=True):
+                            st.session_state[counter_active_key] = True
+                            st.rerun()
+                    else:
+                        c_hdr1, c_hdr2 = st.columns([2.5, 1])
+                        with c_hdr1:
+                            st.caption("✅ 실물 지폐/동전 실사 모드 작동 중")
+                        with c_hdr2:
+                            if st.button("닫기 ✖️", key=f"btn_close_counter_{c}", use_container_width=True):
+                                st.session_state[counter_active_key] = False
+                                st.rerun()
 
-                    total_counted, cur_counts = 0.0, {}
-                    for bill in bills_to_count:
-                        b_flt = float(bill)
-                        b_key_id = str(bill).replace('.', '_')
+                        # 활성화되었을 때만 실제 현금 인벤토리 로드
+                        cash_df = load_cash_inventory()
+                        cloud_total, cloud_time, cloud_counts = 0.0, "", {}
                         
-                        if c == "VND": b_label = f"{int(bill // 1000)}K"
-                        elif c == "EUR": b_label = f"{int(bill)} €" if bill >= 1 else f"{int(round(bill * 100))} c"
-                        elif c == "USD": b_label = f"{int(bill)} $" if bill >= 1 else f"{int(round(bill * 100))} ¢"
-                        elif c == "TRY": b_label = f"{int(bill)} ₺" if bill >= 1 else f"{int(round(bill * 100))} kr"
-                        elif c == "JPY": b_label = f"{int(bill)} ¥"
-                        elif c == "PHP": b_label = f"{int(bill)} ₱"
-                        else: b_label = f"{bill} {c}"
+                        if not cash_df.empty:
+                            m_sync = (cash_df['TripName'] == st.session_state.current_trip) & (cash_df['Currency'] == c)
+                            if m_sync.any():
+                                row_sync = cash_df[m_sync].iloc[0]
+                                cloud_total = float(row_sync.get('Total_Amount', 0))
+                                raw_t = str(row_sync.get('Updated_At', '')).strip()
+                                m_t = re.search(r'\d{4}-(\d{2}-\d{2})\s+(\d{1,2}):(\d{2})', raw_t)
+                                if m_t: cloud_time = f"{m_t.group(1)} {int(m_t.group(2)):02d}:{m_t.group(3)}"
+                                else: cloud_time = raw_t[5:16].rstrip(':')
+                                    
+                                for item in str(row_sync.get('Bill_Counts', '')).split(";"):
+                                    if ":" in item:
+                                        b_v, b_c = item.split(":")
+                                        try: cloud_counts[float(b_v)] = int(b_c)
+                                        except: pass
+
+                        init_key = f"init_cash_{st.session_state.current_trip}_{c}"
+                        if init_key not in st.session_state:
+                            for b in bills_to_count:
+                                val_loaded = cloud_counts.get(float(b), 0)
+                                b_key_id = str(b).replace('.', '_')
+                                st.session_state[f"cnt_{c}_{b_key_id}"] = int(val_loaded) if val_loaded > 0 else None
+                            st.session_state[init_key] = True
+
+                        total_counted, cur_counts = 0.0, {}
+                        for bill in bills_to_count:
+                            b_flt = float(bill)
+                            b_key_id = str(bill).replace('.', '_')
                             
-                        c_col1, c_col2 = st.columns([1, 1.4])
-                        with c_col1:
-                            st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; height:30px; line-height:30px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}</div>", unsafe_allow_html=True)
-                        with c_col2:
-                            raw_val = st.session_state.get(f"cnt_{c}_{b_key_id}", None)
-                            cnt = st.number_input(
-                                label=f"{c}_{b_key_id}",
-                                min_value=0,
-                                step=1,
-                                value=int(raw_val) if raw_val and raw_val > 0 else None,
-                                placeholder="0",
-                                key=f"cnt_{c}_{b_key_id}",
-                                label_visibility="collapsed"
-                            )
-                        final_cnt = int(cnt) if cnt is not None else 0
-                        cur_counts[b_flt] = final_cnt
-                        total_counted += bill * final_cnt
+                            if c == "VND": b_label = f"{int(bill // 1000)}K"
+                            elif c == "EUR": b_label = f"{int(bill)} €" if bill >= 1 else f"{int(round(bill * 100))} c"
+                            elif c == "USD": b_label = f"{int(bill)} $" if bill >= 1 else f"{int(round(bill * 100))} ¢"
+                            elif c == "TRY": b_label = f"{int(bill)} ₺" if bill >= 1 else f"{int(round(bill * 100))} kr"
+                            elif c == "JPY": b_label = f"{int(bill)} ¥"
+                            elif c == "PHP": b_label = f"{int(bill)} ₱"
+                            else: b_label = f"{bill} {c}"
+                                
+                            c_col1, c_col2 = st.columns([1, 1.4])
+                            with c_col1:
+                                st.markdown(f"<div style='font-size:13px; font-weight:bold; white-space:nowrap; text-align:right; height:30px; line-height:30px; display:flex; align-items:center; justify-content:flex-end;'>{b_label}</div>", unsafe_allow_html=True)
+                            with c_col2:
+                                raw_val = st.session_state.get(f"cnt_{c}_{b_key_id}", None)
+                                cnt = st.number_input(
+                                    label=f"{c}_{b_key_id}",
+                                    min_value=0,
+                                    step=1,
+                                    value=int(raw_val) if raw_val and raw_val > 0 else None,
+                                    placeholder="0",
+                                    key=f"cnt_{c}_{b_key_id}",
+                                    label_visibility="collapsed"
+                                )
+                            final_cnt = int(cnt) if cnt is not None else 0
+                            cur_counts[b_flt] = final_cnt
+                            total_counted += bill * final_cnt
+                            
+                        total_counted = round(total_counted, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted)
                         
-                    total_counted = round(total_counted, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted)
-                    
-                    st.markdown(f"""
-                        <div style='margin-top: 14px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
-                            <span style='font-size:11.5px; color:#A0AEC0;'>🧮 실물현금 합계 (지폐+동전)</span><br>
-                            <span style='font-size:15px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    diff_val = round(total_counted - c_cash, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted - c_cash)
-                    if total_counted > 0:
-                        if abs(diff_val) < 0.001: st.success("✅ 장부/실물 일치!")
-                        elif diff_val < 0: st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족!")
-                        else: st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
-
-                    has_conflict = bool(cloud_counts) and (cur_counts != cloud_counts)
-                    if has_conflict:
                         st.markdown(f"""
-                            <div style='background-color: rgba(255, 165, 0, 0.12); border-left: 3px solid #FFA500; border-radius: 6px; padding: 8px 10px; margin-top: 10px; margin-bottom: 10px;'>
-                                <div style='color: #FFA500; font-size: 12px; font-weight: bold;'>⚠️ 기기 간 데이터 불일치!</div>
-                                <div style='font-size: 11.5px; color: #E2E8F0; margin-top: 4px; line-height: 1.5;'>
-                                    • 현재 화면: <b>{fmt.format(total_counted)} {c}</b><br>
-                                    • 클라우드: <b>{fmt.format(cloud_total)} {c}</b> <span style='color:#888;'>({cloud_time})</span>
-                                </div>
+                            <div style='margin-top: 14px; margin-bottom: 8px; padding: 6px 10px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);'>
+                                <span style='font-size:11.5px; color:#A0AEC0;'>🧮 실물현금 합계 (지폐+동전)</span><br>
+                                <span style='font-size:15px; font-weight:bold; color:#4EFEB3;'>{fmt.format(total_counted)} {c}</span>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        col_sel1, col_sel2 = st.columns(2)
-                        with col_sel1:
-                            st.button("📥 클라우드 가져오기", key=f"btn_pull_{c}", on_click=cb_pull_cloud_cash, args=(c, cloud_counts, bills_to_count), use_container_width=True)
-                        with col_sel2:
-                            if st.button("⚠️ 현재값 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True):
-                                with st.spinner("클라우드 저장 중..."):
+                        diff_val = round(total_counted - c_cash, 2) if c not in ["VND", "HUF", "JPY"] else round(total_counted - c_cash)
+                        if total_counted > 0:
+                            if abs(diff_val) < 0.001: st.success("✅ 장부/실물 일치!")
+                            elif diff_val < 0: st.error(f"🚨 실물 **{fmt.format(abs(diff_val))} {c}** 부족!")
+                            else: st.warning(f"⚠️ 실물 **+{fmt.format(diff_val)} {c}** 초과!")
+
+                        has_conflict = bool(cloud_counts) and (cur_counts != cloud_counts)
+                        if has_conflict:
+                            st.markdown(f"""
+                                <div style='background-color: rgba(255, 165, 0, 0.12); border-left: 3px solid #FFA500; border-radius: 6px; padding: 8px 10px; margin-top: 10px; margin-bottom: 10px;'>
+                                    <div style='color: #FFA500; font-size: 12px; font-weight: bold;'>⚠️ 기기 간 데이터 불일치!</div>
+                                    <div style='font-size: 11.5px; color: #E2E8F0; margin-top: 4px; line-height: 1.5;'>
+                                        • 현재 화면: <b>{fmt.format(total_counted)} {c}</b><br>
+                                        • 클라우드: <b>{fmt.format(cloud_total)} {c}</b> <span style='color:#888;'>({cloud_time})</span>
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            
+                            col_sel1, col_sel2 = st.columns(2)
+                            with col_sel1:
+                                st.button("📥 클라우드 가져오기", key=f"btn_pull_{c}", on_click=cb_pull_cloud_cash, args=(c, cloud_counts, bills_to_count), use_container_width=True)
+                            with col_sel2:
+                                if st.button("⚠️ 현재값 덮어쓰기", key=f"btn_force_push_{c}", use_container_width=True):
+                                    with st.spinner("클라우드 저장 중..."):
+                                        if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
+                                            st.success("덮어쓰기 완료!")
+                                            time.sleep(0.6); st.rerun()
+                        else:
+                            if cloud_total > 0: st.caption(f"클라우드 동기완료 ({cloud_time})")
+                            if st.button(f"💾 {c} 실물현금 저장", key=f"btn_save_normal_{c}", use_container_width=True):
+                                with st.spinner("구글 시트 저장 중..."):
                                     if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
-                                        st.success("덮어쓰기 완료!")
+                                        st.success("🎉 저장 완료!")
                                         time.sleep(0.6); st.rerun()
-                    else:
-                        if cloud_total > 0: st.caption(f"클라우드 동기완료 ({cloud_time})")
-                        if st.button(f"💾 {c} 실물현금 저장", key=f"btn_save_normal_{c}", use_container_width=True):
-                            with st.spinner("구글 시트 저장 중..."):
-                                if save_cash_inventory(st.session_state.current_trip, c, cur_counts, total_counted):
-                                    st.success("🎉 저장 완료!")
-                                    time.sleep(0.6); st.rerun()
             st.divider()
 
         # 1. 🌟 메인 여행 통화 우선 상단 노출 (오렌지 헤더)
