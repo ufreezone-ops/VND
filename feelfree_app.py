@@ -6054,12 +6054,23 @@ try:
 
         st.divider()
 
-        # 3. 세션 및 프로세스 요약 (💡 글자 잘림 없는 깔끔한 지표)
+        # 3. 세션 및 프로세스 요약 (💡 CSS로 글자 크기를 19px로 강제 축소하여 잘림 방지)
+        st.markdown("""
+            <style>
+            div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+                font-size: 19px !important;
+                white-space: nowrap !important;
+            }
+            div[data-testid="stMetric"] label {
+                font-size: 12.5px !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
         st.markdown("#### 🧬 세션 생명주기 및 프로세스 상태")
         c_s1, c_s2, c_s3, c_s4 = st.columns(4)
         c_s1.metric("세션 Rerun 카운트", f"{st.session_state.get('gtl_session_rerun_count', 1)}회")
 
-        # 💡 "정상 탑재 (True)" 대신 건수를 포함하여 잘림 없이 표시
         _cur_df = st.session_state.get('active_ledger_df')
         _mem_status = f"정상 ({len(_cur_df)}건)" if (_cur_df is not None and not _cur_df.empty) else "미탑재"
         c_s2.metric("작업 원장 메모리", _mem_status)
