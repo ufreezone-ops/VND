@@ -118,9 +118,13 @@ def infer_node_info(c_name, def_c, def_s, def_t, def_m):
     return def_c, def_s, def_t, def_m
 
 
-# ------------------------------------------------------------------------------
-# 1.04.02 | Google I/O Global Tracer (READ & WRITE 통합 선행 계측 래퍼)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 1.04.02 | Google I/O Global Tracer (READ & WRITE 릴레이 보존형 래퍼)
+# ==============================================================================
+# 💡 직전 턴에 발생했던 통신 기록을 릴레이 보관하여 st.rerun() 후에도 화면에 유지
+if st.session_state.get('_gtl_google_io_trace_current'):
+    st.session_state['_gtl_google_io_trace_last'] = st.session_state['_gtl_google_io_trace_current']
+
 st.session_state['_gtl_google_io_trace_current'] = []
 st.session_state['_gtl_google_read_trace_current'] = []
 
@@ -162,7 +166,7 @@ if _current_conn_read is not None and not getattr(_current_conn_read, '_gtl_goog
     _gtl_traced_conn_read._gtl_google_io_read_wrapped = True
     conn.read = _gtl_traced_conn_read
 
-# 2. conn.update (Google WRITE) 추적 래퍼 장착
+# 2. conn.update (Google WRITE) 추적 래퍼
 _current_conn_update = getattr(conn, 'update', None)
 if _current_conn_update is not None and not getattr(_current_conn_update, '_gtl_google_io_update_wrapped', False):
     _original_conn_update = _current_conn_update
@@ -1836,139 +1840,43 @@ def _frp_install_wrappers():
 _frp_checkpoint("2.03 종료")
 
 
-# ============================================================
-# 2.03.08 | load_data Memory / Cloud 경로 원인 표시
-# ============================================================
-
-_load_path_diag = st.session_state.get(
-    'last_load_data_path_diag'
-)
-
-if _load_path_diag:
-
-    st.markdown(
-        "### 🧪 load_data 경로 진단"
-    )
-
-    st.json(
-        _load_path_diag
-    )
+# ==============================================================================
+# 2.03.08 | load_data Path Diagnostic (Silent Memory-Only)
+# ==============================================================================
+# 💡 상단 화면을 가리던 st.markdown / st.json을 완전히 제거하고 메모리 상태만 조용히 유지합니다.
+_load_path_diag = st.session_state.get('last_load_data_path_diag')
 
 
-# 2.03.09 | Streamlit Session Lifecycle Diagnostic
-# ============================================================
-# 목적:
-# 1. 새로운 Streamlit session 생성 여부 확인
-# 2. Streamlit app-instance/cache 생명주기 변화 여부 확인
-#
-# 해석:
-# - session_id 변경 + process_instance_id 동일
-#   → 세션/WebSocket 재연결 가능성
-#
-# - session_id 변경 + process_instance_id 변경
-#   → Streamlit app-instance/cache 재시작 가능성
-# ============================================================
-
+# ==============================================================================
+# 2.03.09 | Streamlit Session Lifecycle Diagnostic (Silent Memory-Only)
+# ==============================================================================
 import os
 import uuid
 
-
 @st.cache_resource(show_spinner=False)
 def _get_gtl_process_instance_id():
+    return str(uuid.uuid4())
 
-    return str(
-        uuid.uuid4()
-    )
+_gtl_process_instance_id = _get_gtl_process_instance_id()
 
+if 'gtl_session_instance_id' not in st.session_state:
+    st.session_state['gtl_session_instance_id'] = str(uuid.uuid4())
+    st.session_state['gtl_session_created_at'] = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
+    st.session_state['gtl_session_rerun_count'] = 0
 
-_gtl_process_instance_id = (
-    _get_gtl_process_instance_id()
-)
+st.session_state['gtl_session_rerun_count'] = st.session_state.get('gtl_session_rerun_count', 0) + 1
 
-
-if (
-    'gtl_session_instance_id'
-    not in st.session_state
-):
-
-    st.session_state[
-        'gtl_session_instance_id'
-    ] = str(
-        uuid.uuid4()
-    )
-
-    st.session_state[
-        'gtl_session_created_at'
-    ] = datetime.now(
-        TZ_KST
-    ).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
-
-    st.session_state[
-        'gtl_session_rerun_count'
-    ] = 0
-
-
-st.session_state[
-    'gtl_session_rerun_count'
-] = (
-    st.session_state.get(
-        'gtl_session_rerun_count',
-        0
-    )
-    + 1
-)
-
-
+# 💡 상단 화면 출력(st.json)을 완전히 제거하고 하단 통합 관제 센터에서 깔끔하게 볼 수 있도록 정리합니다.
 _gtl_session_diag = {
-
-    'session_id':
-        st.session_state.get(
-            'gtl_session_instance_id'
-        ),
-
-    'session_created_at':
-        st.session_state.get(
-            'gtl_session_created_at'
-        ),
-
-    'rerun_count':
-        st.session_state.get(
-            'gtl_session_rerun_count'
-        ),
-
-    'process_instance_id':
-        _gtl_process_instance_id,
-
-    'process_id':
-        os.getpid(),
-
-    'active_ledger_df_exists':
-        'active_ledger_df'
-        in st.session_state,
-
-    'last_loaded_sheet':
-        st.session_state.get(
-            'last_loaded_sheet'
-        ),
-
-    'timestamp':
-        datetime.now(
-            TZ_KST
-        ).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
+    'session_id': st.session_state.get('gtl_session_instance_id'),
+    'session_created_at': st.session_state.get('gtl_session_created_at'),
+    'rerun_count': st.session_state.get('gtl_session_rerun_count'),
+    'process_instance_id': _gtl_process_instance_id,
+    'process_id': os.getpid(),
+    'active_ledger_df_exists': 'active_ledger_df' in st.session_state,
+    'last_loaded_sheet': st.session_state.get('last_loaded_sheet'),
+    'timestamp': datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"),
 }
-
-
-st.markdown(
-    "### 🧬 Streamlit 세션 생명주기 진단"
-)
-
-st.json(
-    _gtl_session_diag
-)
 
 # ------------------------------------------------------------------------------
 # 2.04.00 | Core Ledger Engine (FIFO 인벤토리 배치 및 금융 재계산)
@@ -6049,10 +5957,14 @@ elif main_tab_choice == "전체요약":
                 st.dataframe(refund_df[['Date', 'Country', 'Description', 'Amount', 'Currency', 'PaymentMethod']], use_container_width=True, hide_index=True)
     else:
         st.info("기록된 지출 데이터가 없습니다.")
-# ------------------------------------------------------------------------------
-# 6.05.00 | Build Version & Sync Footer
-# ------------------------------------------------------------------------------
+        
+# ==============================================================================
+# [Module 6.05.00] Integrated System Health & Cloud I/O Control Tower
+# ==============================================================================
 
+# ------------------------------------------------------------------------------
+# 6.05.01 | Build Version & Sync Footer
+# ------------------------------------------------------------------------------
 st.markdown(
     f"""
     <div style='display:flex; justify-content:flex-end; align-items:center;
@@ -6069,173 +5981,100 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 6.05.01 | FULL REFRESH Finalizer + Direct Checkpoint Diagnostic
 # ------------------------------------------------------------------------------
-
+# 6.05.02 | FULL REFRESH Finalizer
+# ------------------------------------------------------------------------------
 _frp_finalize()
-
-
-# ------------------------------------------------------------------
-# FULL REFRESH 최근 누적 기록 표시
-# ------------------------------------------------------------------
-
-try:
-
-    if os.path.exists(
-        _FULL_REFRESH_HISTORY_FILE
-    ):
-
-        with open(
-            _FULL_REFRESH_HISTORY_FILE,
-            "r",
-            encoding="utf-8"
-        ) as f:
-
-            _frp_lines = [
-                line.strip()
-                for line in f
-                if line.strip()
-            ]
-
-
-        _frp_records = []
-
-        for line in _frp_lines:
-
-            try:
-                _frp_records.append(
-                    json.loads(line)
-                )
-
-            except Exception:
-                continue
-
-
-        if _frp_records:
-
-            # 최근 5건만 화면에 표시
-            _frp_records = _frp_records[-5:]
-
-
-            st.markdown(
-                "### 🔍 FULL REFRESH 최근 기록 "
-                f"({len(_frp_records)}건)"
-            )
-
-
-            for idx, r in enumerate(
-                reversed(_frp_records),
-                start=1
-            ):
-
-                st.write(
-                    f"{idx}. "
-                    f"{r.get('timestamp', '-')}"
-                    f" | TOTAL={r.get('total_ms', 0):,.1f}ms"
-                    f" | load_data={r.get('load_data_ms', 0):,.1f}ms"
-                    f" | other={r.get('other_ms', 0):,.1f}ms"
-                )
-
-
-            _latest = _frp_records[-1]
-
-
-            st.markdown(
-                "### 🧭 최신 FULL REFRESH 직접 구간 분석"
-            )
-
-
-            _latest_checkpoints = _latest.get(
-                "checkpoints",
-                []
-            )
-
-
-            if _latest_checkpoints:
-
-                for cp in _latest_checkpoints:
-
-                    st.write(
-                        f"• {cp.get('label', '-')}: "
-                        f"**{cp.get('elapsed_ms', 0):,.1f}ms**"
-                    )
-
-
-                st.write(
-                    "• 체크포인트 미측정 잔여: "
-                    f"**{_latest.get('checkpoint_unattributed_ms', 0):,.1f}ms**"
-                )
-
-
-except Exception:
-    pass
-
-
-# 6.05.02 | FULL REFRESH Checkpoint: Module 6 End
-# ------------------------------------------------------------------------------
-
 _frp_checkpoint("6 종료")
 
 
-# ==============================================================================
-# 6.05.03 | Google I/O (READ & WRITE) 호출 결과 통합 표시
-# ==============================================================================
-# 목적:
-#   1. 실제 발생한 모든 conn.read() 및 conn.update() 호출을 한 화면에 투명하게 표시
-#   2. 저장 함수 전체 총 소요시간 진단 카드 제공
-# ==============================================================================
-
+# ------------------------------------------------------------------------------
+# 6.05.03 | Unified Control Tower Dashboard (모든 센서 한곳 집약)
+# ------------------------------------------------------------------------------
 try:
-    _google_io_trace = st.session_state.get('_gtl_google_io_trace_current', [])
-    _read_calls = [x for x in _google_io_trace if x.get('type') == 'READ']
-    _write_calls = [x for x in _google_io_trace if x.get('type') == 'WRITE']
+    _current_io = st.session_state.get('_gtl_google_io_trace_current', [])
+    _last_io = st.session_state.get('_gtl_google_io_trace_last', [])
+    _last_save = st.session_state.get('last_save_func_diag')
 
+    # 💡 이번 턴에 통신이 없었더라도 직전 턴(저장/동기화 리런)에 발생한 통신이 있다면 릴레이 복원!
+    if not _current_io and _last_io:
+        _display_io = _last_io
+        _is_relayed = True
+    else:
+        _display_io = _current_io
+        _is_relayed = False
+
+    _read_calls = [x for x in _display_io if x.get('type') == 'READ']
+    _write_calls = [x for x in _display_io if x.get('type') == 'WRITE']
     _read_total_ms = sum(float(x.get('elapsed_ms', 0)) for x in _read_calls)
     _write_total_ms = sum(float(x.get('elapsed_ms', 0)) for x in _write_calls)
 
-    st.markdown("### 🔬 Google I/O (READ & WRITE) 호출 진단")
+    # 구글 통신이나 저장이 발생했을 때는 관제창을 열어두고, 평소에는 깔끔하게 접어둠
+    _has_recent_activity = bool(_display_io or _last_save)
 
-    # 1. 최근 저장 함수 실행시간 표시
-    _last_save = st.session_state.get('last_save_func_diag')
-    if _last_save:
-        st.markdown(
-            f"""
-            <div style='background: rgba(234, 88, 12, 0.15); border: 1.5px solid #EA580C; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px;'>
-                <b>💾 최근 실행된 저장 함수:</b> <code>{_last_save.get('action')}</code> |
-                대상: <code>{_last_save.get('target')}</code> |
-                <b>총 소요시간: <span style='color:#4EFEB3;'>{_last_save.get('total_ms', 0):,.1f}ms</span></b>
-                <span style='color:#888; font-size:12px;'>({_last_save.get('timestamp')})</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    # 2. 이번 rerun의 구글 통신 총합 요약
-    st.write(
-        f"**현재 rerun 구글 통신 총 {len(_google_io_trace)}회** "
-        f"(📖 읽기: {len(_read_calls)}회 / {_read_total_ms:,.1f}ms | "
-        f"💾 쓰기: {len(_write_calls)}회 / {_write_total_ms:,.1f}ms)"
-    )
-
-    if not _google_io_trace:
-        st.info("이번 rerun에서는 실제 Google 통신(READ/WRITE)이 전혀 발생하지 않았습니다. 순수 메모리 경로입니다.")
-    else:
-        for item in _google_io_trace:
-            _type = item.get('type', 'READ')
-            _badge = "📖 READ" if _type == "READ" else "💾 WRITE"
-            _color = "#10B981" if _type == "READ" else "#EA580C"
-            _status = "✅" if item.get('success', False) else "❌"
-
+    with st.expander("🛠️ 시스템 진단 및 클라우드 I/O 통합 관제 센터", expanded=_has_recent_activity):
+        # 1. 최근 저장 함수 실행시간 카드
+        if _last_save:
             st.markdown(
-                f"{_status} <span style='background-color:{_color}; color:white; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;'>{_badge}</span> "
-                f"#{item.get('seq', '-')} | {item.get('timestamp', '-')} | "
-                f"Sheet=<code>{item.get('worksheet', '-')}</code> ({item.get('details', '-')}) | "
-                f"<b>{item.get('elapsed_ms', 0):,.1f}ms</b>",
+                f"""
+                <div style='background: rgba(234, 88, 12, 0.15); border: 1.5px solid #EA580C; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px;'>
+                    <b>💾 최근 실행된 저장 함수:</b> <code>{_last_save.get('action')}</code> |
+                    대상: <code>{_last_save.get('target')}</code> ({_last_save.get('rows', 0)}개 행) |
+                    <b>총 소요시간: <span style='color:#4EFEB3;'>{_last_save.get('total_ms', 0):,.1f}ms</span></b>
+                    <span style='color:#888; font-size:12px;'>({_last_save.get('timestamp')})</span>
+                </div>
+                """,
                 unsafe_allow_html=True
             )
 
-            if item.get('error'):
-                st.caption(f"오류: {item.get('error')}")
+        # 2. 구글 I/O (READ & WRITE) 상세 목록
+        _relay_tag = "<span style='color:#FFA500; font-size:12px;'> (직전 저장/동기화 작업 통신 내역)</span>" if _is_relayed else ""
+        st.markdown(f"#### 📡 Google Cloud 통신 현황{_relay_tag}", unsafe_allow_html=True)
+        st.write(
+            f"**통신 합계: 총 {len(_display_io)}회** "
+            f"(📖 읽기: {len(_read_calls)}회 / {_read_total_ms:,.1f}ms | "
+            f"💾 쓰기: {len(_write_calls)}회 / {_write_total_ms:,.1f}ms)"
+        )
 
-except Exception as _google_io_diag_error:
-    st.caption(f"Google I/O 진단 표시 실패: {_google_io_diag_error}")
+        if not _display_io:
+            st.info("실제 Google 통신(READ/WRITE)이 전혀 발생하지 않았습니다. 순수 메모리 경로입니다.")
+        else:
+            for item in _display_io:
+                _type = item.get('type', 'READ')
+                _badge = "📖 READ" if _type == "READ" else "💾 WRITE"
+                _color = "#10B981" if _type == "READ" else "#EA580C"
+                _status = "✅" if item.get('success', False) else "❌"
+
+                st.markdown(
+                    f"{_status} <span style='background-color:{_color}; color:white; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;'>{_badge}</span> "
+                    f"#{item.get('seq', '-')} | {item.get('timestamp', '-')} | "
+                    f"Sheet=<code>{item.get('worksheet', '-')}</code> ({item.get('details', '-')}) | "
+                    f"<b>{item.get('elapsed_ms', 0):,.1f}ms</b>",
+                    unsafe_allow_html=True
+                )
+
+        st.divider()
+
+        # 3. 세션 및 프로세스 요약 (깔끔한 4분할 지표)
+        st.markdown("#### 🧬 세션 생명주기 및 프로세스 상태")
+        c_s1, c_s2, c_s3, c_s4 = st.columns(4)
+        c_s1.metric("세션 Rerun 카운트", f"{st.session_state.get('gtl_session_rerun_count', 1)}회")
+        c_s2.metric("작업 원장 메모리", "정상 탑재 (True)" if 'active_ledger_df' in st.session_state else "미탑재")
+        c_s3.metric("프로세스 ID (PID)", str(os.getpid()))
+        c_s4.metric("현재 로드된 시트", str(st.session_state.get('last_loaded_sheet', '-')))
+
+        st.caption(f"Session ID: `{st.session_state.get('gtl_session_instance_id', '-')}` (생성: {st.session_state.get('gtl_session_created_at', '-')})")
+
+        # 4. FULL REFRESH 최근 구간별 속도 분석
+        _frp_latest = st.session_state.get('_frp_latest_record')
+        if _frp_latest:
+            st.divider()
+            st.markdown(f"#### 🧭 최신 실행 구간 분석 (Total: {_frp_latest.get('total_ms', 0):,.1f}ms)")
+            _cps = _frp_latest.get('checkpoints', [])
+            if _cps:
+                c_cols = st.columns(min(4, max(1, len(_cps))))
+                for idx, cp in enumerate(_cps):
+                    c_cols[idx % len(c_cols)].caption(f"• {cp.get('label')}: **{cp.get('elapsed_ms', 0):,.1f}ms**")
+
+except Exception as _e_diag_all:
+    st.caption(f"통합 관제 센터 렌더링 알림: {_e_diag_all}")
