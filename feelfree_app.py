@@ -1212,24 +1212,24 @@ def clean_amount_to_float(val):
     except: return 0.0
 
 # ==============================================================================
-# 2.03.02 | Dual-Layer Ledger Loader (App-Cache + Session-State Fast Path)
+# 2.03.02 | Dual-Layer Ledger Loader (Pure Permanent Cache / Zero-TTL)
 # ==============================================================================
 # 목적:
-#   1. 웹소켓 리셋으로 st.session_state가 날아가도 구글 접속 0회 유지
-#   2. 1계층(@st.cache_data 프로세스 메모리) -> 2계층(st.session_state 작업 원장)
-#   3. force_cloud=True (Cloud Refresh 명시적 클릭)일 때만 구글 READ
+#   1. ttl 파라미터 완전 삭제: 1인 환경에 맞춘 만료 없는 순수 영구 캐시
+#   2. 1계층(@st.cache_data 프로세스 메모리) -> 2계층(session_state 작업 원장)
+#   3. force_cloud=True일 때만 명시적 갱신
 # ==============================================================================
 
 @st.cache_data(show_spinner=False)
 def _fetch_sheet_data_from_cloud(sheet_name):
     """
-    ☁️ 구글 시트 실제 READ 전용 프로세스 캐시 함수.
-    앱 프로세스 메모리에 상주하므로 세션이 끊겨도 구글에 재접속하지 않는다.
+    ☁️ 구글 시트 실제 READ 전용 프로세스 영구 캐시 (TTL 없음)
     """
     df = None
     for attempt in range(3):
         try:
-            df = conn.read(worksheet=sheet_name, ttl="100m")
+            # 💡 ttl 파라미터를 완전히 제거하여 시간 만료를 원천 차단
+            df = conn.read(worksheet=sheet_name)
             break
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
@@ -1242,23 +1242,14 @@ def _fetch_sheet_data_from_cloud(sheet_name):
 
 def load_data(sheet_name, force_cloud=False):
     """
-    ⚡ 2중 메모리 원장 로더:
-    1단계: 현재 세션의 작업 메모리(session_state) 확인
-    2단계: 세션이 초기화된 경우 앱 프로세스 캐시(_fetch_sheet_data_from_cloud)에서 즉시 복원
-    3단계: force_cloud=True인 경우에만 캐시 무효화 후 구글 접속
+    ⚡ 2중 메모리 원장 로더 (TTL 만료 없는 순수 영구 복원)
     """
-    # ------------------------------------------------------------
-    # 1. 강제 클라우드 갱신 요청 시 프로세스 캐시 무효화
-    # ------------------------------------------------------------
     if force_cloud:
         try:
             _fetch_sheet_data_from_cloud.clear()
         except Exception:
             pass
 
-    # ------------------------------------------------------------
-    # 2. 세션 메모리 유효성 검사 (초고속 패스: 0.1ms)
-    # ------------------------------------------------------------
     if (
         not force_cloud
         and 'active_ledger_df' in st.session_state
@@ -1268,9 +1259,6 @@ def load_data(sheet_name, force_cloud=False):
     ):
         return st.session_state.active_ledger_df
 
-    # ------------------------------------------------------------
-    # 3. 세션이 리셋된 경우: 구글 직행 차단 ➔ 앱 프로세스 캐시에서 획득
-    # ------------------------------------------------------------
     raw_df = _fetch_sheet_data_from_cloud(sheet_name)
 
     if raw_df is None or raw_df.empty:
@@ -1281,9 +1269,6 @@ def load_data(sheet_name, force_cloud=False):
 
     df = raw_df.copy()
 
-    # ------------------------------------------------------------
-    # 4. 원장 정규화 및 전처리 (메모리상 수행)
-    # ------------------------------------------------------------
     year_match = re.search(r'\((\d{4})\)', st.session_state.get('current_trip', ''))
     trip_year = year_match.group(1) if year_match else "2026"
     first_node_curr = FIRST_NODE_NAME if 'FIRST_NODE_NAME' in globals() else "베트남"
@@ -1334,9 +1319,6 @@ def load_data(sheet_name, force_cloud=False):
     df['Note'] = df['Note'].fillna("").astype(str)
     df['Receipt_URL'] = df['Receipt_URL'].fillna("").astype(str)
 
-    # ------------------------------------------------------------
-    # 5. 세션 메모리에 바인딩 후 반환
-    # ------------------------------------------------------------
     st.session_state.active_ledger_df = df
     st.session_state.last_loaded_sheet = sheet_name
 
@@ -1683,12 +1665,11 @@ if (
 
 
 # ==============================================================================
-# 2.03.03 | Multi-Trip Global Ledger Consolidator (Permanent App-Cache)
+# 2.03.03 | Multi-Trip Global Ledger Consolidator (Pure Permanent Cache / Zero-TTL)
 # ==============================================================================
 # 목적:
-#   1. Streamlit 스레드 격리 무결성: 메인 스레드 안전 루프로 복원
-#   2. 1인 환경 최적화: ttl=None (영구 메모리 캐시)로 최초 1회만 로드
-#   3. '모든 여행가계부' 검색 및 물가비교(SPI)에 완전한 통합 원장 제공
+#   1. ttl 파라미터 완전 삭제: 8개 시트 영구 메모리 보존
+#   2. Cloud Refresh(수동 동기화) 외에는 10분, 100분 지나도 재조회 0회
 # ==============================================================================
 
 import json
@@ -1697,12 +1678,11 @@ import os
 _ALL_TRIPS_DIAG_PATH = "/tmp/load_all_trips_diagnostic.jsonl"
 
 
-@st.cache_data(ttl=None, show_spinner=False)
+# 💡 ttl 파라미터를 아예 쓰지 않는 것이 Streamlit 표준 영구 캐시
+@st.cache_data(show_spinner=False)
 def _load_all_trips_data_cloud():
     """
-    🌍 모든 여행가계부 원본 데이터 영구 캐시 계층.
-    - 최초 1회만 Google Sheets에서 안전하게 읽고 영구 보존
-    - ttl=None: 대표님이 직접 'Cloud Refresh'를 누르기 전까지 재조회 0회
+    🌍 모든 여행가계부 원본 데이터 영구 캐시 계층 (TTL 없음)
     """
     _cloud_started_at = time.perf_counter()
     all_dfs = []
@@ -1717,10 +1697,8 @@ def _load_all_trips_data_cloud():
         for attempt in range(3):
             _read_attempts += 1
             try:
-                df_t = conn.read(
-                    worksheet=config['sheet'],
-                    ttl="100m"
-                )
+                # 💡 ttl 매개변수 완전 삭제
+                df_t = conn.read(worksheet=config['sheet'])
                 _read_success = True
                 break
             except Exception as e:
@@ -1784,9 +1762,7 @@ def _load_all_trips_data_cloud():
 
 def load_all_trips_data(force_cloud=False):
     """
-    🌍 모든 여행가계부 조회 전용 메모리 캐시.
-    1. session_state 메모리 우선
-    2. 앱 영구 캐시(_load_all_trips_data_cloud) 사용
+    🌍 모든 여행가계부 조회 전용 메모리 캐시 (TTL 없음)
     """
     cache_key = 'all_trips_lookup_df'
 
