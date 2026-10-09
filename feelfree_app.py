@@ -93,10 +93,13 @@ def auto_update_log_to_gsheets():
 # 기존 호출은 그대로 둬도 안전하다.
 auto_update_log_to_gsheets()
 
-# ------------------------------------------------------------------------------
-# 1.04.00 | Dynamic Multi-Node Provisioning (관제탑 로드 및 다중 국가 동적 설정)
+# ==============================================================================
+# [Module 1.04.00] Dynamic Multi-Node Provisioning & Google I/O Global Tracer
+# ==============================================================================
+
 # ------------------------------------------------------------------------------
 # 1.04.01 | Multi-Country Node Financial Parser (현지 통화 자동 추론 헬퍼)
+# ------------------------------------------------------------------------------
 def infer_node_info(c_name, def_c, def_s, def_t, def_m):
     c_upper = c_name.upper().replace(" ", "")
     if any(k in c_upper for k in ["튀르키예", "터키"]): return "TRY", "₺", 3, 1
@@ -114,191 +117,133 @@ def infer_node_info(c_name, def_c, def_s, def_t, def_m):
     if any(k in c_upper for k in ["사이프러스", "CYPRUS", "키프로스"]): return "EUR", "€", 2, 1
     return def_c, def_s, def_t, def_m
 
-# ==============================================================================
-# 1.04.02 | Control Tower Config Loader & Node Assembler
-# ==============================================================================
-# 목적:
-#   _GTL_CONFIG_는 여행 생성 시 만들어진 후 거의 변경되지 않는
-#   정적 설정 데이터이므로 Session State가 아니라 앱 전체 Cache를 사용한다.
-#
-# 동작:
-#   - 최초 1회: Google READ
-#   - 이후 모든 Session: Cache 사용
-#   - TTL 없음
-#   - 새 여행 생성 / Cloud Refresh에서 st.cache_data.clear()가 실행되면
-#     다음 접근 시 다시 Google READ
-#
-# 중요:
-#   CONFIG_SHEET 자체의 conn.read()에는 ttl=0s를 사용한다.
-#   실제 재조회 여부는 바깥의 @st.cache_data가 결정한다.
-# ==============================================================================
 
-@st.cache_data(
-    show_spinner=False
-)
+# ------------------------------------------------------------------------------
+# 1.04.02 | Google I/O Global Tracer (READ & WRITE 통합 선행 계측 래퍼)
+# ------------------------------------------------------------------------------
+st.session_state['_gtl_google_io_trace_current'] = []
+st.session_state['_gtl_google_read_trace_current'] = []
+
+# 1. conn.read 추적 래퍼
+_current_conn_read = getattr(conn, 'read', None)
+if _current_conn_read is not None and not getattr(_current_conn_read, '_gtl_google_io_read_wrapped', False):
+    _original_conn_read = _current_conn_read
+
+    def _gtl_traced_conn_read(*args, **kwargs):
+        _seq = len(st.session_state.get('_gtl_google_io_trace_current', [])) + 1
+        _started_at = time.perf_counter()
+        _worksheet = kwargs.get('worksheet', args[0] if len(args) > 0 else 'Unknown')
+        _ttl = kwargs.get('ttl', 'None')
+        _success = False
+        _error = ''
+        try:
+            _result = _original_conn_read(*args, **kwargs)
+            _success = True
+            return _result
+        except Exception as e:
+            _error = str(e)
+            raise
+        finally:
+            _elapsed_ms = (time.perf_counter() - _started_at) * 1000
+            _trace_item = {
+                'seq': _seq,
+                'type': 'READ',
+                'timestamp': datetime.now(TZ_KST).strftime("%H:%M:%S.%f")[:-3],
+                'worksheet': str(_worksheet),
+                'details': f"TTL={_ttl}",
+                'elapsed_ms': round(_elapsed_ms, 1),
+                'success': bool(_success),
+                'error': _error[:300],
+            }
+            st.session_state.setdefault('_gtl_google_io_trace_current', []).append(_trace_item)
+            st.session_state.setdefault('_gtl_google_read_trace_current', []).append(_trace_item)
+
+    _gtl_traced_conn_read.__name__ = getattr(_original_conn_read, '__name__', 'read')
+    _gtl_traced_conn_read._gtl_google_io_read_wrapped = True
+    conn.read = _gtl_traced_conn_read
+
+# 2. conn.update (Google WRITE) 추적 래퍼 장착
+_current_conn_update = getattr(conn, 'update', None)
+if _current_conn_update is not None and not getattr(_current_conn_update, '_gtl_google_io_update_wrapped', False):
+    _original_conn_update = _current_conn_update
+
+    def _gtl_traced_conn_update(*args, **kwargs):
+        _seq = len(st.session_state.get('_gtl_google_io_trace_current', [])) + 1
+        _started_at = time.perf_counter()
+        _worksheet = kwargs.get('worksheet', args[0] if len(args) > 0 else 'Unknown')
+        _data = kwargs.get('data', args[1] if len(args) > 1 else None)
+        _row_count = len(_data) if _data is not None and hasattr(_data, '__len__') else 0
+        _success = False
+        _error = ''
+        try:
+            _result = _original_conn_update(*args, **kwargs)
+            _success = True
+            return _result
+        except Exception as e:
+            _error = str(e)
+            raise
+        finally:
+            _elapsed_ms = (time.perf_counter() - _started_at) * 1000
+            _trace_item = {
+                'seq': _seq,
+                'type': 'WRITE',
+                'timestamp': datetime.now(TZ_KST).strftime("%H:%M:%S.%f")[:-3],
+                'worksheet': str(_worksheet),
+                'details': f"{_row_count}개 행",
+                'elapsed_ms': round(_elapsed_ms, 1),
+                'success': bool(_success),
+                'error': _error[:300],
+            }
+            st.session_state.setdefault('_gtl_google_io_trace_current', []).append(_trace_item)
+
+    _gtl_traced_conn_update.__name__ = getattr(_original_conn_update, '__name__', 'update')
+    _gtl_traced_conn_update._gtl_google_io_update_wrapped = True
+    conn.update = _gtl_traced_conn_update
+
+
+# ------------------------------------------------------------------------------
+# 1.04.03 | Control Tower Config Loader & Node Assembler
+# ------------------------------------------------------------------------------
+@st.cache_data(show_spinner=False)
 def get_trip_configs():
-
     _func_started_at = time.perf_counter()
-
-    _diag_path = (
-        "/tmp/get_trip_configs_diagnostic.jsonl"
-    )
-
-    # --------------------------------------------------------
-    # 1. Google CONFIG_SHEET READ
-    # --------------------------------------------------------
-
+    _diag_path = "/tmp/get_trip_configs_diagnostic.jsonl"
     _read_started_at = time.perf_counter()
 
     cfg_df = None
     _read_attempts = 0
 
     for attempt in range(3):
-
         _read_attempts += 1
-
         try:
-
-            cfg_df = conn.read(
-                worksheet=CONFIG_SHEET,
-                ttl="0s"
-            )
-
-            if (
-                cfg_df is not None
-                and not cfg_df.empty
-            ):
-
+            # 💡 센서가 선행 설치되었으므로 이 호출이 정확히 READ #1로 계측됨
+            cfg_df = conn.read(worksheet=CONFIG_SHEET)
+            if cfg_df is not None and not cfg_df.empty:
                 break
-
         except Exception as e:
-
-            if (
-                attempt < 2
-                and (
-                    "429" in str(e)
-                    or "Quota" in str(e)
-                )
-            ):
-
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(2.5)
-
                 continue
-
-            st.error(
-                f"🚨 **관제탑 설정("
-                f"'{CONFIG_SHEET}') "
-                f"로드 실패 (API 과부하).**"
-            )
-
+            st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}') 로드 실패 (API 과부하).**")
             st.stop()
 
-    _read_elapsed_ms = (
-        time.perf_counter()
-        - _read_started_at
-    ) * 1000
+    _read_elapsed_ms = (time.perf_counter() - _read_started_at) * 1000
 
-    # --------------------------------------------------------
-    # 2. Empty Config Protection
-    # --------------------------------------------------------
-
-    if (
-        cfg_df is None
-        or cfg_df.empty
-    ):
-
-        st.error(
-            f"🚨 **관제탑 설정("
-            f"'{CONFIG_SHEET}')이 "
-            f"비어있습니다.**"
-        )
-
+    if cfg_df is None or cfg_df.empty:
+        st.error(f"🚨 **관제탑 설정('{CONFIG_SHEET}')이 비어있습니다.**")
         st.stop()
 
-    # --------------------------------------------------------
-    # 3. Dynamic Config Assembly
-    # --------------------------------------------------------
-
     dynamic_configs = {}
-
     for _, row in cfg_df.iterrows():
-
-        raw_cats = (
-            str(
-                row['Categories']
-            )
-            .replace(
-                "，",
-                ","
-            )
-            .split(",")
-        )
-
-        cats = [
-            c.strip()
-            for c in raw_cats
-            if c.strip()
-        ]
-
-        travelers = (
-            int(
-                row['Travelers']
-            )
-            if (
-                'Travelers'
-                in row
-                and pd.notna(
-                    row['Travelers']
-                )
-            )
-            else 2
-        )
-
-        stay_mapping = (
-            str(
-                row['Stay_Mapping']
-            ).strip()
-            if (
-                'Stay_Mapping'
-                in row
-                and pd.notna(
-                    row['Stay_Mapping']
-                )
-            )
-            else ""
-        )
-
-        main_country = str(
-            row['MainCountry']
-        ).strip()
-
-        main_curr = str(
-            row['Currency']
-        ).strip().upper()
-
-        main_sym = str(
-            row['Symbol']
-        ).strip()
-
-        main_tz = (
-            int(
-                row['Timezone']
-            )
-            if pd.notna(
-                row['Timezone']
-            )
-            else 9
-        )
-
-        main_mult = (
-            int(
-                row['Multiplier']
-            )
-            if pd.notna(
-                row['Multiplier']
-            )
-            else 1
-        )
+        raw_cats = str(row['Categories']).replace("，", ",").split(",")
+        cats = [c.strip() for c in raw_cats if c.strip()]
+        travelers = int(row['Travelers']) if ('Travelers' in row and pd.notna(row['Travelers'])) else 2
+        stay_mapping = str(row['Stay_Mapping']).strip() if ('Stay_Mapping' in row and pd.notna(row['Stay_Mapping'])) else ""
+        main_country = str(row['MainCountry']).strip()
+        main_curr = str(row['Currency']).strip().upper()
+        main_sym = str(row['Symbol']).strip()
+        main_tz = int(row['Timezone']) if pd.notna(row['Timezone']) else 9
+        main_mult = int(row['Multiplier']) if pd.notna(row['Multiplier']) else 1
 
         nodes = {
             main_country: {
@@ -310,44 +255,12 @@ def get_trip_configs():
         }
 
         if stay_mapping:
-
-            parts = (
-                stay_mapping
-                .replace(
-                    " ",
-                    ""
-                )
-                .split(",")
-            )
-
+            parts = stay_mapping.replace(" ", "").split(",")
             for p in parts:
-
                 if ":" in p:
-
-                    c_name = (
-                        p.split(":")[0]
-                        .strip()
-                    )
-
-                    if (
-                        c_name
-                        and c_name
-                        not in nodes
-                    ):
-
-                        (
-                            inf_c,
-                            inf_s,
-                            inf_t,
-                            inf_m
-                        ) = infer_node_info(
-                            c_name,
-                            main_curr,
-                            main_sym,
-                            main_tz,
-                            main_mult
-                        )
-
+                    c_name = p.split(":")[0].strip()
+                    if c_name and c_name not in nodes:
+                        inf_c, inf_s, inf_t, inf_m = infer_node_info(c_name, main_curr, main_sym, main_tz, main_mult)
                         nodes[c_name] = {
                             "currency": inf_c,
                             "symbol": inf_s,
@@ -355,68 +268,29 @@ def get_trip_configs():
                             "multiplier": inf_m
                         }
 
-        dynamic_configs[
-            str(
-                row['TripName']
-            )
-        ] = {
-            "sheet": str(
-                row['SheetName']
-            ),
+        dynamic_configs[str(row['TripName'])] = {
+            "sheet": str(row['SheetName']),
             "nodes": nodes,
             "cats": cats,
             "travelers": travelers,
             "stay_mapping": stay_mapping
         }
 
-    # --------------------------------------------------------
-    # 4. Diagnostic Log
-    # --------------------------------------------------------
-
-    _function_elapsed_ms = (
-        time.perf_counter()
-        - _func_started_at
-    ) * 1000
-
+    _function_elapsed_ms = (time.perf_counter() - _func_started_at) * 1000
     _diag_item = {
-        "timestamp": datetime.now(
-            TZ_KST
-        ).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
+        "timestamp": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"),
         "event": "google_read",
-        "sheet": str(
-            CONFIG_SHEET
-        ),
-        "read_elapsed_ms": round(
-            _read_elapsed_ms,
-            1
-        ),
-        "function_elapsed_ms": round(
-            _function_elapsed_ms,
-            1
-        ),
+        "sheet": str(CONFIG_SHEET),
+        "read_elapsed_ms": round(_read_elapsed_ms, 1),
+        "function_elapsed_ms": round(_function_elapsed_ms, 1),
         "attempts": _read_attempts,
         "cache_type": "st.cache_data",
         "ttl": "NONE",
     }
 
     try:
-
-        with open(
-            _diag_path,
-            "a",
-            encoding="utf-8"
-        ) as f:
-
-            f.write(
-                json.dumps(
-                    _diag_item,
-                    ensure_ascii=False
-                )
-                + "\n"
-            )
-
+        with open(_diag_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(_diag_item, ensure_ascii=False) + "\n")
     except Exception:
         pass
 
@@ -424,181 +298,8 @@ def get_trip_configs():
 
 
 # ------------------------------------------------------------------------------
-# Global Trip Config
+# 1.04.04 | Global Trip Config 실행부 (단 1회 실행)
 # ------------------------------------------------------------------------------
-
-TRIP_CONFIGS = get_trip_configs()
-
-
-# ==============================================================================
-# 1.04.03 | Google READ Global Tracer
-# ==============================================================================
-# 목적:
-# 한 번의 Streamlit rerun 동안 실제 conn.read()가
-# 몇 번 호출되는지 전부 계측한다.
-#
-# 기록 항목:
-#   - 순번
-#   - worksheet
-#   - ttl
-#   - 소요시간
-#   - 성공/실패
-#   - 오류 메시지
-#
-# 중요:
-#   이 블록은 데이터 동작을 변경하지 않는다.
-#   기존 conn.read()를 감싸서 시간과 호출 횟수만 측정한다.
-# ==============================================================================
-
-# ------------------------------------------------------------
-# 1. 이번 rerun의 Google READ 진단 버퍼 초기화
-# ------------------------------------------------------------
-
-st.session_state[
-    '_gtl_google_read_trace_current'
-] = []
-
-st.session_state[
-    '_gtl_google_read_trace_started_at'
-] = datetime.now(
-    TZ_KST
-).strftime(
-    "%Y-%m-%d %H:%M:%S"
-)
-
-
-# ------------------------------------------------------------
-# 2. conn.read()가 아직 tracer로 감싸지지 않은 경우에만 설치
-# ------------------------------------------------------------
-
-_current_conn_read = getattr(
-    conn,
-    'read',
-    None
-)
-
-if (
-    _current_conn_read is not None
-    and not getattr(
-        _current_conn_read,
-        '_gtl_google_read_trace_wrapped',
-        False
-    )
-):
-
-    _original_conn_read = (
-        _current_conn_read
-    )
-
-    def _gtl_traced_conn_read(
-        *args,
-        **kwargs
-    ):
-
-        _seq = (
-            len(
-                st.session_state.get(
-                    '_gtl_google_read_trace_current',
-                    []
-                )
-            )
-            + 1
-        )
-
-        _started_at = (
-            time.perf_counter()
-        )
-
-        _worksheet = kwargs.get(
-            'worksheet',
-            None
-        )
-
-        _ttl = kwargs.get(
-            'ttl',
-            None
-        )
-
-        _success = False
-        _error = ''
-        _result = None
-
-        try:
-
-            _result = _original_conn_read(
-                *args,
-                **kwargs
-            )
-
-            _success = True
-
-            return _result
-
-        except Exception as e:
-
-            _error = str(e)
-
-            raise
-
-        finally:
-
-            _elapsed_ms = (
-                time.perf_counter()
-                - _started_at
-            ) * 1000
-
-            _trace_item = {
-                'seq': _seq,
-                'timestamp': datetime.now(
-                    TZ_KST
-                ).strftime(
-                    "%H:%M:%S.%f"
-                )[:-3],
-                'worksheet': str(
-                    _worksheet
-                ),
-                'ttl': str(
-                    _ttl
-                ),
-                'elapsed_ms': round(
-                    _elapsed_ms,
-                    1
-                ),
-                'success': bool(
-                    _success
-                ),
-                'error': _error[:300],
-            }
-
-            st.session_state[
-                '_gtl_google_read_trace_current'
-            ].append(
-                _trace_item
-            )
-
-
-    _gtl_traced_conn_read.__name__ = (
-        getattr(
-            _original_conn_read,
-            '__name__',
-            'read'
-        )
-    )
-
-    _gtl_traced_conn_read._gtl_google_read_trace_wrapped = True
-
-    _gtl_traced_conn_read._gtl_google_read_trace_original = (
-        _original_conn_read
-    )
-
-    conn.read = (
-        _gtl_traced_conn_read
-    )
-
-# ==============================================================================
-# 1.04.04 | TRIP_CONFIGS = get_trip_configs() 실행부
-# ==============================================================================
-# ⚠️ 이 줄은 기존 그대로 유지
 TRIP_CONFIGS = get_trip_configs()
 
 # ------------------------------------------------------------------------------
@@ -2610,363 +2311,149 @@ def recalculate_entire_ledger(df):
 _frp_checkpoint("2.04 종료")
 
 
-# ------------------------------------------------------------------------------
-# 2.05.00 | Cloud Persistence & Inventory Synchronization
-# ------------------------------------------------------------------------------
-
+# ==============================================================================
+# [Module 2.05.00] Cloud Persistence & Inventory Synchronization
+# ==============================================================================
 
 # ------------------------------------------------------------------------------
 # 2.05.01 | Memory Mutation & Dirty-State Manager
 # ------------------------------------------------------------------------------
-
 LEDGER_BACKUP_INTERVAL_SECONDS = 180
 
 
 def mark_ledger_dirty():
-    """
-    원장 변경을 메모리에만 반영했음을 표시한다.
-    Google Sheets에는 접근하지 않는다.
-    """
-
-    st.session_state[
-        'ledger_dirty'
-    ] = True
-
-    st.session_state[
-        'ledger_mutation_count'
-    ] = int(
-        st.session_state.get(
-            'ledger_mutation_count',
-            0
-        )
-    ) + 1
-
-    st.session_state[
-        'ledger_order_dirty'
-    ] = True
+    st.session_state['ledger_dirty'] = True
+    st.session_state['ledger_mutation_count'] = int(st.session_state.get('ledger_mutation_count', 0)) + 1
+    st.session_state['ledger_order_dirty'] = True
 
 
 def _invalidate_post_commit_lookup_caches():
-    """
-    정식 저장 후 조회용 캐시만 무효화한다.
-
-    active_ledger_df는 유지한다.
-    """
-
-    st.session_state.pop(
-        'all_trips_lookup_df',
-        None
-    )
-
-    for fn_name in [
-        '_load_all_trips_data_cloud',
-        'load_all_trips_data'
-    ]:
-
+    st.session_state.pop('all_trips_lookup_df', None)
+    for fn_name in ['_load_all_trips_data_cloud', 'load_all_trips_data']:
         try:
-
-            fn = globals().get(
-                fn_name
-            )
-
-            if (
-                fn is not None
-                and hasattr(fn, 'clear')
-            ):
+            fn = globals().get(fn_name)
+            if fn is not None and hasattr(fn, 'clear'):
                 fn.clear()
-
         except Exception:
             pass
 
 
 def save_data(df, metrics=None):
-    """
-    기존 호출부 호환용.
-
-    실제 Google Sheets 저장은 하지 않는다.
-    메모리 원장만 갱신한다.
-    """
-
     if df is None or df.empty:
-
-        st.error(
-            "🚨 저장하려는 데이터가 비어있습니다. "
-            "데이터 보호를 위해 저장을 중단합니다."
-        )
-
+        st.error("🚨 저장하려는 데이터가 비어있습니다. 저장을 중단합니다.")
         return False
 
-    final_df = recalculate_entire_ledger(
-        df
-    )
-
-    st.session_state.active_ledger_df = (
-        final_df
-    )
-
-    st.session_state[
-        'last_loaded_sheet'
-    ] = ACTIVE_SHEET
-
+    final_df = recalculate_entire_ledger(df)
+    st.session_state.active_ledger_df = final_df
+    st.session_state['last_loaded_sheet'] = ACTIVE_SHEET
     mark_ledger_dirty()
-
     return True
 
 
 # ------------------------------------------------------------------------------
 # 2.05.02 | Atomic Ledger Appender (Memory-First)
 # ------------------------------------------------------------------------------
-
 def append_new_data(new_rows_df):
-    """
-    새 내역을 메모리 원장에 추가한다.
-    """
-
-    if (
-        new_rows_df is None
-        or new_rows_df.empty
-    ):
+    if new_rows_df is None or new_rows_df.empty:
         return False
 
-    latest_df = st.session_state.get(
-        'active_ledger_df'
-    )
-
+    latest_df = st.session_state.get('active_ledger_df')
     if latest_df is None:
+        latest_df = load_data(ACTIVE_SHEET)
 
-        latest_df = load_data(
-            ACTIVE_SHEET
-        )
-
-    merged_df = pd.concat(
-        [
-            latest_df,
-            new_rows_df
-        ],
-        ignore_index=True
-    )
-
-    final_df = recalculate_entire_ledger(
-        merged_df
-    )
-
-    st.session_state.active_ledger_df = (
-        final_df
-    )
-
-    st.session_state[
-        'last_loaded_sheet'
-    ] = ACTIVE_SHEET
-
+    merged_df = pd.concat([latest_df, new_rows_df], ignore_index=True)
+    final_df = recalculate_entire_ledger(merged_df)
+    st.session_state.active_ledger_df = final_df
+    st.session_state['last_loaded_sheet'] = ACTIVE_SHEET
     mark_ledger_dirty()
-
     return True
 
 
 # ------------------------------------------------------------------------------
 # 2.05.03 | Quick Order Swap Committer (Memory-First)
 # ------------------------------------------------------------------------------
-
 def quick_swap_and_save(df):
-    """
-    기존 호출부 호환용.
-
-    실제 클라우드 저장은 하지 않고
-    메모리 원장만 갱신한다.
-    """
-
     try:
-
-        if (
-            df is None
-            or len(df) < 1
-        ):
+        if df is None or len(df) < 1:
             return False
 
-        final_df = recalculate_entire_ledger(
-            df
-        )
-
-        st.session_state.active_ledger_df = (
-            final_df
-        )
-
-        st.session_state[
-            'last_loaded_sheet'
-        ] = ACTIVE_SHEET
-
+        final_df = recalculate_entire_ledger(df)
+        st.session_state.active_ledger_df = final_df
+        st.session_state['last_loaded_sheet'] = ACTIVE_SHEET
         mark_ledger_dirty()
-
         return True
-
     except Exception as e:
-
-        st.error(
-            f"🚨 메모리 순서 변경 실패: {e}"
-        )
-
+        st.error(f"🚨 메모리 순서 변경 실패: {e}")
         return False
 
 
 # ------------------------------------------------------------------------------
-# 2.05.03A | Explicit Cloud Committer (Single Final Save)
+# 2.05.03A | Explicit Cloud Committer (Single Final Save & Timing Logger)
 # ------------------------------------------------------------------------------
-
 def commit_ledger_to_cloud():
     """
-    현재 메모리 원장을 최종 계산한 뒤
-    Google Sheets에 단 한 번 확정 저장한다.
+    현재 메모리 원장을 Google Sheets에 단 1회 확정 저장하고 전체 실행시간 계측
     """
-
-    df = st.session_state.get(
-        'active_ledger_df'
-    )
+    _t_start = time.perf_counter()
+    df = st.session_state.get('active_ledger_df')
 
     if df is None or df.empty:
-
-        st.error(
-            "🚨 저장할 원장 데이터가 없습니다."
-        )
-
+        st.error("🚨 저장할 원장 데이터가 없습니다.")
         return False
-
-    # ----------------------------------------------------------
-    # Anti-Wipe 보호
-    # ----------------------------------------------------------
 
     existing_df = None
-
     for attempt in range(3):
-
         try:
-
-            existing_df = conn.read(
-                worksheet=ACTIVE_SHEET,
-                ttl="0s"
-            )
-
+            existing_df = conn.read(worksheet=ACTIVE_SHEET, ttl="0s")
             break
-
         except Exception as e:
-
-            if (
-                attempt < 2
-                and (
-                    "429" in str(e)
-                    or "Quota" in str(e)
-                )
-            ):
-
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(2)
                 continue
-
-            st.error(
-                "🚨 클라우드 상태 확인 실패! "
-                f"안전을 위해 최종 저장을 중단합니다. ({e})"
-            )
-
+            st.error(f"🚨 클라우드 상태 확인 실패! 저장을 중단합니다. ({e})")
             return False
 
-    if (
-        existing_df is not None
-        and len(existing_df) > 5
-        and len(df) <= 3
-    ):
-
-        st.error(
-            "🚨 **치명적 데이터 증발(Wipe) 시도 차단됨!** "
-            f"(클라우드: {len(existing_df)}건 "
-            f"-> 저장시도: {len(df)}건)"
-        )
-
+    if existing_df is not None and len(existing_df) > 5 and len(df) <= 3:
+        st.error(f"🚨 **치명적 데이터 증발 시도 차단됨!** (클라우드: {len(existing_df)}건 -> 저장시도: {len(df)}건)")
         return False
 
-    # ----------------------------------------------------------
-    # 최종 계산
-    # ----------------------------------------------------------
-
-    final_df = (
-        recalculate_entire_ledger(df)
-        .reindex(columns=FINAL_COLUMNS)
-        .copy()
-    )
-
-    # ----------------------------------------------------------
-    # 실제 Google 저장
-    # ----------------------------------------------------------
+    final_df = recalculate_entire_ledger(df).reindex(columns=FINAL_COLUMNS).copy()
 
     for attempt in range(3):
-
         try:
-
-            conn.update(
-                worksheet=ACTIVE_SHEET,
-                data=final_df
-            )
-
-            st.session_state.active_ledger_df = (
-                final_df
-            )
-
-            st.session_state[
-                'last_loaded_sheet'
-            ] = ACTIVE_SHEET
-
-            st.session_state[
-                'ledger_dirty'
-            ] = False
-
-            st.session_state[
-                'ledger_order_dirty'
-            ] = False
-
-            st.session_state[
-                'ledger_mutation_count'
-            ] = 0
-
-            st.session_state[
-                'last_cloud_commit_at'
-            ] = datetime.now(
-                TZ_KST
-            ).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+            conn.update(worksheet=ACTIVE_SHEET, data=final_df)
+            st.session_state.active_ledger_df = final_df
+            st.session_state['last_loaded_sheet'] = ACTIVE_SHEET
+            st.session_state['ledger_dirty'] = False
+            st.session_state['ledger_order_dirty'] = False
+            st.session_state['ledger_mutation_count'] = 0
+            st.session_state['last_cloud_commit_at'] = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
 
             _invalidate_post_commit_lookup_caches()
 
+            _t_elapsed_ms = (time.perf_counter() - _t_start) * 1000
+            st.session_state['last_save_func_diag'] = {
+                'action': '원장 일괄 저장',
+                'target': ACTIVE_SHEET,
+                'total_ms': round(_t_elapsed_ms, 1),
+                'rows': len(final_df),
+                'timestamp': datetime.now(TZ_KST).strftime("%H:%M:%S")
+            }
             return True
 
         except Exception as e:
-
-            if (
-                attempt < 2
-                and (
-                    "429" in str(e)
-                    or "Quota" in str(e)
-                )
-            ):
-
+            if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(2.5)
                 continue
-
-            st.error(
-                f"🚨 Google Sheets 최종 저장 실패: {e}"
-            )
-
+            st.error(f"🚨 Google Sheets 최종 저장 실패: {e}")
             return False
 
     return False
 
 
-# ==============================================================================
-# 2.05.04 | Cash Inventory Cloud Loader & Optimized Single-Write Saver
-# ==============================================================================
-# 목적:
-#   1. 지연 로딩용 영구 캐시 로더
-#   2. 저장 시 불필요한 구글 READ(force_cloud) 완전 제거 -> 구글 WRITE 딱 1회만 전송
-#   3. 저장 시간 수직 단축
-# ==============================================================================
-
+# ------------------------------------------------------------------------------
+# 2.05.04 | Cash Inventory Cloud Loader & Single-Write Timing Saver
+# ------------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def _load_cash_inventory_cloud():
     for attempt in range(3):
@@ -2974,18 +2461,14 @@ def _load_cash_inventory_cloud():
             df = conn.read(worksheet=CASH_SHEET)
             if df is not None and not df.empty:
                 return df.copy()
-            return pd.DataFrame(
-                columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At']
-            )
+            return pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
         except Exception as e:
             if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
                 time.sleep(1.5)
                 continue
             break
 
-    return pd.DataFrame(
-        columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At']
-    )
+    return pd.DataFrame(columns=['TripName', 'Currency', 'Bill_Counts', 'Total_Amount', 'Updated_At'])
 
 
 def load_cash_inventory(force_cloud=False):
@@ -2995,11 +2478,7 @@ def load_cash_inventory(force_cloud=False):
         except Exception:
             pass
 
-    if (
-        not force_cloud
-        and 'cached_cash_df' in st.session_state
-        and st.session_state.cached_cash_df is not None
-    ):
+    if not force_cloud and 'cached_cash_df' in st.session_state and st.session_state.cached_cash_df is not None:
         return st.session_state.cached_cash_df
 
     df = _load_cash_inventory_cloud()
@@ -3009,11 +2488,10 @@ def load_cash_inventory(force_cloud=False):
 
 def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
     """
-    ⚡ 최적화된 단일 쓰기(Single WRITE):
-    저장 전 구글 재조회(READ)를 제거하고, 메모리 데이터로 즉시 1회 쓰기 수행
+    ⚡ 최적화된 단일 쓰기 및 실행 시간 정밀 계측
     """
+    _t_start = time.perf_counter()
     try:
-        # 1. 💡 구글 재조회 없이 현재 메모리에 있는 캐시 사용
         df = st.session_state.get('cached_cash_df')
         if df is None or df.empty:
             df = load_cash_inventory(force_cloud=False)
@@ -3021,7 +2499,6 @@ def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
         counts_str = ";".join([f"{k}:{v}" for k, v in counts_dict.items()])
         now_str = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
 
-        # 2. 행 갱신 또는 추가
         mask = (df['TripName'] == trip_name) & (df['Currency'] == currency)
         if mask.any():
             idx = df[mask].index[0]
@@ -3038,16 +2515,22 @@ def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
             }])
             df = pd.concat([df, new_row], ignore_index=True)
 
-        # 3. 🚀 구글에 딱 1번만 쓰기(WRITE) 전송
         conn.update(worksheet=CASH_SHEET, data=df)
 
-        # 4. 메모리 캐시 갱신
         st.session_state.cached_cash_df = df
         try:
             _load_cash_inventory_cloud.clear()
         except Exception:
             pass
 
+        _t_elapsed_ms = (time.perf_counter() - _t_start) * 1000
+        st.session_state['last_save_func_diag'] = {
+            'action': f"실물현금 저장 ({currency})",
+            'target': CASH_SHEET,
+            'total_ms': round(_t_elapsed_ms, 1),
+            'rows': len(df),
+            'timestamp': datetime.now(TZ_KST).strftime("%H:%M:%S")
+        }
         return True
 
     except Exception as e:
@@ -3058,418 +2541,141 @@ def save_cash_inventory(trip_name, currency, counts_dict, total_amt):
 # ------------------------------------------------------------------------------
 # 2.05.05 | Ledger Auto-Backup & Recovery Guard
 # ------------------------------------------------------------------------------
-
 AUTO_BACKUP_PREFIX = "AUTO_BACKUP_"
 
 
 def _backup_sheet_name(sheet_name):
-
-    safe = re.sub(
-        r"[^0-9A-Za-z가-힣_-]+",
-        "_",
-        str(sheet_name)
-    ).strip("_")
-
-    return (
-        AUTO_BACKUP_PREFIX
-        + safe
-    )[:90]
+    safe = re.sub(r"[^0-9A-Za-z가-힣_-]+", "_", str(sheet_name)).strip("_")
+    return (AUTO_BACKUP_PREFIX + safe)[:90]
 
 
 def _trip_name_for_sheet(sheet_name):
-
     for trip_name, config in TRIP_CONFIGS.items():
-
-        if str(
-            config.get('sheet')
-        ) == str(sheet_name):
-
+        if str(config.get('sheet')) == str(sheet_name):
             return trip_name
-
     return str(sheet_name)
 
 
-def _write_auto_backup_snapshot(
-    df,
-    sheet_name=None,
-    trip_name=None
-):
-
+def _write_auto_backup_snapshot(df, sheet_name=None, trip_name=None):
     if df is None or df.empty:
         return False
 
-    target_sheet = str(
-        sheet_name
-        or ACTIVE_SHEET
-    )
+    target_sheet = str(sheet_name or ACTIVE_SHEET)
+    target_trip = str(trip_name or _trip_name_for_sheet(target_sheet))
+    backup_sheet = _backup_sheet_name(target_sheet)
+    backup_time = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
 
-    target_trip = str(
-        trip_name
-        or _trip_name_for_sheet(
-            target_sheet
-        )
-    )
-
-    backup_sheet = _backup_sheet_name(
-        target_sheet
-    )
-
-    backup_time = datetime.now(
-        TZ_KST
-    ).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
-
-    snapshot = (
-        df.reindex(
-            columns=FINAL_COLUMNS
-        ).copy()
-    )
-
-    snapshot.insert(
-        0,
-        'BackupTime',
-        backup_time
-    )
-
-    snapshot.insert(
-        1,
-        'ActiveSheet',
-        target_sheet
-    )
-
-    snapshot.insert(
-        2,
-        'TripName',
-        target_trip
-    )
-
-    snapshot.insert(
-        3,
-        'RowCount',
-        len(df)
-    )
+    snapshot = df.reindex(columns=FINAL_COLUMNS).copy()
+    snapshot.insert(0, 'BackupTime', backup_time)
+    snapshot.insert(1, 'ActiveSheet', target_sheet)
+    snapshot.insert(2, 'TripName', target_trip)
+    snapshot.insert(3, 'RowCount', len(df))
 
     try:
-
         try:
-
-            conn.update(
-                worksheet=backup_sheet,
-                data=snapshot
-            )
-
+            conn.update(worksheet=backup_sheet, data=snapshot)
         except Exception as e_update:
-
-            msg = str(
-                e_update
-            ).lower()
-
-            if (
-                'not found' in msg
-                or (
-                    'worksheet' in msg
-                    and (
-                        '404' in msg
-                        or 'does not exist'
-                        in msg
-                    )
-                )
-            ):
-
-                conn.create(
-                    worksheet=backup_sheet,
-                    data=snapshot
-                )
-
+            msg = str(e_update).lower()
+            if 'not found' in msg or ('worksheet' in msg and ('404' in msg or 'does not exist' in msg)):
+                conn.create(worksheet=backup_sheet, data=snapshot)
             else:
                 raise
-
         return True
-
     except Exception as e:
-
-        st.session_state[
-            'last_auto_backup_error'
-        ] = str(e)
-
+        st.session_state['last_auto_backup_error'] = str(e)
         return False
 
 
 def backup_active_ledger_to_cloud():
-
-    df = st.session_state.get(
-        'active_ledger_df'
-    )
-
+    df = st.session_state.get('active_ledger_df')
     if df is None or df.empty:
         return False
 
-    ok = _write_auto_backup_snapshot(
-        df
-    )
-
+    ok = _write_auto_backup_snapshot(df)
     if ok:
-
-        now_str = datetime.now(
-            TZ_KST
-        ).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-
-        st.session_state[
-            'last_auto_backup_at'
-        ] = now_str
-
-        st.session_state[
-            'last_auto_backup_sheet'
-        ] = ACTIVE_SHEET
-
-        st.session_state[
-            'last_auto_backup_error'
-        ] = ''
-
+        now_str = datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S")
+        st.session_state['last_auto_backup_at'] = now_str
+        st.session_state['last_auto_backup_sheet'] = ACTIVE_SHEET
+        st.session_state['last_auto_backup_error'] = ''
     return ok
 
 
 def restore_auto_backup_from_cloud():
-
-    backup_sheet = _backup_sheet_name(
-        ACTIVE_SHEET
-    )
-
+    backup_sheet = _backup_sheet_name(ACTIVE_SHEET)
     try:
-
-        backup_df = conn.read(
-            worksheet=backup_sheet,
-            ttl="0s"
-        )
-
-        if (
-            backup_df is None
-            or backup_df.empty
-        ):
-
-            st.error(
-                "🛡️ 복원할 자동 백업이 없습니다."
-            )
-
+        backup_df = conn.read(worksheet=backup_sheet, ttl="0s")
+        if backup_df is None or backup_df.empty:
+            st.error("🛡️ 복원할 자동 백업이 없습니다.")
             return False
 
         if 'ActiveSheet' in backup_df.columns:
-
-            backup_df = backup_df[
-                backup_df[
-                    'ActiveSheet'
-                ].astype(str)
-                == str(ACTIVE_SHEET)
-            ].copy()
+            backup_df = backup_df[backup_df['ActiveSheet'].astype(str) == str(ACTIVE_SHEET)].copy()
 
         if backup_df.empty:
-
-            st.error(
-                "🛡️ 현재 여행가계부와 일치하는 "
-                "자동 백업이 없습니다."
-            )
-
+            st.error("🛡️ 현재 여행가계부와 일치하는 자동 백업이 없습니다.")
             return False
 
-        data_df = (
-            backup_df
-            .reindex(columns=FINAL_COLUMNS)
-            .copy()
-        )
-
-        data_df = (
-            data_df
-            .dropna(how='all')
-            .reset_index(drop=True)
-        )
+        data_df = backup_df.reindex(columns=FINAL_COLUMNS).copy()
+        data_df = data_df.dropna(how='all').reset_index(drop=True)
 
         if data_df.empty:
-
-            st.error(
-                "🛡️ 자동 백업 데이터가 비어 있습니다."
-            )
-
+            st.error("🛡️ 자동 백업 데이터가 비어 있습니다.")
             return False
 
-        final_df = recalculate_entire_ledger(
-            data_df
-        )
-
-        st.session_state.active_ledger_df = (
-            final_df
-        )
-
-        st.session_state[
-            'last_loaded_sheet'
-        ] = ACTIVE_SHEET
-
-        st.session_state[
-            'ledger_dirty'
-        ] = True
-
-        st.session_state[
-            'ledger_order_dirty'
-        ] = True
-
-        st.session_state[
-            'ledger_mutation_count'
-        ] = int(
-            st.session_state.get(
-                'ledger_mutation_count',
-                0
-            )
-        ) + 1
-
-        st.toast(
-            "🛡️ 자동 백업을 메모리로 복원했습니다. "
-            "확인 후 '변경사항 일괄 저장'을 눌러주세요.",
-            icon="🔄"
-        )
-
+        final_df = recalculate_entire_ledger(data_df)
+        st.session_state.active_ledger_df = final_df
+        st.session_state['last_loaded_sheet'] = ACTIVE_SHEET
+        st.session_state['ledger_dirty'] = True
+        st.session_state['ledger_order_dirty'] = True
+        st.session_state['ledger_mutation_count'] = int(st.session_state.get('ledger_mutation_count', 0)) + 1
+        st.toast("🛡️ 자동 백업을 복원했습니다. 확인 후 '변경사항 일괄 저장'을 눌러주세요.", icon="🔄")
         return True
-
     except Exception as e:
-
-        st.error(
-            f"🚨 자동 백업 복원 실패: {e}"
-        )
-
+        st.error(f"🚨 자동 백업 복원 실패: {e}")
         return False
 
 
 def _ledger_auto_backup_fragment():
-    """
-    현재 진단 기간에는 자동 Google 접근을 하지 않는다.
-
-    사용자가 직접 백업하거나
-    최종 저장을 누른 경우에만 Google에 접근한다.
-    """
-
     return
 
 
 # ------------------------------------------------------------------------------
 # 2.05.06 | Pure Memory Cache Binder + Safe Trip Context
 # ------------------------------------------------------------------------------
-
 if 'ledger_dirty' not in st.session_state:
-
-    st.session_state[
-        'ledger_dirty'
-    ] = False
-
+    st.session_state['ledger_dirty'] = False
 
 if 'ledger_mutation_count' not in st.session_state:
+    st.session_state['ledger_mutation_count'] = 0
 
-    st.session_state[
-        'ledger_mutation_count'
-    ] = 0
-
-
-_previous_working_sheet = (
-    st.session_state.get(
-        'ledger_working_sheet'
-    )
-)
-
-
-if (
-    _previous_working_sheet
-    and
-    _previous_working_sheet
-    != ACTIVE_SHEET
-    and
-    st.session_state.get(
-        'ledger_dirty',
-        False
-    )
-):
-
+_previous_working_sheet = st.session_state.get('ledger_working_sheet')
+if _previous_working_sheet and _previous_working_sheet != ACTIVE_SHEET and st.session_state.get('ledger_dirty', False):
     _write_auto_backup_snapshot(
-        st.session_state.get(
-            'active_ledger_df'
-        ),
+        st.session_state.get('active_ledger_df'),
         sheet_name=_previous_working_sheet,
-        trip_name=_trip_name_for_sheet(
-            _previous_working_sheet
-        ),
+        trip_name=_trip_name_for_sheet(_previous_working_sheet),
     )
-
-
-# ------------------------------------------------------------
-# FULL REFRESH profiler wrapper 설치
-#
-# 이 시점에는
-# load_data
-# load_all_trips_data
-# load_cash_inventory
-# recalculate_entire_ledger
-#
-# 네 함수가 모두 정의되어 있다.
-# ------------------------------------------------------------
 
 _frp_install_wrappers()
 
-
-# ------------------------------------------------------------
-# 실제 원장 로딩
-# ------------------------------------------------------------
-
 if (
-    'active_ledger_df'
-    not in st.session_state
-    or
-    st.session_state.get(
-        'last_loaded_sheet'
-    )
-    != ACTIVE_SHEET
+    'active_ledger_df' not in st.session_state
+    or st.session_state.get('last_loaded_sheet') != ACTIVE_SHEET
 ):
+    st.session_state.active_ledger_df = load_data(ACTIVE_SHEET, force_cloud=False)
+    st.session_state['last_loaded_sheet'] = ACTIVE_SHEET
+    st.session_state['ledger_dirty'] = False
+    st.session_state['ledger_order_dirty'] = False
+    st.session_state['ledger_mutation_count'] = 0
 
-    st.session_state.active_ledger_df = (
-        load_data(
-            ACTIVE_SHEET,
-            force_cloud=False
-        )
-    )
-
-    st.session_state[
-        'last_loaded_sheet'
-    ] = ACTIVE_SHEET
-
-    st.session_state[
-        'ledger_dirty'
-    ] = False
-
-    st.session_state[
-        'ledger_order_dirty'
-    ] = False
-
-    st.session_state[
-        'ledger_mutation_count'
-    ] = 0
-
-
-st.session_state[
-    'ledger_working_sheet'
-] = ACTIVE_SHEET
-
-
-ledger_df = (
-    st.session_state.active_ledger_df
-)
-
-
-# 자동 백업은 현재 진단 기간에는
-# Google 접근을 하지 않는다.
+st.session_state['ledger_working_sheet'] = ACTIVE_SHEET
+ledger_df = st.session_state.active_ledger_df
 _ledger_auto_backup_fragment()
 
 
+# ------------------------------------------------------------------------------
 # 2.05.07 | FULL REFRESH Checkpoint: 2.05 End
 # ------------------------------------------------------------------------------
-
 _frp_checkpoint("2.05 종료")
 
 
@@ -6974,88 +6180,64 @@ _frp_checkpoint("6 종료")
 
 
 # ==============================================================================
-# 6.05.03 | Google READ 호출 결과 표시
+# 6.05.03 | Google I/O (READ & WRITE) 호출 결과 통합 표시
 # ==============================================================================
 # 목적:
-# 현재 rerun에서 실제 발생한 conn.read() 호출을 화면에 표시한다.
+#   1. 실제 발생한 모든 conn.read() 및 conn.update() 호출을 한 화면에 투명하게 표시
+#   2. 저장 함수 전체 총 소요시간 진단 카드 제공
 # ==============================================================================
 
 try:
+    _google_io_trace = st.session_state.get('_gtl_google_io_trace_current', [])
+    _read_calls = [x for x in _google_io_trace if x.get('type') == 'READ']
+    _write_calls = [x for x in _google_io_trace if x.get('type') == 'WRITE']
 
-    _google_read_trace = (
-        st.session_state.get(
-            '_gtl_google_read_trace_current',
-            []
+    _read_total_ms = sum(float(x.get('elapsed_ms', 0)) for x in _read_calls)
+    _write_total_ms = sum(float(x.get('elapsed_ms', 0)) for x in _write_calls)
+
+    st.markdown("### 🔬 Google I/O (READ & WRITE) 호출 진단")
+
+    # 1. 최근 저장 함수 실행시간 표시
+    _last_save = st.session_state.get('last_save_func_diag')
+    if _last_save:
+        st.markdown(
+            f"""
+            <div style='background: rgba(234, 88, 12, 0.15); border: 1.5px solid #EA580C; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px;'>
+                <b>💾 최근 실행된 저장 함수:</b> <code>{_last_save.get('action')}</code> |
+                대상: <code>{_last_save.get('target')}</code> |
+                <b>총 소요시간: <span style='color:#4EFEB3;'>{_last_save.get('total_ms', 0):,.1f}ms</span></b>
+                <span style='color:#888; font-size:12px;'>({_last_save.get('timestamp')})</span>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
-    )
 
-    _google_read_total_ms = sum(
-        float(
-            item.get(
-                'elapsed_ms',
-                0
-            )
-        )
-        for item in _google_read_trace
-    )
-
-    st.markdown(
-        "### 🔬 Google READ 호출 진단"
-    )
-
+    # 2. 이번 rerun의 구글 통신 총합 요약
     st.write(
-        f"**현재 rerun 실제 Google READ: "
-        f"{len(_google_read_trace)}회**"
-        f" | 합계: "
-        f"**{_google_read_total_ms:,.1f}ms**"
+        f"**현재 rerun 구글 통신 총 {len(_google_io_trace)}회** "
+        f"(📖 읽기: {len(_read_calls)}회 / {_read_total_ms:,.1f}ms | "
+        f"💾 쓰기: {len(_write_calls)}회 / {_write_total_ms:,.1f}ms)"
     )
 
-    if not _google_read_trace:
-
-        st.info(
-            "이번 rerun에서는 실제 conn.read()가 호출되지 않았습니다. "
-            "메모리 또는 캐시 경로입니다."
-        )
-
+    if not _google_io_trace:
+        st.info("이번 rerun에서는 실제 Google 통신(READ/WRITE)이 전혀 발생하지 않았습니다. 순수 메모리 경로입니다.")
     else:
+        for item in _google_io_trace:
+            _type = item.get('type', 'READ')
+            _badge = "📖 READ" if _type == "READ" else "💾 WRITE"
+            _color = "#10B981" if _type == "READ" else "#EA580C"
+            _status = "✅" if item.get('success', False) else "❌"
 
-        for item in _google_read_trace:
-
-            _status = (
-                "✅"
-                if item.get(
-                    'success',
-                    False
-                )
-                else "❌"
+            st.markdown(
+                f"{_status} <span style='background-color:{_color}; color:white; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;'>{_badge}</span> "
+                f"#{item.get('seq', '-')} | {item.get('timestamp', '-')} | "
+                f"Sheet=<code>{item.get('worksheet', '-')}</code> ({item.get('details', '-')}) | "
+                f"<b>{item.get('elapsed_ms', 0):,.1f}ms</b>",
+                unsafe_allow_html=True
             )
 
-            st.write(
-                f"{_status} "
-                f"#{item.get('seq', '-')}"
-                f" | "
-                f"{item.get('timestamp', '-')}"
-                f" | "
-                f"Sheet="
-                f"`{item.get('worksheet', '-')}`"
-                f" | TTL="
-                f"`{item.get('ttl', '-')}`"
-                f" | "
-                f"**{item.get('elapsed_ms', 0):,.1f}ms**"
-            )
+            if item.get('error'):
+                st.caption(f"오류: {item.get('error')}")
 
-            if item.get(
-                'error'
-            ):
-
-                st.caption(
-                    f"오류: "
-                    f"{item.get('error')}"
-                )
-
-except Exception as _google_read_diag_error:
-
-    st.caption(
-        "Google READ 진단 표시 실패: "
-        f"{_google_read_diag_error}"
-    )
+except Exception as _google_io_diag_error:
+    st.caption(f"Google I/O 진단 표시 실패: {_google_io_diag_error}")
