@@ -151,6 +151,50 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# ==============================================================================
+# 1.03.01 | Interviewee Profile & Financial State Initializer
+# ==============================================================================
+import random
+
+def init_interviewee_session():
+    """
+    서버 DB 0회! 키패드 입력 없이 터치만으로 완성되는 익명 세션 오케스트레이터
+    """
+    # 💡 스타벅스 주문번호 스타일의 친근하고 익명성 높은 고유 진단 번호 자동 생성 (예: #C-408)
+    if "starbucks_order_id" not in st.session_state:
+        tag_letter = random.choice(["A", "B", "C", "D", "E"])
+        tag_num = random.randint(101, 999)
+        st.session_state["starbucks_order_id"] = f"#{tag_letter}-{tag_num}"
+
+    defaults = {
+        # 1. 익명 터치형 프로필
+        "gender": "남성 👨",
+        "age_selected": "38세",
+        "marital_status": "기혼 💍",
+        "children_status": "자녀 1명 👶",
+        "parents_support": "독립 / 비부양",
+        
+        # 2. 로버트 기요사키 경제사분면 (주 소득원 & 부업)
+        "primary_quadrant": "💼 직장인 (E)",
+        "has_side_gig": False,
+        "side_quadrant": "자영업 / N잡 (S)",
+        
+        # 3. 소득 및 지출 흐름 (월 / 만원 단위)
+        "monthly_labor_income": 380,
+        "monthly_spouse_income": 150,
+        "monthly_asset_income": 0,
+        "monthly_living_cost": 280,
+        "monthly_debt_payment": 90,
+        "monthly_consumable_spend": 35,
+        "liquid_emergency_cash": 1200,
+    }
+    
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+init_interviewee_session()
+
 
 # ==============================================================================
 # [Module 2.00.00] Core Schema & National Benchmark Data (기초 메타데이터)
@@ -236,29 +280,60 @@ init_interviewee_session()
 
 
 # ==============================================================================
-# [Module 4.00.00] Sidebar Console (프로필 입력창 & 실시간 안심 버퍼 관제탑)
+# [Module 4.00.00] Sidebar Console (터치형 익명 프로필 & 실시간 안심 버퍼 관제탑)
 # ==============================================================================
 with st.sidebar:
-    st.markdown("### 🧭 인터뷰 대상자 프로필")
+    # 💡 제목 '인터뷰 대상자 프로필' 삭제 -> 직관적인 상단 아이콘 셀렉터로 시작
     
-    # 4.01.01 | 기본 인적 사항 입력
-    name = st.text_input("1. 성함 (닉네임)", value=st.session_state.name, key="name")
-    age = st.number_input("2. 현재 연령 (세)", min_value=1, max_value=120, value=int(st.session_state.age), key="age")
-    family_count = st.number_input("3. 동거 가족 수 (명, 본인 포함)", min_value=1, max_value=20, value=int(st.session_state.family_count), key="family_count")
-    job_title = st.text_input("4. 현재 직업 (하는 일)", value=st.session_state.job_title, key="job_title")
-    target_retirement_age = st.number_input("5. 예상 일선 은퇴 연령 (세)", min_value=age, max_value=120, value=int(st.session_state.target_retirement_age), key="target_retirement_age")
+    # 4.01.01 | 성별 선택 (아이콘 터치)
+    gender_opts = ["남성 👨", "여성 👩"]
+    cur_gender_idx = gender_opts.index(st.session_state.gender) if st.session_state.gender in gender_opts else 0
+    st.session_state.gender = st.radio(
+        "성별", gender_opts, index=cur_gender_idx, horizontal=True, label_visibility="collapsed"
+    )
     
+    # 4.01.02 | 연령 선택 (키패드 사절! 클릭-다운 선택창)
+    age_list = [f"{a}세" for a in range(20, 76)]
+    cur_age_idx = age_list.index(st.session_state.age_selected) if st.session_state.age_selected in age_list else 18
+    st.session_state.age_selected = st.selectbox("연령 (나이)", age_list, index=cur_age_idx)
+
+    # 4.01.03 | 가족 구성 (아이콘 기반 클릭 선택)
+    c_fam1, c_fam2 = st.columns(2)
+    with c_fam1:
+        mar_opts = ["미혼 👤", "기혼 💍"]
+        cur_mar_idx = mar_opts.index(st.session_state.marital_status) if st.session_state.marital_status in mar_opts else 1
+        st.session_state.marital_status = st.selectbox("결혼 여부", mar_opts, index=cur_mar_idx)
+    with c_fam2:
+        child_opts = ["자녀 없음", "자녀 1명 👶", "자녀 2명 👧👦", "자녀 3명+ 👨‍👩‍👧‍👦"]
+        cur_child_idx = child_opts.index(st.session_state.children_status) if st.session_state.children_status in child_opts else 1
+        st.session_state.children_status = st.selectbox("자녀", child_opts, index=cur_child_idx)
+
+    par_opts = ["독립 / 비부양", "부모님 부양 중 👵👴"]
+    cur_par_idx = par_opts.index(st.session_state.parents_support) if st.session_state.parents_support in par_opts else 0
+    st.session_state.parents_support = st.radio("부모님 부양 여부", par_opts, index=cur_par_idx, horizontal=True)
+
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+    
+    # 4.01.04 | 로버트 기요사키 경제사분면으로 직업 대치 (클릭 선택)
+    quad_opts = ["💼 직장인 (E)", "🩺 자영업·전문직 (S)", "🏢 사업가 (B)", "📈 투자가 (I)"]
+    cur_quad_idx = quad_opts.index(st.session_state.primary_quadrant) if st.session_state.primary_quadrant in quad_opts else 0
+    st.session_state.primary_quadrant = st.selectbox("주 소득원 (경제사분면)", quad_opts, index=cur_quad_idx)
+
+    # 부업 / N잡 여부 추가
+    st.session_state.has_side_gig = st.checkbox("➕ 부업 / 투잡(N잡) 병행 중", value=st.session_state.has_side_gig)
+    if st.session_state.has_side_gig:
+        side_opts = ["자영업 / N잡 (S)", "플랫폼 / 사업 (B)", "투자 / 재테크 (I)", "시간제 알바 (E)"]
+        cur_side_idx = side_opts.index(st.session_state.side_quadrant) if st.session_state.side_quadrant in side_opts else 0
+        st.session_state.side_quadrant = st.selectbox("부업의 소득 성격", side_opts, index=cur_side_idx)
+
     st.divider()
-    st.markdown("### 🌿 나침판 현실점검 관제")
-    
-    # 4.01.02 | 💡 안심 버퍼 (Financial Buffer) 실시간 연산
-    # 자금 수명 연산: 비상자금 / (필수 생활비 + 대출 원리금 상환액)
+
+    # 4.01.05 | 🌿 안심 버퍼 (숨고르기 시간) 실시간 연산 관제
     monthly_outgo = float(st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment)
     liquid_cash = float(st.session_state.liquid_emergency_cash)
     
     if monthly_outgo > 0:
         buffer_months = liquid_cash / monthly_outgo
-        # 연/개월 수 시각화 포맷
         if buffer_months >= 12:
             y_part = int(buffer_months // 12)
             m_part = int(round(buffer_months % 12))
@@ -280,10 +355,16 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
     
-    # 4.01.03 | 가벼운 안심 멘트 선언
-    st.markdown("""
-        <div style='font-size:11.5px; color:#64748B; line-height:1.5; padding: 4px 6px;'>
-            🔒 본 앱은 어떠한 중앙 서버에도 개인정보와 입력값을 기록하지 않습니다. 상담 중 데이터는 오직 현재 화면에만 임시 연산되며, 브라우저 창을 닫으면 완전히 소멸하여 보호됩니다.
+    # 4.01.06 | ☕ 스타벅스 영수증 스타일의 고유 진단 번호 (제일 하단에 은은하게 배치)
+    st.markdown(f"""
+        <div style='text-align: center; margin-top: 15px; padding-top: 12px; border-top: 1px dashed #334155;'>
+            <span style='font-size: 11px; color: #64748B;'>익명 진단 고유번호</span><br>
+            <span style='font-family: monospace; font-size: 16px; font-weight: 800; color: #94A3B8; letter-spacing: 1px;'>
+                {st.session_state.get('starbucks_order_id', '#A-101')}
+            </span>
+            <div style='font-size: 10.5px; color: #475569; margin-top: 4px; line-height: 1.4;'>
+                🔒 서버에 저장되지 않는 일회성 휘발 세션입니다.
+            </div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -291,15 +372,23 @@ with st.sidebar:
 # ==============================================================================
 # [Module 5.00.00] Main Header & Navigation Router (메인 화면 헤더 및 4대 탭 배치)
 # ==============================================================================
+
+# ==============================================================================
 # 5.01.01 | 나침판 앱 오프닝 헤더
+# ==============================================================================
 st.title("🧭 나침판 (Compass)")
+
+# 선택된 사분면과 연령에 기반한 자연스러운 맞춤 인사말
+quad_label = st.session_state.primary_quadrant.split(" ")[1] if " " in st.session_state.primary_quadrant else "소중한 일터"
+age_label = st.session_state.age_selected
+
 st.markdown(f"""
     <div style='background-color: rgba(30, 41, 59, 0.4); border: 1px solid rgba(56, 189, 248, 0.15); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px;'>
-        <span style='font-size:15px; color:#F1F5F9; font-weight:bold;'>🌱 {job_title}로 소중한 가정을 일구시는 {name}님, 환영합니다.</span><br>
+        <span style='font-size:15px; color:#F1F5F9; font-weight:bold;'>🌱 {quad_label}로서 소중한 삶의 계절({age_label})을 가꾸어 가시는 길벗님, 환영합니다.</span><br>
         <span style='font-size:13.5px; color:#94A3B8; line-height:1.6;'>
             본 진단은 누구를 평가하거나 미래를 위협하려는 도구가 아닙니다. 
             단지 망망대해 같은 인생의 바다 위에서, <b>나의 현재 좌표를 조용히 응시하고 다가올 계절을 지혜롭게 준비하기 위한 따뜻한 현실 거울</b>입니다. 
-            조상들이 '산 입에 거미줄 치랴'고 유쾌하게 외쳤듯, 우리에겐 언제나 길이 있습니다. 함께 가벼운 마음으로 걸음을 딛어보겠습니다.
+            조상들이 '산 입에 거미줄 치랴'고 유쾌하게 외쳤듯, 우리에겐 언제나 길이 있습니다. 가벼운 마음으로 나만의 좌표를 찾아보겠습니다.
         </span>
     </div>
 """, unsafe_allow_html=True)
