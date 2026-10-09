@@ -6009,9 +6009,43 @@ try:
     _read_total_ms = sum(float(x.get('elapsed_ms', 0)) for x in _read_calls)
     _write_total_ms = sum(float(x.get('elapsed_ms', 0)) for x in _write_calls)
 
-    _has_recent_activity = bool(_display_io or _last_save)
+    # 💡 통합 관제 센터 접이식 버튼: 은은한 회색(슬레이트 그레이) 톤 스타일 주입
+    st.markdown("""
+        <style>
+        div[data-testid="stExpander"] summary,
+        [data-testid="stExpander"] summary {
+            background-color: #1E293B !important;
+            border: 1px solid #334155 !important;
+            border-radius: 8px !important;
+            padding: 8px 14px !important;
+            margin-top: 10px !important;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2) !important;
+            transition: all 0.2s ease-in-out !important;
+        }
+        div[data-testid="stExpander"] summary:hover,
+        [data-testid="stExpander"] summary:hover {
+            background-color: #334155 !important;
+            border-color: #64748B !important;
+        }
+        div[data-testid="stExpander"] summary p,
+        [data-testid="stExpander"] summary p {
+            color: #94A3B8 !important;
+            font-weight: 600 !important;
+            font-size: 13.5px !important;
+        }
+        div[data-testid="stExpander"] summary:hover p,
+        [data-testid="stExpander"] summary:hover p {
+            color: #F1F5F9 !important;
+        }
+        div[data-testid="stExpander"] summary svg,
+        [data-testid="stExpander"] summary svg {
+            fill: #94A3B8 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    with st.expander("🛠️ 시스템 진단 및 클라우드 I/O 통합 관제 센터", expanded=_has_recent_activity):
+    # 평상시에는 닫아두어 깔끔하게 유지
+    with st.expander("🛠️ 시스템 진단 및 클라우드 I/O 통합 관제 센터", expanded=False):
         # 1. 최근 저장 함수 실행시간 카드
         if _last_save:
             st.markdown(
@@ -6054,7 +6088,7 @@ try:
 
         st.divider()
 
-        # 3. 세션 및 프로세스 요약 (💡 CSS로 글자 크기를 19px로 강제 축소하여 잘림 방지)
+        # 3. 세션 및 프로세스 요약 (폰트 19px 유지)
         st.markdown("""
             <style>
             div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
