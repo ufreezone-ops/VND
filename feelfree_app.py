@@ -1683,17 +1683,16 @@ if (
 
 
 # ==============================================================================
-# 2.03.03 | Multi-Trip Parallel Consolidator (Permanent App-Cache + Multi-Threading)
+# 2.03.03 | Multi-Trip Global Ledger Consolidator (Permanent App-Cache)
 # ==============================================================================
 # 목적:
-#   1. 1인 환경 맞춤: ttl="10m" 완전 제거 ➔ ttl=None (영구 메모리 캐시)
-#   2. 순차 조회(5초) ➔ 8개 시트 동시 병렬 조회(ThreadPoolExecutor, 1초대)
-#   3. Cloud Refresh(수동 동기화) 외에는 재조회 절대 0회
+#   1. Streamlit 스레드 격리 무결성: 메인 스레드 안전 루프로 복원
+#   2. 1인 환경 최적화: ttl=None (영구 메모리 캐시)로 최초 1회만 로드
+#   3. '모든 여행가계부' 검색 및 물가비교(SPI)에 완전한 통합 원장 제공
 # ==============================================================================
 
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _ALL_TRIPS_DIAG_PATH = "/tmp/load_all_trips_diagnostic.jsonl"
 
@@ -1701,28 +1700,28 @@ _ALL_TRIPS_DIAG_PATH = "/tmp/load_all_trips_diagnostic.jsonl"
 @st.cache_data(ttl=None, show_spinner=False)
 def _load_all_trips_data_cloud():
     """
-    🌍 모든 여행가계부 병렬 고속 로더 (영구 캐시 계층)
-    - 8개 시트를 동시 병렬 요청하여 5초 ➔ 1초대로 단축
-    - ttl=None: 대표님이 직접 새로고침하기 전까지 영구 보존
+    🌍 모든 여행가계부 원본 데이터 영구 캐시 계층.
+    - 최초 1회만 Google Sheets에서 안전하게 읽고 영구 보존
+    - ttl=None: 대표님이 직접 'Cloud Refresh'를 누르기 전까지 재조회 0회
     """
     _cloud_started_at = time.perf_counter()
     all_dfs = []
     _read_history = []
 
-    def _fetch_single_trip_sheet(trip_name, config):
-        _s_start = time.perf_counter()
-        _attempts = 0
+    for trip_name, config in TRIP_CONFIGS.items():
+        _read_started_at = time.perf_counter()
+        _read_attempts = 0
+        _read_success = False
         df_t = None
-        _success = False
 
         for attempt in range(3):
-            _attempts += 1
+            _read_attempts += 1
             try:
                 df_t = conn.read(
                     worksheet=config['sheet'],
-                    ttl=None
+                    ttl="100m"
                 )
-                _success = True
+                _read_success = True
                 break
             except Exception as e:
                 if attempt < 2 and ("429" in str(e) or "Quota" in str(e)):
@@ -1730,20 +1729,21 @@ def _load_all_trips_data_cloud():
                     continue
                 break
 
-        _s_elapsed_ms = (time.perf_counter() - _s_start) * 1000
+        _read_elapsed_ms = (time.perf_counter() - _read_started_at) * 1000
 
-        diag_item = {
+        _read_history.append({
             "trip_name": str(trip_name),
             "sheet": str(config.get('sheet', '')),
-            "read_elapsed_ms": round(_s_elapsed_ms, 1),
-            "attempts": _attempts,
-            "success": _success,
-        }
+            "read_elapsed_ms": round(_read_elapsed_ms, 1),
+            "attempts": _read_attempts,
+            "success": _read_success,
+        })
 
         if df_t is not None and not df_t.empty:
             df_t = df_t.copy()
             df_t['TripName'] = trip_name
-            first_node_name = list(config["nodes"].keys())[0]
+
+            first_node_name = list(config["nodes"].keys())[0] if config.get("nodes") else "기본"
 
             if 'Country' not in df_t.columns:
                 df_t.insert(1, 'Country', first_node_name)
@@ -1752,32 +1752,17 @@ def _load_all_trips_data_cloud():
                     df_t['Country']
                     .astype(str)
                     .str.strip()
+                    .replace(['nan', 'None', ''], None)
                     .fillna(first_node_name)
                 )
 
-        return df_t, diag_item
-
-    # 🚀 8개 시트를 순차적이 아닌 최대 8개 스레드로 동시 병렬 수집
-    with ThreadPoolExecutor(max_workers=min(8, max(1, len(TRIP_CONFIGS)))) as executor:
-        future_to_trip = {
-            executor.submit(_fetch_single_trip_sheet, t_name, cfg): t_name
-            for t_name, cfg in TRIP_CONFIGS.items()
-        }
-
-        for future in as_completed(future_to_trip):
-            try:
-                df_res, diag_res = future.result()
-                _read_history.append(diag_res)
-                if df_res is not None and not df_res.empty:
-                    all_dfs.append(df_res)
-            except Exception:
-                pass
+            all_dfs.append(df_t)
 
     _cloud_elapsed_ms = (time.perf_counter() - _cloud_started_at) * 1000
 
     _diag_item = {
         "timestamp": datetime.now(TZ_KST).strftime("%Y-%m-%d %H:%M:%S"),
-        "event": "load_all_trips_data_cloud (Parallel)",
+        "event": "load_all_trips_data_cloud",
         "function_elapsed_ms": round(_cloud_elapsed_ms, 1),
         "read_count": len(_read_history),
         "reads": _read_history,
@@ -1799,10 +1784,9 @@ def _load_all_trips_data_cloud():
 
 def load_all_trips_data(force_cloud=False):
     """
-    🌍 모든 여행가계부 조회 전용 메모리 캐시 인터페이스
+    🌍 모든 여행가계부 조회 전용 메모리 캐시.
     1. session_state 메모리 우선
     2. 앱 영구 캐시(_load_all_trips_data_cloud) 사용
-    3. 구글 접근 0회 유지
     """
     cache_key = 'all_trips_lookup_df'
 
@@ -4929,11 +4913,15 @@ elif st.session_state.get('show_new_trip', False):
                     st.rerun()
 
 
-# 5.04.99 | FULL REFRESH Checkpoint: Module 5 End
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 5.04.99 | FULL REFRESH Checkpoint & Mode Isolation Guard
+# ==============================================================================
 
 _frp_checkpoint("5 종료")
 
+# 🛑 물가비교(SPI) 모드 또는 신규개설 모드일 때는 모듈 6(단일 가계부)을 실행하지 않고 종료
+if st.session_state.get('show_spi', False) or st.session_state.get('show_new_trip', False):
+    st.stop()
 
 # ==============================================================================
 # [Module 6.00.00] Main Ledger & Multi-Tab Analytics Engine
