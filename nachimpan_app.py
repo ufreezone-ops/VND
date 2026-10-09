@@ -1,37 +1,33 @@
 # ==============================================================================
-# [Module 1.00.00] System Core & Compassion Framework (환경 및 기초 세션 설정)
+# [Module 1.00.00] System Core & Global Config (나침판 환경 설정 및 테마 CSS)
 # ==============================================================================
-
-# ------------------------------------------------------------------------------
-# 1.01.00 | Global Setup & Mobile App Layout (라이브러리, 모바일 최적화 테마)
-# ------------------------------------------------------------------------------
-# 1.01.01 | Core Libraries & Page Config
+# 1.01.01 | Page Configurations & Libraries
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import json
-import base64
+import os
 
 # ⚙️ 페이지 기본 설정: 신뢰감 있는 나침판(🧭) 브랜딩
 st.set_page_config(
-    page_title="나침판: 인생 사계절과 재무 나침반",
+    page_title="나침판: 라이프사이클 현실점검 & 재무 진단",
     page_icon="🧭",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 1.01.02 | Mobile Standalone PWA & Warm Dignity Theme CSS
-# 공포감을 주는 붉은 경고색을 배제하고, 신뢰의 딥 네이비(#0E1626)와 따뜻한 샌드 골드(#F59E0B) 적용
+TZ_KST = 9 # 대한민국 표준시 KST
+
+# 1.01.02 | Mobile Web-App Capable & Warm Professional Theme CSS
 st.markdown("""
-    <!-- 모바일 홈 화면 추가(PWA) 전용 메타 태그 -->
+    <!-- 모바일 홈 화면 추가(PWA) 시 진짜 앱처럼 실행되도록 설정 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="https://img.icons8.com/color/512/compass--v1.png">
 
     <style>
-    /* 1. 기본 레이아웃 여백 최적화 (모바일 터치 친화형) */
+    /* 1. 기본 레이아웃 여백 최적화 (모바일 터치 및 한눈에 보기 최적화) */
     .block-container {
         padding-top: 2.2rem !important;
         padding-bottom: 2rem !important;
@@ -39,13 +35,13 @@ st.markdown("""
         padding-right: 0.9rem !important;
     }
     
-    /* 2. 폰트 및 배경: 차분하고 신뢰감 있는 딥 네이비 */
+    /* 2. 본문 배경: 신뢰감 있고 피로도가 낮은 차분한 딥 블랙네이비 */
     .main {
         background-color: #0B1120;
         color: #F8FAFC;
     }
     
-    /* 3. 사이드바 스타일링 */
+    /* 3. 사이드바 스타일링 (인터뷰어와의 대화 공간) */
     section[data-testid="stSidebar"] {
         background-color: #0F172A !important;
         border-right: 1px solid #1E293B !important;
@@ -54,11 +50,11 @@ st.markdown("""
         padding-top: 1.2rem !important;
     }
     
-    /* 4. 부드러운 위로의 카드 (Compassion Card) */
+    /* 4. 부드러운 위로의 카드 (Compassion Reassurance Card) */
     .compassion-card {
         background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
         border: 1px solid #334155;
-        border-left: 5px solid #F59E0B;
+        border-left: 5px solid #FBBF24;
         border-radius: 12px;
         padding: 14px 18px;
         margin-bottom: 16px;
@@ -67,37 +63,47 @@ st.markdown("""
     .compassion-card h4 {
         margin: 0 0 6px 0;
         color: #FBBF24;
-        font-size: 16px;
+        font-size: 16.5px;
         font-weight: 700;
     }
     .compassion-card p {
         margin: 0;
         color: #CBD5E1;
-        font-size: 13.5px;
+        font-size: 14px;
         line-height: 1.6;
     }
 
-    /* 5. 안심 버퍼 KPI 메트릭 카드 */
+    /* 5. 🌿 재정 안심 버퍼 (숨고르기 시간) KPI 카드 */
     .buffer-box {
-        background-color: #1E293B;
-        padding: 12px 14px;
-        border-radius: 10px;
-        border: 1px solid #334155;
-        border-top: 3px solid #38BDF8;
+        background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1.5px solid #334155;
+        border-top: 5px solid #38BDF8;
         text-align: center;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
     .buffer-title {
-        font-size: 12.5px;
+        font-size: 13px;
         color: #94A3B8;
         margin-bottom: 4px;
+        font-weight: 600;
     }
     .buffer-val {
-        font-size: 22px;
+        font-size: 24px;
         font-weight: 800;
         color: #38BDF8;
+        letter-spacing: -0.5px;
+    }
+    .buffer-desc {
+        font-size: 11.5px;
+        color: #64748B;
+        margin-top: 6px;
+        line-height: 1.4;
     }
 
-    /* 6. 스트림릿 입력 폼 컨트롤 다크 톤 정돈 */
+    /* 6. 스트림릿 입력 폼 다크 톤 깔끔하게 정돈 */
     div[data-baseweb="input"] {
         background-color: #1E293B !important;
         border: 1px solid #334155 !important;
@@ -105,102 +111,121 @@ st.markdown("""
     }
     div[data-baseweb="input"] input {
         color: #FFFFFF !important;
+        font-size: 14px !important;
     }
     div[data-testid="stNumberInput"] button {
         display: none !important;
+    }
+    
+    /* 7. 탭 네비게이션: 여행가계부에서 검증된 은은한 회색 슬레이트 배지 형태 */
+    div[data-baseweb="tab-list"] {
+        gap: 8px !important;
+        margin-bottom: 16px !important;
+    }
+    button[data-baseweb="tab"], [data-baseweb="tab"] {
+        flex: 1 1 0% !important;
+        height: 44px !important;
+        background-color: #1E293B !important;
+        border-radius: 10px !important;
+        border: 1.5px solid #334155 !important;
+        cursor: pointer !important;
+    }
+    button[data-baseweb="tab"]:hover {
+        background-color: #334155 !important;
+        border-color: #475569 !important;
+    }
+    button[data-baseweb="tab"] p, [data-baseweb="tab"] p {
+        font-size: 14.5px !important;
+        font-weight: 600 !important;
+        color: #94A3B8 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"], [aria-selected="true"] {
+        background: linear-gradient(135deg, #FF9E00 0%, #EA580C 100%) !important;
+        border: 1.5px solid #FFA500 !important;
+        box-shadow: 0 4px 12px rgba(255, 158, 0, 0.25) !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] p, [aria-selected="true"] p {
+        color: #FFFFFF !important;
+        font-weight: 800 !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 
-# ------------------------------------------------------------------------------
-# 1.02.00 | Metadata & National Lifecycle Benchmark Registry
-# ------------------------------------------------------------------------------
-# 1.02.01 | Robert Kiyosaki ESBI Matrix Definitions
+# ==============================================================================
+# [Module 2.00.00] Core Schema & National Benchmark Data (기초 메타데이터)
+# ==============================================================================
+# 2.01.01 | Robert Kiyosaki ESBI Quadrant Definitions
 ESBI_QUADRANTS = {
     "E": {
-        "name": "봉급생활자 (Employee)",
-        "badge": "💼 E 사분면",
-        "desc": "자신의 시간과 노동력을 급여와 1:1로 맞바꾸는 영역",
-        "nature": "시간을 멈추면 수입도 즉시 멈추는 선형적 노동소득",
-        "color": "#60A5FA"
+        "badge": "💼 봉급생활자 (Employee)",
+        "desc": "나의 시간과 가치를 1:1로 맞바꿔 급여 수입을 창출하는 영역",
+        "philosophy": "성실하게 내 삶을 지켜오신 기반이며, 시간 대비 정직한 가치를 입증합니다."
     },
     "S": {
-        "name": "자영업자 / 전문직 (Self-employed / Specialist)",
-        "badge": "🩺 S 사분면",
-        "desc": "내가 곧 시스템이 되어 나의 역량으로 수입을 창출하는 영역",
-        "nature": "수입의 상한은 높으나, 쉴 수 없는 무한 책임의 고소득 노동소득",
-        "color": "#34D399"
+        "badge": "🩺 자영업자 / 전문직 (Self-employed)",
+        "desc": "내가 곧 시스템이자 브랜드가 되어 주도적으로 가치를 창출하는 영역",
+        "philosophy": "누구보다 강한 역량과 열정으로 스스로 고소득을 일구어내는 책임감의 영역입니다."
     },
     "B": {
-        "name": "사업가 (Business Owner)",
-        "badge": "🏢 B 사분면",
-        "desc": "사람과 시스템이 스스로 가치를 창출하도록 자산을 구축한 영역",
-        "nature": "초기 구축 후 내가 직접 일하지 않아도 발생하는 권리·자산소득",
-        "color": "#FBBF24"
+        "badge": "🏢 사업가 (Business Owner)",
+        "desc": "사람과 시스템이 유기적으로 가치를 만들어내도록 자산을 구축하는 영역",
+        "philosophy": "처음에는 땀과 시간이 집중되나, 구축 후에는 일하지 않아도 흐르는 자산소득의 원천입니다."
     },
     "I": {
-        "name": "투자가 (Investor)",
-        "badge": "📈 I 사분면",
-        "desc": "돈이 돈을 벌도록 자본을 레버리지하는 영역",
-        "nature": "자본 기반의 투자 소득 (자본금과 리스크 관리 역량 필수)",
-        "color": "#A78BFA"
+        "badge": "📈 투자가 (Investor)",
+        "desc": "자본이 자본을 레버리지하여 스스로 일하게 만드는 영역",
+        "philosophy": "지혜와 자금력을 기반으로 자산의 크기를 키우고 레버리지를 극대화하는 영역입니다."
     }
 }
 
-# 1.02.02 | 대한민국 통계청 국민이전계정(생애주기 수입·소비 적자) 공공 벤치마크
-# 출처: 통계청 국민이전계정 (1인당 연령별 노동소득 vs 소비지출 표준 곡선 기준 데이터)
+# 2.01.02 | 대한민국 통계청 국민이전계정 (1인당 연령별 표준 수입/지출 곡선 벤치마크)
 LIFECYCLE_BENCHMARK = pd.DataFrame([
-    {"age": 20, "labor_income": 45,  "consumption": 130}, # 적자 (학습/준비기)
+    {"age": 20, "labor_income": 45,  "consumption": 130}, 
     {"age": 25, "labor_income": 180, "consumption": 150},
     {"age": 28, "labor_income": 260, "consumption": 170}, # 흑자 진입 (골든크로스 약 27~28세)
     {"age": 35, "labor_income": 360, "consumption": 220},
     {"age": 43, "labor_income": 435, "consumption": 265}, # 소득 피크 정점 (42~44세)
     {"age": 50, "labor_income": 410, "consumption": 280},
     {"age": 55, "labor_income": 330, "consumption": 280},
-    {"age": 60, "labor_income": 220, "consumption": 250}, # 적자 전환 (데드크로스 약 58~61세)
-    {"age": 65, "labor_income": 120, "consumption": 230}, # 본격적 비활동기 적자 구간
+    {"age": 60, "labor_income": 220, "consumption": 250}, # 적자 전환 (데드크로스 약 59세)
+    {"age": 65, "labor_income": 120, "consumption": 230}, 
     {"age": 70, "labor_income": 60,  "consumption": 210},
     {"age": 75, "labor_income": 25,  "consumption": 195},
     {"age": 80, "labor_income": 10,  "consumption": 185},
-    {"age": 85, "labor_income": 5,   "consumption": 180},
 ])
 
 
-# ------------------------------------------------------------------------------
-# 1.03.00 | Client-Side Session State Orchestrator (Zero-Backend 메모리 엔진)
-# ------------------------------------------------------------------------------
-# 1.03.01 | Interviewee Profile & Financial State Initializer
+# ==============================================================================
+# [Module 3.00.00] Session State Orchestrator (Zero-Backend 데이터 연산 제어)
+# ==============================================================================
 def init_interviewee_session():
     """
-    서버 DB 없이 브라우저 메모리(st.session_state)에만 독립 격리되는 인터뷰어 작업대
+    구글 시트 0회 접속! 오직 브라우저 메모리에만 상주하는 인터뷰 상담 데이터 초기화
     """
     defaults = {
-        # 1. 프로필 기본 정보
+        # 1. 기본 인적 사항
         "name": "성실한 이웃",
         "age": 38,
         "family_count": 3,
         "job_title": "제조업체 대리",
         "target_retirement_age": 60,
         
-        # 2. 소득 및 현금흐름 (단위: 만원)
-        "monthly_labor_income": 380,    # 본인 노동소득 (월)
-        "monthly_spouse_income": 150,   # 배우자 소득 (월, 맞벌이 등)
-        "monthly_asset_income": 0,      # 자산/권리소득 (월, 시스템/로열티/임대)
+        # 2. 소득 흐름 (월 / 만원 단위)
+        "monthly_labor_income": 380,
+        "monthly_spouse_income": 150,
+        "monthly_asset_income": 0,       # 연금, 배당, 시스템 소득 등 (처음엔 대부분 0)
         
-        # 3. 생활비 및 지출 구조 (단위: 만원)
-        "monthly_living_cost": 280,     # 숨만 쉬어도 나가는 필수 생활비(식음료, 공과금, 교육 등)
-        "monthly_debt_payment": 90,     # 대출 원리금 상환액 (주담대, 신용대출 등)
-        "monthly_consumable_spend": 35, # 어차피 매달 마트/쿠팡에서 쓰는 세제, 샴푸, 영양제 등 생필품비
+        # 3. 지출 흐름 (월 / 만원 단위)
+        "monthly_living_cost": 280,      # 필수 의식주, 공과금, 보육비 등 필수생활비
+        "monthly_debt_payment": 90,      # 주택담보대출, 신용대출 등 매달 상환 원리금
+        "monthly_consumable_spend": 35,  # 샴푸, 치약, 영양제 등 마트에서 어차피 쓸 생필품비
         
-        # 4. 보유 자산 (단위: 만원)
-        "liquid_emergency_cash": 1200,  # 당장 인출 가능한 비상금/예적금
+        # 4. 보유 비상금
+        "liquid_emergency_cash": 1200,   # 당장 출금 가능한 예적금/현금자산
         
-        # 5. 사분면 자가진단 (기본: E 사분면)
-        "primary_quadrant": "E",
-        
-        # 6. 활성 탭 인덱스
-        "active_tab": 0
+        # 5. 사분면 자가 진단
+        "primary_quadrant": "E"
     }
     
     for k, v in defaults.items():
@@ -208,3 +233,175 @@ def init_interviewee_session():
             st.session_state[k] = v
 
 init_interviewee_session()
+
+
+# ==============================================================================
+# [Module 4.00.00] Sidebar Console (프로필 입력창 & 실시간 안심 버퍼 관제탑)
+# ==============================================================================
+with st.sidebar:
+    st.markdown("### 🧭 인터뷰 대상자 프로필")
+    
+    # 4.01.01 | 기본 인적 사항 입력
+    name = st.text_input("1. 성함 (닉네임)", value=st.session_state.name, key="name")
+    age = st.number_input("2. 현재 연령 (세)", min_value=1, max_value=120, value=int(st.session_state.age), key="age")
+    family_count = st.number_input("3. 동거 가족 수 (명, 본인 포함)", min_value=1, max_value=20, value=int(st.session_state.family_count), key="family_count")
+    job_title = st.text_input("4. 현재 직업 (하는 일)", value=st.session_state.job_title, key="job_title")
+    target_retirement_age = st.number_input("5. 예상 일선 은퇴 연령 (세)", min_value=age, max_value=120, value=int(st.session_state.target_retirement_age), key="target_retirement_age")
+    
+    st.divider()
+    st.markdown("### 🌿 나침판 현실점검 관제")
+    
+    # 4.01.02 | 💡 안심 버퍼 (Financial Buffer) 실시간 연산
+    # 자금 수명 연산: 비상자금 / (필수 생활비 + 대출 원리금 상환액)
+    monthly_outgo = float(st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment)
+    liquid_cash = float(st.session_state.liquid_emergency_cash)
+    
+    if monthly_outgo > 0:
+        buffer_months = liquid_cash / monthly_outgo
+        # 연/개월 수 시각화 포맷
+        if buffer_months >= 12:
+            y_part = int(buffer_months // 12)
+            m_part = int(round(buffer_months % 12))
+            buffer_str = f"약 {y_part}년 {m_part}개월" if m_part > 0 else f"약 {y_part}년"
+        else:
+            buffer_str = f"약 {buffer_months:.1f}개월"
+    else:
+        buffer_str = "무제한 (지출 없음)"
+        
+    st.markdown(f"""
+        <div class='buffer-box'>
+            <div class='buffer-title'>🕊️ 잠시 멈춤을 보장하는 '안심 버퍼 시간'</div>
+            <div class='buffer-val'>{buffer_str}</div>
+            <div class='buffer-desc'>
+                내일 당장 수입이 중단되어 일을 쉬더라도,<br>
+                현재 보유하신 자산으로 가정이 평온하게<br>
+                일상과 품위를 지켜낼 수 있는 여유 시간입니다.
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 4.01.03 | 가벼운 안심 멘트 선언
+    st.markdown("""
+        <div style='font-size:11.5px; color:#64748B; line-height:1.5; padding: 4px 6px;'>
+            🔒 본 앱은 어떠한 중앙 서버에도 개인정보와 입력값을 기록하지 않습니다. 상담 중 데이터는 오직 현재 화면에만 임시 연산되며, 브라우저 창을 닫으면 완전히 소멸하여 보호됩니다.
+        </div>
+    """, unsafe_allow_html=True)
+
+
+# ==============================================================================
+# [Module 5.00.00] Main Header & Navigation Router (메인 화면 헤더 및 4대 탭 배치)
+# ==============================================================================
+# 5.01.01 | 나침판 앱 오프닝 헤더
+st.title("🧭 나침판 (Compass)")
+st.markdown(f"""
+    <div style='background-color: rgba(30, 41, 59, 0.4); border: 1px solid rgba(56, 189, 248, 0.15); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px;'>
+        <span style='font-size:15px; color:#F1F5F9; font-weight:bold;'>🌱 {job_title}로 소중한 가정을 일구시는 {name}님, 환영합니다.</span><br>
+        <span style='font-size:13.5px; color:#94A3B8; line-height:1.6;'>
+            본 진단은 누구를 평가하거나 미래를 위협하려는 도구가 아닙니다. 
+            단지 망망대해 같은 인생의 바다 위에서, <b>나의 현재 좌표를 조용히 응시하고 다가올 계절을 지혜롭게 준비하기 위한 따뜻한 현실 거울</b>입니다. 
+            조상들이 '산 입에 거미줄 치랴'고 유쾌하게 외쳤듯, 우리에겐 언제나 길이 있습니다. 함께 가벼운 마음으로 걸음을 딛어보겠습니다.
+        </span>
+    </div>
+""", unsafe_allow_html=True)
+
+# 5.01.02 | 4대 핵심 현실점검 탭 네비게이션 생성
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📂 1. 나의 현재 좌표 (재무현황)",
+    "⏳ 2. 시간과 쉼표 (노동한계)",
+    "🍂 3. 인생의 사계절 (생애주기)",
+    "🧭 4. 나침판의 제안 (전략대안)"
+])
+
+
+# ==============================================================================
+# [Module 6.00.00] 4-Step Interactive Tabs (메인 인터뷰 4대 캔버스)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 6.01.00 | Tab 1: 나의 현재 좌표 (ESBI 사분면 및 자산 현황 상세 입력)
+# ------------------------------------------------------------------------------
+with tab1:
+    st.markdown("### 💼 나의 현재 수입 구조와 재무 현황")
+    
+    st.markdown("""
+        <div class='compassion-card'>
+            <h4>⚖️ 그동안 참 열심히 성실하게 삶을 가꾸어 오셨습니다.</h4>
+            <p>
+                우리가 매달 가정을 위해 얻는 소득은 어떤 성격을 띠고 있을까요? 
+                자신의 에너지가 주로 머무는 소득 영역(사분면)을 들여다보고, 숨 가쁘게 지나치던 소득원과 지출의 크기를 거울 보듯 조용히 적어보는 단계입니다.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 💡 [앞으로 구현될 Tab 1 스케치]:
+    # - 로버트 기요사키 사분면(E/S/B/I) 선택 라디오 버튼
+    # - 본인 소득, 배우자 소득, 자산 소득 슬라이더 입력기
+    # - 필수 생활비, 대출 원리금, 숨겨진 생필품 마트 소비비 입력기
+    st.info("🚧 **[Tab 1 뼈대 준비 완공]** 이곳에 'ESBI 경제사분면 자가 선택기'와 '소득/지출 상세 입력 슬라이더'가 이식될 예정입니다. 편안한 마음으로 다음 탭들을 차례로 구경해 보세요.")
+
+
+# ------------------------------------------------------------------------------
+# 6.02.00 | Tab 2: 시간과 쉼표 (노동수입 한계 자각 및 숨고르기 시간 관제)
+# ------------------------------------------------------------------------------
+with tab2:
+    st.markdown("### ⏳ 내 인생의 자유를 위한 숨고르기 시간")
+    
+    st.markdown("""
+        <div class='compassion-card'>
+            <h4>🕊️ '산 입에 거미줄 치랴'의 해학과 여유</h4>
+            <p>
+                우리의 몸과 에너지는 한계가 있기에, 때로는 쉬고 싶고 멈춰 서야 할 때도 찾아옵니다. 
+                이 탭에서는 내가 일하지 않고 쉴 수 있는 시간(버퍼)을 통해, 노동 수입 너머에서 가정을 지켜줄 지혜로운 장작(자산 수입)이 왜 필요한지 가볍게 마주해 봅니다.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 💡 [앞으로 구현될 Tab 2 스케치]:
+    # - "수입 중단 시 생존 일수"를 시각적 게이지 및 모래시계 차트로 변환
+    # - 나의 소득 중 '내가 일하지 않아도 돌아가는 시스템 소득(Amway 등)' 비중을 도넛 차트로 실시간 렌더링
+    st.info("🚧 **[Tab 2 뼈대 준비 완공]** 이곳에 '노동수입 대비 자산소득 비율 분석 그래프'와 '재정 활주로 시각화 모래시계 차트'가 이식될 예정입니다.")
+
+
+# ------------------------------------------------------------------------------
+# 6.03.00 | Tab 3: 인생의 사계절 (생애주기 수입·지출 흐름 및 적자 절벽 대비)
+# ------------------------------------------------------------------------------
+with tab3:
+    st.markdown("### 🍂 인생 사계절의 자연스러운 흐름")
+    
+    st.markdown("""
+        <div class='compassion-card'>
+            <h4>🍁 낙엽이 지고 겨울이 오는 것은 결코 두려운 일이 아닙니다.</h4>
+            <p>
+                봄에 씨를 뿌려 풍요로운 가을을 수확하듯, 누구에게나 땀 흘릴 수 있는 계절과 필연적으로 맞이하는 은퇴기(겨울)가 있습니다. 
+                통계청 공식 데이터가 보여주는 대한민국 평균 수입/지출 교차점을 내 삶과 대조해 보며, 인생 겨울을 따뜻하게 지켜줄 장작을 준비할 시점을 자각합니다.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 💡 [앞으로 구현될 Tab 3 스케치]:
+    # - 통계청 생애주기 적자/흑자 데이터셋 로딩
+    # - 인터뷰이의 현재 나이(age)와 은퇴목표나이를 반영하여, '인생 수입-지출 골든크로스 & 데드크로스 곡선'을 아름다운 라인 차트로 실시간 드로잉
+    st.info("🚧 **[Tab 3 뼈대 준비 완공]** 이곳에 '대한민국 통계청 평균 인생 곡선'과 나의 '예상 은퇴 적자 시점 시뮬레이션 곡선 그래프'가 이식될 예정입니다.")
+
+
+# ------------------------------------------------------------------------------
+# 6.04.00 | Tab 4: 나침판의 제안 (AI 팩트체크 리포트 및 소비의 자산화 가이드)
+# ------------------------------------------------------------------------------
+with tab4:
+    st.markdown("### 🧭 지혜로운 인생을 위한 나침판의 조언")
+    
+    st.markdown("""
+        <div class='compassion-card'>
+            <h4>🎁 일상 속 어차피 쓰던 소비가 가치 있는 장작으로 바뀌는 비밀</h4>
+            <p>
+                위기가 아닌 기회를 응시합니다. 
+                매달 어차피 마트나 쿠팡에 지불하던 생필품비(월 30~50만원)가, 마트를 바꾸는 것만으로도 나에게 매달 평온한 파이프라인(자산소득)을 선물해 주는 아주 유연하고 가벼운 플랜 B로 이어지는 따뜻한 미래 로드맵을 선사합니다.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 💡 [앞으로 구현될 Tab 4 스케치]:
+    # - Gemini AI가 Tab 1~3의 입력 데이터를 요약해서 '따뜻한 멘토의 편지' 형식의 맞춤 재정 진단서 생성
+    # - "카카오톡 결과 공유하기" (텍스트 복사 버튼) 제공
+    # - "인터뷰 데이터 로컬 파일 저장 및 불러오기" 버튼 신설
+    st.info("🚧 **[Tab 4 뼈대 준비 완공]** 이곳에 'Gemini AI 정밀 진단서'와 '카카오톡 원클릭 요약 복사 버튼', 그리고 '상담 데이터 파일(JSON)로 소장/불러오기 버튼'이 이식될 예정입니다.")
