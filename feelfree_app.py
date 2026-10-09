@@ -4520,12 +4520,14 @@ if main_tab_choice == "가계부":
                 if append_new_data(new_row): st.toast("환불 롤백 완료!", icon="✅"); st.rerun()
 
 
-    # 6.01.03 | 검색결과 표 + 메모리 행 이동
+    # ==============================================================================
+    # 6.01.03 | Search Result Table Fragment (검색결과 표 렌더링)
+    # ==============================================================================
     @st.fragment
     def _render_ledger_table_fragment():
         st.info("💡 **표의 행(Row)을 클릭(터치)하시면 상세 내역 수정, 순서 변경(🔼/🔽), 선물(🎁) 자동분리 신설, 영수증 AI 재스캔이 펼쳐집니다!**")
 
-        # ☁️ 원장 저장은 이제 여기 하나로 통합한다. 모든 편집은 먼저 메모리에 반영된다.
+        # ☁️ 원장 저장 알림 및 백업
         if st.session_state.get('ledger_dirty', False):
             c_save, c_backup = st.columns([3, 2])
             with c_save:
@@ -4543,8 +4545,6 @@ if main_tab_choice == "가계부":
                     st.toast("🛡️ 현재 메모리 원장을 자동 백업했습니다.", icon="✅")
                     st.rerun(scope="fragment")
 
-        # 🔥 검색결과 표와 행 이동의 단일 메모리 원본
-        # 이동 버튼을 누를 때마다 Google Sheets를 읽지 않고, active_ledger_df를 즉시 화면에 반영한다.
         active_memory_df = st.session_state.get('active_ledger_df')
         if active_memory_df is None or active_memory_df.empty:
             active_memory_df = ledger_df.copy()
@@ -4553,10 +4553,12 @@ if main_tab_choice == "가계부":
             active_memory_df = active_memory_df.copy()
 
         initial_country = st.session_state.get('his_country', "이번 여행가계부")
-        if initial_country == "모든 여행가계부": temp_display_df = load_all_trips_data()
+        if initial_country == "모든 여행가계부": 
+            temp_display_df = load_all_trips_data()
         else:
             temp_display_df = active_memory_df
-            if initial_country != "이번 여행가계부": temp_display_df = temp_display_df[temp_display_df['Country'] == initial_country]
+            if initial_country != "이번 여행가계부": 
+                temp_display_df = temp_display_df[temp_display_df['Country'] == initial_country]
 
         cat_options = ["모든 카테고리"] + sorted(list(temp_display_df['Category'].dropna().unique())) if not temp_display_df.empty else ["모든 카테고리"]
 
@@ -4567,24 +4569,41 @@ if main_tab_choice == "가계부":
         with c_cat: 
             cat_filter = st.selectbox("📂 카테고리 필터", cat_options, index=0, key="his_cat")
         with c_search: 
-            search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모 등 검색", key="his_search")
+            search_query = st.text_input("🔎 검색어 입력", placeholder="상호명, 메모, 여행지 등 검색", key="his_search")
 
-        if country_filter == "모든 여행가계부":
+        is_all_trips_mode = (country_filter == "모든 여행가계부")
+
+        if is_all_trips_mode:
             st.warning("⚠️ '모든 여행가계부' 모드에서는 내역 조회만 가능합니다.")
             display_df = load_all_trips_data()
         else:
-            # 일반 조회는 항상 메모리 원본(active_ledger_df)을 사용한다.
             display_df = active_memory_df
-            if country_filter != "이번 여행가계부": display_df = display_df[display_df['Country'] == country_filter]
+            if country_filter != "이번 여행가계부": 
+                display_df = display_df[display_df['Country'] == country_filter]
 
         if not display_df.empty: 
-            display_df = display_df.reindex(columns=FINAL_COLUMNS)
+            # 💡 [핵심] '모든 여행가계부' 모드일 때는 TripName 컬럼을 보존하여 맨 앞에 배치
+            if is_all_trips_mode:
+                cols_order = ['TripName'] + [c for c in FINAL_COLUMNS if c != 'Receipt_URL'] + ['Receipt_URL']
+                display_df = display_df.reindex(columns=cols_order)
+            else:
+                display_df = display_df.reindex(columns=FINAL_COLUMNS)
+
             link_cfg = st.column_config.LinkColumn("영수증 📸", display_text="🔗 보기", disabled=True)
             
-            render_df = display_df
-            if cat_filter != "모든 카테고리": render_df = render_df[render_df['Category'] == cat_filter]
+            render_df = display_df.copy()
+            if cat_filter != "모든 카테고리": 
+                render_df = render_df[render_df['Category'] == cat_filter]
+                
             if search_query.strip():
-                mask = (render_df['Category'].str.contains(search_query, case=False, na=False) | render_df['Description'].str.contains(search_query, case=False, na=False) | render_df['Note'].str.contains(search_query, case=False, na=False) | render_df['Country'].str.contains(search_query, case=False, na=False))
+                mask = (
+                    render_df['Category'].str.contains(search_query, case=False, na=False) | 
+                    render_df['Description'].str.contains(search_query, case=False, na=False) | 
+                    render_df['Note'].str.contains(search_query, case=False, na=False) | 
+                    render_df['Country'].str.contains(search_query, case=False, na=False)
+                )
+                if 'TripName' in render_df.columns:
+                    mask = mask | render_df['TripName'].str.contains(search_query, case=False, na=False)
                 render_df = render_df[mask]
                 
             st.write(f"🔎 검색 결과: {len(render_df)}건")
@@ -4604,22 +4623,35 @@ if main_tab_choice == "가계부":
                 m_arr = re.search(r'(\d{4}-\d{2})-(\d{2})', str(target_arr_row.iloc[-1]['Date']))
                 if m_arr: arr_dt = datetime.strptime(m_arr.group(0), "%Y-%m-%d").date()
 
-            unique_date_series = render_df['Date'].astype(str).str.extract(r'(\d{4}-\d{2}-\d{2})', expand=False).dropna()
-            unique_dates = sorted(unique_date_series.unique().tolist())
+            unique_date_series = render_df['Date'].astype(str).str.extract(r'(\d{4}-\d{2})-(\d{2})', expand=False).dropna()
+            unique_dates = sorted(render_df['Date'].astype(str).str.extract(r'(\d{4}-\d{2}-\d{2})', expand=False).dropna().unique().tolist())
             date_to_group = {d: i % 2 for i, d in enumerate(unique_dates)}
 
             day_kr_names = ['월', '화', '수', '목', '금', '토', '일']
+            
+            # 💡 [핵심] 모드별 스마트 날짜 포맷터
             def format_display_date_se(row):
-                orig_d, cat = str(row['Date']).strip(), str(row['Category']).strip()
+                orig_d = str(row['Date']).strip()
                 m_full = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
-                if m_full: pure_date, mm, dd = m_full.group(0), m_full.group(2), m_full.group(3)
-                else: return orig_d
+                if m_full: 
+                    yyyy, mm, dd = m_full.group(1), m_full.group(2), m_full.group(3)
+                    pure_date = m_full.group(0)
+                else: 
+                    return orig_d
+                    
                 try:
                     cur_d = datetime.strptime(pure_date, "%Y-%m-%d").date()
                     day_kr = day_kr_names[cur_d.weekday()]
-                except: cur_d, day_kr = None, ""
-                short_d = f"{mm}/{dd}({day_kr})" if day_kr else f"{mm}/{dd}"
+                except: 
+                    cur_d, day_kr = None, ""
+                
+                # 🌟 모든 여행 모드: '24.09/26(목) 형태로 연도를 명확하게 노출하고 왜곡된 사전 태그 제거!
+                if is_all_trips_mode:
+                    yy = yyyy[-2:]
+                    return f"'{yy}.{mm}/{dd}({day_kr})" if day_kr else f"'{yy}.{mm}/{dd}"
 
+                # 🌟 현재 여행 모드: 기존의 편리한 D-Day 및 사전결제 뱃지 유지
+                short_d = f"{mm}/{dd}({day_kr})" if day_kr else f"{mm}/{dd}"
                 if cur_d and dep_dt and cur_d == dep_dt: return f"{short_d} 🛫Day1"
                 if cur_d and arr_dt and cur_d == arr_dt: return f"{short_d} 🛬귀국"
                 if not dep_dt or not cur_d: return short_d
@@ -4629,10 +4661,23 @@ if main_tab_choice == "가계부":
 
             styled_render_df = render_df.copy()
             styled_render_df['Date'] = styled_render_df.apply(format_display_date_se, axis=1)
-            if is_single_country and 'Country' in styled_render_df.columns:
-                styled_render_df = styled_render_df.drop(columns=['Country'])
+            
+            # 모드별 불필요 컬럼 정리
+            if not is_all_trips_mode:
+                if is_single_country and 'Country' in styled_render_df.columns:
+                    styled_render_df = styled_render_df.drop(columns=['Country'])
+                if 'TripName' in styled_render_df.columns:
+                    styled_render_df = styled_render_df.drop(columns=['TripName'])
 
             def style_journey_rows_se(row):
+                if is_all_trips_mode:
+                    orig_d = str(render_df.loc[row.name, 'Date'])
+                    m = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
+                    pure_date = m.group(0) if m else ""
+                    if date_to_group.get(pure_date, 0) == 1: 
+                        return ['background-color: rgba(249, 115, 22, 0.08);'] * len(row)
+                    return ['background-color: transparent;'] * len(row)
+
                 orig_d = str(render_df.loc[row.name, 'Date'])
                 m = re.search(r'(\d{4})-(\d{2})-(\d{2})', orig_d)
                 if not m: return [''] * len(row)
@@ -4653,16 +4698,29 @@ if main_tab_choice == "가계부":
 
             num_cols = ['Amount', 'AppliedRate', 'Cum_Budget_KRW', 'Cum_Card_Local', 'Cum_Cash_Local']
             styled_table = styled_table.format(smart_num_fmt, subset=[c for c in num_cols if c in styled_render_df.columns])
-            col_cfg = {"Date": st.column_config.TextColumn("날짜", width=120), "Category": st.column_config.TextColumn("항목", width="small"), "Receipt_URL": link_cfg}
+            
+            # 💡 [핵심] 컬럼 설정에 여행지 열 폭 지정
+            col_cfg = {
+                "TripName": st.column_config.TextColumn("여행지", width=140),
+                "Date": st.column_config.TextColumn("날짜", width=120), 
+                "Category": st.column_config.TextColumn("항목", width="small"), 
+                "Country": st.column_config.TextColumn("국가", width="small"),
+                "Receipt_URL": link_cfg
+            }
 
-            df_event = st.dataframe(styled_table, use_container_width=True, column_config=col_cfg, hide_index=True, selection_mode="single-cell", on_select="rerun", key="ledger_result_table")
+            df_event = st.dataframe(
+                styled_table, 
+                use_container_width=True, 
+                column_config=col_cfg, 
+                hide_index=True, 
+                selection_mode="single-cell", 
+                on_select="rerun", 
+                key="ledger_result_table"
+            )
 
-            # 6.01.04 | 선택 행 상태 관리 + 연속 행 이동
-            # 선택 행은 "표시 위치"가 아니라 실제 ledger index로 기억한다.
-            # 중요: dataframe 위젯의 selection 상태를 session_state에 강제로 주입하지 않는다.
-            #       특히 Description 셀을 다시 선택시키면 모바일에서 가로 스크롤 위치가 튈 수 있다.
-            # 행 이동 직후에는 dataframe selection이 이전 화면 위치를 다시 보내올 수 있으므로
-            # 한 번만 무시하고, 메모리상의 선택 행만 계속 사용한다.
+        # ==============================================================================
+        # 6.01.04 | Row Selection & Move Committer (선택 행 상태 관리 및 순서 조정)
+        # ==============================================================================
             selected_idx = None
             saved_real_idx = st.session_state.get('ledger_selected_real_idx')
             ignore_stale_selection = bool(st.session_state.pop('ledger_ignore_selection_once', False))
@@ -4697,10 +4755,9 @@ if main_tab_choice == "가계부":
                     except (KeyError, TypeError, IndexError):
                         selected_idx = None
 
-
-            # 이동은 active_ledger_df 메모리만 변경하고, 이 검색결과 fragment만 다시 그린다.
+            # 💡 행 이동 버튼은 현재 여행 편집 모드에서만 활성화 (모든 여행 조회 모드에선 숨김)
             selected_real_idx_for_move = st.session_state.get('ledger_selected_real_idx')
-            if selected_real_idx_for_move is not None:
+            if selected_real_idx_for_move is not None and not is_all_trips_mode:
                 try:
                     _move_pos = active_memory_df.index.get_loc(selected_real_idx_for_move)
                     if isinstance(_move_pos, slice):
@@ -4734,8 +4791,6 @@ if main_tab_choice == "가계부":
                         cur_df = cur_df.copy()
                         moved_real_idx = cur_df.index[current_pos]
 
-                        # 행 교환(swap)이 아니라 실제 삽입 이동을 수행한다.
-                        # 위쪽 화살표는 delta=-1/-5, 아래쪽 화살표는 delta=+1/+5이다.
                         new_order = list(cur_df.index)
                         moved_label = new_order.pop(current_pos)
                         new_order.insert(new_pos, moved_label)
