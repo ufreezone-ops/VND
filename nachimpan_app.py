@@ -744,98 +744,158 @@ with tab1:
         </div>
     """, unsafe_allow_html=True)
 
-# ==============================================================================
-    # 6.01.09 | Fact-Based Future Net Worth Trajectory & Retirement Readiness
+    # ==============================================================================
+    # 6.01.09 | Fact-Based Future Net Worth Trajectory & Pension Gap Analysis
     # ==============================================================================
     st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
     st.markdown("#### 📈 미래 순자산 궤적 및 노후 준비 팩트 분석 (사실 진단)")
 
-    # 1. 인터뷰이 연령 추출 및 은퇴까지 남은 기간 산출
+    # 1. 인터뷰이 연령 추출 및 기간 산출
     try:
         cur_age_num = int(str(st.session_state.get('age_selected', '38세')).replace('세', '').strip())
     except:
         cur_age_num = 38
         
-    retire_age_standard = 60 # 통계청 표준 일선 은퇴 기준 연령 (60세)
-    years_to_retire = max(0, retire_age_standard - cur_age_num)
-
-    # 2. 연간 순자산 축적액 계산
-    annual_savings = monthly_surplus * 12 # 만원 단위
-
-    # 3. 5년 후, 10년 후, 은퇴 시점(60세) 예상 순자산 추계
-    est_net_worth_5yr = net_worth + (annual_savings * 5)
-    est_net_worth_10yr = net_worth + (annual_savings * 10)
-    est_net_worth_retire = net_worth + (annual_savings * years_to_retire)
-
-    # 4. 공공 벤치마크: 국민연금연구원 부부 적정 노후자금 (월 250만원 × 12개월 × 은퇴 후 25년 = 약 7.5억 원)
-    benchmark_retirement_need = 75000 # 7억 5천만 원
-    readiness_pct = (est_net_worth_retire / benchmark_retirement_need * 100) if benchmark_retirement_need > 0 else 0
-
-    # 5. 객관적 팩트 상태 판정 (감정 배제, 순수 비율 기반)
-    if readiness_pct >= 100:
-        readiness_badge = "<span style='background:#10B981; color:#FFFFFF; font-size:12px; font-weight:800; padding:3px 8px; border-radius:5px;'>🟢 든든 (안정권)</span>"
-        readiness_summary = "현재의 현금흐름 밸런스가 유지된다면, 일선 은퇴 시점(60세)에 공공 적정 노후자금(7.5억)을 자력으로 충당할 수 있는 안정적인 구조입니다."
-    elif readiness_pct >= 50:
-        readiness_badge = "<span style='background:#F59E0B; color:#0B1120; font-size:12px; font-weight:800; padding:3px 8px; border-radius:5px;'>🟡 주의 (현상 유지)</span>"
-        readiness_summary = f"현재 페이스 유지 시 은퇴 시점에 필요 노후 자금의 약 <b>{readiness_pct:.0f}%</b>가 준비됩니다. 겉보기엔 안정적이나 은퇴 후 25년의 장기 비활동기를 지탱할 추가적인 완충 자산이 필요합니다."
-    else:
-        readiness_badge = "<span style='background:#EF4444; color:#FFFFFF; font-size:12px; font-weight:800; padding:3px 8px; border-radius:5px;'>🔴 부족 (재정 정체)</span>"
-        readiness_summary = f"매달 대출 상환과 고정 생활비로 인해 <b>연간 순자산 축적 속도가 제한적</b>입니다. 현재 구조로는 60세 은퇴 시점 예상 충족률이 <b>{max(0, readiness_pct):.0f}%</b>에 불과하여, 노동 소득 외의 대안(자산소득)이 반드시 뒷받침되어야 합니다."
-
-    annual_str = f"+{annual_savings:,.0f}만 원/년" if annual_savings >= 0 else f"{annual_savings:,.0f}만 원/년 (자산 감소)"
+    retire_age_std = 60 # 표준 일선 은퇴 연령 (60세)
+    years_to_retire = max(0, retire_age_std - cur_age_num)
 
     # --------------------------------------------------------------------------
-    # 팩트 분석 4분할 지표 카드 렌더링
+    # 💡 [신설] 노후 예상 연금 수령액 (국민연금 + 퇴직연금 + 개인연금 합산)
     # --------------------------------------------------------------------------
-    c_f1, c_f2, c_f3, c_f4 = st.columns(4)
+    c_pen1, c_pen2 = st.columns([2.8, 1.2], gap="small")
+    with c_pen1:
+        if "expected_pension_monthly" not in st.session_state:
+            st.session_state.expected_pension_monthly = 120 # 기본 120만원 (국민+퇴직연금 평균 수준)
+        
+        st.session_state.expected_pension_monthly = st.slider(
+            "🛡️ 은퇴(60세) 후 부부 합산 예상 연금 수령액 (국민연금+퇴직+개인연금)",
+            min_value=0, max_value=400, value=int(st.session_state.expected_pension_monthly), step=10, format="%d만 원/월"
+        )
+    with c_pen2:
+        st.markdown("<div style='height:24px;'></div>", unsafe_allow_html=True)
+        st.caption(f"💡 월 {st.session_state.expected_pension_monthly}만 원은 연금으로 방어")
+
+    # 2. 현실적인 은퇴 생활비 갭(Gap) 계산
+    benchmark_monthly_living = 250 # 국민연금연구원 부부 적정 노후생활비 (월 250만원)
+    net_monthly_deficit = max(0, benchmark_monthly_living - st.session_state.expected_pension_monthly)
+    annual_retirement_burn = net_monthly_deficit * 12 # 은퇴 후 1년에 순수하게 까먹는 자산 규모
+
+    # 3. 은퇴 전 축적액 (연간 저축 가능액)
+    annual_savings = monthly_surplus * 12
+
+    # 4. 나이대별(현재 -> +5년 -> +10년 -> 60세 -> 70세 -> 80세) 생애 순자산 궤적 시뮬레이션
+    sim_ages = [cur_age_num, cur_age_num + 5, cur_age_num + 10]
+    if 60 not in sim_ages and 60 > cur_age_num:
+        sim_ages.append(60)
+    sim_ages.extend([70, 80])
+    sim_ages = sorted(list(set(sim_ages)))
+
+    traj_net_worth = []
+    current_sim_asset = float(net_worth)
+
+    for a in sim_ages:
+        if a <= cur_age_num:
+            traj_net_worth.append(current_sim_asset)
+        elif a <= retire_age_std:
+            # 은퇴 전: 매년 저축액 축적
+            years_passed = a - cur_age_num
+            val = net_worth + (annual_savings * years_passed)
+            traj_net_worth.append(val)
+        else:
+            # 은퇴 후: 60세 시점 자산에서 매년 생활비 적자(annual_retirement_burn)를 헐어 쓰며 소진!
+            val_at_60 = net_worth + (annual_savings * years_to_retire)
+            years_after_retire = a - retire_age_std
+            burned_val = val_at_60 - (annual_retirement_burn * years_after_retire)
+            traj_net_worth.append(burned_val)
+
+    # 60세 시점 순자산 도달액 및 금융자산(부동산 제외) 팩트 분석
+    net_worth_at_60 = net_worth + (annual_savings * years_to_retire)
+    real_estate_val = st.session_state.get('asset_real_estate', 0)
+    liquid_asset_at_60 = net_worth_at_60 - real_estate_val # 집 빼고 손에 쥔 현금 자산
+
+    # --------------------------------------------------------------------------
+    # 5. 📉 Plotly 생애 순자산 궤적 부드러운 꺾은선 그래프 (Spline Curve)
+    # --------------------------------------------------------------------------
+    traj_df = pd.DataFrame({"연령": sim_ages, "순자산": traj_net_worth})
+    traj_df["연령_라벨"] = traj_df["연령"].apply(lambda x: f"{x}세(은퇴)" if x == retire_age_std else f"{x}세")
+
+    fig_traj = go.Figure()
+
+    # 1. 부드러운 자산 궤적 라인
+    fig_traj.add_trace(go.Scatter(
+        x=traj_df["연령"],
+        y=traj_df["순자산"],
+        mode='lines+markers+text',
+        line=dict(color='#F59E0B', width=3.5, shape='spline'),
+        marker=dict(size=9, color='#FFFFFF', line=dict(color='#EA580C', width=2)),
+        text=traj_df["순자산"].apply(lambda v: fmt_money_kr(v)),
+        textposition="top center",
+        textfont=dict(size=12, color='#F8FAFC'),
+        name="가계 순자산 궤적"
+    ))
+
+    # 2. 60세 은퇴 수직 기준선
+    if retire_age_std > cur_age_num:
+        fig_traj.add_vline(
+            x=retire_age_std, line_dash="dash", line_color="#38BDF8", line_width=2,
+            annotation_text=" 60세 일선 은퇴 시점 ", annotation_position="bottom right",
+            annotation_font=dict(size=12, color="#38BDF8")
+        )
+
+    # 3. 0원 기준선 (자산 바닥선)
+    fig_traj.add_hline(y=0, line_dash="dot", line_color="#EF4444", line_width=1.5)
+
+    fig_traj.update_layout(
+        height=330,
+        margin=dict(l=10, r=20, t=30, b=30),
+        paper_bgcolor='rgba(15, 23, 42, 0.4)',
+        plot_bgcolor='rgba(15, 23, 42, 0.4)',
+        xaxis=dict(
+            tickmode='array', tickvals=sim_ages, ticktext=traj_df["연령_라벨"],
+            fixedrange=True, gridcolor='#334155'
+        ),
+        yaxis=dict(fixedrange=True, showgrid=True, gridcolor='#334155', zeroline=False),
+        showlegend=False
+    )
+    st.plotly_chart(fig_traj, use_container_width=True, config={'displayModeBar': False})
+
+    # --------------------------------------------------------------------------
+    # 6. 💎 7.5억의 허상과 부동산 착시 팩트체크 카드
+    # --------------------------------------------------------------------------
+    # 80세 시점에 자산이 남아있는지 여부
+    net_at_80 = traj_net_worth[-1]
     
-    with c_f1:
-        st.markdown(f"""
-            <div style='background:#1E293B; border:1px solid #334155; border-radius:10px; padding:12px; text-align:center;'>
-                <div style='font-size:12px; color:#94A3B8;'>연간 순자산 축적 속도</div>
-                <div style='font-size:18px; font-weight:800; color:#38BDF8; margin-top:3px;'>{annual_str}</div>
-                <div style='font-size:11px; color:#64748B; margin-top:2px;'>매월 여유자금 × 12개월</div>
-            </div>
-        """, unsafe_allow_html=True)
+    if liquid_asset_at_60 <= 0 and real_estate_val > 0:
+        insight_title = "🚨 '부동산 착시' 경고 (집 한 채의 함정)"
+        insight_badge = "<span style='background:#EF4444; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:3px 8px; border-radius:5px;'>하우스푸어 위험</span>"
+        insight_msg = f"""
+            • 60세 시점 가계 순자산은 <b>{fmt_money_kr(net_worth_at_60)}</b>에 달하지만, 
+            살고 있는 <b>집(부동산 {fmt_money_kr(real_estate_val)})을 빼고 나면 통장에 남는 현금성 자산은 마이너스({fmt_money_kr(liquid_asset_at_60)})</b>입니다.<br>
+            • 아파트를 헐어 먹고 살 수는 없습니다. 7.5억의 집이 있어도 마르지 않는 <b>'매달 나오는 현금흐름'</b>이 없다면 은퇴 직후부터 심각한 생활고에 직면합니다.
+        """
+    elif net_at_80 > 0:
+        insight_title = "🟢 은퇴 후 기본 생활 유지권"
+        insight_badge = "<span style='background:#10B981; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:3px 8px; border-radius:5px;'>현금흐름 보완 필요</span>"
+        insight_msg = f"""
+            • 연금(월 {st.session_state.expected_pension_monthly}만 원)과 현재의 자산 축적 페이스 덕분에 80세 시점에도 자산이 유지되는 궤적입니다.<br>
+            • 다만 자산의 대부분이 부동산에 묶여 있다면 의료비/간병비 등 예상치 못한 목돈 지출 시 유동성 위기가 올 수 있으므로, <b>매달 파이프처럼 들어오는 권리소득</b>으로 체질을 개선해야 안전합니다.
+        """
+    else:
+        insight_title = "⚠️ 은퇴 후 자산 소진 곡선 발생"
+        insight_badge = "<span style='background:#F59E0B; color:#0B1120; font-size:11.5px; font-weight:800; padding:3px 8px; border-radius:5px;'>자산 소진기 진입</span>"
+        insight_msg = f"""
+            • 60세 은퇴 후 연금 수령액을 제외한 부족분(월 {net_monthly_deficit:,.0f}만 원)을 모아둔 자산에서 메우다 보면, <b>노후 15~20년 차에 축적 자산이 급격히 바닥으로 꺾이는 궤적</b>이 나타납니다.<br>
+            • 모아둔 돈을 까먹는 삶에서 벗어나, <b>평생 멈추지 않는 현금흐름 파이프라인(자산)</b>을 미리 구축해야 하는 이유가 바로 여기에 있습니다.
+        """
 
-    with c_f2:
-        st.markdown(f"""
-            <div style='background:#1E293B; border:1px solid #334155; border-radius:10px; padding:12px; text-align:center;'>
-                <div style='font-size:12px; color:#94A3B8;'>5년 후 예상 순자산</div>
-                <div style='font-size:18px; font-weight:800; color:#F8FAFC; margin-top:3px;'>{fmt_money_kr(est_net_worth_5yr)}</div>
-                <div style='font-size:11px; color:#64748B; margin-top:2px;'>{cur_age_num + 5}세 시점 도달액</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    with c_f3:
-        st.markdown(f"""
-            <div style='background:#1E293B; border:1px solid #334155; border-radius:10px; padding:12px; text-align:center;'>
-                <div style='font-size:12px; color:#94A3B8;'>10년 후 예상 순자산</div>
-                <div style='font-size:18px; font-weight:800; color:#F8FAFC; margin-top:3px;'>{fmt_money_kr(est_net_worth_10yr)}</div>
-                <div style='font-size:11px; color:#64748B; margin-top:2px;'>{cur_age_num + 10}세 시점 도달액</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    with c_f4:
-        st.markdown(f"""
-            <div style='background:#1E293B; border:1px solid #F59E0B; border-radius:10px; padding:12px; text-align:center;'>
-                <div style='font-size:12px; color:#FBBF24;'>은퇴({retire_age_standard}세) 최종 순자산</div>
-                <div style='font-size:18px; font-weight:800; color:#FBBF24; margin-top:3px;'>{fmt_money_kr(est_net_worth_retire)}</div>
-                <div style='font-size:11px; color:#94A3B8; margin-top:2px;'>{years_to_retire}년 뒤 일선 은퇴 시점</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    # --------------------------------------------------------------------------
-    # 노후 준비 상태 종합 팩트 체크 안내 박스
-    # --------------------------------------------------------------------------
     st.markdown(f"""
-        <div style='background:rgba(15, 23, 42, 0.7); border:1.5px solid #334155; border-radius:10px; padding:14px 18px; margin-top:14px;'>
+        <div style='background:rgba(30, 41, 59, 0.7); border:1.5px solid #334155; border-radius:12px; padding:16px 20px; margin-top:10px;'>
             <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;'>
-                <span style='font-size:13.5px; font-weight:700; color:#E2E8F0;'>📋 노후 적정 생활비(7.5억) 대비 준비율 팩트 체크</span>
-                {readiness_badge}
+                <b style='font-size:14.5px; color:#FBBF24;'>{insight_title}</b>
+                {insight_badge}
             </div>
-            <div style='font-size:12.5px; color:#CBD5E1; line-height:1.6;'>
-                {readiness_summary}
+            <div style='font-size:13px; color:#CBD5E1; line-height:1.7;'>
+                {insight_msg}
             </div>
         </div>
     """, unsafe_allow_html=True)
