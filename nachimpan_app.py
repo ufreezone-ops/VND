@@ -411,7 +411,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ==============================================================================
 with tab1:
     # --------------------------------------------------------------------------
-    # 6.01.01 | 오프닝 위로의 카드 (중복 문구 완전 삭제 및 단일화)
+    # 6.01.01 | 오프닝 위로의 카드
     # --------------------------------------------------------------------------
     st.markdown("### 💼 나의 현재 수입 구조와 재무 현황")
     
@@ -430,7 +430,6 @@ with tab1:
     # --------------------------------------------------------------------------
     st.markdown("#### 🧭 나의 에너지가 머무는 소득 사분면 (ESBI)")
 
-    # 선택 상태에 따른 동적 카드 스타일 계산 함수
     def get_quad_box_html(q_code, title, core_phrase, sub_desc):
         is_primary = (q_code in st.session_state.primary_quadrant)
         is_side = (st.session_state.has_side_gig and q_code in st.session_state.side_quadrant)
@@ -457,7 +456,6 @@ with tab1:
             </div>
         """
 
-    # 💡 [요청사항 반영] 수학 x-y 좌표계 2x2 대칭 배치
     # Row 1: 좌측 상단 [S 자영업]  |  우측 상단 [B 사업가]
     r1_col1, r1_col2 = st.columns(2, gap="medium")
     with r1_col1:
@@ -494,70 +492,110 @@ with tab1:
     st.divider()
 
     # --------------------------------------------------------------------------
-    # 6.01.03 | 수입 & 지출 슬라이더 컨트롤러 (키패드 0% 터치 인터랙션)
+    # 6.01.03 | 슬라이더(50만 단위 자석) + 직접입력 빈칸(1만 단위) 양방향 동기화
     # --------------------------------------------------------------------------
+    # 양방향 동기화 콜백 헬퍼
+    def _sync_from_slider(key):
+        val = st.session_state[f"sld_{key}"]
+        st.session_state[f"num_{key}"] = val
+        st.session_state[key] = val
+
+    def _sync_from_num(key):
+        val = st.session_state[f"num_{key}"]
+        st.session_state[f"sld_{key}"] = val
+        st.session_state[key] = val
+
+    def render_dual_input(label_text, key_name, max_v=2000, min_v=0, default_v=0):
+        # 세션 초기값 보장
+        if key_name not in st.session_state:
+            st.session_state[key_name] = default_v
+        cur_val = int(st.session_state[key_name])
+        if f"sld_{key_name}" not in st.session_state:
+            st.session_state[f"sld_{key_name}"] = cur_val
+        if f"num_{key_name}" not in st.session_state:
+            st.session_state[f"num_{key_name}"] = cur_val
+
+        st.markdown(f"<div style='font-size:13.5px; font-weight:600; color:#E2E8F0; margin-bottom:2px;'>{label_text}</div>", unsafe_allow_html=True)
+        col_slider, col_box = st.columns([3.2, 1.3], gap="small")
+        
+        with col_slider:
+            st.slider(
+                label=label_text,
+                min_value=min_v,
+                max_value=max_v,
+                step=50,  # 💡 50만 원 자석 스텝
+                key=f"sld_{key_name}",
+                on_change=_sync_from_slider,
+                args=(key_name,),
+                label_visibility="collapsed"
+            )
+        with col_box:
+            st.number_input(
+                label=f"{label_text}_빈칸",
+                min_value=min_v,
+                max_value=max_v,
+                step=1,   # 💡 1만 원 단위 정밀 직접 입력
+                key=f"num_{key_name}",
+                on_change=_sync_from_num,
+                args=(key_name,),
+                label_visibility="collapsed"
+            )
+
     c_in, c_out = st.columns([1, 1], gap="large")
     
     with c_in:
-        st.markdown("#### 📥 매달 들어오는 수입 (월 단위)")
+        st.markdown("#### 📥 월수입")
         
-        # 1. 본인 노동소득
-        st.session_state.monthly_labor_income = st.slider(
+        render_dual_input(
             "1. 본인 월 소득 (급여 / 사업소득)",
-            min_value=0, max_value=2000, value=int(st.session_state.monthly_labor_income), step=10, format="%d만 원"
+            "monthly_labor_income",
+            max_v=2000, min_v=0, default_v=380
         )
         
-        # 2. 배우자 소득
-        st.session_state.monthly_spouse_income = st.slider(
+        render_dual_input(
             "2. 배우자 월 소득 (맞벌이 등)",
-            min_value=0, max_value=1500, value=int(st.session_state.monthly_spouse_income), step=10, format="%d만 원"
+            "monthly_spouse_income",
+            max_v=1500, min_v=0, default_v=150
         )
         
-        # 3. 자산/권리 소득 (일하지 않아도 나오는 돈)
-        st.session_state.monthly_asset_income = st.slider(
+        render_dual_input(
             "3. 일하지 않아도 나오는 소득 (연금/배당/임대/로열티)",
-            min_value=0, max_value=1000, value=int(st.session_state.monthly_asset_income), step=10, format="%d만 원"
+            "monthly_asset_income",
+            max_v=1000, min_v=0, default_v=0
         )
 
         total_income = st.session_state.monthly_labor_income + st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income
         st.markdown(f"""
-            <div style='background:rgba(30, 41, 59, 0.6); padding:10px 14px; border-radius:8px; border:1px solid #334155; margin-top:14px;'>
+            <div style='background:rgba(30, 41, 59, 0.6); padding:10px 14px; border-radius:8px; border:1px solid #334155; margin-top:10px;'>
                 <span style='font-size:13px; color:#94A3B8;'>가정 총 월수입 합계:</span> 
                 <b style='font-size:18px; color:#38BDF8; float:right;'>{total_income:,.0f}만 원</b>
             </div>
         """, unsafe_allow_html=True)
 
     with c_out:
-        st.markdown("#### 📤 매달 나가는 지출 & 보유 자산")
+        st.markdown("#### 📤 월지출")
         
-        # 1. 필수 생활비
-        st.session_state.monthly_living_cost = st.slider(
+        render_dual_input(
             "1. 필수 생활비 (식비, 공과금, 보육/교육비 등)",
-            min_value=50, max_value=1500, value=int(st.session_state.monthly_living_cost), step=10, format="%d만 원"
+            "monthly_living_cost",
+            max_v=1500, min_v=0, default_v=280
         )
         
-        # 2. 대출 상환액
-        st.session_state.monthly_debt_payment = st.slider(
+        render_dual_input(
             "2. 대출 원리금 상환액 (주담대, 신용대출 등)",
-            min_value=0, max_value=1000, value=int(st.session_state.monthly_debt_payment), step=10, format="%d만 원"
+            "monthly_debt_payment",
+            max_v=1000, min_v=0, default_v=90
         )
-        
-        # 3. 💡 [핵심 복선] 매달 마트/쿠팡에 지불하는 생필품비
-        st.session_state.monthly_consumable_spend = st.slider(
-            "3. 어차피 마트/쿠팡에서 쓰는 생필품비 (세제, 치약, 영양제 등)",
-            min_value=10, max_value=200, value=int(st.session_state.monthly_consumable_spend), step=5, format="%d만 원"
-        )
-        st.caption("💡 이 생필품비는 필수 생활비 안에 이미 포함되어 있으나, 나중에 '자산의 씨앗'이 될 소중한 금액입니다.")
 
-        # 4. 비상금
-        st.session_state.liquid_emergency_cash = st.slider(
-            "4. 당장 인출 가능한 비상 현금 / 예적금",
-            min_value=0, max_value=10000, value=int(st.session_state.liquid_emergency_cash), step=50, format="%d만 원"
+        render_dual_input(
+            "3. 당장 인출 가능한 비상 현금 / 예적금 (보유 자산)",
+            "liquid_emergency_cash",
+            max_v=10000, min_v=0, default_v=1200
         )
 
         total_expense = st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment
         st.markdown(f"""
-            <div style='background:rgba(30, 41, 59, 0.6); padding:10px 14px; border-radius:8px; border:1px solid #334155; margin-top:14px;'>
+            <div style='background:rgba(30, 41, 59, 0.6); padding:10px 14px; border-radius:8px; border:1px solid #334155; margin-top:10px;'>
                 <span style='font-size:13px; color:#94A3B8;'>매달 빠져나가는 고정지출 합계:</span> 
                 <b style='font-size:18px; color:#F87171; float:right;'>{total_expense:,.0f}만 원</b>
             </div>
@@ -577,7 +615,7 @@ with tab1:
             <span style='font-size:14px; color:#94A3B8; font-weight:600;'>매달 가계에 남는 순수 여유 자금 (월 현금흐름 밸런스)</span>
             <div style='font-size:26px; font-weight:800; color:{surplus_color}; margin-top:4px;'>{surplus_text}</div>
             <div style='font-size:12px; color:#64748B; margin-top:6px;'>
-                수입 슬라이더나 지출 슬라이더를 조절하시면 왼쪽 사이드바의 <b>'안심 버퍼 시간(개월 수)'</b>이 실시간으로 함께 변화합니다.
+                수입이나 지출 금액을 조절하시면 왼쪽 사이드바의 <b>'안심 버퍼 시간(개월 수)'</b>이 실시간으로 함께 연동되어 변화합니다.
             </div>
         </div>
     """, unsafe_allow_html=True)
