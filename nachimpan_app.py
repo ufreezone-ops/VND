@@ -492,26 +492,38 @@ with tab1:
     st.divider()
 
     # --------------------------------------------------------------------------
-    # 6.01.03 | 슬라이더(50만 단위 자석) + 직접입력 빈칸(1만 단위) 양방향 동기화
+    # 6.01.03 | 비선형 맞춤 슬라이더(300~500만 중심) + 직접입력 양방향 동기화
     # --------------------------------------------------------------------------
-    # 양방향 동기화 콜백 헬퍼
+    # 💡 300~500만 원 구간이 정중앙에 오도록 설계된 비선형 자석 눈금 옵션들
+    INCOME_OPTIONS = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1200, 1500, 2000]
+    SPOUSE_OPTIONS = [0, 50, 100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000, 1500]
+    ASSET_OPTIONS  = [0, 10, 20, 30, 50, 70, 100, 150, 200, 300, 500, 1000]
+
+    LIVING_OPTIONS = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1500]
+    DEBT_OPTIONS   = [0, 30, 50, 70, 90, 100, 120, 150, 200, 250, 300, 400, 500, 700, 1000]
+    CASH_OPTIONS   = [0, 100, 300, 500, 800, 1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000, 7000, 10000]
+
     def _sync_from_slider(key):
         val = st.session_state[f"sld_{key}"]
         st.session_state[f"num_{key}"] = val
         st.session_state[key] = val
 
-    def _sync_from_num(key):
+    def _sync_from_num(key, options):
         val = st.session_state[f"num_{key}"]
-        st.session_state[f"sld_{key}"] = val
         st.session_state[key] = val
+        # 직접 친 숫자와 가장 가까운 슬라이더 눈금 위치로 자석 이동
+        nearest = min(options, key=lambda x: abs(x - val))
+        st.session_state[f"sld_{key}"] = nearest
 
-    def render_dual_input(label_text, key_name, max_v=2000, min_v=0, default_v=0):
-        # 세션 초기값 보장
+    def render_custom_input(label_text, key_name, options, default_v=0, max_limit=2000):
         if key_name not in st.session_state:
             st.session_state[key_name] = default_v
         cur_val = int(st.session_state[key_name])
+        
+        # 슬라이더 눈금에 현재 값이 없으면 가장 가까운 눈금으로 맞춤
         if f"sld_{key_name}" not in st.session_state:
-            st.session_state[f"sld_{key_name}"] = cur_val
+            nearest_opt = min(options, key=lambda x: abs(x - cur_val))
+            st.session_state[f"sld_{key_name}"] = nearest_opt
         if f"num_{key_name}" not in st.session_state:
             st.session_state[f"num_{key_name}"] = cur_val
 
@@ -519,25 +531,26 @@ with tab1:
         col_slider, col_box = st.columns([3.2, 1.3], gap="small")
         
         with col_slider:
-            st.slider(
+            # 💡 [핵심] 비선형 비균일 간격 슬라이더 (st.select_slider)
+            st.select_slider(
                 label=label_text,
-                min_value=min_v,
-                max_value=max_v,
-                step=50,  # 💡 50만 원 자석 스텝
+                options=options,
+                format_func=lambda x: f"{x}만 원",
                 key=f"sld_{key_name}",
                 on_change=_sync_from_slider,
                 args=(key_name,),
                 label_visibility="collapsed"
             )
         with col_box:
+            # 💡 정밀 타이핑 입력칸
             st.number_input(
                 label=f"{label_text}_빈칸",
-                min_value=min_v,
-                max_value=max_v,
-                step=1,   # 💡 1만 원 단위 정밀 직접 입력
+                min_value=options[0],
+                max_value=max_limit,
+                step=1,
                 key=f"num_{key_name}",
                 on_change=_sync_from_num,
-                args=(key_name,),
+                args=(key_name, options),
                 label_visibility="collapsed"
             )
 
@@ -546,22 +559,29 @@ with tab1:
     with c_in:
         st.markdown("#### 📥 월수입")
         
-        render_dual_input(
+        # 본인 월 소득: 300~500만 원이 정확히 슬라이더 정중앙에 위치!
+        render_custom_input(
             "1. 본인 월 소득 (급여 / 사업소득)",
             "monthly_labor_income",
-            max_v=2000, min_v=0, default_v=380
+            options=INCOME_OPTIONS,
+            default_v=350,
+            max_limit=2000
         )
         
-        render_dual_input(
+        render_custom_input(
             "2. 배우자 월 소득 (맞벌이 등)",
             "monthly_spouse_income",
-            max_v=1500, min_v=0, default_v=150
+            options=SPOUSE_OPTIONS,
+            default_v=150,
+            max_limit=1500
         )
         
-        render_dual_input(
+        render_custom_input(
             "3. 일하지 않아도 나오는 소득 (연금/배당/임대/로열티)",
             "monthly_asset_income",
-            max_v=1000, min_v=0, default_v=0
+            options=ASSET_OPTIONS,
+            default_v=0,
+            max_limit=1000
         )
 
         total_income = st.session_state.monthly_labor_income + st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income
@@ -575,22 +595,29 @@ with tab1:
     with c_out:
         st.markdown("#### 📤 월지출")
         
-        render_dual_input(
+        # 필수 생활비: 250~350만 원이 슬라이더 정중앙에 위치!
+        render_custom_input(
             "1. 필수 생활비 (식비, 공과금, 보육/교육비 등)",
             "monthly_living_cost",
-            max_v=1500, min_v=0, default_v=280
+            options=LIVING_OPTIONS,
+            default_v=280,
+            max_limit=1500
         )
         
-        render_dual_input(
+        render_custom_input(
             "2. 대출 원리금 상환액 (주담대, 신용대출 등)",
             "monthly_debt_payment",
-            max_v=1000, min_v=0, default_v=90
+            options=DEBT_OPTIONS,
+            default_v=90,
+            max_limit=1000
         )
 
-        render_dual_input(
+        render_custom_input(
             "3. 당장 인출 가능한 비상 현금 / 예적금 (보유 자산)",
             "liquid_emergency_cash",
-            max_v=10000, min_v=0, default_v=1200
+            options=CASH_OPTIONS,
+            default_v=1200,
+            max_limit=10000
         )
 
         total_expense = st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment
