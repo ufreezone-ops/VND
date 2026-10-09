@@ -407,7 +407,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1: 나의 현재 좌표 (ESBI 사분면 및 자산 현황 상세 입력)
+# 6.01.00 | Tab 1: 나의 현재 좌표 (ESBI 사분면, 손익계산서 & 대차대조표)
 # ==============================================================================
 with tab1:
     # --------------------------------------------------------------------------
@@ -420,7 +420,7 @@ with tab1:
             <h4>⚖️ 그동안 참 성실하고 치열하게 삶을 가꾸어 오셨습니다.</h4>
             <p>
                 매달 가정을 지키기 위해 쏟아붓는 땀과 에너지는 과연 어떤 성격의 소득일까요? 
-                나의 주 소득원이 머무는 사분면을 응시하고, 매달 들어오고 나가는 현금의 흐름을 거울 보듯 조용히 마주해보는 시간입니다.
+                나의 주 소득원이 머무는 사분면을 응시하고, 매달 들어오고 나가는 현금의 흐름과 순자산을 거울 보듯 조용히 마주해보는 시간입니다.
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -492,185 +492,111 @@ with tab1:
     st.divider()
 
     # --------------------------------------------------------------------------
-    # 6.01.03 | 슬라이더 전용 CSS (두께 5배 + 금액 라벨 손잡이 안쪽 완벽 안착)
+    # 6.01.03 | 슬라이더 전용 CSS (두께 5배 + 부유 텍스트 제거로 깔끔 일체화)
     # --------------------------------------------------------------------------
     st.markdown("""
         <style>
-        /* 💡 1. 슬라이더 바 트랙 두께 5배 확대 (24px 도톰한 알약 형태) */
-        div[data-baseweb="slider"] {
-            margin-top: 8px !important;
-            margin-bottom: 8px !important;
-        }
-        div[data-baseweb="slider"] > div {
-            height: 24px !important;
-            border-radius: 12px !important;
+        /* 1. 슬라이더 바 트랙 두께 5배 확대 (20px 도톰한 알약형) */
+        div[data-testid="stSlider"] div[data-baseweb="slider"] > div:first-child {
+            height: 20px !important;
+            border-radius: 10px !important;
             background-color: #1E293B !important;
-            border: 1.5px solid #334155 !important;
+            border: 1px solid #334155 !important;
         }
-        /* 채워지는 활성 트랙 (오렌지 그라데이션) */
-        div[data-baseweb="slider"] > div > div:first-child {
-            height: 24px !important;
-            border-radius: 12px !important;
+        /* 채워지는 활성 트랙 */
+        div[data-testid="stSlider"] div[data-baseweb="slider"] > div:first-child > div:first-child {
+            height: 20px !important;
+            border-radius: 10px !important;
             background: linear-gradient(90deg, #F59E0B 0%, #EA580C 100%) !important;
         }
-        /* 💡 2. 슬라이더 손잡이를 70px 와이드 캡슐로 확장하여 금액이 쏙 들어가게 디자인 */
-        div[data-baseweb="slider"] div[role="slider"] {
+        /* 2. 슬라이더 손잡이 썸 */
+        div[data-testid="stSlider"] div[role="slider"] {
             height: 26px !important;
-            min-width: 72px !important;
-            border-radius: 13px !important;
-            background: #EA580C !important;
+            width: 26px !important;
+            top: -3px !important;
+            background-color: #F59E0B !important;
             border: 2px solid #FFFFFF !important;
-            top: -2px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.5) !important;
-            cursor: grab !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5) !important;
         }
-        div[data-baseweb="slider"] div[role="slider"]:active {
-            cursor: grabbing !important;
-            background: #C2410C !important;
-        }
-        /* 💡 3. 위에 떠다니던 금액 텍스트를 손잡이 캡슐 안쪽 중앙에 화이트 볼드로 고정 */
-        div[data-baseweb="slider"] div[role="slider"] > div {
-            position: static !important;
-            bottom: auto !important;
-            transform: none !important;
-            color: #FFFFFF !important;
-            font-size: 11px !important;
-            font-weight: 800 !important;
-            padding: 0 4px !important;
-            margin: 0 !important;
-            white-space: nowrap !important;
+        /* 3. 💡 위에 떠다니며 시야를 어지럽히던 붉은색 중복 텍스트 숨김 (우측 네모칸과 100% 일치하므로 깔끔 정리) */
+        div[data-testid="stSlider"] div[data-baseweb="slider"] div[role="slider"] > div {
+            display: none !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.01.04 | 수입 & 지출 비선형 눈금 옵션 (월수입·월지출 전 항목 100% 동일 눈금)
+    # 6.01.04 | 양방향 완전 종속 동기화 헬퍼 함수
     # --------------------------------------------------------------------------
-    # 💡 [요청 반영] 300~500만이 정중앙에 오는 0~2,000만 원 표준 통일 눈금 (본인, 배우자, 자산, 생활비, 대출 모두 동일!)
-    MONTHLY_FLOW_OPTIONS = [
-        0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 
-        600, 700, 800, 1000, 1200, 1500, 2000
-    ]
-    # 보유 자산(비상금)은 축적 자산 특성에 맞춘 고유 눈금 (1,000~1,500만 원 중심)
-    CASH_OPTIONS = [
-        0, 100, 300, 500, 800, 1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000, 7000, 10000
-    ]
-
-    def _sync_from_slider(key):
+    def _sync_slider_to_num(key):
         val = st.session_state[f"sld_{key}"]
         st.session_state[f"num_{key}"] = val
         st.session_state[key] = val
 
-    def _sync_from_num(key, options):
-        val = st.session_state[f"num_{key}"]
+    def _sync_num_to_slider(key, max_v):
+        val = min(max_v, max(0, st.session_state[f"num_{key}"]))
+        st.session_state[f"sld_{key}"] = val
         st.session_state[key] = val
-        nearest = min(options, key=lambda x: abs(x - val))
-        st.session_state[f"sld_{key}"] = nearest
 
-    def render_custom_input(label_text, key_name, options, default_v=0, max_limit=2000):
+    def render_linked_input(label_text, key_name, max_v=2000, step_s=50, default_v=0):
         if key_name not in st.session_state:
             st.session_state[key_name] = default_v
         cur_val = int(st.session_state[key_name])
         
         if f"sld_{key_name}" not in st.session_state:
-            nearest_opt = min(options, key=lambda x: abs(x - cur_val))
-            st.session_state[f"sld_{key_name}"] = nearest_opt
+            st.session_state[f"sld_{key_name}"] = cur_val
         if f"num_{key_name}" not in st.session_state:
             st.session_state[f"num_{key_name}"] = cur_val
 
         st.markdown(f"<div style='font-size:13.5px; font-weight:600; color:#E2E8F0; margin-bottom:2px;'>{label_text}</div>", unsafe_allow_html=True)
-        col_slider, col_box = st.columns([3.1, 1.3], gap="small")
+        col_s, col_n = st.columns([3.1, 1.3], gap="small")
         
-        with col_slider:
-            st.select_slider(
+        with col_s:
+            st.slider(
                 label=label_text,
-                options=options,
-                format_func=lambda x: f"{x}만 원",
+                min_value=0,
+                max_value=max_v,
+                step=step_s,
                 key=f"sld_{key_name}",
-                on_change=_sync_from_slider,
+                on_change=_sync_slider_to_num,
                 args=(key_name,),
                 label_visibility="collapsed"
             )
-        with col_box:
+        with col_n:
             st.number_input(
-                label=f"{label_text}_빈칸",
-                min_value=options[0],
-                max_value=max_limit,
+                label=f"{label_text}_입력",
+                min_value=0,
+                max_value=max_v,
                 step=1,
                 key=f"num_{key_name}",
-                on_change=_sync_from_num,
-                args=(key_name, options),
+                on_change=_sync_num_to_slider,
+                args=(key_name, max_v),
                 label_visibility="collapsed"
             )
 
-    # 1. 입력 슬라이더 영역 (좌: 월수입 / 우: 월지출)
+    # --------------------------------------------------------------------------
+    # 6.01.05 | 손익계산서: 월수입 vs 월지출 (50만 원 자석 스텝 연동)
+    # --------------------------------------------------------------------------
     c_in, c_out = st.columns([1, 1], gap="large")
     
     with c_in:
         st.markdown("#### 📥 월수입")
-        
-        render_custom_input(
-            "1. 본인 월 소득 (급여 / 사업소득)",
-            "monthly_labor_income",
-            options=MONTHLY_FLOW_OPTIONS,
-            default_v=350,
-            max_limit=2000
-        )
-        
-        # 💡 배우자 소득도 동일하게 최대 2000만 원까지 동일 눈금 적용!
-        render_custom_input(
-            "2. 배우자 월 소득 (맞벌이 등)",
-            "monthly_spouse_income",
-            options=MONTHLY_FLOW_OPTIONS,
-            default_v=150,
-            max_limit=2000
-        )
-        
-        render_custom_input(
-            "3. 일하지 않아도 나오는 소득 (연금/배당/임대/로열티)",
-            "monthly_asset_income",
-            options=MONTHLY_FLOW_OPTIONS,
-            default_v=0,
-            max_limit=2000
-        )
+        render_linked_input("1. 본인 월 소득 (급여 / 사업소득)", "monthly_labor_income", max_v=2000, step_s=50, default_v=350)
+        render_linked_input("2. 배우자 월 소득 (맞벌이 등)", "monthly_spouse_income", max_v=2000, step_s=50, default_v=150)
+        render_linked_input("3. 일하지 않아도 나오는 소득 (연금/배당/임대)", "monthly_asset_income", max_v=2000, step_s=50, default_v=0)
 
     with c_out:
         st.markdown("#### 📤 월지출")
-        
-        render_custom_input(
-            "1. 필수 생활비 (식비, 공과금, 보육/교육비 등)",
-            "monthly_living_cost",
-            options=MONTHLY_FLOW_OPTIONS,
-            default_v=280,
-            max_limit=2000
-        )
-        
-        render_custom_input(
-            "2. 대출 원리금 상환액 (주담대, 신용대출 등)",
-            "monthly_debt_payment",
-            options=MONTHLY_FLOW_OPTIONS,
-            default_v=90,
-            max_limit=2000
-        )
-
-        render_custom_input(
-            "3. 당장 인출 가능한 비상 현금 / 예적금 (보유 자산)",
-            "liquid_emergency_cash",
-            options=CASH_OPTIONS,
-            default_v=1200,
-            max_limit=10000
-        )
+        render_linked_input("1. 필수 생활비 (식비, 공과금, 보육/교육비)", "monthly_living_cost", max_v=2000, step_s=50, default_v=280)
+        render_linked_input("2. 대출 원리금 상환액 (주담대, 신용대출 등)", "monthly_debt_payment", max_v=2000, step_s=50, default_v=90)
+        # 칸 높이 대칭을 맞추기 위한 여백
+        st.markdown("<div style='height: 48px;'></div>", unsafe_allow_html=True)
 
     total_income = st.session_state.monthly_labor_income + st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income
     total_expense = st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment
 
-    # --------------------------------------------------------------------------
-    # 6.01.05 | 💡 [수평 위치 100% 일치] 월수입 합계 & 월지출 합계 요약 박스
-    # --------------------------------------------------------------------------
-    st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+    # 💡 [수평 높이 100% 일치] 월수입 합계 vs 고정지출 합계
+    st.markdown("<div style='margin-top:6px;'></div>", unsafe_allow_html=True)
     c_sum_in, c_sum_out = st.columns([1, 1], gap="large")
     
     with c_sum_in:
@@ -689,21 +615,84 @@ with tab1:
             </div>
         """, unsafe_allow_html=True)
 
-    # --------------------------------------------------------------------------
-    # 6.01.06 | 실시간 현금흐름 요약 밸런스 카드
-    # --------------------------------------------------------------------------
-    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
     monthly_surplus = total_income - total_expense
-    
     surplus_color = "#34D399" if monthly_surplus >= 0 else "#F87171"
     surplus_text = f"+{monthly_surplus:,.0f}만 원 (흑자 흐름)" if monthly_surplus >= 0 else f"{monthly_surplus:,.0f}만 원 (적자 흐름)"
     
     st.markdown(f"""
-        <div style='background:linear-gradient(135deg, #1E293B 0%, #0F172A 100%); border:1.5px solid #334155; border-radius:12px; padding:16px 20px; text-align:center;'>
-            <span style='font-size:14px; color:#94A3B8; font-weight:600;'>매달 가계에 남는 순수 여유 자금 (월 현금흐름 밸런스)</span>
-            <div style='font-size:26px; font-weight:800; color:{surplus_color}; margin-top:4px;'>{surplus_text}</div>
-            <div style='font-size:12px; color:#64748B; margin-top:6px;'>
-                수입이나 지출 금액을 조절하시면 왼쪽 사이드바의 <b>'안심 버퍼 시간(개월 수)'</b>이 실시간으로 함께 연동되어 변화합니다.
+        <div style='background:linear-gradient(135deg, #1E293B 0%, #0F172A 100%); border:1.5px solid #334155; border-radius:12px; padding:14px 20px; text-align:center; margin-top:14px;'>
+            <span style='font-size:13.5px; color:#94A3B8; font-weight:600;'>매달 가계에 남는 순수 여유 자금 (월 현금흐름 밸런스)</span>
+            <div style='font-size:24px; font-weight:800; color:{surplus_color}; margin-top:2px;'>{surplus_text}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
+    st.divider()
+
+    # --------------------------------------------------------------------------
+    # 6.01.06 | 🌟 [신설] 대차대조표: 보유 자산 vs 보유 부채 (가계 순자산 평가)
+    # --------------------------------------------------------------------------
+    st.markdown("#### 🏛️ 가계 자산 및 부채 현황 (대차대조표)")
+
+    c_asset, c_debt = st.columns([1, 1], gap="large")
+
+    with c_asset:
+        st.markdown("##### 🏦 보유 자산 (Assets)")
+        render_linked_input("1. 비상 현금 / 예·적금 (현금성 자산)", "liquid_emergency_cash", max_v=10000, step_s=100, default_v=1200)
+        render_linked_input("2. 주식 / 채권 / 펀드 (투자 평가금액)", "asset_invest", max_v=50000, step_s=100, default_v=3000)
+        render_linked_input("3. 부동산 / 주택 시세 (실거주 주택 등)", "asset_real_estate", max_v=200000, step_s=500, default_v=35000)
+
+    with c_debt:
+        st.markdown("##### 💳 보유 부채 (Liabilities)")
+        render_linked_input("1. 주택담보대출 / 전세보증금 대출 원금 잔액", "debt_mortgage", max_v=150000, step_s=500, default_v=15000)
+        render_linked_input("2. 신용대출 / 마이너스통장 / 기타 부채 잔액", "debt_credit", max_v=30000, step_s=100, default_v=2000)
+        st.markdown("<div style='height: 48px;'></div>", unsafe_allow_html=True)
+
+    # 자산 및 부채 합계 계산
+    total_assets = (
+        st.session_state.get('liquid_emergency_cash', 0) +
+        st.session_state.get('asset_invest', 0) +
+        st.session_state.get('asset_real_estate', 0)
+    )
+    total_debts = (
+        st.session_state.get('debt_mortgage', 0) +
+        st.session_state.get('debt_credit', 0)
+    )
+    net_worth = total_assets - total_debts
+
+    # 💡 [수평 높이 100% 일치] 총자산 합계 vs 총부채 합계
+    st.markdown("<div style='margin-top:6px;'></div>", unsafe_allow_html=True)
+    c_sum_ast, c_sum_dbt = st.columns([1, 1], gap="large")
+
+    with c_sum_ast:
+        st.markdown(f"""
+            <div style='background:rgba(30, 41, 59, 0.6); padding:12px 16px; border-radius:10px; border:1px solid #334155; min-height:54px; display:flex; align-items:center; justify-content:space-between;'>
+                <span style='font-size:13.5px; color:#94A3B8; font-weight:600;'>가계 총자산 합계:</span> 
+                <b style='font-size:19px; color:#38BDF8;'>{total_assets:,.0f}만 원</b>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with c_sum_dbt:
+        st.markdown(f"""
+            <div style='background:rgba(30, 41, 59, 0.6); padding:12px 16px; border-radius:10px; border:1px solid #334155; min-height:54px; display:flex; align-items:center; justify-content:space-between;'>
+                <span style='font-size:13.5px; color:#94A3B8; font-weight:600;'>가계 총부채 합계:</span> 
+                <b style='font-size:19px; color:#F87171;'>{total_debts:,.0f}만 원</b>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 6.01.07 | 💎 가계 순자산(Net Worth) 종합 평가 카드
+    # --------------------------------------------------------------------------
+    net_color = "#38BDF8" if net_worth >= 0 else "#F87171"
+    debt_ratio = (total_debts / total_assets * 100) if total_assets > 0 else 0
+    
+    st.markdown(f"""
+        <div style='background:linear-gradient(135deg, #1E293B 0%, #0F172A 100%); border:2px solid #F59E0B; border-radius:12px; padding:18px 24px; text-align:center; margin-top:16px; box-shadow:0 4px 16px rgba(245, 158, 11, 0.2);'>
+            <span style='font-size:14px; color:#FBBF24; font-weight:700;'>💎 빚을 제외한 가계 진짜 순자산 (Net Worth)</span>
+            <div style='font-size:28px; font-weight:900; color:{net_color}; margin-top:4px;'>{net_worth:,.0f}만 원</div>
+            <div style='font-size:12.5px; color:#94A3B8; margin-top:6px;'>
+                총자산 대비 부채 비율: <b style='color:#F87171;'>{debt_ratio:.1f}%</b> | 
+                겉보기 자산이 아닌, <b>부채를 덜어낸 진짜 순수 자산</b>을 응시할 때 진짜 재무 나침반이 작동합니다.
             </div>
         </div>
     """, unsafe_allow_html=True)
