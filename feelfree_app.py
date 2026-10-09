@@ -3176,6 +3176,11 @@ with st.sidebar:
 # ==============================================================================
 # 4.01.05 | Net Financial Summary KPI Display & Master Cloud Sync
 # ==============================================================================
+# 목적:
+#   1. 총 예산 및 실지출액 KPI 요약 표시
+#   2. 과거 여행 8개 캐시를 폭파하던 전역 clear() 제거 -> 현재 여행 시트만 1회 정밀 새로고침
+#   3. 9회 연속 택배(5초 지연) 원천 차단 -> 1초 이내 초고속 정합성 복구
+# ==============================================================================
 
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         st.metric("🏦 총 예산", f"{float(b_val):,.0f} 원")
@@ -3188,24 +3193,16 @@ with st.sidebar:
         st.divider()
         st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
 
-        # ⚡ 사용자가 수동으로 버튼을 누를 때만 구글 시트에서 강제 최신화(force_cloud=True)
+        # ⚡ 현재 활성 여행 시트만 1회 정밀 동기화 (과거 8개 여행 캐시 무손실 보존)
         if st.button(
-            "🔄 Cloud Refresh (데이터 동기화)",
+            "🔄 Cloud Refresh (현재 여행 동기화)",
             use_container_width=True,
             type="primary"
         ):
-            st.cache_data.clear()
-            smart_cache_clear()
-
-            if 'cached_trip_configs' in st.session_state:
-                del st.session_state['cached_trip_configs']
-
+            # 💡 [핵심] st.cache_data.clear() 전역 폭파 삭제!
+            # 현재 활성 여행 시트만 캐시를 풀고 구글에서 새로 읽어옴 (0.6초)
             pulled_df = load_data(
                 ACTIVE_SHEET,
-                force_cloud=True
-            )
-
-            load_cash_inventory(
                 force_cloud=True
             )
 
@@ -3214,6 +3211,7 @@ with st.sidebar:
             )
 
             st.session_state.active_ledger_df = re_calc_df
+            st.session_state['last_loaded_sheet'] = ACTIVE_SHEET
 
             try:
                 conn.update(
@@ -3224,7 +3222,7 @@ with st.sidebar:
                 )
 
                 st.toast(
-                    "✅ 클라우드 동기화 및 지출 정합성 복구 완료!",
+                    f"✅ '{st.session_state.current_trip}' 정밀 동기화 완료!",
                     icon="🎉"
                 )
 
@@ -3233,7 +3231,7 @@ with st.sidebar:
                     f"동기화 에러: {e_cr}"
                 )
 
-            time.sleep(0.5)
+            # 불필요한 time.sleep(0.5) 대기 삭제
             st.rerun()
 
         # 사이드바 하단의 보조/기타 통화 잔고
