@@ -744,6 +744,102 @@ with tab1:
         </div>
     """, unsafe_allow_html=True)
 
+# ==============================================================================
+    # 6.01.09 | Fact-Based Future Net Worth Trajectory & Retirement Readiness
+    # ==============================================================================
+    st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+    st.markdown("#### 📈 미래 순자산 궤적 및 노후 준비 팩트 분석 (사실 진단)")
+
+    # 1. 인터뷰이 연령 추출 및 은퇴까지 남은 기간 산출
+    try:
+        cur_age_num = int(str(st.session_state.get('age_selected', '38세')).replace('세', '').strip())
+    except:
+        cur_age_num = 38
+        
+    retire_age_standard = 60 # 통계청 표준 일선 은퇴 기준 연령 (60세)
+    years_to_retire = max(0, retire_age_standard - cur_age_num)
+
+    # 2. 연간 순자산 축적액 계산
+    annual_savings = monthly_surplus * 12 # 만원 단위
+
+    # 3. 5년 후, 10년 후, 은퇴 시점(60세) 예상 순자산 추계
+    est_net_worth_5yr = net_worth + (annual_savings * 5)
+    est_net_worth_10yr = net_worth + (annual_savings * 10)
+    est_net_worth_retire = net_worth + (annual_savings * years_to_retire)
+
+    # 4. 공공 벤치마크: 국민연금연구원 부부 적정 노후자금 (월 250만원 × 12개월 × 은퇴 후 25년 = 약 7.5억 원)
+    benchmark_retirement_need = 75000 # 7억 5천만 원
+    readiness_pct = (est_net_worth_retire / benchmark_retirement_need * 100) if benchmark_retirement_need > 0 else 0
+
+    # 5. 객관적 팩트 상태 판정 (감정 배제, 순수 비율 기반)
+    if readiness_pct >= 100:
+        readiness_badge = "<span style='background:#10B981; color:#FFFFFF; font-size:12px; font-weight:800; padding:3px 8px; border-radius:5px;'>🟢 든든 (안정권)</span>"
+        readiness_summary = "현재의 현금흐름 밸런스가 유지된다면, 일선 은퇴 시점(60세)에 공공 적정 노후자금(7.5억)을 자력으로 충당할 수 있는 안정적인 구조입니다."
+    elif readiness_pct >= 50:
+        readiness_badge = "<span style='background:#F59E0B; color:#0B1120; font-size:12px; font-weight:800; padding:3px 8px; border-radius:5px;'>🟡 주의 (현상 유지)</span>"
+        readiness_summary = f"현재 페이스 유지 시 은퇴 시점에 필요 노후 자금의 약 <b>{readiness_pct:.0f}%</b>가 준비됩니다. 겉보기엔 안정적이나 은퇴 후 25년의 장기 비활동기를 지탱할 추가적인 완충 자산이 필요합니다."
+    else:
+        readiness_badge = "<span style='background:#EF4444; color:#FFFFFF; font-size:12px; font-weight:800; padding:3px 8px; border-radius:5px;'>🔴 부족 (재정 정체)</span>"
+        readiness_summary = f"매달 대출 상환과 고정 생활비로 인해 <b>연간 순자산 축적 속도가 제한적</b>입니다. 현재 구조로는 60세 은퇴 시점 예상 충족률이 <b>{max(0, readiness_pct):.0f}%</b>에 불과하여, 노동 소득 외의 대안(자산소득)이 반드시 뒷받침되어야 합니다."
+
+    annual_str = f"+{annual_savings:,.0f}만 원/년" if annual_savings >= 0 else f"{annual_savings:,.0f}만 원/년 (자산 감소)"
+
+    # --------------------------------------------------------------------------
+    # 팩트 분석 4분할 지표 카드 렌더링
+    # --------------------------------------------------------------------------
+    c_f1, c_f2, c_f3, c_f4 = st.columns(4)
+    
+    with c_f1:
+        st.markdown(f"""
+            <div style='background:#1E293B; border:1px solid #334155; border-radius:10px; padding:12px; text-align:center;'>
+                <div style='font-size:12px; color:#94A3B8;'>연간 순자산 축적 속도</div>
+                <div style='font-size:18px; font-weight:800; color:#38BDF8; margin-top:3px;'>{annual_str}</div>
+                <div style='font-size:11px; color:#64748B; margin-top:2px;'>매월 여유자금 × 12개월</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with c_f2:
+        st.markdown(f"""
+            <div style='background:#1E293B; border:1px solid #334155; border-radius:10px; padding:12px; text-align:center;'>
+                <div style='font-size:12px; color:#94A3B8;'>5년 후 예상 순자산</div>
+                <div style='font-size:18px; font-weight:800; color:#F8FAFC; margin-top:3px;'>{fmt_money_kr(est_net_worth_5yr)}</div>
+                <div style='font-size:11px; color:#64748B; margin-top:2px;'>{cur_age_num + 5}세 시점 도달액</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with c_f3:
+        st.markdown(f"""
+            <div style='background:#1E293B; border:1px solid #334155; border-radius:10px; padding:12px; text-align:center;'>
+                <div style='font-size:12px; color:#94A3B8;'>10년 후 예상 순자산</div>
+                <div style='font-size:18px; font-weight:800; color:#F8FAFC; margin-top:3px;'>{fmt_money_kr(est_net_worth_10yr)}</div>
+                <div style='font-size:11px; color:#64748B; margin-top:2px;'>{cur_age_num + 10}세 시점 도달액</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with c_f4:
+        st.markdown(f"""
+            <div style='background:#1E293B; border:1px solid #F59E0B; border-radius:10px; padding:12px; text-align:center;'>
+                <div style='font-size:12px; color:#FBBF24;'>은퇴({retire_age_standard}세) 최종 순자산</div>
+                <div style='font-size:18px; font-weight:800; color:#FBBF24; margin-top:3px;'>{fmt_money_kr(est_net_worth_retire)}</div>
+                <div style='font-size:11px; color:#94A3B8; margin-top:2px;'>{years_to_retire}년 뒤 일선 은퇴 시점</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 노후 준비 상태 종합 팩트 체크 안내 박스
+    # --------------------------------------------------------------------------
+    st.markdown(f"""
+        <div style='background:rgba(15, 23, 42, 0.7); border:1.5px solid #334155; border-radius:10px; padding:14px 18px; margin-top:14px;'>
+            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;'>
+                <span style='font-size:13.5px; font-weight:700; color:#E2E8F0;'>📋 노후 적정 생활비(7.5억) 대비 준비율 팩트 체크</span>
+                {readiness_badge}
+            </div>
+            <div style='font-size:12.5px; color:#CBD5E1; line-height:1.6;'>
+                {readiness_summary}
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
 
 # ------------------------------------------------------------------------------
 # 6.02.00 | Tab 2: 시간과 쉼표 (노동수입 한계 자각 및 숨고르기 시간 관제)
