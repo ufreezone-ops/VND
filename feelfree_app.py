@@ -5988,15 +5988,15 @@ _frp_finalize()
 _frp_checkpoint("6 종료")
 
 
-# ------------------------------------------------------------------------------
+# ==============================================================================
 # 6.05.03 | Unified Control Tower Dashboard (모든 센서 한곳 집약)
-# ------------------------------------------------------------------------------
+# ==============================================================================
 try:
     _current_io = st.session_state.get('_gtl_google_io_trace_current', [])
     _last_io = st.session_state.get('_gtl_google_io_trace_last', [])
     _last_save = st.session_state.get('last_save_func_diag')
 
-    # 💡 이번 턴에 통신이 없었더라도 직전 턴(저장/동기화 리런)에 발생한 통신이 있다면 릴레이 복원!
+    # 💡 직전 턴(저장/동기화 리런)에 발생한 통신 기록을 릴레이 복원
     if not _current_io and _last_io:
         _display_io = _last_io
         _is_relayed = True
@@ -6009,7 +6009,6 @@ try:
     _read_total_ms = sum(float(x.get('elapsed_ms', 0)) for x in _read_calls)
     _write_total_ms = sum(float(x.get('elapsed_ms', 0)) for x in _write_calls)
 
-    # 구글 통신이나 저장이 발생했을 때는 관제창을 열어두고, 평소에는 깔끔하게 접어둠
     _has_recent_activity = bool(_display_io or _last_save)
 
     with st.expander("🛠️ 시스템 진단 및 클라우드 I/O 통합 관제 센터", expanded=_has_recent_activity):
@@ -6055,11 +6054,16 @@ try:
 
         st.divider()
 
-        # 3. 세션 및 프로세스 요약 (깔끔한 4분할 지표)
+        # 3. 세션 및 프로세스 요약 (💡 글자 잘림 없는 깔끔한 지표)
         st.markdown("#### 🧬 세션 생명주기 및 프로세스 상태")
         c_s1, c_s2, c_s3, c_s4 = st.columns(4)
         c_s1.metric("세션 Rerun 카운트", f"{st.session_state.get('gtl_session_rerun_count', 1)}회")
-        c_s2.metric("작업 원장 메모리", "정상 탑재 (True)" if 'active_ledger_df' in st.session_state else "미탑재")
+
+        # 💡 "정상 탑재 (True)" 대신 건수를 포함하여 잘림 없이 표시
+        _cur_df = st.session_state.get('active_ledger_df')
+        _mem_status = f"정상 ({len(_cur_df)}건)" if (_cur_df is not None and not _cur_df.empty) else "미탑재"
+        c_s2.metric("작업 원장 메모리", _mem_status)
+
         c_s3.metric("프로세스 ID (PID)", str(os.getpid()))
         c_s4.metric("현재 로드된 시트", str(st.session_state.get('last_loaded_sheet', '-')))
 
