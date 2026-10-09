@@ -393,10 +393,12 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
+# ==============================================================================
 # 5.01.02 | 4대 핵심 현실점검 탭 네비게이션 생성
+# ==============================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📂 1. 나의 현재 좌표 (재무현황)",
-    "⏳ 2. 시간과 쉼표 (노동한계)",
+    "🏡 1. 우리집 가계부",
+    "⏳ 2. 삶과 시간",
     "🍂 3. 인생의 사계절 (생애주기)",
     "🧭 4. 나침판의 제안 (전략대안)"
 ])
@@ -901,27 +903,203 @@ with tab1:
     """, unsafe_allow_html=True)
 
 
-# ------------------------------------------------------------------------------
-# 6.02.00 | Tab 2: 시간과 쉼표 (노동수입 한계 자각 및 숨고르기 시간 관제)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 6.02.00 | Tab 2: 삶과 시간 (시간의 물리적 한계 & 물통과 파이프라인)
+# ==============================================================================
 with tab2:
-    st.markdown("### ⏳ 내 인생의 자유를 위한 숨고르기 시간")
+    st.markdown("### ⏳ 내 삶의 시간표와 소득의 교환 가치")
     
     st.markdown("""
         <div class='compassion-card'>
-            <h4>🕊️ '산 입에 거미줄 치랴'의 해학과 여유</h4>
+            <h4>⚖️ 시간은 누구에게나 하루 24시간 공평하게 주어집니다.</h4>
             <p>
-                우리의 몸과 에너지는 한계가 있기에, 때로는 쉬고 싶고 멈춰 서야 할 때도 찾아옵니다. 
-                이 탭에서는 내가 일하지 않고 쉴 수 있는 시간(버퍼)을 통해, 노동 수입 너머에서 가정을 지켜줄 지혜로운 장작(자산 수입)이 왜 필요한지 가볍게 마주해 봅니다.
+                지금까지 가족을 위해, 그리고 나 자신을 위해 쉼 없이 달려온 시간의 발자취를 존중합니다. 
+                이 탭에서는 내가 하루 중 일과 맞바꾸고 있는 소중한 시간의 실질적인 가치를 살펴보고, 
+                '더 많은 시간 일하는 것(Hard Work)' 너머에 존재하는 '지혜로운 파이프라인의 가치'를 조용히 응시해 봅니다.
             </p>
         </div>
     """, unsafe_allow_html=True)
-    
-    # 💡 [앞으로 구현될 Tab 2 스케치]:
-    # - "수입 중단 시 생존 일수"를 시각적 게이지 및 모래시계 차트로 변환
-    # - 나의 소득 중 '내가 일하지 않아도 돌아가는 시스템 소득(Amway 등)' 비중을 도넛 차트로 실시간 렌더링
-    st.info("🚧 **[Tab 2 뼈대 준비 완공]** 이곳에 '노동수입 대비 자산소득 비율 분석 그래프'와 '재정 활주로 시각화 모래시계 차트'가 이식될 예정입니다.")
 
+    # --------------------------------------------------------------------------
+    # 6.02.01 | 주당 노동 시간 입력 및 실질 시급 산출 (키패드 0%)
+    # --------------------------------------------------------------------------
+    st.markdown("#### ⏱️ 내가 일과 맞바꾸는 시간 (주당 기준)")
+    
+    c_time1, c_time2 = st.columns(2, gap="large")
+    
+    with c_time1:
+        if "weekly_work_hours" not in st.session_state:
+            st.session_state.weekly_work_hours = 40
+            
+        st.session_state.weekly_work_hours = st.slider(
+            "1. 주당 순수 근무 시간 (정규직 40시간 기준 / 야근, 특근 포함)",
+            min_value=10, max_value=80, value=int(st.session_state.weekly_work_hours), step=5, format="%d시간/주"
+        )
+        st.caption(f"💡 평일 하루 평균 약 {st.session_state.weekly_work_hours / 5:.1f}시간 집중 노동")
+
+    with c_time2:
+        if "weekly_commute_hours" not in st.session_state:
+            st.session_state.weekly_commute_hours = 10
+            
+        st.session_state.weekly_commute_hours = st.slider(
+            "2. 주당 출퇴근 및 일 준비/대기 시간 (왕복 이동, 주말 업무 대기 등)",
+            min_value=0, max_value=30, value=int(st.session_state.weekly_commute_hours), step=2, format="%d시간/주"
+        )
+        st.caption("💡 이동 시간과 준비 시간도 사실상 일터에 구속된 내 소중한 생명 시간입니다.")
+
+    # 실질 시간 연산 (한 달 = 4.33주 기준)
+    total_weekly_hours = st.session_state.weekly_work_hours + st.session_state.weekly_commute_hours
+    monthly_dedicated_hours = total_weekly_hours * 4.33
+    
+    # 내 노동소득 기준 실질 시급 계산
+    my_income_won = float(st.session_state.monthly_labor_income * 10000)
+    real_hourly_wage = (my_income_won / monthly_dedicated_hours) if monthly_dedicated_hours > 0 else 0
+    
+    # 깨어 있는 시간(하루 16시간, 월 480시간) 중 일에 바치는 비중
+    monthly_awake_hours = 16 * 30 # 약 480시간
+    life_labor_ratio = (monthly_dedicated_hours / monthly_awake_hours * 100) if monthly_awake_hours > 0 else 0
+
+    st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
+
+    # 시간 지표 3분할 팩트 카드
+    c_w1, c_w2, c_w3 = st.columns(3)
+    with c_w1:
+        st.markdown(f"""
+            <div style='background:#1E293B; border:1px solid #334155; border-radius:10px; padding:14px; text-align:center;'>
+                <div style='font-size:12px; color:#94A3B8;'>월간 일터 구속 시간</div>
+                <div style='font-size:22px; font-weight:800; color:#38BDF8; margin-top:3px;'>약 {monthly_dedicated_hours:.0f}시간</div>
+                <div style='font-size:11px; color:#64748B; margin-top:3px;'>근무 {st.session_state.weekly_work_hours*4.33:.0f}h + 출퇴근 {st.session_state.weekly_commute_hours*4.33:.0f}h</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with c_w2:
+        st.markdown(f"""
+            <div style='background:#1E293B; border:1.5px solid #F59E0B; border-radius:10px; padding:14px; text-align:center;'>
+                <div style='font-size:12px; color:#FBBF24;'>내 청춘 1시간의 '실질 시급'</div>
+                <div style='font-size:22px; font-weight:900; color:#FBBF24; margin-top:3px;'>{real_hourly_wage:,.0f}원</div>
+                <div style='font-size:11px; color:#94A3B8; margin-top:3px;'>월 소득 ÷ 일에 바친 총 시간</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with c_w3:
+        st.markdown(f"""
+            <div style='background:#1E293B; border:1px solid #334155; border-radius:10px; padding:14px; text-align:center;'>
+                <div style='font-size:12px; color:#94A3B8;'>깨어 있는 삶의 일터 점유율</div>
+                <div style='font-size:22px; font-weight:800; color:#F87171; margin-top:3px;'>{life_labor_ratio:.1f}%</div>
+                <div style='font-size:11px; color:#64748B; margin-top:3px;'>수면 외 온전한 삶의 절반 가까이</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
+    st.divider()
+
+    # --------------------------------------------------------------------------
+    # 6.02.02 | 🛑 '잠시 멈춤' 시뮬레이션 (몸이 멈추면 수입은?)
+    # --------------------------------------------------------------------------
+    st.markdown("#### 🛑 만약 내일 당장 노동을 멈춘다면? (수입 셧다운 시뮬레이션)")
+    
+    stop_simulation = st.toggle("👉 '내일 아침 출근을 잠시 멈추고 1년간 푹 쉰다면?' 시뮬레이션 가동", value=False)
+    
+    # 지출과 수입의 대비 계산
+    monthly_fixed_outgo = float(st.session_state.monthly_living_cost + st.session_state.monthly_debt_payment)
+    normal_income = float(st.session_state.monthly_labor_income + st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income)
+    
+    if stop_simulation:
+        # 노동 중단 시: 본인 노동소득 0원! (배우자 소득 + 자산 소득만 잔존)
+        stopped_income = float(st.session_state.monthly_spouse_income + st.session_state.monthly_asset_income)
+        stopped_deficit = stopped_income - monthly_fixed_outgo
+        
+        c_sim1, c_sim2 = st.columns(2, gap="large")
+        with c_sim1:
+            st.markdown(f"""
+                <div style='background:rgba(239, 68, 68, 0.12); border:1.5px solid #EF4444; border-radius:12px; padding:16px; text-align:center;'>
+                    <div style='font-size:13px; color:#FCA5A5;'>🛑 노동 중단 시 월 수입</div>
+                    <div style='font-size:24px; font-weight:900; color:#EF4444; margin-top:4px;'>{stopped_income:,.0f}만 원</div>
+                    <div style='font-size:11.5px; color:#94A3B8; margin-top:6px;'>
+                        본인의 노동소득({st.session_state.monthly_labor_income}만 원)이 즉시 <b>0원으로 소멸</b>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with c_sim2:
+            st.markdown(f"""
+                <div style='background:rgba(239, 68, 68, 0.12); border:1.5px solid #EF4444; border-radius:12px; padding:16px; text-align:center;'>
+                    <div style='font-size:13px; color:#FCA5A5;'>💸 멈추지 않는 매달 고정 지출</div>
+                    <div style='font-size:24px; font-weight:900; color:#F87171; margin-top:4px;'>{monthly_fixed_outgo:,.0f}만 원</div>
+                    <div style='font-size:11.5px; color:#94A3B8; margin-top:6px;'>
+                        생활비와 대출이자는 내가 쉬어도 <b>단 1원도 멈추지 않고 청구됨</b>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        st.markdown(f"""
+            <div style='background:rgba(15, 23, 42, 0.8); border:1px dashed #EF4444; border-radius:10px; padding:12px 16px; margin-top:14px; text-align:center;'>
+                <span style='font-size:13px; color:#E2E8F0;'>
+                    매달 발생하는 순수 현금 적자: <b style='color:#EF4444; font-size:16px;'>{stopped_deficit:,.0f}만 원</b> | 
+                    보유 비상금({st.session_state.liquid_emergency_cash:,.0f}만 원) 기준 <b>안심 버퍼 소진 시간: <span style='color:#FBBF24;'>{st.session_state.liquid_emergency_cash / monthly_fixed_outgo:.1f}개월</span></b>
+                </span>
+            </div>
+        """, unsafe_allow_html=True)
+        
+    else:
+        st.caption("💡 위 토글 스위치를 켜보시면, 노동이 멈추었을 때 가계 현금흐름이 마주하는 실제 변화를 체감하실 수 있습니다.")
+
+    st.markdown("<div style='margin-top:25px;'></div>", unsafe_allow_html=True)
+    st.divider()
+
+    # --------------------------------------------------------------------------
+    # 6.02.03 | 물통을 나르는 삶 vs 파이프라인을 묻는 삶 (인포그래픽 대비)
+    # --------------------------------------------------------------------------
+    st.markdown("#### 🚰 물통을 나르는 삶 vs 파이프라인을 구축하는 삶")
+    
+    col_pipe1, col_pipe2 = st.columns(2, gap="large")
+    
+    with col_pipe1:
+        st.markdown("""
+            <div style='background:rgba(30, 41, 59, 0.5); border:1.5px solid #475569; border-radius:12px; padding:16px 18px; min-height:220px;'>
+                <div style='display:flex; justify-content:space-between; align-items:center;'>
+                    <b style='font-size:16px; color:#E2E8F0;'>🪣 물통을 나르는 삶 (E / S 사분면)</b>
+                    <span style='background:#475569; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px;'>레버리지 = 1.0</span>
+                </div>
+                <div style='font-size:12.5px; color:#94A3B8; margin-top:10px; line-height:1.6;'>
+                    • <b>방식</b>: 물이 필요할 때마다 직접 산 너머 우물로 걸어가 물통을 져 나름<br>
+                    • <b>한계</b>: 물통의 크기(월급)를 키울 수는 있지만, 몸이 아프거나 늙어서 발걸음을 멈추는 날 물 공급도 즉시 멈춤<br>
+                    • <b>비극</b>: 평생 물통의 무게를 짊어지느라 가족과의 저녁과 자유를 반납해야 함
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col_pipe2:
+        st.markdown("""
+            <div style='background:rgba(245, 158, 11, 0.08); border:2px solid #F59E0B; border-radius:12px; padding:16px 18px; min-height:220px;'>
+                <div style='display:flex; justify-content:space-between; align-items:center;'>
+                    <b style='font-size:16px; color:#FBBF24;'>🚰 파이프라인을 묻는 삶 (B / I 사분면)</b>
+                    <span style='background:#F59E0B; color:#0B1120; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px;'>레버리지 = N배 무한대</span>
+                </div>
+                <div style='font-size:12.5px; color:#E2E8F0; margin-top:10px; line-height:1.6;'>
+                    • <b>방식</b>: 낮에는 물통을 나르더라도, 남는 자투리 시간에 마을로 이어지는 수도관(파이프)을 묻음<br>
+                    • <b>열매</b>: 파이프라인이 완공되는 날, 수도꼭지만 틀면 내가 잠잘 때도, 아플 때도 맑은 물이 스스로 흘러들어옴<br>
+                    • <b>가치</b>: 진정한 시간의 자유를 되찾고, 대물림되는 평온한 자산의 주인이 됨
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 6.02.04 | 두 번째 탭의 핵심 깨달음 요약 카드 (Awakening Card)
+    # --------------------------------------------------------------------------
+    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+    st.markdown("""
+        <div style='background:linear-gradient(135deg, #1E293B 0%, #0F172A 100%); border:1.5px solid #38BDF8; border-radius:12px; padding:18px 22px; text-align:center;'>
+            <div style='font-size:15px; font-weight:700; color:#38BDF8;'>💡 나침판이 전하는 결정적 자각</div>
+            <div style='font-size:18px; font-weight:800; color:#FFFFFF; margin-top:6px;'>
+                "문제는 수입의 '크기'가 아니라, 수입의 <b>'종류(어떻게 버는가)'</b>였습니다."
+            </div>
+            <div style='font-size:13px; color:#94A3B8; margin-top:8px; line-height:1.6;'>
+                몸을 더 혹사시켜 더 큰 물통을 지는 것(Hard Work)은 유한한 인생의 영원한 해답이 될 수 없습니다.<br>
+                지금 내 삶에는, 내가 쉬거나 아플 때도 <b>마르지 않고 물을 대줄 나만의 파이프라인</b>이 단 하나라도 준비되어 있습니까?
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
 # 6.03.00 | Tab 3: 인생의 사계절 (생애주기 수입·지출 흐름 및 적자 절벽 대비)
