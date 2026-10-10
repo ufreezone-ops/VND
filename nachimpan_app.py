@@ -379,24 +379,67 @@ with st.sidebar:
 # ==============================================================================
 
 # ==============================================================================
-# 5.01.01 | 나침판 앱 오프닝 헤더
+# 5.01.00 | Main Navigation Tabs (Feelfree Ledger Style Segmented Tabs)
 # ==============================================================================
-st.title("🧭 나침판 (Compass)")
 
-# 선택된 사분면과 연령에 기반한 자연스러운 맞춤 인사말
-quad_label = st.session_state.primary_quadrant.split(" ")[1] if " " in st.session_state.primary_quadrant else "소중한 일터"
-age_label = st.session_state.age_selected
+# 여행가계부 맞춤형 탭 CSS 주입
+st.markdown("""
+<style>
+/* Streamlit 기본 탭 바 컨테이너 커스텀 */
+div[data-testid="stTabs"] > div[role="tablist"] {
+    background-color: #0F172A;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid #334155;
+    gap: 6px;
+    display: flex;
+    justify-content: stretch;
+}
 
-st.markdown(f"""
-    <div style='background-color: rgba(30, 41, 59, 0.4); border: 1px solid rgba(56, 189, 248, 0.15); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px;'>
-        <span style='font-size:15px; color:#F1F5F9; font-weight:bold;'>🌱 {quad_label}로서 소중한 삶의 계절({age_label})을 가꾸어 가시는 길벗님, 환영합니다.</span><br>
-        <span style='font-size:13.5px; color:#94A3B8; line-height:1.6;'>
-            본 진단은 누구를 평가하거나 미래를 위협하려는 도구가 아닙니다. 
-            단지 망망대해 같은 인생의 바다 위에서, <b>나의 현재 좌표를 조용히 응시하고 다가올 계절을 지혜롭게 준비하기 위한 따뜻한 현실 거울</b>입니다. 
-            조상들이 '산 입에 거미줄 치랴'고 유쾌하게 외쳤듯, 우리에겐 언제나 길이 있습니다. 가벼운 마음으로 나만의 좌표를 찾아보겠습니다.
-        </span>
-    </div>
+/* 탭 버튼 기본 (Inactive) */
+div[data-testid="stTabs"] button[role="tab"] {
+    flex: 1;
+    background-color: #1E293B !important;
+    color: #94A3B8 !important;
+    border-radius: 8px !important;
+    padding: 10px 16px !important;
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    border: none !important;
+    box-shadow: none !important;
+    transition: all 0.2s ease-in-out !important;
+    text-align: center;
+}
+
+/* 마우스 호버 */
+div[data-testid="stTabs"] button[role="tab"]:hover {
+    color: #F8FAFC !important;
+    background-color: #334155 !important;
+}
+
+/* 활성화된 탭 (Active - 여행가계부 시그니처 브릭 오렌지 테마) */
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    background-color: #C2410C !important; /* 세련된 테라코타 오렌지 */
+    background: linear-gradient(135deg, #EA580C 0%, #C2410C 100%) !important;
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 12px rgba(194, 65, 12, 0.35) !important;
+}
+
+/* Streamlit 기본 밑줄(border-bottom) 제거 */
+div[data-testid="stTabs"] div[role="tablist"] span {
+    display: none !important;
+}
+</style>
 """, unsafe_allow_html=True)
+
+# 4대 메인 탭 생성
+tab1, tab2, tab3, tab4 = st.tabs([
+    "우리집 가계부",
+    "삶과 시간",
+    "인생의 사계절",
+    "나침판의 제안"
+])
 
 # ==============================================================================
 # 5.01.02 | 4대 핵심 현실점검 탭 네비게이션 생성
@@ -1121,27 +1164,234 @@ with tab2:
         </div>
     """, unsafe_allow_html=True)
 
-# ------------------------------------------------------------------------------
-# 6.03.00 | Tab 3: 인생의 사계절 (생애주기 수입·지출 흐름 및 적자 절벽 대비)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 6.03.00 | Tab 3: 인생의 사계절 (Life Seasons & National Transfer Account)
+# ==============================================================================
 with tab3:
-    st.markdown("### 🍂 인생 사계절의 자연스러운 흐름")
-    
-    st.markdown("""
-        <div class='compassion-card'>
-            <h4>🍁 낙엽이 지고 겨울이 오는 것은 결코 두려운 일이 아닙니다.</h4>
-            <p>
-                봄에 씨를 뿌려 풍요로운 가을을 수확하듯, 누구에게나 땀 흘릴 수 있는 계절과 필연적으로 맞이하는 은퇴기(겨울)가 있습니다. 
-                통계청 공식 데이터가 보여주는 대한민국 평균 수입/지출 교차점을 내 삶과 대조해 보며, 인생 겨울을 따뜻하게 지켜줄 장작을 준비할 시점을 자각합니다.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # 💡 [앞으로 구현될 Tab 3 스케치]:
-    # - 통계청 생애주기 적자/흑자 데이터셋 로딩
-    # - 인터뷰이의 현재 나이(age)와 은퇴목표나이를 반영하여, '인생 수입-지출 골든크로스 & 데드크로스 곡선'을 아름다운 라인 차트로 실시간 드로잉
-    st.info("🚧 **[Tab 3 뼈대 준비 완공]** 이곳에 '대한민국 통계청 평균 인생 곡선'과 나의 '예상 은퇴 적자 시점 시뮬레이션 곡선 그래프'가 이식될 예정입니다.")
+    import numpy as np
+    import plotly.graph_objects as go
 
+    # --------------------------------------------------------------------------
+    # 6.03.01 | 인생의 사계절 철학 안내 카드
+    # --------------------------------------------------------------------------
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+                border: 1px solid #334155; border-radius: 14px; padding: 22px 24px; margin-bottom: 24px;">
+        <div style="font-size: 1.15rem; font-weight: 700; color: #F8FAFC; margin-bottom: 8px;">
+            🌾 봄에 씨를 뿌리고, 가을에 추수하여, 따뜻한 아랫목에서 맞이하는 겨울
+        </div>
+        <div style="font-size: 0.92rem; color: #94A3B8; line-height: 1.6;">
+            자연에 사계절이 있듯, 사람의 삶에도 봄(배움과 준비) · 여름(성장과 질주) · 가을(결실과 비축) · 겨울(음미와 온기)이 있습니다.<br>
+            <b style="color: #FBBF24;">겨울은 춥고 두려운 계절이 아닙니다.</b> 여름과 가을에 마련해 둔 땔감과 곡식이 있다면, 가장 평온하게 차 한 잔을 나누는 인생의 황금기입니다.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 6.03.02 | 인터랙티브 생애 시간표 컨트롤러
+    # --------------------------------------------------------------------------
+    curr_age = st.session_state.get('user_age', 42)
+    # 현재 연령 기반 사계절 명칭 산출
+    if curr_age < 28:
+        season_title = "🌱 푸르른 배움의 계절, [봄]"
+        season_desc = "세상으로 나아갈 든든한 밑천과 꿈을 준비하는 시기입니다."
+    elif curr_age <= 45:
+        season_title = "☀️ 치열하게 달리는 성장의 계절, [여름]"
+        season_desc = "가장 뜨겁게 땀 흘리며 가족과 삶의 토대를 넓혀가는 전성기입니다."
+    elif curr_age <= 60:
+        season_title = "🍁 지혜롭게 결실을 거두는, [가을]"
+        season_desc = "그동안의 노고를 모아 다가올 긴 겨울을 차분하게 준비하는 추수의 시기입니다."
+    else:
+        season_title = "❄️ 삶을 관조하고 온기를 나누는, [겨울]"
+        season_desc = "차 한 잔의 여유와 함께, 지혜를 베풀며 따뜻하게 지내는 소중한 시간입니다."
+
+    ctrl_col1, ctrl_col2, ctrl_col3 = st.columns(3)
+    with ctrl_col1:
+        st.markdown(f"""
+        <div style="background-color: #1E293B; border: 1px solid #475569; border-radius: 10px; padding: 14px 16px; text-align: center; height: 100%;">
+            <div style="font-size: 0.8rem; color: #94A3B8;">현재 나의 계절</div>
+            <div style="font-size: 1.05rem; font-weight: 700; color: #F59E0B; margin-top: 4px;">{season_title}</div>
+            <div style="font-size: 0.78rem; color: #CBD5E1; margin-top: 4px;">만 {curr_age}세 ({season_desc})</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with ctrl_col2:
+        retire_age = st.slider("💼 내가 현업을 졸업할 나이", min_value=50, max_value=75, value=60, step=1, key="retire_age_slider")
+    
+    with ctrl_col3:
+        life_expectancy = st.slider("🕊️ 나와 가족의 건강 기대수명", min_value=80, max_value=100, value=88, step=1, key="life_exp_slider")
+
+    winter_years = max(0, life_expectancy - retire_age)
+    st.write("")
+
+    # --------------------------------------------------------------------------
+    # 6.03.03 | 통계청 국민이전계정(NTA) 생애주기 적자·흑자 시각화 (Plotly)
+    # --------------------------------------------------------------------------
+    st.markdown("""
+    <div style="font-size: 0.95rem; font-weight: 600; color: #F1F5F9; margin-bottom: 4px;">
+        📊 대한민국 통계청 '국민이전계정'으로 본 생애주기 수지 곡선
+    </div>
+    <div style="font-size: 0.82rem; color: #94A3B8; margin-bottom: 12px;">
+        누구나 27세 전후로 흑자에 진입해 43세에 정점을 찍고, 61세부터 다시 적자(소비 > 노동소득)로 돌아섭니다. 
+        즉, <b>약 33년의 흑자 기간</b> 동안 평생의 자원을 준비해야 하는 것이 인간의 보편적 생애 곡선입니다.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 곡선 연산 (0세 ~ 100세 모델링)
+    ages = np.arange(0, 101, 1)
+    
+    # 소비 곡선: 유년기 완만, 16~20세 교육비 급증, 40~50대 가족 소비 피크, 노년기 의료비 유지
+    consumption = 800 + 1200 / (1 + np.exp(-(ages - 18)/3)) + 1000 * np.exp(-((ages - 45)**2)/350) + 400 * (ages / 100)
+    
+    # 노동소득 곡선: 25세 전후 진입, 43세 정점(약 3,800만), 60세 전후 급감
+    labor_income = np.maximum(0, 3900 * np.exp(-((ages - 43)**2)/180) - 200)
+    labor_income[ages < 22] = 0
+    labor_income[ages > 70] = np.maximum(0, labor_income[ages > 70] * 0.2)
+
+    # 순수지 (노동소득 - 소비)
+    net_flow = labor_income - consumption
+
+    fig_nta = go.Figure()
+
+    # 0선 기준선
+    fig_nta.add_hline(y=0, line_dash="solid", line_color="#475569", line_width=1.5)
+
+    # 흑자 영역 채우기 (골드)
+    surplus_flow = np.where(net_flow >= 0, net_flow, 0)
+    fig_nta.add_trace(go.Scatter(
+        x=ages, y=surplus_flow,
+        mode='lines',
+        line=dict(color='#F59E0B', width=2),
+        fill='tozeroy',
+        fillcolor='rgba(245, 158, 11, 0.25)',
+        name='생애 흑자 구간 (자원 비축기, 27~60세)',
+        hovertemplate='나이: %{x}세<br>연간 흑자: +%{y:,.0f}만 원<extra></extra>'
+    ))
+
+    # 적자 영역 채우기 (소프트 네이비/그레이)
+    deficit_flow = np.where(net_flow < 0, net_flow, 0)
+    fig_nta.add_trace(go.Scatter(
+        x=ages, y=deficit_flow,
+        mode='lines',
+        line=dict(color='#64748B', width=1.5),
+        fill='tozeroy',
+        fillcolor='rgba(100, 116, 139, 0.2)',
+        name='생애 자연 적자 구간 (소비 > 노동소득)',
+        hovertemplate='나이: %{x}세<br>연간 적자: %{y:,.0f}만 원<extra></extra>'
+    ))
+
+    # 3대 주요 통계 전환 포인트 표시
+    fig_nta.add_annotation(x=27, y=0, text="27세: 흑자 진입", showarrow=True, arrowhead=2, arrowcolor="#F59E0B", font=dict(size=10, color="#FCD34D"), ay=-35)
+    fig_nta.add_annotation(x=43, y=np.max(net_flow), text="43세: 흑자 정점 (피크)", showarrow=True, arrowhead=2, arrowcolor="#10B981", font=dict(size=10, color="#6EE7B7"), ay=-30)
+    fig_nta.add_annotation(x=61, y=0, text="61세: 적자 전환", showarrow=True, arrowhead=2, arrowcolor="#94A3B8", font=dict(size=10, color="#CBD5E1"), ay=35)
+
+    # 현재 인터뷰이 나이 세로 마커
+    curr_flow = float(net_flow[curr_age])
+    fig_nta.add_vline(x=curr_age, line_width=2, line_dash="dash", line_color="#38BDF8")
+    fig_nta.add_trace(go.Scatter(
+        x=[curr_age], y=[curr_flow],
+        mode='markers+text',
+        marker=dict(color='#38BDF8', size=12, symbol='diamond'),
+        text=[f"📍 현재 나 ({curr_age}세)"],
+        textposition="top center" if curr_flow < 0 else "bottom center",
+        name='현재 내 위치',
+        textfont=dict(color='#E0F2FE', size=12, family="sans-serif"),
+        hoverinfo='skip'
+    ))
+
+    fig_nta.update_layout(
+        paper_bgcolor='rgba(15, 23, 42, 0.6)',
+        plot_bgcolor='rgba(15, 23, 42, 0.6)',
+        height=360,
+        margin=dict(l=40, r=30, t=30, b=40),
+        xaxis=dict(
+            title=dict(text="연령 (세)", font=dict(color="#94A3B8", size=11)),
+            tickmode='linear', tick0=0, dtick=10,
+            tickfont=dict(color="#94A3B8"),
+            gridcolor="#1E293B"
+        ),
+        yaxis=dict(
+            title=dict(text="생애 수지 밸런스", font=dict(color="#94A3B8", size=11)),
+            showticklabels=False,
+            gridcolor="#1E293B"
+        ),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(color="#CBD5E1", size=10)
+        ),
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig_nta, use_container_width=True, config={'displayModeBar': False})
+
+    # --------------------------------------------------------------------------
+    # 6.03.04 | 인생의 겨울 밸런스 체크 (따뜻한 아랫목 지수)
+    # --------------------------------------------------------------------------
+    # 기본 생활비 연동 (Tab 1에서 입력된 고정생활비 기준, 미입력 시 디폴트 280만 원)
+    base_expense = st.session_state.get('living_expense_input', 280.0)
+    
+    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+    winter_col1, winter_col2 = st.columns([1.2, 1.8])
+
+    with winter_col1:
+        st.markdown(f"""
+        <div style="background-color: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 20px; height: 100%;">
+            <div style="font-size: 0.85rem; color: #94A3B8;">은퇴 후 맞이할 겨울의 시간</div>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #F8FAFC; margin: 6px 0;">
+                {winter_years}년 <span style="font-size: 1.05rem; font-weight: 500; color: #94A3B8;">({winter_years * 12:,}개월)</span>
+            </div>
+            <div style="font-size: 0.8rem; color: #64748B; line-height: 1.5;">
+                {retire_age}세 현업 졸업부터 {life_expectancy}세까지,<br>노동소득 없이 삶을 유지하고 즐겨야 하는 순수한 축복이자 여백의 시간입니다.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with winter_col2:
+        winter_monthly_need = st.slider(
+            "🍵 겨울철 한 달 희망 생활비 (의료·생활·여가)",
+            min_value=150, max_value=600,
+            value=int(min(max(base_expense, 150), 600)),
+            step=10,
+            format="%d만 원",
+            key="winter_cost_slider"
+        )
+        total_winter_fund = winter_years * 12 * winter_monthly_need / 10000.0  # 억원 단위
+
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
+                    border: 1px solid #F59E0B; border-radius: 12px; padding: 16px 20px; margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.9rem; color: #E2E8F0;">따뜻한 아랫목을 채울 평온의 곡간 규모</span>
+                <span style="font-size: 1.35rem; font-weight: 800; color: #F59E0B;">약 {total_winter_fund:.1f}억 원</span>
+            </div>
+            <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 4px;">
+                월 {winter_monthly_need:,}만 원 × {winter_years * 12:,}개월 기준 (물가 및 의료비 버퍼 고려)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 6.03.05 | 지혜로운 전환의 화두 (자연스러운 Plan B로의 연결)
+    # --------------------------------------------------------------------------
+    st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
+                border: 1px solid #4338CA; border-radius: 14px; padding: 22px 24px; text-align: left;">
+        <div style="font-size: 1.05rem; font-weight: 700; color: #A5B4FC; margin-bottom: 8px;">
+            💡 모아둔 땔감을 태우는 삶 vs 매달 땔감이 배달되는 파이프라인
+        </div>
+        <div style="font-size: 0.88rem; color: #CBD5E1; line-height: 1.7;">
+            수억 원의 목돈을 차곡차곡 모아 조금씩 헐어 쓰는 방식은 <b>수명이 길어질수록 곡간이 바닥날까 조마조마한 마음</b>을 남깁니다.<br>
+            하지만 내가 일을 쉬어도 마당 한구석에서 매달 <b>150만 원, 250만 원의 온기 있는 현금흐름</b>이 지속적으로 솟아난다면 어떨까요?<br>
+            그것은 통장에 <b>10억 원의 원금을 건드리지 않고 평생 지켜내는 것</b>과 같은 단단한 힘입니다.
+        </div>
+        <div style="margin-top: 16px; text-align: right;">
+            <span style="font-size: 0.85rem; font-weight: 600; color: #F59E0B;">
+                👉 상단 탭의 [나침판의 제안]에서 '어차피 쓰는 생필품'으로 그 파이프라인을 만드는 해법을 확인해 보세요.
+            </span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
 # 6.04.00 | Tab 4: 나침판의 제안 (AI 팩트체크 리포트 및 소비의 자산화 가이드)
