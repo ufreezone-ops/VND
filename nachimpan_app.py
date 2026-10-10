@@ -385,9 +385,60 @@ with st.sidebar:
 # 5.01.00 | Navigation Branch Point
 # ==============================================================================
 
+
 # ==============================================================================
 # 5.01.01 | Horizontal Navigation with streamlit-option-menu
 # ==============================================================================
+
+# 상단 여백과 가로 메뉴의 높이·가독성 개선
+st.markdown("""
+<style>
+/* 본문 상단 여백 확보: 메뉴가 브라우저 상단에 붙는 현상 완화 */
+.stAppViewBlockContainer,
+div[data-testid="stMainBlockContainer"] {
+    padding-top: 3.5rem !important;
+}
+
+/* 메뉴 바 */
+div[data-testid="stAppViewContainer"] ul {
+    margin-top: 0.4rem;
+}
+
+/* option_menu 전체 컨테이너 */
+.nav-link-container {
+    padding: 8px !important;
+    border-radius: 12px !important;
+}
+
+/* 메뉴 글자와 아이콘의 터치 영역 확대 */
+.nav-link {
+    min-height: 48px !important;
+    padding: 13px 10px !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+    border-radius: 9px !important;
+}
+
+/* 아이콘 크기 */
+.nav-link i {
+    font-size: 17px !important;
+}
+
+/* 모바일·좁은 화면에서도 메뉴 글자가 잘리기 어렵게 */
+@media (max-width: 700px) {
+    .nav-link {
+        min-height: 52px !important;
+        padding: 10px 4px !important;
+        font-size: 12px !important;
+    }
+
+    .nav-link i {
+        font-size: 15px !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
 
 selected_tab = option_menu(
     menu_title=None,
@@ -409,31 +460,37 @@ selected_tab = option_menu(
     key="main_navigation",
     styles={
         "container": {
-            "padding": "0!important",
+            "padding": "8px 8px",
             "background-color": "#0F172A",
-            "border-radius": "10px",
-            "margin-bottom": "18px",
+            "border": "1px solid #263449",
+            "border-radius": "12px",
+            "margin-top": "8px",
+            "margin-bottom": "24px",
+            "width": "100%",
         },
         "icon": {
             "color": "#CBD5E1",
-            "font-size": "16px",
+            "font-size": "17px",
         },
         "nav-link": {
-            "font-size": "14px",
+            "font-size": "15px",
             "text-align": "center",
-            "margin": "3px",
-            "padding": "10px 8px",
+            "margin": "3px 4px",
+            "padding": "13px 8px",
             "color": "#CBD5E1",
             "--hover-color": "#334155",
-            "border-radius": "8px",
+            "border-radius": "9px",
+            "min-height": "48px",
         },
         "nav-link-selected": {
             "background-color": "#EA580C",
             "color": "#FFFFFF",
             "font-weight": "700",
+            "box-shadow": "0 3px 10px rgba(234, 88, 12, 0.25)",
         },
     },
 )
+
 
 
 # ==============================================================================
