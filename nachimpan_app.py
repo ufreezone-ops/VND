@@ -1165,7 +1165,6 @@ with tab2:
 # ==============================================================================
 with tab3:
     import re
-    import numpy as np
     import plotly.graph_objects as go
 
     # --------------------------------------------------------------------------
@@ -1255,143 +1254,48 @@ with tab3:
 """, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.03.04 | 국가데이터처(통계청) 공식 국민이전계정 수입·소비 곡선 (엄격한 팩트 반영)
+    # 6.03.04 | 국가데이터처 2024년 국민이전계정 공식 그래프 및 출처
     # --------------------------------------------------------------------------
-    st.markdown("""
-<div style="font-size: 0.96rem; font-weight: 700; color: #F1F5F9; margin-bottom: 4px;">
-    📊 통계청(국가데이터처) 국민이전계정: 생애주기별 1인당 소득·소비 곡선
-</div>
-<div style="font-size: 0.82rem; color: #94A3B8; margin-bottom: 12px;">
-    공식 통계 기준, 대한민국 국민은 <b>28세에 흑자로 진입</b>하여 <b>43~45세에 최대 흑자(연 1,900만 원 이상)</b>를 달성한 뒤, 
-    <b>61세부터 다시 적자(소비 > 소득)</b>로 전환됩니다. 약 33년의 황금기에 평생의 온기를 준비해야 합니다.
-</div>
-""", unsafe_allow_html=True)
-
-    # 공식 통계에 기반한 0~100세 연간 금액 (단위: 만 원/년)
-    ages = np.arange(0, 101, 1)
-
-    # 1) 통계청 1인당 소비 곡선 (공공+민간 소비 총액)
-    # 0~14세: 2,000~3,000만 원, 16~17세 교육비 피크: 약 3,800~4,100만 원
-    # 20대~80대: 평균 2,200~2,500만 원 수준 완만하게 지속 (노년기엔 의료/돌봄비 증가)
-    spending_curve = (
-        2200 
-        + 1800 * np.exp(-((ages - 16.5)**2) / 12)   # 16~17세 교육비 최대 지출 피크
-        + 300 * np.exp(-((ages - 45)**2) / 120)     # 40대 가족 소비
-        + 150 * (ages / 100)                        # 노년기 보건의료비 증가
+    st.markdown("### 📊 대한민국 생애주기적자: 국가데이터처 공식 자료")
+    st.markdown(
+        "2024년 국민이전계정에서 발표한 연령별 소비와 노동소득의 차이입니다. "
+        "아래 자료는 국가데이터처 원문을 직접 확인할 수 있도록 연결합니다. "
+        "공식 통계 곡선을 별도의 수식으로 재생성하거나 은퇴 나이에 맞춰 변형하지 않습니다."
     )
 
-    # 2) 통계청 1인당 노동소득 곡선
-    # 0~17세: 0원, 28세: 소비(약 2,300만)를 추월하며 흑자 진입
-    # 43~45세: 정점(약 4,400~4,650만 원) ➔ 소비보다 연 2,000만 원 이상 압도적으로 큼!
-    # 61세: 약 2,200만 원 밑으로 떨어지며 적자 전환
-    income_base = 4550 * np.exp(-((ages - 44)**2) / 140)
-    # 22세 이전 근로소득 미미
-    income_base[ages < 20] = 0
-    income_base[(ages >= 20) & (ages < 25)] *= 0.35
-
-    # 은퇴 나이 반영 (retire_age 이후 급격한 감소)
-    income_curve = np.copy(income_base)
-    for i, a in enumerate(ages):
-        if a > retire_age:
-            drop_factor = max(0.08, 1.0 - (a - retire_age) * 0.18)
-            income_curve[i] = income_curve[i] * drop_factor
-
-    # Plotly 차트 구성
-    fig_life = go.Figure()
-
-    # [영역 1] 흑자 구간 (소득 > 소비: 28세 ~ 은퇴시점) ➔ 확실한 골드빛 산 형태
-    surplus_mask = (income_curve >= spending_curve) & (ages <= retire_age)
-    surplus_x = ages[surplus_mask]
-    if len(surplus_x) > 0:
-        fig_life.add_trace(go.Scatter(
-            x=np.concatenate([surplus_x, surplus_x[::-1]]),
-            y=np.concatenate([income_curve[surplus_mask], spending_curve[surplus_mask][::-1]]),
-            fill='toself',
-            fillcolor='rgba(245, 158, 11, 0.28)',
-            line=dict(color='rgba(255,255,255,0)'),
-            name='생애 흑자 구간 (소득 > 소비, 약 33년)',
-            hoverinfo='skip'
-        ))
-
-    # [영역 2] 은퇴 후 적자 구간 (소비 > 소득: 은퇴나이 ~ 100세) ➔ 소프트 레드 음영
-    deficit_mask = (ages >= retire_age)
-    deficit_x = ages[deficit_mask]
-    if len(deficit_x) > 0:
-        fig_life.add_trace(go.Scatter(
-            x=np.concatenate([deficit_x, deficit_x[::-1]]),
-            y=np.concatenate([spending_curve[deficit_mask], income_curve[deficit_mask][::-1]]),
-            fill='toself',
-            fillcolor='rgba(239, 68, 68, 0.18)',
-            line=dict(color='rgba(255,255,255,0)'),
-            name='노년기 적자 구간 (소비 > 소득)',
-            hoverinfo='skip'
-        ))
-
-    # 노동소득 곡선 (에메랄드 그린 실선)
-    fig_life.add_trace(go.Scatter(
-        x=ages, y=income_curve,
-        mode='lines',
-        line=dict(color='#10B981', width=3),
-        name='노동소득 곡선 (국가데이터처)',
-        hovertemplate='연령: %{x}세<br>연 노동소득: %{y:,.0f}만 원<extra></extra>'
-    ))
-
-    # 소비 곡선 (따뜻한 주황 점선)
-    fig_life.add_trace(go.Scatter(
-        x=ages, y=spending_curve,
-        mode='lines',
-        line=dict(color='#FB923C', width=2.5, dash='dash'),
-        name='소비 곡선 (생활·교육·보건비)',
-        hovertemplate='연령: %{x}세<br>연 소비: %{y:,.0f}만 원<extra></extra>'
-    ))
-
-    # 핵심 통계 팩트 주석
-    fig_life.add_annotation(x=28, y=spending_curve[28], text="28세: 흑자 진입", showarrow=True, arrowhead=2, arrowcolor="#10B981", font=dict(size=10, color="#6EE7B7"), ay=-30)
-    fig_life.add_annotation(x=44, y=income_curve[44], text="44세: 흑자 정점 (+1,930만 원)", showarrow=True, arrowhead=2, arrowcolor="#F59E0B", font=dict(size=10, color="#FCD34D"), ay=-35)
-    fig_life.add_annotation(x=retire_age, y=spending_curve[retire_age], text=f"{retire_age}세: 은퇴(적자 전환)", showarrow=True, arrowhead=2, arrowcolor="#EF4444", font=dict(size=10, color="#FCA5A5"), ay=35)
-
-    # 📍 현재 인터뷰이 나이 세로 점선 & 마커 (curr_age 100% 동기화)
-    curr_inc = float(income_curve[curr_age])
-    curr_spe = float(spending_curve[curr_age])
-    marker_y = max(curr_inc, curr_spe) + 300
-    fig_life.add_vline(x=curr_age, line_width=2, line_dash="solid", line_color="#38BDF8")
-    fig_life.add_trace(go.Scatter(
-        x=[curr_age], y=[marker_y],
-        mode='markers+text',
-        marker=dict(color='#38BDF8', size=11, symbol='triangle-down'),
-        text=[f"📍 현재 나 ({curr_age}세)"],
-        textposition="top center",
-        name='현재 나의 위치',
-        textfont=dict(color='#E0F2FE', size=12, family="sans-serif"),
-        hoverinfo='skip'
-    ))
-
-    fig_life.update_layout(
-        paper_bgcolor='rgba(15, 23, 42, 0.6)',
-        plot_bgcolor='rgba(15, 23, 42, 0.6)',
-        height=390,
-        margin=dict(l=45, r=25, t=30, b=35),
-        xaxis=dict(
-            title=dict(text="나이 (세)", font=dict(color="#94A3B8", size=11)),
-            tickmode='linear', tick0=0, dtick=10,
-            tickfont=dict(color="#94A3B8"),
-            gridcolor="#1E293B",
-            range=[15, 95]
-        ),
-        yaxis=dict(
-            title=dict(text="연간 금액 (만 원/년)", font=dict(color="#94A3B8", size=11)),
-            tickformat=",d",
-            tickfont=dict(color="#94A3B8"),
-            gridcolor="#1E293B"
-        ),
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-            font=dict(color="#CBD5E1", size=10)
-        ),
-        hovermode="x unified"
+    # 원문 PDF를 페이지 4로 열도록 요청한다. PDF 뷰어 지원 여부에 관계없이
+    # 아래 원문 링크를 대체 경로로 제공한다.
+    official_pdf_url = (
+        "https://mods.go.kr/boardDownload.es?bid=11898&list_no=447028&seq=3#page=4"
+    )
+    official_release_url = (
+        "https://mods.go.kr/board.es?act=view&bid=11898&list_no=447028&mid=a10301130100"
     )
 
-    st.plotly_chart(fig_life, use_container_width=True, config={'displayModeBar': False})
+    st.markdown("#### 핵심 수치 요약")
+    stat_cols = st.columns(3)
+    with stat_cols[0]:
+        st.metric("흑자 전환", "28세")
+        st.caption("노동소득이 소비를 넘어서는 시점")
+    with stat_cols[1]:
+        st.metric("최대 흑자", "45세 · 1,932만 원")
+        st.caption("1인당 연간 생애주기흑자")
+    with stat_cols[2]:
+        st.metric("적자 재전환", "61세")
+        st.caption("소비가 노동소득을 다시 넘어서는 시점")
+
+    st.info(
+        "해석할 때 참고하세요. 여기서 ‘생애주기적자’는 소비에서 노동소득을 뺀 값입니다. "
+        "개인의 가계부상 적자나 실제 은퇴 시점을 뜻하지 않으며, 연령별 평균 통계입니다."
+    )
+
+    # 공식 PDF의 해당 페이지를 인라인으로 표시한다. 일부 브라우저에서는 PDF가
+    # 임베드되지 않을 수 있으므로 항상 원문 열기 링크를 함께 제공한다.
+    st.components.v1.iframe(official_pdf_url, height=620, scrolling=True)
+    st.markdown(
+        f"**원문 자료:** [2024년 국민이전계정 PDF 열기]({official_pdf_url})  \n"
+        f"\n[국가데이터처 공식 발표 페이지]({official_release_url})"
+    )
 
     # --------------------------------------------------------------------------
     # 6.03.05 | 은퇴 후 생활비 슬라이더 (200만 원 중심, 최대 600만 원, 공식 통계 제시)
