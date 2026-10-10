@@ -25,7 +25,7 @@ st.markdown("""
     <!-- 모바일 홈 화면 추가(PWA) 시 진짜 앱처럼 실행되도록 설정 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="https://img.icons8.com/color/512/compass--v1.png">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/ufreezone-ops/VND/main/nachimpan_icon_512.png">
 
     <style>
     /* 1. 기본 레이아웃 여백 최적화 (모바일 터치 및 한눈에 보기 최적화) */
