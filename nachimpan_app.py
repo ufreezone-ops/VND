@@ -374,14 +374,13 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 
+
 # ==============================================================================
-# 5.00.00 | Main Navigation Tabs (Clean Unified Segmented Tabs)
+# 5.00.00 | Main Navigation Tabs (Unified Segmented Tabs)
 # ==============================================================================
 
-# 단일 세그먼트 탭 스타일 CSS
 st.markdown("""
 <style>
-/* Streamlit 기본 탭 바 컨테이너 커스텀 */
 div[data-testid="stTabs"] > div[role="tablist"] {
     background-color: #0F172A;
     padding: 6px;
@@ -393,7 +392,6 @@ div[data-testid="stTabs"] > div[role="tablist"] {
     margin-bottom: 20px;
 }
 
-/* 탭 버튼 기본 (Inactive) */
 div[data-testid="stTabs"] button[role="tab"] {
     flex: 1;
     background-color: #1E293B !important;
@@ -413,23 +411,31 @@ div[data-testid="stTabs"] button[role="tab"]:hover {
     background-color: #334155 !important;
 }
 
-/* 활성화된 탭 (Active - 오렌지/앰버) */
 div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-    background-color: #C2410C !important;
     background: linear-gradient(135deg, #EA580C 0%, #C2410C 100%) !important;
     color: #FFFFFF !important;
     font-weight: 700 !important;
     box-shadow: 0 4px 12px rgba(194, 65, 12, 0.35) !important;
 }
 
-/* Streamlit 기본 밑줄선 제거 */
 div[data-testid="stTabs"] div[role="tablist"] span {
     display: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# 메인 4대 탭 정의 (단 1번만 선언)
+
+# ==============================================================================
+# 5.01.00 | Main Navigation Branch Point
+# ==============================================================================
+
+# 메인 탭은 이 위치에서 단 한 번만 생성한다.
+# 각 탭 내부의 with tab1:, with tab2: 등은 기존 코드를 그대로 사용한다.
+
+# ==============================================================================
+# 5.01.01 | Four Main Tabs
+# ==============================================================================
+
 tab1, tab2, tab3, tab4 = st.tabs([
     "우리집 가계부",
     "삶과 시간",
@@ -438,15 +444,11 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 # ==============================================================================
-# 5.01.02 | 4대 핵심 현실점검 탭 네비게이션 생성
+# 5.01.02 | Navigation Initialization Complete
 # ==============================================================================
-# 💡 숫자와 이모티콘을 제거하여 군더더기 없는 단정한 텍스트 탭 구성
-tab1, tab2, tab3, tab4 = st.tabs([
-    "우리집 가계부",
-    "삶과 시간",
-    "인생의 사계절",
-    "나침판의 제안"
-])
+
+# 중복 st.tabs() 선언 금지.
+# 다음 블록부터 기존 Module 6.00.00 코드를 실행한다.
 
 
 # ==============================================================================
@@ -796,161 +798,18 @@ with tab1:
         </div>
     """, unsafe_allow_html=True)
 
+
     # ==============================================================================
-    # 6.01.09 | Fact-Based Future Net Worth Trajectory & Pension Gap Analysis
+    # 6.01.09 | Current Net Worth Review Complete
     # ==============================================================================
-    st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
-    st.markdown("#### 📈 미래 순자산 궤적 및 노후 준비 팩트 분석 (사실 진단)")
 
-    # 1. 인터뷰이 연령 추출 및 기간 산출
-    try:
-        cur_age_num = int(str(st.session_state.get('age_selected', '38세')).replace('세', '').strip())
-    except:
-        cur_age_num = 38
-        
-    retire_age_std = 60 # 표준 일선 은퇴 연령 (60세)
-    years_to_retire = max(0, retire_age_std - cur_age_num)
-
-    # --------------------------------------------------------------------------
-    # 💡 [신설] 노후 예상 연금 수령액 (국민연금 + 퇴직연금 + 개인연금 합산)
-    # --------------------------------------------------------------------------
-    c_pen1, c_pen2 = st.columns([2.8, 1.2], gap="small")
-    with c_pen1:
-        if "expected_pension_monthly" not in st.session_state:
-            st.session_state.expected_pension_monthly = 120 # 기본 120만원 (국민+퇴직연금 평균 수준)
-        
-        st.session_state.expected_pension_monthly = st.slider(
-            "🛡️ 은퇴(60세) 후 부부 합산 예상 연금 수령액 (국민연금+퇴직+개인연금)",
-            min_value=0, max_value=400, value=int(st.session_state.expected_pension_monthly), step=10, format="%d만 원/월"
-        )
-    with c_pen2:
-        st.markdown("<div style='height:24px;'></div>", unsafe_allow_html=True)
-        st.caption(f"💡 월 {st.session_state.expected_pension_monthly}만 원은 연금으로 방어")
-
-    # 2. 현실적인 은퇴 생활비 갭(Gap) 계산
-    benchmark_monthly_living = 250 # 국민연금연구원 부부 적정 노후생활비 (월 250만원)
-    net_monthly_deficit = max(0, benchmark_monthly_living - st.session_state.expected_pension_monthly)
-    annual_retirement_burn = net_monthly_deficit * 12 # 은퇴 후 1년에 순수하게 까먹는 자산 규모
-
-    # 3. 은퇴 전 축적액 (연간 저축 가능액)
-    annual_savings = monthly_surplus * 12
-
-    # 4. 나이대별(현재 -> +5년 -> +10년 -> 60세 -> 70세 -> 80세) 생애 순자산 궤적 시뮬레이션
-    sim_ages = [cur_age_num, cur_age_num + 5, cur_age_num + 10]
-    if 60 not in sim_ages and 60 > cur_age_num:
-        sim_ages.append(60)
-    sim_ages.extend([70, 80])
-    sim_ages = sorted(list(set(sim_ages)))
-
-    traj_net_worth = []
-    current_sim_asset = float(net_worth)
-
-    for a in sim_ages:
-        if a <= cur_age_num:
-            traj_net_worth.append(current_sim_asset)
-        elif a <= retire_age_std:
-            # 은퇴 전: 매년 저축액 축적
-            years_passed = a - cur_age_num
-            val = net_worth + (annual_savings * years_passed)
-            traj_net_worth.append(val)
-        else:
-            # 은퇴 후: 60세 시점 자산에서 매년 생활비 적자(annual_retirement_burn)를 헐어 쓰며 소진!
-            val_at_60 = net_worth + (annual_savings * years_to_retire)
-            years_after_retire = a - retire_age_std
-            burned_val = val_at_60 - (annual_retirement_burn * years_after_retire)
-            traj_net_worth.append(burned_val)
-
-    # 60세 시점 순자산 도달액 및 금융자산(부동산 제외) 팩트 분석
-    net_worth_at_60 = net_worth + (annual_savings * years_to_retire)
-    real_estate_val = st.session_state.get('asset_real_estate', 0)
-    liquid_asset_at_60 = net_worth_at_60 - real_estate_val # 집 빼고 손에 쥔 현금 자산
-
-    # --------------------------------------------------------------------------
-    # 5. 📉 Plotly 생애 순자산 궤적 부드러운 꺾은선 그래프 (Spline Curve)
-    # --------------------------------------------------------------------------
-    traj_df = pd.DataFrame({"연령": sim_ages, "순자산": traj_net_worth})
-    traj_df["연령_라벨"] = traj_df["연령"].apply(lambda x: f"{x}세(은퇴)" if x == retire_age_std else f"{x}세")
-
-    fig_traj = go.Figure()
-
-    # 1. 부드러운 자산 궤적 라인
-    fig_traj.add_trace(go.Scatter(
-        x=traj_df["연령"],
-        y=traj_df["순자산"],
-        mode='lines+markers+text',
-        line=dict(color='#F59E0B', width=3.5, shape='spline'),
-        marker=dict(size=9, color='#FFFFFF', line=dict(color='#EA580C', width=2)),
-        text=traj_df["순자산"].apply(lambda v: fmt_money_kr(v)),
-        textposition="top center",
-        textfont=dict(size=12, color='#F8FAFC'),
-        name="가계 순자산 궤적"
-    ))
-
-    # 2. 60세 은퇴 수직 기준선
-    if retire_age_std > cur_age_num:
-        fig_traj.add_vline(
-            x=retire_age_std, line_dash="dash", line_color="#38BDF8", line_width=2,
-            annotation_text=" 60세 일선 은퇴 시점 ", annotation_position="bottom right",
-            annotation_font=dict(size=12, color="#38BDF8")
-        )
-
-    # 3. 0원 기준선 (자산 바닥선)
-    fig_traj.add_hline(y=0, line_dash="dot", line_color="#EF4444", line_width=1.5)
-
-    fig_traj.update_layout(
-        height=330,
-        margin=dict(l=10, r=20, t=30, b=30),
-        paper_bgcolor='rgba(15, 23, 42, 0.4)',
-        plot_bgcolor='rgba(15, 23, 42, 0.4)',
-        xaxis=dict(
-            tickmode='array', tickvals=sim_ages, ticktext=traj_df["연령_라벨"],
-            fixedrange=True, gridcolor='#334155'
-        ),
-        yaxis=dict(fixedrange=True, showgrid=True, gridcolor='#334155', zeroline=False),
-        showlegend=False
+    # 탭 1에서는 현재 시점의 자산·부채·순자산만 확인한다.
+    # 미래 순자산 시뮬레이션과 은퇴 후 생활비 계산은 탭 3에서 다룬다.
+    st.caption(
+        "현재의 재무 현황을 확인했습니다. "
+        "미래의 은퇴 시점과 생활비 시나리오는 "
+        "‘인생의 사계절’ 탭에서 별도로 살펴볼 수 있습니다."
     )
-    st.plotly_chart(fig_traj, use_container_width=True, config={'displayModeBar': False})
-
-    # --------------------------------------------------------------------------
-    # 6. 💎 7.5억의 허상과 부동산 착시 팩트체크 카드
-    # --------------------------------------------------------------------------
-    # 80세 시점에 자산이 남아있는지 여부
-    net_at_80 = traj_net_worth[-1]
-    
-    if liquid_asset_at_60 <= 0 and real_estate_val > 0:
-        insight_title = "🚨 '부동산 착시' 경고 (집 한 채의 함정)"
-        insight_badge = "<span style='background:#EF4444; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:3px 8px; border-radius:5px;'>하우스푸어 위험</span>"
-        insight_msg = f"""
-            • 60세 시점 가계 순자산은 <b>{fmt_money_kr(net_worth_at_60)}</b>에 달하지만, 
-            살고 있는 <b>집(부동산 {fmt_money_kr(real_estate_val)})을 빼고 나면 통장에 남는 현금성 자산은 마이너스({fmt_money_kr(liquid_asset_at_60)})</b>입니다.<br>
-            • 아파트를 헐어 먹고 살 수는 없습니다. 7.5억의 집이 있어도 마르지 않는 <b>'매달 나오는 현금흐름'</b>이 없다면 은퇴 직후부터 심각한 생활고에 직면합니다.
-        """
-    elif net_at_80 > 0:
-        insight_title = "🟢 은퇴 후 기본 생활 유지권"
-        insight_badge = "<span style='background:#10B981; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:3px 8px; border-radius:5px;'>현금흐름 보완 필요</span>"
-        insight_msg = f"""
-            • 연금(월 {st.session_state.expected_pension_monthly}만 원)과 현재의 자산 축적 페이스 덕분에 80세 시점에도 자산이 유지되는 궤적입니다.<br>
-            • 다만 자산의 대부분이 부동산에 묶여 있다면 의료비/간병비 등 예상치 못한 목돈 지출 시 유동성 위기가 올 수 있으므로, <b>매달 파이프처럼 들어오는 권리소득</b>으로 체질을 개선해야 안전합니다.
-        """
-    else:
-        insight_title = "⚠️ 은퇴 후 자산 소진 곡선 발생"
-        insight_badge = "<span style='background:#F59E0B; color:#0B1120; font-size:11.5px; font-weight:800; padding:3px 8px; border-radius:5px;'>자산 소진기 진입</span>"
-        insight_msg = f"""
-            • 60세 은퇴 후 연금 수령액을 제외한 부족분(월 {net_monthly_deficit:,.0f}만 원)을 모아둔 자산에서 메우다 보면, <b>노후 15~20년 차에 축적 자산이 급격히 바닥으로 꺾이는 궤적</b>이 나타납니다.<br>
-            • 모아둔 돈을 까먹는 삶에서 벗어나, <b>평생 멈추지 않는 현금흐름 파이프라인(자산)</b>을 미리 구축해야 하는 이유가 바로 여기에 있습니다.
-        """
-
-    st.markdown(f"""
-        <div style='background:rgba(30, 41, 59, 0.7); border:1.5px solid #334155; border-radius:12px; padding:16px 20px; margin-top:10px;'>
-            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;'>
-                <b style='font-size:14.5px; color:#FBBF24;'>{insight_title}</b>
-                {insight_badge}
-            </div>
-            <div style='font-size:13px; color:#CBD5E1; line-height:1.7;'>
-                {insight_msg}
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
 
 
 # ==============================================================================
@@ -1253,143 +1112,197 @@ with tab3:
 </div>
 """, unsafe_allow_html=True)
 
+
     # --------------------------------------------------------------------------
-    # 6.03.04 | 국가데이터처 2024년 국민이전계정 공식 그래프 및 출처
+    # 6.03.04 | 국가데이터처 2024년 국민이전계정 공식 통계
     # --------------------------------------------------------------------------
-    st.markdown("### 📊 대한민국 생애주기적자: 국가데이터처 공식 자료")
+
+    st.markdown("### 📊 대한민국 생애주기적자: 공식 통계")
+
     st.markdown(
-        "2024년 국민이전계정에서 발표한 연령별 소비와 노동소득의 차이입니다. "
-        "아래 자료는 국가데이터처 원문을 직접 확인할 수 있도록 연결합니다. "
-        "공식 통계 곡선을 별도의 수식으로 재생성하거나 은퇴 나이에 맞춰 변형하지 않습니다."
+        "국민이전계정은 연령별 소비와 노동소득의 차이를 통해 "
+        "생애주기의 경제적 흐름을 살펴보는 통계입니다. "
+        "개인의 가계부와는 구분해서 해석해야 합니다."
     )
 
-    # 원문 PDF를 페이지 4로 열도록 요청한다. PDF 뷰어 지원 여부에 관계없이
-    # 아래 원문 링크를 대체 경로로 제공한다.
     official_pdf_url = (
-        "https://mods.go.kr/boardDownload.es?bid=11898&list_no=447028&seq=3#page=4"
+        "https://mods.go.kr/boardDownload.es"
+        "?bid=11898&list_no=447028&seq=3#page=4"
     )
     official_release_url = (
-        "https://mods.go.kr/board.es?act=view&bid=11898&list_no=447028&mid=a10301130100"
+        "https://mods.go.kr/board.es"
+        "?act=view&bid=11898&list_no=447028&mid=a10301130100"
     )
 
-    st.markdown("#### 핵심 수치 요약")
     stat_cols = st.columns(3)
+
     with stat_cols[0]:
-        st.metric("흑자 전환", "28세")
+        st.metric("흑자 전환 연령", "28세")
         st.caption("노동소득이 소비를 넘어서는 시점")
+
     with stat_cols[1]:
-        st.metric("최대 흑자", "45세 · 1,932만 원")
-        st.caption("1인당 연간 생애주기흑자")
+        st.metric("최대 흑자", "45세")
+        st.caption("1인당 연간 1,932만 원")
+
     with stat_cols[2]:
-        st.metric("적자 재전환", "61세")
+        st.metric("적자 재전환 연령", "61세")
         st.caption("소비가 노동소득을 다시 넘어서는 시점")
 
     st.info(
-        "해석할 때 참고하세요. 여기서 ‘생애주기적자’는 소비에서 노동소득을 뺀 값입니다. "
-        "개인의 가계부상 적자나 실제 은퇴 시점을 뜻하지 않으며, 연령별 평균 통계입니다."
+        "생애주기적자는 소비에서 노동소득을 뺀 값입니다. "
+        "개인의 실제 가계 적자나 은퇴 연령을 뜻하지 않습니다. "
+        "위 수치는 연령별 평균 통계이며 개인의 미래를 예측하는 값이 아닙니다."
     )
 
-    # 공식 PDF의 해당 페이지를 인라인으로 표시한다. 일부 브라우저에서는 PDF가
-    # 임베드되지 않을 수 있으므로 항상 원문 열기 링크를 함께 제공한다.
-    st.components.v1.iframe(official_pdf_url, height=620, scrolling=True)
     st.markdown(
-        f"**원문 자료:** [2024년 국민이전계정 PDF 열기]({official_pdf_url})  \n"
-        f"\n[국가데이터처 공식 발표 페이지]({official_release_url})"
+        f"**공식 원문:** [2024년 국민이전계정 PDF 열기]({official_pdf_url})"
+        f"\n\n[국가데이터처 공식 발표 페이지]({official_release_url})"
     )
 
+    # 공식 원자료 전체의 연령별 수치가 코드에 포함되어 있지 않으므로
+    # 수치를 보간하거나 추정해 공식 통계 곡선을 그리지 않는다.
+
+
     # --------------------------------------------------------------------------
-    # 6.03.05 | 은퇴 후 생활비 슬라이더 (200만 원 중심, 최대 600만 원, 공식 통계 제시)
+    # 6.03.05 | 은퇴 후 희망 생활비와 필요 자금 계산
     # --------------------------------------------------------------------------
-    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-    post_col1, post_col2 = st.columns([1.15, 1.85])
+
+    st.markdown("---")
+    st.markdown("### 🧮 내가 원하는 노후 생활비 계산")
+
+    st.markdown(
+        "은퇴 후 몇 년을 보내게 될지, 매달 어느 정도의 생활비를 "
+        "원하는지 직접 선택해 보세요. 아래 계산은 물가 상승, 투자 수익, "
+        "세금, 의료비 변동을 제외한 단순 계산입니다."
+    )
+
+    post_col1, post_col2 = st.columns([1, 1.5], gap="large")
 
     with post_col1:
-        st.markdown(f"""
-<div style="background-color: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 20px 18px; height: 100%;">
-    <div style="font-size: 0.85rem; color: #94A3B8;">은퇴 후 맞이할 비활동기 (겨울)</div>
-    <div style="font-size: 1.85rem; font-weight: 800; color: #F8FAFC; margin: 6px 0;">
-        {winter_years}년 <span style="font-size: 0.95rem; font-weight: 500; color: #94A3B8;">({winter_years * 12:,}개월)</span>
-    </div>
-    <div style="font-size: 0.78rem; color: #64748B; line-height: 1.5;">
-        {retire_age}세 현업 졸업부터 {life_expectancy}세까지,<br>
-        정기 노동소득이 멈춘 상태에서 품위와 건강을 지켜내야 하는 소중한 시간입니다.
-    </div>
-</div>
-""", unsafe_allow_html=True)
+        st.markdown("#### 🌙 나의 노후 기간")
+
+        st.metric("현업 졸업 나이", f"{retire_age}세")
+        st.metric("기대수명 설정", f"{life_expectancy}세")
+        st.metric("노후 기간", f"{winter_years}년")
+        st.caption(f"총 {winter_years * 12:,}개월 기준")
 
     with post_col2:
-        # 공식 통계 팩트 뱃지 안내
-        st.markdown("""
-<div style="display: flex; gap: 8px; margin-bottom: 8px;">
-    <span style="font-size: 0.75rem; background: #0F172A; color: #94A3B8; padding: 3px 8px; border-radius: 4px; border: 1px solid #334155;">
-        📌 국민연금연구원 적정 노후생활비: 부부 <b>월 280~314만 원</b> / 1인 <b>월 180~195만 원</b>
-    </span>
-</div>
-""", unsafe_allow_html=True)
+        st.markdown("#### 💰 월 생활비 설정")
 
-        # 200만 원 정중앙 로그 스케일 슬라이더 (0~100)
-        # s=0 -> 100만 원, s=50 -> 200만 원, s=100 -> 600만 원
-        slider_val = st.slider(
-            "은퇴 후 생활비(월)",
-            min_value=0, max_value=100, value=50, step=1,
-            format="",
-            key="winter_expense_log_slider_v2",
-            help="가운데가 200만 원이며, 100만 원부터 600만 원까지 부드럽게 조절됩니다."
+        calc_monthly_expense = st.slider(
+            "은퇴 후 희망 생활비 (월)",
+            min_value=100,
+            max_value=600,
+            value=200,
+            step=10,
+            format="%d만 원",
+            key="winter_expense_monthly_v3",
+            help="현재 가치 기준으로 원하는 월 생활비를 선택하세요."
         )
 
-        if slider_val <= 50:
-            calc_monthly_expense = int(round(100 + (slider_val / 50.0) * 100))  # 100 ~ 200만 원
-        else:
-            ratio = (slider_val - 50) / 50.0
-            calc_monthly_expense = int(round(200 + (ratio ** 1.3) * 400))       # 200 ~ 600만 원
+        total_winter_fund = (
+            winter_years * 12 * calc_monthly_expense / 10000.0
+        )
 
-        # 10만 원 단위 정돈
-        calc_monthly_expense = (calc_monthly_expense // 10) * 10
-
-        # 총 필요 자금 계산
-        total_winter_fund = (winter_years * 12 * calc_monthly_expense) / 10000.0  # 억원 단위
-
-        # 실시간 생활비 & 필요 총자금 카드
-        st.markdown(f"""
-<div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
-            border: 1px solid #F59E0B; border-radius: 12px; padding: 14px 18px;">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 0.88rem; color: #CBD5E1;">선택하신 월 희망 생활비</span>
-        <span style="font-size: 1.25rem; font-weight: 800; color: #38BDF8;">월 {calc_monthly_expense:,}만 원</span>
+        st.markdown(
+            f"""
+<div style="
+    background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+    border: 1px solid #F59E0B;
+    border-radius: 12px;
+    padding: 18px;
+    margin-top: 12px;
+">
+    <div style="font-size: 0.85rem; color: #CBD5E1;">
+        선택한 월 생활비
     </div>
-    <div style="height: 1px; background-color: #334155; margin: 8px 0;"></div>
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 0.88rem; color: #E2E8F0;">평온한 노후를 위한 총 필요자금</span>
-        <span style="font-size: 1.45rem; font-weight: 800; color: #F59E0B;">약 {total_winter_fund:.1f}억 원</span>
+    <div style="
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #38BDF8;
+        margin: 4px 0 12px 0;
+    ">
+        월 {calc_monthly_expense:,}만 원
     </div>
-    <div style="font-size: 0.76rem; color: #94A3B8; margin-top: 4px;">
-        월 {calc_monthly_expense:,}만 원 × {winter_years * 12:,}개월 기준
+    <div style="height: 1px; background: #334155; margin: 8px 0;"></div>
+    <div style="font-size: 0.85rem; color: #CBD5E1;">
+        노후 기간 전체의 단순 생활비 합계
+    </div>
+    <div style="
+        font-size: 1.65rem;
+        font-weight: 800;
+        color: #FBBF24;
+        margin-top: 4px;
+    ">
+        약 {total_winter_fund:.2f}억 원
+    </div>
+    <div style="font-size: 0.75rem; color: #94A3B8; margin-top: 8px;">
+        월 생활비 × {winter_years * 12:,}개월
     </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+            unsafe_allow_html=True
+        )
+
+    st.caption(
+        "※ 위 금액은 연금이나 다른 소득을 차감하기 전의 단순 합계입니다. "
+        "실제로 준비해야 할 자금은 연금 수령액, 보유 자산, 물가 상승률, "
+        "의료·간병비 등에 따라 달라집니다."
+    )
+
 
     # --------------------------------------------------------------------------
-    # 6.03.06 | 본질의 질문 (Plan B 브릿지)
+    # 6.03.06 | 본질의 질문: 나에게 필요한 준비는 무엇일까?
     # --------------------------------------------------------------------------
+
     st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
-    st.markdown(f"""
-<div style="background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
-            border: 1px solid #4338CA; border-radius: 14px; padding: 20px 22px; text-align: left;">
-    <div style="font-size: 1.02rem; font-weight: 700; color: #A5B4FC; margin-bottom: 6px;">
-        💡 모아둔 {total_winter_fund:.1f}억 원을 헐어 쓰는 삶 vs 매달 200만 원이 들어오는 자산의 샘물
+
+    st.markdown(
+        f"""
+<div style="
+    background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
+    border: 1px solid #4338CA;
+    border-radius: 14px;
+    padding: 20px 22px;
+">
+    <div style="
+        font-size: 1.02rem;
+        font-weight: 700;
+        color: #A5B4FC;
+        margin-bottom: 8px;
+    ">
+        💡 노후 준비는 정답을 맞히는 일이 아니라,
+        내 상황을 이해하는 일입니다.
     </div>
-    <div style="font-size: 0.88rem; color: #CBD5E1; line-height: 1.7;">
-        목돈 수억 원을 통장에 넣어두고 매달 쪼개어 쓰는 방식은 <b>'수명이 길어질수록 잔고가 바닥날까 불안한 마음'</b>을 지우기 어렵습니다.<br>
-        하지만 내가 노동을 졸업해도 마당 한구석에서 <b>매달 150만~250만 원의 평생 지속되는 현금흐름</b>이 나온다면 어떨까요?<br>
-        그것은 <b>수억 원의 원금을 단 1원도 축내지 않고 자녀에게 그대로 물려줄 수 있는 든든한 방패</b>가 됩니다.
+    <div style="
+        font-size: 0.88rem;
+        color: #CBD5E1;
+        line-height: 1.8;
+    ">
+        선택하신 생활비를 기준으로 노후 기간 전체에 필요한
+        단순 생활비 합계는 <b>약 {total_winter_fund:.2f}억 원</b>입니다.
+        <br><br>
+        이 금액이 곧 지금 당장 마련해야 할 자금이라는 뜻은 아닙니다.
+        국민연금 등 예상 연금, 현재 자산, 은퇴 후에도 발생할 수 있는
+        소득을 함께 고려해야 실제 부족분을 파악할 수 있습니다.
+        <br><br>
+        지금의 숫자를 불안의 근거로 삼기보다,
+        앞으로 어떤 준비를 할 수 있을지 생각하는 출발점으로 활용해 보세요.
     </div>
-    <div style="margin-top: 14px; text-align: right;">
-        <span style="font-size: 0.85rem; font-weight: 600; color: #F59E0B;">
-            👉 상단 탭의 [나침판의 제안]에서 '생활비 지출을 자산으로 바꾸는 비밀'을 함께 확인해 보세요.
-        </span>
+    <div style="
+        margin-top: 14px;
+        text-align: right;
+        color: #FBBF24;
+        font-size: 0.85rem;
+        font-weight: 600;
+    ">
+        👉 다음 탭에서 현실적인 선택지를 살펴보세요.
     </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True
+    )
+
 
 # ------------------------------------------------------------------------------
 # 6.04.00 | Tab 4: 나침판의 제안 (AI 팩트체크 리포트 및 소비의 자산화 가이드)
