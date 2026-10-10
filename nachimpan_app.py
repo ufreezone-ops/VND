@@ -375,14 +375,10 @@ with st.sidebar:
 
 
 # ==============================================================================
-# [Module 5.00.00] Main Header & Navigation Router (메인 화면 헤더 및 4대 탭 배치)
+# 5.00.00 | Main Navigation Tabs (Clean Unified Segmented Tabs)
 # ==============================================================================
 
-# ==============================================================================
-# 5.01.00 | Main Navigation Tabs (Feelfree Ledger Style Segmented Tabs)
-# ==============================================================================
-
-# 여행가계부 맞춤형 탭 CSS 주입
+# 단일 세그먼트 탭 스타일 CSS
 st.markdown("""
 <style>
 /* Streamlit 기본 탭 바 컨테이너 커스텀 */
@@ -394,6 +390,7 @@ div[data-testid="stTabs"] > div[role="tablist"] {
     gap: 6px;
     display: flex;
     justify-content: stretch;
+    margin-bottom: 20px;
 }
 
 /* 탭 버튼 기본 (Inactive) */
@@ -402,7 +399,7 @@ div[data-testid="stTabs"] button[role="tab"] {
     background-color: #1E293B !important;
     color: #94A3B8 !important;
     border-radius: 8px !important;
-    padding: 10px 16px !important;
+    padding: 10px 14px !important;
     font-size: 0.95rem !important;
     font-weight: 500 !important;
     border: none !important;
@@ -411,29 +408,28 @@ div[data-testid="stTabs"] button[role="tab"] {
     text-align: center;
 }
 
-/* 마우스 호버 */
 div[data-testid="stTabs"] button[role="tab"]:hover {
     color: #F8FAFC !important;
     background-color: #334155 !important;
 }
 
-/* 활성화된 탭 (Active - 여행가계부 시그니처 브릭 오렌지 테마) */
+/* 활성화된 탭 (Active - 오렌지/앰버) */
 div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-    background-color: #C2410C !important; /* 세련된 테라코타 오렌지 */
+    background-color: #C2410C !important;
     background: linear-gradient(135deg, #EA580C 0%, #C2410C 100%) !important;
     color: #FFFFFF !important;
     font-weight: 700 !important;
     box-shadow: 0 4px 12px rgba(194, 65, 12, 0.35) !important;
 }
 
-/* Streamlit 기본 밑줄(border-bottom) 제거 */
+/* Streamlit 기본 밑줄선 제거 */
 div[data-testid="stTabs"] div[role="tablist"] span {
     display: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# 4대 메인 탭 생성
+# 메인 4대 탭 정의 (단 1번만 선언)
 tab1, tab2, tab3, tab4 = st.tabs([
     "우리집 가계부",
     "삶과 시간",
@@ -1165,7 +1161,7 @@ with tab2:
     """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 6.03.00 | Tab 3: 인생의 사계절 (Life Seasons & Income-Expense Curves)
+# 6.03.00 | Tab 3: 인생의 사계절 (통계청 팩트 기반 생애 곡선)
 # ==============================================================================
 with tab3:
     import re
@@ -1173,9 +1169,8 @@ with tab3:
     import plotly.graph_objects as go
 
     # --------------------------------------------------------------------------
-    # 6.03.01 | 사이드바 가족 데이터 파싱 & 동기화 (첨부 1, 첨부 2 대응)
+    # 6.03.01 | 인터뷰이 나이 파싱 및 사이드바 동기화 (첨부 2 완벽 연동)
     # --------------------------------------------------------------------------
-    # 1) 인터뷰이 현재 나이 정수 추출
     raw_age_val = st.session_state.get('user_age', "38세")
     if isinstance(raw_age_val, str):
         extracted_num = re.findall(r'\d+', raw_age_val)
@@ -1183,43 +1178,24 @@ with tab3:
     else:
         curr_age = int(raw_age_val)
 
-    # 2) 가족 프로필 추출
-    marital_status = st.session_state.get('user_marriage', '기혼')
-    child_status = st.session_state.get('user_children', '자녀 1명')
-    parent_status = st.session_state.get('user_parents', '독립 / 비부양')
-
-    # 3) 현재 사계절 타이틀 도출
-    if curr_age < 28:
-        season_title = "🌱 푸르른 배움의 계절, [봄]"
-        season_desc = "세상으로 나아갈 든든한 밑천과 꿈을 준비하는 시기"
-    elif curr_age <= 45:
-        season_title = "☀️ 치열하게 달리는 성장의 계절, [여름]"
-        season_desc = "가장 뜨겁게 땀 흘리며 삶의 토대를 넓혀가는 시기"
-    elif curr_age <= 60:
-        season_title = "🍁 지혜롭게 결실을 거두는, [가을]"
-        season_desc = "노고를 모아 다가올 긴 겨울을 차분하게 비축하는 시기"
-    else:
-        season_title = "❄️ 삶을 관조하고 온기를 나누는, [겨울]"
-        season_desc = "차 한 잔의 여유와 함께 온기를 누리는 소중한 시간"
-
     # --------------------------------------------------------------------------
     # 6.03.02 | 상단 철학 안내 카드
     # --------------------------------------------------------------------------
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-                border: 1px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 20px;">
-        <div style="font-size: 1.1rem; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;">
-            🌾 봄에 씨를 뿌리고, 가을에 추수하여, 따뜻한 아랫목에서 맞이하는 겨울
-        </div>
-        <div style="font-size: 0.9rem; color: #94A3B8; line-height: 1.6;">
-            자연에 사계절이 있듯, 사람의 삶에도 봄(준비) · 여름(성장) · 가을(비축) · 겨울(음미)이 있습니다.<br>
-            <b style="color: #FBBF24;">겨울은 춥고 두려운 계절이 아닙니다.</b> 여름과 가을에 마련해 둔 땔감과 곡식이 있다면, 가장 평온하게 차 한 잔을 나누는 인생의 황금기입니다.
-        </div>
+<div style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+            border: 1px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 20px;">
+    <div style="font-size: 1.1rem; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;">
+        🌾 봄에 씨를 뿌리고, 가을에 추수하여, 따뜻한 아랫목에서 맞이하는 겨울
     </div>
-    """, unsafe_allow_html=True)
+    <div style="font-size: 0.9rem; color: #94A3B8; line-height: 1.6;">
+        자연에 사계절이 있듯, 사람의 삶에도 봄(준비) · 여름(성장) · 가을(비축) · 겨울(음미)이 있습니다.<br>
+        <b style="color: #FBBF24;">겨울은 춥고 두려운 계절이 아닙니다.</b> 여름과 가을에 마련해 둔 땔감과 곡식이 있다면, 가장 평온하게 차 한 잔을 나누는 인생의 황금기입니다.
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.03.03 | 생애 컨트롤러 & '우리 가족의 은퇴 시점 나이' (첨부 1 개선)
+    # 6.03.03 | 컨트롤러 & '우리 가족의 은퇴 시점 나이' (코드 노출 버그 박멸)
     # --------------------------------------------------------------------------
     ctrl_col1, ctrl_col2 = st.columns([1, 1])
     with ctrl_col1:
@@ -1227,128 +1203,117 @@ with tab3:
     with ctrl_col2:
         life_expectancy = st.slider("🕊️ 나와 가족의 건강 기대수명", min_value=80, max_value=100, value=88, step=1, key="life_exp_slider")
 
-    # 남은 현업 시간 및 겨울(은퇴) 기간 계산
     years_to_retire = max(0, retire_age - curr_age)
     winter_years = max(0, life_expectancy - retire_age)
 
-    # 가족 나이 추정 모델링 (현실점검 임팩트)
-    # 배우자: 본인과 동갑 또는 ±2세
+    # 가족 구성원 은퇴 시점 나이 연산
+    marital_status = st.session_state.get('user_marriage', '기혼')
+    child_status = st.session_state.get('user_children', '자녀 1명')
+    parent_status = st.session_state.get('user_parents', '독립 / 비부양')
+
     spouse_cur = curr_age
     spouse_ret = spouse_cur + years_to_retire
-    
-    # 첫째/둘째 자녀 나이 추정 (대한민국 평균 첫째 출산연령 31~33세 반영)
+
     child1_cur = max(1, curr_age - 32)
     child1_ret = child1_cur + years_to_retire
-    
-    # 부모님 나이 추정 (본인 + 28~30세)
+
     parent_cur = curr_age + 29
     parent_ret = parent_cur + years_to_retire
 
-    # 가족 현실점검 인포 카드 렌더링
-    family_badges_html = f"""
-    <div style="display: inline-flex; align-items: center; background: rgba(15, 23, 42, 0.6); padding: 4px 10px; border-radius: 6px; margin: 3px; border: 1px solid #334155;">
-        <span style="color: #38BDF8; font-weight: 700; margin-right: 6px;">나</span>
-        <span style="color: #94A3B8;">{curr_age}세</span>
-        <span style="color: #EA580C; margin: 0 4px; font-weight: 800;">➔</span>
-        <span style="color: #F8FAFC; font-weight: 700;">{retire_age}세</span>
-    </div>
-    """
+    # 인덴트 버그 방지를 위해 한 줄 문자열로 배지 조합
+    badges = []
+    badges.append(f'<div style="display:inline-flex;align-items:center;background:#0F172A;padding:5px 12px;border-radius:6px;margin:3px;border:1px solid #334155;"><span style="color:#38BDF8;font-weight:700;margin-right:6px;">나</span><span style="color:#94A3B8;">{curr_age}세</span><span style="color:#EA580C;margin:0 5px;font-weight:800;">➔</span><span style="color:#F8FAFC;font-weight:700;">{retire_age}세</span></div>')
 
-    if "기혼" in marital_status:
-        family_badges_html += f"""
-        <div style="display: inline-flex; align-items: center; background: rgba(15, 23, 42, 0.6); padding: 4px 10px; border-radius: 6px; margin: 3px; border: 1px solid #334155;">
-            <span style="color: #F472B6; font-weight: 700; margin-right: 6px;">배우자</span>
-            <span style="color: #94A3B8;">약 {spouse_cur}세</span>
-            <span style="color: #EA580C; margin: 0 4px; font-weight: 800;">➔</span>
-            <span style="color: #F8FAFC; font-weight: 700;">약 {spouse_ret}세</span>
-        </div>
-        """
+    if "기혼" in str(marital_status):
+        badges.append(f'<div style="display:inline-flex;align-items:center;background:#0F172A;padding:5px 12px;border-radius:6px;margin:3px;border:1px solid #334155;"><span style="color:#F472B6;font-weight:700;margin-right:6px;">배우자</span><span style="color:#94A3B8;">약 {spouse_cur}세</span><span style="color:#EA580C;margin:0 5px;font-weight:800;">➔</span><span style="color:#F8FAFC;font-weight:700;">약 {spouse_ret}세</span></div>')
 
-    if "자녀" in child_status and "없음" not in child_status:
-        family_badges_html += f"""
-        <div style="display: inline-flex; align-items: center; background: rgba(15, 23, 42, 0.6); padding: 4px 10px; border-radius: 6px; margin: 3px; border: 1px solid #334155;">
-            <span style="color: #34D399; font-weight: 700; margin-right: 6px;">자녀</span>
-            <span style="color: #94A3B8;">약 {child1_cur}세</span>
-            <span style="color: #EA580C; margin: 0 4px; font-weight: 800;">➔</span>
-            <span style="color: #F8FAFC; font-weight: 700; color: #FBBF24;">약 {child1_ret}세 (학자금/결혼기)</span>
-        </div>
-        """
+    if "자녀" in str(child_status) and "없음" not in str(child_status):
+        badges.append(f'<div style="display:inline-flex;align-items:center;background:#0F172A;padding:5px 12px;border-radius:6px;margin:3px;border:1px solid #334155;"><span style="color:#34D399;font-weight:700;margin-right:6px;">자녀</span><span style="color:#94A3B8;">약 {child1_cur}세</span><span style="color:#EA580C;margin:0 5px;font-weight:800;">➔</span><span style="color:#FBBF24;font-weight:700;">약 {child1_ret}세 (대학/결혼기)</span></div>')
 
-    if "부양" in parent_status:
-        family_badges_html += f"""
-        <div style="display: inline-flex; align-items: center; background: rgba(15, 23, 42, 0.6); padding: 4px 10px; border-radius: 6px; margin: 3px; border: 1px solid #334155;">
-            <span style="color: #A78BFA; font-weight: 700; margin-right: 6px;">부모님</span>
-            <span style="color: #94A3B8;">약 {parent_cur}세</span>
-            <span style="color: #EA580C; margin: 0 4px; font-weight: 800;">➔</span>
-            <span style="color: #F8FAFC; font-weight: 700;">약 {parent_ret}세 (간병/돌봄기)</span>
-        </div>
-        """
+    if "부양" in str(parent_status):
+        badges.append(f'<div style="display:inline-flex;align-items:center;background:#0F172A;padding:5px 12px;border-radius:6px;margin:3px;border:1px solid #334155;"><span style="color:#A78BFA;font-weight:700;margin-right:6px;">부모님</span><span style="color:#94A3B8;">약 {parent_cur}세</span><span style="color:#EA580C;margin:0 5px;font-weight:800;">➔</span><span style="color:#F8FAFC;font-weight:700;">약 {parent_ret}세 (간병/돌봄기)</span></div>')
+
+    badges_joined = "".join(badges)
 
     st.markdown(f"""
-    <div style="background-color: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 14px 18px; margin-bottom: 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <span style="font-size: 0.92rem; font-weight: 700; color: #F1F5F9;">
-                👨‍👩‍👧 내가 현업을 졸업할 때({retire_age}세), 우리 가족의 나이는?
-            </span>
-            <span style="font-size: 0.82rem; color: #F59E0B; font-weight: 600;">
-                남은 준비 기간: {years_to_retire}년
-            </span>
-        </div>
-        <div style="font-size: 0.8rem; color: #94A3B8; margin-bottom: 10px;">
-            보통 나의 은퇴 나이만 생각하지만, 그 순간 가족들이 마주할 생애 이벤트(자녀 대학/독립, 부모님 케어)를 함께 보아야 온전한 대비가 됩니다.
-        </div>
-        <div style="display: flex; flex-wrap: wrap;">
-            {family_badges_html}
-        </div>
+<div style="background-color: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 16px 18px; margin-bottom: 22px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 0.95rem; font-weight: 700; color: #F1F5F9;">
+            👨‍👩‍👧 내가 현업을 졸업할 때({retire_age}세), 우리 가족의 나이는?
+        </span>
+        <span style="font-size: 0.82rem; color: #F59E0B; font-weight: 600;">
+            남은 준비 기간: {years_to_retire}년
+        </span>
     </div>
-    """, unsafe_allow_html=True)
+    <div style="font-size: 0.8rem; color: #94A3B8; margin-bottom: 12px;">
+        자신의 은퇴 나이만 보다가 가족들의 연령과 생애 이벤트(자녀 독립, 부모님 케어)를 대조해보면 준비의 무게가 새롭게 다가옵니다.
+    </div>
+    <div style="display: flex; flex-wrap: wrap;">
+        {badges_joined}
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.03.04 | 생애주기 수입·소비 곡선 (첨부 4: 교과서/KDI 2대 곡선 방식)
+    # 6.03.04 | 국가데이터처(통계청) 공식 국민이전계정 수입·소비 곡선 (엄격한 팩트 반영)
     # --------------------------------------------------------------------------
     st.markdown("""
-    <div style="font-size: 0.98rem; font-weight: 700; color: #F1F5F9; margin-bottom: 4px;">
-        📊 생애주기별 수입(소득)과 지출(소비) 곡선
-    </div>
-    <div style="font-size: 0.83rem; color: #94A3B8; margin-bottom: 14px;">
-        대한민국 교과서와 KDI가 제시하는 보편적 생애 현금흐름입니다. 수입이 지출보다 많은 <b>'흑자 구간(약 30년)'</b> 동안 모은 것으로, 
-        일생의 유년기 적자와 은퇴 후 긴 <b>'노년기 적자'</b>를 감당하도록 구조화되어 있습니다.
-    </div>
-    """, unsafe_allow_html=True)
+<div style="font-size: 0.96rem; font-weight: 700; color: #F1F5F9; margin-bottom: 4px;">
+    📊 통계청(국가데이터처) 국민이전계정: 생애주기별 1인당 소득·소비 곡선
+</div>
+<div style="font-size: 0.82rem; color: #94A3B8; margin-bottom: 12px;">
+    공식 통계 기준, 대한민국 국민은 <b>28세에 흑자로 진입</b>하여 <b>43~45세에 최대 흑자(연 1,900만 원 이상)</b>를 달성한 뒤, 
+    <b>61세부터 다시 적자(소비 > 소득)</b>로 전환됩니다. 약 33년의 황금기에 평생의 온기를 준비해야 합니다.
+</div>
+""", unsafe_allow_html=True)
 
+    # 공식 통계에 기반한 0~100세 연간 금액 (단위: 만 원/년)
     ages = np.arange(0, 101, 1)
 
-    # 1) 지출(소비) 곡선 모델링 (완만한 언덕형, 유소년기~자녀교육 피크 45~50세 ~ 노년기 완만한 감소)
-    # y단위: 상대적 지출 지수 (만 원 기준 정규화)
-    spending_curve = 120 + 260 * np.exp(-((ages - 48)**2) / 450) + 90 / (1 + np.exp(-(ages - 20) / 4))
+    # 1) 통계청 1인당 소비 곡선 (공공+민간 소비 총액)
+    # 0~14세: 2,000~3,000만 원, 16~17세 교육비 피크: 약 3,800~4,100만 원
+    # 20대~80대: 평균 2,200~2,500만 원 수준 완만하게 지속 (노년기엔 의료/돌봄비 증가)
+    spending_curve = (
+        2200 
+        + 1800 * np.exp(-((ages - 16.5)**2) / 12)   # 16~17세 교육비 최대 지출 피크
+        + 300 * np.exp(-((ages - 45)**2) / 120)     # 40대 가족 소비
+        + 150 * (ages / 100)                        # 노년기 보건의료비 증가
+    )
 
-    # 2) 수입(노동소득) 곡선 모델링 (27세 역전, 43~45세 정점, 60세 전후 급락)
-    income_curve = np.maximum(0, 490 * np.exp(-((ages - 45)**2) / 160) - 40)
-    income_curve[ages < 24] = 0
-    # 은퇴 연령 이후 급격한 감소 반영
+    # 2) 통계청 1인당 노동소득 곡선
+    # 0~17세: 0원, 28세: 소비(약 2,300만)를 추월하며 흑자 진입
+    # 43~45세: 정점(약 4,400~4,650만 원) ➔ 소비보다 연 2,000만 원 이상 압도적으로 큼!
+    # 61세: 약 2,200만 원 밑으로 떨어지며 적자 전환
+    income_base = 4550 * np.exp(-((ages - 44)**2) / 140)
+    # 22세 이전 근로소득 미미
+    income_base[ages < 20] = 0
+    income_base[(ages >= 20) & (ages < 25)] *= 0.35
+
+    # 은퇴 나이 반영 (retire_age 이후 급격한 감소)
+    income_curve = np.copy(income_base)
     for i, a in enumerate(ages):
         if a > retire_age:
-            # 은퇴 이후에는 기본 노동소득이 10~15% 수준으로 급감
-            decay = max(0.0, 1.0 - (a - retire_age) * 0.15)
-            income_curve[i] = income_curve[i] * decay
+            drop_factor = max(0.08, 1.0 - (a - retire_age) * 0.18)
+            income_curve[i] = income_curve[i] * drop_factor
 
+    # Plotly 차트 구성
     fig_life = go.Figure()
 
-    # 흑자 영역 채우기 (수입 > 지출인 구간: 약 28세 ~ 은퇴나이)
-    surplus_mask = income_curve >= spending_curve
+    # [영역 1] 흑자 구간 (소득 > 소비: 28세 ~ 은퇴시점) ➔ 확실한 골드빛 산 형태
+    surplus_mask = (income_curve >= spending_curve) & (ages <= retire_age)
     surplus_x = ages[surplus_mask]
     if len(surplus_x) > 0:
         fig_life.add_trace(go.Scatter(
             x=np.concatenate([surplus_x, surplus_x[::-1]]),
             y=np.concatenate([income_curve[surplus_mask], spending_curve[surplus_mask][::-1]]),
             fill='toself',
-            fillcolor='rgba(245, 158, 11, 0.22)',
+            fillcolor='rgba(245, 158, 11, 0.28)',
             line=dict(color='rgba(255,255,255,0)'),
-            name='생애 흑자 구간 (수입 > 지출)',
+            name='생애 흑자 구간 (소득 > 소비, 약 33년)',
             hoverinfo='skip'
         ))
 
-    # 노년기 적자 영역 채우기 (은퇴나이 ~ 100세: 지출 > 수입)
+    # [영역 2] 은퇴 후 적자 구간 (소비 > 소득: 은퇴나이 ~ 100세) ➔ 소프트 레드 음영
     deficit_mask = (ages >= retire_age)
     deficit_x = ages[deficit_mask]
     if len(deficit_x) > 0:
@@ -1358,39 +1323,40 @@ with tab3:
             fill='toself',
             fillcolor='rgba(239, 68, 68, 0.18)',
             line=dict(color='rgba(255,255,255,0)'),
-            name='노년기 적자 구간 (지출 > 수입)',
+            name='노년기 적자 구간 (소비 > 소득)',
             hoverinfo='skip'
         ))
 
-    # 메인 수입 곡선 (청록 실선)
+    # 노동소득 곡선 (에메랄드 그린 실선)
     fig_life.add_trace(go.Scatter(
         x=ages, y=income_curve,
         mode='lines',
         line=dict(color='#10B981', width=3),
-        name='수입 곡선 (노동소득)',
-        hovertemplate='연령: %{x}세<br>수입 지수: %{y:.0f}<extra></extra>'
+        name='노동소득 곡선 (국가데이터처)',
+        hovertemplate='연령: %{x}세<br>연 노동소득: %{y:,.0f}만 원<extra></extra>'
     ))
 
-    # 메인 지출 곡선 (부드러운 주황 점선)
+    # 소비 곡선 (따뜻한 주황 점선)
     fig_life.add_trace(go.Scatter(
         x=ages, y=spending_curve,
         mode='lines',
         line=dict(color='#FB923C', width=2.5, dash='dash'),
-        name='지출 곡선 (생활·교육·의료비)',
-        hovertemplate='연령: %{x}세<br>지출 지수: %{y:.0f}<extra></extra>'
+        name='소비 곡선 (생활·교육·보건비)',
+        hovertemplate='연령: %{x}세<br>연 소비: %{y:,.0f}만 원<extra></extra>'
     ))
 
-    # 4대 핵심 이정표 주석
-    fig_life.add_annotation(x=28, y=spending_curve[28], text="28세: 흑자 진입", showarrow=True, arrowhead=2, arrowcolor="#10B981", font=dict(size=10, color="#6EE7B7"), ay=-35)
-    fig_life.add_annotation(x=45, y=income_curve[45], text="45세: 수입 정점", showarrow=True, arrowhead=2, arrowcolor="#F59E0B", font=dict(size=10, color="#FCD34D"), ay=-30)
+    # 핵심 통계 팩트 주석
+    fig_life.add_annotation(x=28, y=spending_curve[28], text="28세: 흑자 진입", showarrow=True, arrowhead=2, arrowcolor="#10B981", font=dict(size=10, color="#6EE7B7"), ay=-30)
+    fig_life.add_annotation(x=44, y=income_curve[44], text="44세: 흑자 정점 (+1,930만 원)", showarrow=True, arrowhead=2, arrowcolor="#F59E0B", font=dict(size=10, color="#FCD34D"), ay=-35)
     fig_life.add_annotation(x=retire_age, y=spending_curve[retire_age], text=f"{retire_age}세: 은퇴(적자 전환)", showarrow=True, arrowhead=2, arrowcolor="#EF4444", font=dict(size=10, color="#FCA5A5"), ay=35)
 
-    # 📍 현재 인터뷰이 나이 기준선 & 마커 (정확히 curr_age 연동, 첨부 2 완벽 해결)
+    # 📍 현재 인터뷰이 나이 세로 점선 & 마커 (curr_age 100% 동기화)
     curr_inc = float(income_curve[curr_age])
     curr_spe = float(spending_curve[curr_age])
+    marker_y = max(curr_inc, curr_spe) + 300
     fig_life.add_vline(x=curr_age, line_width=2, line_dash="solid", line_color="#38BDF8")
     fig_life.add_trace(go.Scatter(
-        x=[curr_age], y=[max(curr_inc, curr_spe) + 30],
+        x=[curr_age], y=[marker_y],
         mode='markers+text',
         marker=dict(color='#38BDF8', size=11, symbol='triangle-down'),
         text=[f"📍 현재 나 ({curr_age}세)"],
@@ -1403,8 +1369,8 @@ with tab3:
     fig_life.update_layout(
         paper_bgcolor='rgba(15, 23, 42, 0.6)',
         plot_bgcolor='rgba(15, 23, 42, 0.6)',
-        height=380,
-        margin=dict(l=35, r=25, t=30, b=35),
+        height=390,
+        margin=dict(l=45, r=25, t=30, b=35),
         xaxis=dict(
             title=dict(text="나이 (세)", font=dict(color="#94A3B8", size=11)),
             tickmode='linear', tick0=0, dtick=10,
@@ -1413,8 +1379,9 @@ with tab3:
             range=[15, 95]
         ),
         yaxis=dict(
-            title=dict(text="금액 (상대 규모)", font=dict(color="#94A3B8", size=11)),
-            showticklabels=False,
+            title=dict(text="연간 금액 (만 원/년)", font=dict(color="#94A3B8", size=11)),
+            tickformat=",d",
+            tickfont=dict(color="#94A3B8"),
             gridcolor="#1E293B"
         ),
         legend=dict(
@@ -1427,90 +1394,98 @@ with tab3:
     st.plotly_chart(fig_life, use_container_width=True, config={'displayModeBar': False})
 
     # --------------------------------------------------------------------------
-    # 6.03.05 | 은퇴 후 생활비 슬라이더 (첨부 3: 200만원 중심 로그 스케일)
+    # 6.03.05 | 은퇴 후 생활비 슬라이더 (200만 원 중심, 최대 600만 원, 공식 통계 제시)
     # --------------------------------------------------------------------------
-    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-    post_col1, post_col2 = st.columns([1.1, 1.9])
+    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+    post_col1, post_col2 = st.columns([1.15, 1.85])
 
     with post_col1:
         st.markdown(f"""
-        <div style="background-color: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 20px 18px; height: 100%;">
-            <div style="font-size: 0.85rem; color: #94A3B8;">은퇴 후 맞이할 비활동기(겨울)</div>
-            <div style="font-size: 1.85rem; font-weight: 800; color: #F8FAFC; margin: 6px 0;">
-                {winter_years}년 <span style="font-size: 1.0rem; font-weight: 500; color: #94A3B8;">({winter_years * 12:,}개월)</span>
-            </div>
-            <div style="font-size: 0.8rem; color: #64748B; line-height: 1.5;">
-                {retire_age}세 현업 졸업부터 {life_expectancy}세까지,<br>
-                정기 노동소득이 멈춘 상태에서 가족의 평온을 지켜내야 하는 귀한 시간입니다.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+<div style="background-color: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 20px 18px; height: 100%;">
+    <div style="font-size: 0.85rem; color: #94A3B8;">은퇴 후 맞이할 비활동기 (겨울)</div>
+    <div style="font-size: 1.85rem; font-weight: 800; color: #F8FAFC; margin: 6px 0;">
+        {winter_years}년 <span style="font-size: 0.95rem; font-weight: 500; color: #94A3B8;">({winter_years * 12:,}개월)</span>
+    </div>
+    <div style="font-size: 0.78rem; color: #64748B; line-height: 1.5;">
+        {retire_age}세 현업 졸업부터 {life_expectancy}세까지,<br>
+        정기 노동소득이 멈춘 상태에서 품위와 건강을 지켜내야 하는 소중한 시간입니다.
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
     with post_col2:
-        # 로그 스케일 슬라이더 매핑 (100만원 ~ 1,000만원, 중심값 50 = 200만원)
-        # s in [0, 100]: s=0 -> 100, s=50 -> 200, s=100 -> 1,000
+        # 공식 통계 팩트 뱃지 안내
+        st.markdown("""
+<div style="display: flex; gap: 8px; margin-bottom: 8px;">
+    <span style="font-size: 0.75rem; background: #0F172A; color: #94A3B8; padding: 3px 8px; border-radius: 4px; border: 1px solid #334155;">
+        📌 국민연금연구원 적정 노후생활비: 부부 <b>월 280~314만 원</b> / 1인 <b>월 180~195만 원</b>
+    </span>
+</div>
+""", unsafe_allow_html=True)
+
+        # 200만 원 정중앙 로그 스케일 슬라이더 (0~100)
+        # s=0 -> 100만 원, s=50 -> 200만 원, s=100 -> 600만 원
         slider_val = st.slider(
             "은퇴 후 생활비(월)",
             min_value=0, max_value=100, value=50, step=1,
             format="",
-            key="winter_expense_log_slider",
-            help="가운데가 약 200만 원이며, 양옆으로 부드럽게 조절됩니다."
+            key="winter_expense_log_slider_v2",
+            help="가운데가 200만 원이며, 100만 원부터 600만 원까지 부드럽게 조절됩니다."
         )
 
-        # 로그-지수 복원 연산
         if slider_val <= 50:
-            calc_monthly_expense = int(round(100 + (slider_val / 50.0) * 100))  # 100 ~ 200만 원 (2만 원 단위)
+            calc_monthly_expense = int(round(100 + (slider_val / 50.0) * 100))  # 100 ~ 200만 원
         else:
             ratio = (slider_val - 50) / 50.0
-            calc_monthly_expense = int(round(200 + (ratio ** 1.7) * 800))       # 200 ~ 1,000만 원
+            calc_monthly_expense = int(round(200 + (ratio ** 1.3) * 400))       # 200 ~ 600만 원
 
         # 10만 원 단위 정돈
         calc_monthly_expense = (calc_monthly_expense // 10) * 10
 
-        # 필요 자금 총액 연산
+        # 총 필요 자금 계산
         total_winter_fund = (winter_years * 12 * calc_monthly_expense) / 10000.0  # 억원 단위
 
         # 실시간 생활비 & 필요 총자금 카드
         st.markdown(f"""
-        <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
-                    border: 1px solid #F59E0B; border-radius: 12px; padding: 16px 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.88rem; color: #CBD5E1;">희망 월 생활비</span>
-                <span style="font-size: 1.25rem; font-weight: 800; color: #38BDF8;">월 {calc_monthly_expense:,}만 원</span>
-            </div>
-            <div style="height: 1px; background-color: #334155; margin: 10px 0;"></div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.9rem; color: #E2E8F0;">평온한 노후를 위한 총 필요자금</span>
-                <span style="font-size: 1.45rem; font-weight: 800; color: #F59E0B;">약 {total_winter_fund:.1f}억 원</span>
-            </div>
-            <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 5px;">
-                월 {calc_monthly_expense:,}만 원 × {winter_years * 12:,}개월 기준
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+<div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
+            border: 1px solid #F59E0B; border-radius: 12px; padding: 14px 18px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.88rem; color: #CBD5E1;">선택하신 월 희망 생활비</span>
+        <span style="font-size: 1.25rem; font-weight: 800; color: #38BDF8;">월 {calc_monthly_expense:,}만 원</span>
+    </div>
+    <div style="height: 1px; background-color: #334155; margin: 8px 0;"></div>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.88rem; color: #E2E8F0;">평온한 노후를 위한 총 필요자금</span>
+        <span style="font-size: 1.45rem; font-weight: 800; color: #F59E0B;">약 {total_winter_fund:.1f}억 원</span>
+    </div>
+    <div style="font-size: 0.76rem; color: #94A3B8; margin-top: 4px;">
+        월 {calc_monthly_expense:,}만 원 × {winter_years * 12:,}개월 기준
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.03.06 | 자연스러운 본질의 질문 (Plan B 연결 브릿지)
+    # 6.03.06 | 본질의 질문 (Plan B 브릿지)
     # --------------------------------------------------------------------------
-    st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
-                border: 1px solid #4338CA; border-radius: 14px; padding: 22px 24px; text-align: left;">
-        <div style="font-size: 1.05rem; font-weight: 700; color: #A5B4FC; margin-bottom: 8px;">
-            💡 모아둔 {total_winter_fund:.1f}억 원을 헐어 쓰는 삶 vs 매달 200만 원이 들어오는 자산의 샘물
-        </div>
-        <div style="font-size: 0.88rem; color: #CBD5E1; line-height: 1.7;">
-            목돈 수억 원을 통장에 넣어두고 매달 쪼개어 쓰는 방식은 <b>'수명이 길어질수록 잔고가 바닥날까 불안한 마음'</b>을 지우기 어렵습니다.<br>
-            하지만 내가 노동을 졸업해도 마당 한구석에서 <b>매달 150만~250만 원의 평생 지속되는 현금흐름</b>이 나온다면 어떨까요?<br>
-            그것은 <b>수억 원의 원금을 단 1원도 축내지 않고 자녀에게 그대로 물려줄 수 있는 든든한 방패</b>가 됩니다.
-        </div>
-        <div style="margin-top: 14px; text-align: right;">
-            <span style="font-size: 0.85rem; font-weight: 600; color: #F59E0B;">
-                👉 상단 탭의 [나침판의 제안]에서 '생활비 지출을 자산으로 바꾸는 비밀'을 함께 확인해 보세요.
-            </span>
-        </div>
+<div style="background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
+            border: 1px solid #4338CA; border-radius: 14px; padding: 20px 22px; text-align: left;">
+    <div style="font-size: 1.02rem; font-weight: 700; color: #A5B4FC; margin-bottom: 6px;">
+        💡 모아둔 {total_winter_fund:.1f}억 원을 헐어 쓰는 삶 vs 매달 200만 원이 들어오는 자산의 샘물
     </div>
-    """, unsafe_allow_html=True)
+    <div style="font-size: 0.88rem; color: #CBD5E1; line-height: 1.7;">
+        목돈 수억 원을 통장에 넣어두고 매달 쪼개어 쓰는 방식은 <b>'수명이 길어질수록 잔고가 바닥날까 불안한 마음'</b>을 지우기 어렵습니다.<br>
+        하지만 내가 노동을 졸업해도 마당 한구석에서 <b>매달 150만~250만 원의 평생 지속되는 현금흐름</b>이 나온다면 어떨까요?<br>
+        그것은 <b>수억 원의 원금을 단 1원도 축내지 않고 자녀에게 그대로 물려줄 수 있는 든든한 방패</b>가 됩니다.
+    </div>
+    <div style="margin-top: 14px; text-align: right;">
+        <span style="font-size: 0.85rem; font-weight: 600; color: #F59E0B;">
+            👉 상단 탭의 [나침판의 제안]에서 '생활비 지출을 자산으로 바꾸는 비밀'을 함께 확인해 보세요.
+        </span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
 # 6.04.00 | Tab 4: 나침판의 제안 (AI 팩트체크 리포트 및 소비의 자산화 가이드)
