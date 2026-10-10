@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import os
+from streamlit_option_menu import option_menu
 
 # ⚙️ 페이지 기본 설정: 신뢰감 있는 나침판(🧭) 브랜딩
 st.set_page_config(
