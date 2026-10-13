@@ -459,6 +459,13 @@ elif selected_page == "인생의\n사계절" or selected_page == "인생의 사�
             father_age = st.number_input("아버지 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("father_age", 0)), step=1)
         with col_mother:
             mother_age = st.number_input("어머니 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("mother_age", 0)), step=1)
+        st.markdown("#### 앞으로의 가족 계획 (선택)")
+        marriage_options = ["미정", "계획 없음", "1~3년 내 결혼 생각 있음", "3년 이후 결혼 생각 있음", "결혼 예정/준비 중"]
+        marriage_plan = st.selectbox("결혼 계획", marriage_options, index=marriage_options.index(st.session_state.get("marriage_plan", "미정")) if st.session_state.get("marriage_plan", "미정") in marriage_options else 0)
+        child_plan_options = ["미정", "계획 없음", "자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"]
+        child_plan = st.selectbox("출산·자녀 계획", child_plan_options, index=child_plan_options.index(st.session_state.get("child_plan", "미정")) if st.session_state.get("child_plan", "미정") in child_plan_options else 0)
+        housing_options = ["미정", "현재 주거 유지", "전세·월세 이동 고려", "주택 구입 고려", "주거 계획 확정"]
+        housing_plan = st.selectbox("주거 계획", housing_options, index=housing_options.index(st.session_state.get("housing_plan", "미정")) if st.session_state.get("housing_plan", "미정") in housing_options else 0)
         sibling_options = ["형", "남동생", "누나", "여동생", "오빠", "언니", "남자 형제(관계 미지정)", "여자 형제(관계 미지정)"]
         siblings = st.multiselect(
             "형제자매 (해당 항목 모두 선택, 없거나 입력하지 않으려면 비워 두세요)",
@@ -472,6 +479,9 @@ elif selected_page == "인생의\n사계절" or selected_page == "인생의 사�
         st.session_state.child_age=child_age; st.session_state.child_age2=child_age2; st.session_state.child_age3=child_age3
         st.session_state.father_age=father_age; st.session_state.mother_age=mother_age
         st.session_state.siblings=siblings
+        st.session_state.marriage_plan=marriage_plan
+        st.session_state.child_plan=child_plan
+        st.session_state.housing_plan=housing_plan
         st.rerun()
 
     people = [(st.session_state.get("person_name","나"),age)]
@@ -528,17 +538,22 @@ else:
             "은퇴 예정 나이": st.session_state.get("retirement_age"),
             "가족 나이": {k:getv(k,0) for k in ["spouse_age","child_age","child_age2","child_age3","father_age","mother_age"]},
             "형제자매": st.session_state.get("siblings", []),
+            "결혼 계획": st.session_state.get("marriage_plan", "미정"),
+            "출산·자녀 계획": st.session_state.get("child_plan", "미정"),
+            "주거 계획": st.session_state.get("housing_plan", "미정"),
         }
         st.session_state.ai_summary = summary
         st.session_state.ai_details = details
         st.session_state.ai_comment = None
         try:
             prompt = (
-                "역할: 당신은 한국의 가계 재무와 은퇴 준비를 함께 검토하는 차분하고 현실적인 성찰 파트너입니다. 투자상품을 판매하거나 근거 없이 낙관·비관하지 마세요.\n\n"
-                "출력은 한국어 약 250~350자로 작성하세요. 딱딱한 보고서나 논문처럼 쓰지 말고, 편안하고 자연스러운 대화체를 사용하세요. 입력된 재무 수치를 줄줄이 반복하지 말고, 핵심 판단과 이유만 말하세요. 두 항목 사이에는 반드시 빈 줄을 하나 넣으세요. 각 항목은 2~3문장 이내로 간결하게 작성하고, 불필요한 괄호·주의문·반복 설명은 피하세요. 정보가 부족하면 한 문장으로만 짚으세요.\n\n"
-                "1. 은퇴 안정성: 첫 문장은 '은퇴 안정성: 유리한 편 / 불리한 편 / 판단 보류' 중 하나로 시작하세요. 남은 준비 기간, 매달 남는 돈, 부채, 실제로 쓸 수 있는 자산을 종합해 이유를 한두 문장으로 설명하세요. 이는 통계 순위가 아닌 입력자료 기준의 대략적 판단입니다. 큰 기타자산은 현금화 가능성이 확인되지 않으면 생활비로 쓸 수 있다고 가정하지 마세요.\n"
-                "2. 소득 개선 방향: 투잡과 본업을 유지하며 사업·투자 영역을 키우는 방법 중 더 적합해 보이는 쪽을 먼저 말하고, 입력정보와 연결해 한두 문장으로 이유를 설명하세요. 근거가 부족하면 억지로 결론 내리지 말고 판단을 바꿀 핵심 조건만 짧게 언급하세요. 특정 투자상품이나 수익률을 권하거나 보장하지 마세요.\n\n"
-                "가족정보는 실제 부양·경제적 지원이 입력되지 않았다면 비용이나 책임이 있다고 가정하지 마세요. 배우자·자녀·부모·형제자매의 정보는 가족관계와 잠재적 책임을 이해하는 맥락으로만 사용하세요. '현재 재무 모습 요약', '다음 단계', '성찰 질문'은 쓰지 마세요. 금액은 만원 단위를 유지하세요.\n\n입력 데이터:\n"
+                "역할: 한국의 가계 재무와 은퇴 준비를 함께 검토하는 현실적이고 친근한 성찰 파트너입니다. 투자상품을 권유하지 말고, 근거 없이 낙관하거나 비관하지 마세요.\n\n"
+                "아래 두 코멘트만 한국어로 작성하세요. 전체 250~350자 정도, 쉬운 대화체로 쓰고 재무제표 숫자를 길게 되풀이하지 마세요. 두 코멘트는 각각 별도 제목과 문단으로 작성하고, 두 문단 사이에는 빈 줄을 반드시 한 줄 넣으세요.\n\n"
+                "[은퇴 안정성]\n"
+                "첫 문장은 '은퇴 안정성: 유리한 편 / 판단 보류 / 불리한 편' 중 가장 적합한 하나를 골라 시작하세요. 현재 저축 여력뿐 아니라 순자산, 실제로 쓸 수 있는 자산, 부채, 은퇴까지 남은 기간을 함께 보세요. 결혼·출산·주거 계획이 입력되어 있다면 예상되는 비용 변화와 현재 자산의 여유를 함께 고려하세요. 계획이 '미정'이거나 정보가 부족하면 미래 비용을 사실처럼 가정하지 말고, 현재 숫자만으로 지나치게 낙관하지 마세요. 공식 비교 통계가 입력되지 않았다면 평균보다 낫다거나 못하다고 주장하지 마세요.\n\n"
+                "[소득 개선 방향]\n"
+                "투잡 추가와 본업 유지 후 사업·투자 준비 중 현재 상황에 더 맞는 방향을 짧게 제시하세요. 결혼·출산·주거 계획이 있거나 불확실하다면, 무리한 확장이나 위험투자보다 현금 여력과 본업 안정성을 우선 고려할 수 있습니다. 단, 사용자의 계획·선호를 임의로 단정하지 말고 근거가 부족하면 결론을 유보하세요.\n\n"
+                "가족 구성원 정보는 실제 부양·지원 여부가 입력되지 않았다면 지출이나 책임으로 가정하지 마세요. '현재 재무 모습 요약', '다음 단계', '성찰 질문'은 쓰지 마세요. 금액 단위는 만원으로 유지하세요.\n\n입력 데이터:\n"
                 + json.dumps(details, ensure_ascii=False)
             )
             comment, error = call_gemini_text(prompt)
@@ -554,7 +569,22 @@ else:
         cols[2].metric("월 잔액",money(s["surplus"]))
         cols[3].metric("순자산",fmt_eok(s["net_worth"]))
         st.markdown("### AI 코멘트")
-        st.markdown(f"<div class='soft-card'>{st.session_state.get('ai_comment','')}</div>",unsafe_allow_html=True)
+        comment_text = str(st.session_state.get("ai_comment", ""))
+        retirement_comment, income_comment = comment_text, ""
+        if "[소득 개선 방향]" in comment_text:
+            retirement_comment, income_comment = comment_text.split("[소득 개선 방향]", 1)
+            retirement_comment = retirement_comment.replace("[은퇴 안정성]", "").strip()
+            income_comment = income_comment.strip()
+        elif "소득 개선 방향:" in comment_text:
+            retirement_comment, income_comment = comment_text.split("소득 개선 방향:", 1)
+            retirement_comment = retirement_comment.strip()
+            income_comment = income_comment.strip()
+        else:
+            retirement_comment = retirement_comment.replace("[은퇴 안정성]", "").strip()
+        st.markdown("#### 은퇴 안정성")
+        st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
+        st.markdown("#### 소득 개선 방향")
+        st.markdown(f"<div class='soft-card'>{income_comment or '두 번째 코멘트를 찾지 못했습니다. 다시 분석해 주세요.'}</div>", unsafe_allow_html=True)
         st.caption("입력한 값과 AI 코멘트는 참고 자료입니다. 삶의 해석과 결정은 인터뷰이의 몫입니다.")
     else:
         st.info("‘분석’을 누르면 입력 내용의 재무제표 요약을 먼저 보여주고, 설정이 되어 있는 경우 AI 코멘트를 덧붙입니다.")
