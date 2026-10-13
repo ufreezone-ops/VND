@@ -44,6 +44,26 @@ div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
 div[data-testid="stDialog"] [data-testid="stDialogHeader"] { position:relative !important; display:grid !important; grid-template-columns:1fr auto 1fr !important; }
 div[data-testid="stDialog"] [data-testid="stDialogHeader"] h2 { grid-column: 1 / 4 !important; justify-self:center !important; position:static !important; transform:none !important; width:max-content !important; max-width:calc(100% - 56px) !important; text-align:center !important; padding:0 !important; margin:0 !important; }
+
+
+/* 시작 팝업 제목 중앙 정렬 */
+div[data-testid="stDialog"] [data-testid="stDialogHeader"] h2[slot="title"] {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    text-align: center !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+div[data-testid="stDialog"] [data-testid="stDialogHeader"] h2[slot="title"] [data-testid="stMarkdownContainer"],
+div[data-testid="stDialog"] [data-testid="stDialogHeader"] h2[slot="title"] p {
+    text-align: center !important;
+    width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
 div[data-testid="stDialog"] [data-testid="stDialogHeader"] button { grid-column:3 !important; justify-self:end !important; }
 div[data-testid="stDialog"] label { display:block !important; width:100% !important; text-align:center !important; }
 div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content:center !important; width:100% !important; }
