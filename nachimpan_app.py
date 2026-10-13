@@ -8,9 +8,11 @@ import json
 import urllib.request
 import urllib.error
 from datetime import date
+import base64
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from streamlit_option_menu import option_menu
 
 st.set_page_config(
     page_title="나침반 — 나의 삶을 바라보는 산책로",
@@ -36,6 +38,22 @@ st.markdown("""
 .quad { border-radius: 10px; padding: 8px 10px; border: 1px solid #475569; background: #172033; text-align: center; }
 .quad-active { border: 2px solid #f59e0b; background: #34291a; color: #fde68a; }
 .question { font-size: clamp(20px, 2.5vw, 27px); line-height: 1.55; font-weight: 750; color: #f8fafc; }
+/* 시작 팝업은 화면 중앙, 제목·입력·버튼 글자도 중앙 정렬 */
+div[data-testid="stDialog"] > div { margin: auto !important; }
+div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
+div[data-testid="stDialog"] h2, div[data-testid="stDialog"] label,
+div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align: center !important; }
+div[data-testid="stDialog"] input { text-align: center !important; }
+/* 첫 화면은 표지 이미지가 배경 */
+.cover-bg { position: relative; min-height: 72vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display:flex; align-items:center; justify-content:center; }
+.cover-shade { position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,17,32,.05),rgba(8,17,32,.25)); }
+.cover-caption { position:relative; z-index:1; text-align:center; color:#fff; text-shadow:0 2px 16px rgba(0,0,0,.7); padding:28px; }
+.cover-caption h1 { font-size:clamp(32px,5vw,54px); color:#fff; }
+/* 원래처럼 큼직한 4개 가로 탭 */
+.nav-link-container { padding: 8px !important; background:#0f172a !important; border:1px solid #263449 !important; border-radius:12px !important; margin:8px 0 24px !important; }
+.nav-link { min-height:52px !important; padding:14px 8px !important; font-size:16px !important; font-weight:700 !important; border-radius:9px !important; }
+.nav-link i { font-size:18px !important; }
+@media (max-width: 700px) { .nav-link { min-height:48px !important; font-size:12px !important; padding:9px 2px !important; } }
 hr { border-color: #334155; }
 @media (max-width: 700px) { .hero { padding: 26px 16px; } .hero-sub { font-size: 15px; } }
 </style>
@@ -104,28 +122,36 @@ def active_quadrant(job):
 def current_financial_summary():
     income = sum(float(getv(k, 0)) for k in ["income_self", "income_spouse", "income_other", "income_pension"])
     expenses = sum(float(getv(k, 0)) for k in ["expense_living", "expense_loan", "expense_other"])
-    assets = sum(float(getv(k, 0)) for k in ["asset_cash", "asset_financial", "asset_home", "asset_other"])
+    assets = sum(float(getv(k, 0)) for k in ["asset_cash", "asset_financial", "asset_home", "asset_deposit", "asset_other"])
     debts = sum(float(getv(k, 0)) for k in ["debt_home", "debt_other"])
     return {"income": income, "expenses": expenses, "surplus": income-expenses,
             "assets": assets, "debts": debts, "net_worth": assets-debts}
 
-# Cover + small central start dialog. The cover remains behind the dialog.
-st.markdown("""
-<div class="hero">
-  <div class="hero-mark">🧭 🌻</div>
-  <div class="hero-title">나침반</div>
-  <div class="hero-sub">나의 삶을 대신 해석하는 도구가 아니라,<br>내 삶을 조금 더 정확히 바라보는 산책로</div>
-  <div style="margin-top:24px;color:#fbbf24;font-weight:700;">질문에 답하는 앱이 아니라, 답을 바꾸어 보면서 자기 삶을 발견하는 앱.</div>
+# Cover + centered start dialog. Embed the cover so deployment needs no extra image file.
+cover_path = os.path.join(os.path.dirname(__file__), "나침반_표지_이미지.png")
+if os.path.exists(cover_path):
+    with open(cover_path, "rb") as f:
+        cover_b64 = base64.b64encode(f.read()).decode("ascii")
+    cover_style = f"background-image:url(data:image/png;base64,{cover_b64});"
+else:
+    cover_style = "background:radial-gradient(circle at top,#38506c,#0f172a 70%);"
+st.markdown(f"""
+<div class="cover-bg" style="{cover_style}">
+  <div class="cover-shade"></div>
+  <div class="cover-caption">
+    <h1>나침반</h1>
+    <div style="font-size:clamp(16px,2vw,22px);font-weight:650;">나를 돌아보고, 내일을 그리는 여정</div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
 if not st.session_state.started:
-    st.markdown("<div class='soft-card' style='text-align:center'>잠시 걸음을 멈추고, 나의 현재를 살펴볼 준비를 해봅니다.</div>", unsafe_allow_html=True)
     @st.dialog("나침반 산책을 시작합니다", width="small")
     def start_dialog():
+        st.markdown("<div style='text-align:center;color:#cbd5e1;margin-bottom:12px'>이름과 나이를 입력해 주세요.</div>", unsafe_allow_html=True)
         with st.form("start_form", clear_on_submit=False):
-            name = st.text_input("이름 또는 별칭", placeholder="이름이나 편한 별칭")
-            age = st.number_input("나이", min_value=1, max_value=120, value=None, step=1, placeholder="나이 입력")
+            name = st.text_input("이름 또는 별칭", placeholder="이름이나 편한 별칭", key="start_person_name")
+            age = st.number_input("나이", min_value=1, max_value=120, value=None, step=1, placeholder="나이 입력", key="start_person_age")
             submitted = st.form_submit_button("시작", use_container_width=True, type="primary")
         if submitted:
             if not name.strip() or age is None:
@@ -148,18 +174,27 @@ with st.sidebar:
     st.caption(f"익명 고유번호 {st.session_state.anonymous_id}")
     st.caption("입력 내용은 이 화면의 세션에서 사용됩니다.")
 
-# Five pages including the cover/start page; after starting, four content pages.
-page_names = ["가계부", "삶과 시간", "인생의 사계절", "AI의 시선"]
-selected = st.radio("페이지", page_names, horizontal=True, key="page_navigation", label_visibility="collapsed")
+# Original large horizontal navigation restored.
+selected = option_menu(
+    menu_title=None,
+    options=["우리집 가계부", "삶과 생계수단", "인생의 사계절", "AI 시선"],
+    icons=["wallet2", "hourglass-split", "calendar-heart", "compass"],
+    menu_icon=None, default_index=0, orientation="horizontal", key="main_navigation",
+    styles={"container":{"padding":"8px 8px","background-color":"#0F172A","border":"1px solid #263449","border-radius":"12px","margin-top":"8px","margin-bottom":"24px","width":"100%"},
+            "icon":{"color":"#CBD5E1","font-size":"18px"},
+            "nav-link":{"font-size":"16px","text-align":"center","margin":"3px 4px","padding":"14px 8px","color":"#CBD5E1","--hover-color":"#334155","border-radius":"9px","min-height":"52px"},
+            "nav-link-selected":{"background-color":"#EA580C","color":"#FFFFFF","font-weight":"800","box-shadow":"0 3px 10px rgba(234,88,12,0.25)"}}
+)
 
 # Page 1 — Household finances
-if selected == "가계부":
-    st.markdown("## 1. 가계부")
-    st.markdown("현재의 재무 상황을 가능한 범위에서 입력합니다. 모르는 값은 비워 두어도 됩니다.")
+if selected == "우리집 가계부":
+    st.markdown("## 우리집 가계부")
     with st.form("finance_form"):
-        st.markdown("#### 소득의 형태")
-        job = st.text_input("소득의 형태 (예: 직장인, 자영업, 전문직, 사업가, 투자자, 임대소득자 등)",
-                            value=st.session_state.get("job_form", ""), placeholder="직접 입력")
+        st.markdown("#### 직업의 종류")
+        job_options = ["선택하세요", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
+        previous_job = st.session_state.get("job_form", "선택하세요")
+        job_index = job_options.index(previous_job) if previous_job in job_options else 0
+        job = st.selectbox("직업의 종류", job_options, index=job_index, key="job_form_input", label_visibility="collapsed")
         st.markdown("#### 월수입 (만원)")
         a,b = st.columns(2)
         with a:
@@ -167,7 +202,7 @@ if selected == "가계부":
             income_spouse = st.number_input("배우자 소득", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
         with b:
             income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액")
-            income_pension = st.number_input("은퇴 이후 예상 월 연금 수령액", min_value=0, value=st.session_state.get("income_pension"), step=10, placeholder="금액")
+            income_pension = st.number_input("은퇴 이후 예상 월 연금 수령액 (만원)", min_value=0, value=st.session_state.get("income_pension"), step=10, placeholder="모르면 비워 두세요")
         st.markdown("#### 월지출 (만원)")
         c,d = st.columns(2)
         with c:
@@ -181,15 +216,30 @@ if selected == "가계부":
             asset_cash = st.number_input("현금·예적금", min_value=0, value=st.session_state.get("asset_cash"), step=100, placeholder="금액")
             asset_financial = st.number_input("주식·채권 등 금융자산", min_value=0, value=st.session_state.get("asset_financial"), step=100, placeholder="금액")
             asset_home = st.number_input("부동산·주택 시세", min_value=0, value=st.session_state.get("asset_home"), step=100, placeholder="금액")
+            asset_deposit = st.number_input("전세보증금", min_value=0, value=st.session_state.get("asset_deposit"), step=100, placeholder="금액")
             asset_other = st.number_input("기타 자산·사업 가치", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액")
         with d:
             debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액")
             debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
         save_finance = st.form_submit_button("입력 내용 반영", use_container_width=True, type="primary")
+    st.caption("참고 통계: 국민연금공단의 2025년 12월 기준 안내에서 가입기간 20년 이상 노령연금 수급자의 평균은 월 약 113만 원입니다. 부부 합산 평균은 약 120만 원으로 보도된 바 있습니다. 개인별 가입기간·소득에 따라 차이가 크므로, 실제 예상액은 공단의 ‘내 연금 알아보기’에서 확인하세요.")
+    link1, link2 = st.columns(2)
+    link1.link_button("국민연금공단 급여지급 통계", "https://www.nps.or.kr/pnsinfo/statistics/getOHAF0119M0.do", use_container_width=True)
+    link2.link_button("내 연금 알아보기 안내", "https://www.nps.or.kr/pnsinfo/ntpsklg/getOHAF0095M0.do", use_container_width=True)
     if save_finance:
-        values = locals()
-        for key in ["job_form","income_self","income_spouse","income_other","income_pension","expense_living","expense_loan","expense_other","asset_cash","asset_financial","asset_home","asset_other","debt_home","debt_other"]:
-            st.session_state[key] = values[key]
+        # Never index locals() by a different session key: this was the KeyError source.
+        submitted_values = {
+            "job_form": "" if job == "선택하세요" else job,
+            "income_self": income_self, "income_spouse": income_spouse,
+            "income_other": income_other, "income_pension": income_pension,
+            "expense_living": expense_living, "expense_loan": expense_loan,
+            "expense_other": expense_other, "asset_cash": asset_cash,
+            "asset_financial": asset_financial, "asset_home": asset_home,
+            "asset_deposit": asset_deposit, "asset_other": asset_other,
+            "debt_home": debt_home, "debt_other": debt_other,
+        }
+        for key, value in submitted_values.items():
+            st.session_state[key] = value
         st.rerun()
 
     q = active_quadrant(st.session_state.get("job_form", ""))
@@ -229,8 +279,8 @@ if selected == "가계부":
     st.caption("단순 가정에 따른 예시 계산입니다. 물가·수익률·세금·주거비 변화는 반영하지 않았으며, 예측이나 보장은 아닙니다.")
 
 # Page 2 — livelihood choice and small/large bucket/pipeline illustration
-elif selected == "삶과 시간":
-    st.markdown("## 2. 삶과 시간")
+elif selected == "삶과 생계수단":
+    st.markdown("## 삶과 생계수단")
     st.markdown("<div class='soft-card'><div class='eyebrow'>잠시 생각해 볼 질문</div><div class='question'>내가 생계를 유지해 온 방식은 나의 선택이었나? 주어진 상황에서 받아들인 것인가?</div></div>", unsafe_allow_html=True)
     st.text_area("떠오르는 생각이 있다면 적어두세요 (선택)", key="life_choice_note", height=90, placeholder="답을 정할 필요는 없습니다.")
     st.markdown("### 소득이 만들어지는 세 가지 모습")
@@ -247,7 +297,7 @@ elif selected == "삶과 시간":
 
 # Page 3 — seasons, family ages, illustrative lifecycle curve, official statistics
 elif selected == "인생의 사계절":
-    st.markdown("## 3. 인생의 사계절")
+    st.markdown("## 인생의 사계절")
     st.markdown("자연에 사계절이 있듯, 삶에도 준비·성장·비축·음미의 시간이 있습니다. 계절마다 의미는 다르고, 누구에게나 같은 모습으로 오지는 않습니다.")
     age = int(st.session_state.person_age)
     retirement = int(st.session_state.get("retirement_age", max(60,age)))
@@ -291,7 +341,7 @@ elif selected == "인생의 사계절":
 
 # Page 4 — AI perspective. Sends all currently entered answers, but only after explicit click.
 else:
-    st.markdown("## 4. AI의 시선")
+    st.markdown("## AI 시선")
     st.markdown("AI는 판정자가 아니라, 입력한 내용을 다른 각도에서 바라보는 참고 관점입니다.")
     model = st.selectbox("분석 관점", ["Gemini", "OpenAI 호환 API"], key="ai_model")
     if st.button("분석",type="primary",use_container_width=True):
