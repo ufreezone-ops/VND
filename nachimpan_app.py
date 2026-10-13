@@ -459,11 +459,19 @@ elif selected_page == "인생의\n사계절" or selected_page == "인생의 사�
             father_age = st.number_input("아버지 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("father_age", 0)), step=1)
         with col_mother:
             mother_age = st.number_input("어머니 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("mother_age", 0)), step=1)
+        sibling_options = ["형", "남동생", "누나", "여동생", "오빠", "언니", "남자 형제(관계 미지정)", "여자 형제(관계 미지정)"]
+        siblings = st.multiselect(
+            "형제자매 (해당 항목 모두 선택, 없거나 입력하지 않으려면 비워 두세요)",
+            sibling_options,
+            default=[x for x in st.session_state.get("siblings", []) if x in sibling_options],
+            help="본인을 기준으로 선택하세요. 예: 남성은 형·남동생·누나·여동생, 여성은 오빠·남동생·언니·여동생 등. 관계 명칭이 맞지 않으면 관계 미지정 항목을 선택할 수 있습니다.",
+        )
         save_family = st.form_submit_button("가족 정보 반영",use_container_width=True)
     if save_family:
         st.session_state.spouse_age=spouse_age; st.session_state.child_count=child_count
         st.session_state.child_age=child_age; st.session_state.child_age2=child_age2; st.session_state.child_age3=child_age3
         st.session_state.father_age=father_age; st.session_state.mother_age=mother_age
+        st.session_state.siblings=siblings
         st.rerun()
 
     people = [(st.session_state.get("person_name","나"),age)]
@@ -519,18 +527,18 @@ else:
             "삶과 시간 메모": st.session_state.get("life_choice_note", ""),
             "은퇴 예정 나이": st.session_state.get("retirement_age"),
             "가족 나이": {k:getv(k,0) for k in ["spouse_age","child_age","child_age2","child_age3","father_age","mother_age"]},
+            "형제자매": st.session_state.get("siblings", []),
         }
         st.session_state.ai_summary = summary
         st.session_state.ai_details = details
         st.session_state.ai_comment = None
         try:
             prompt = (
-                "당신은 재무 성찰 파트너입니다. 한국어로 약 300~450자 안에서 핵심만 답하고, 반복 없이 완결된 문장으로 끝내세요. "
-                "재무제표 요약은 화면에 이미 표시되므로 수입·지출·자산 숫자를 다시 나열하지 말고, 해석에 꼭 필요한 수치만 언급하세요. 가족 나이는 배우자·성인 자녀·고령 부모의 생애 단계 판단에 참고하되, 실제 부양이나 지출은 입력되지 않았다면 추측하지 마세요.\n\n"
-                "반드시 다음 두 항목만 사용하세요.\n"
-                "1. 은퇴 안정성: 은퇴 예정 나이까지 남은 기간, 매월 남는 돈, 자산 대비 부채, 자산의 유동성, 은퇴 후 소득·지출 정보의 유무를 근거로 직관적으로 평가하세요. '현재 입력값만 보면 일반적인 은퇴 준비 원칙에 비해 유리한 편/불리한 편/판단 보류' 중 하나로 표현하고, 그 이유를 짧게 설명하세요. 국가 통계나 개인별 비교자료가 주어지지 않았다면 '통계적으로 평균보다 낫다'고 주장하지 말고, 통계적 비교와 입력값 기반의 잠정 평가를 구분하세요. 큰 기타자산은 성격과 현금화 가능성이 불명확하면 은퇴 생활비로 바로 쓸 수 있다고 가정하지 마세요.\n"
-                "2. 소득 개선 방향: 투잡과 본업 유지 후 사업 확장·투자 준비 중 어느 쪽이 현재 입력된 상황에 더 부합하는지, 시간·건강 부담, 기존 사업의 확장 가능성, 유동자금, 손실 감내 여력을 근거로 비교해 잠정 결론을 제시하세요. 자료가 부족하면 양쪽 장단점을 똑같이 나열하지 말고, 결론을 가르는 핵심 조건을 한 문장으로 밝히세요. 투자 수익을 보장하거나 구체적 상품을 권하지 마세요.\n\n"
-                "'현재 재무 모습', '다음 단계', '성찰 질문' 항목은 만들지 마세요. 훈계하지 말고, 입력값에 없는 사실을 만들지 마세요. 금액은 만원 단위를 유지하세요. 데이터:\n"
+                "역할: 당신은 한국의 가계 재무와 은퇴 준비를 함께 검토하는 차분하고 현실적인 성찰 파트너입니다. 투자상품을 판매하거나 근거 없이 낙관·비관하지 마세요.\n\n"
+                "출력은 한국어 2개 항목만, 약 500~700자로 작성하세요. 입력 내용을 길게 되풀이하지 말고 판단과 근거를 중심으로 쓰세요. 데이터에 없는 사실은 추측하지 말고, 정보가 부족하면 무엇이 불확실한지만 짧게 밝히세요.\n\n"
+                "1. 은퇴 안정성: 은퇴까지 남은 기간, 현재 월 잉여현금흐름, 부채 부담, 현금·금융자산 등 바로 쓸 수 있는 자산과 부동산·기타자산의 유동성을 구분해 평가하세요. 결론은 '현재 입력값 기준 유리한 편 / 불리한 편 / 판단 보류' 중 하나로 시작하세요. 이는 통계적 백분위가 아니라 입력자료에 근거한 잠정 판단임을 분명히 하세요. 큰 기타자산은 성격과 현금화 가능성이 확인되지 않으면 은퇴 생활비로 쓸 수 있다고 간주하지 마세요. 은퇴 후 연금과 지출 정보가 없으면 확정적인 은퇴 가능 판정을 내리지 마세요.\n"
+                "2. 소득 개선 방향: '투잡으로 노동소득 추가'와 '현재 본업을 유지하며 사업 확장 또는 투자 역량을 단계적으로 키움' 중 어느 방향이 더 타당해 보이는지 잠정 결론을 내리세요. 현재 소득 형태, 사업소득 의존도, 유동자금, 시간·건강 부담, 손실 감내 가능성에 연결해 이유를 제시하세요. 근거가 부족하면 무조건 양쪽을 나열하지 말고, 어떤 핵심 정보가 결론을 바꾸는지 명시하세요. 특정 투자상품이나 수익률을 권하거나 보장하지 마세요.\n\n"
+                "가족정보는 실제 부양·경제적 지원이 입력되지 않았다면 비용이나 책임이 있다고 가정하지 마세요. 배우자·자녀·부모·형제자매의 정보는 가족관계와 잠재적 책임을 이해하는 맥락으로만 사용하세요. '현재 재무 모습 요약', '다음 단계', '성찰 질문'은 쓰지 마세요. 금액은 만원 단위를 유지하세요.\n\n입력 데이터:\n"
                 + json.dumps(details, ensure_ascii=False)
             )
             comment, error = call_gemini_text(prompt)
