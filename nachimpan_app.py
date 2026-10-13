@@ -597,7 +597,10 @@ else:
         # Remove accidental duplicate inline heading from the retirement section.
         retirement_comment = re.sub(r"(?i)(?:\*\*|__)\s*소득\s*개선\s*방향\s*(?:\*\*|__)\s*", "", retirement_comment)
         retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
+        # The card already displays this heading, so remove a repeated label at the start of the AI text.
+        retirement_comment = re.sub(r"(?i)^\s*(?:\*\*|__)?\s*은퇴\s*안정성\s*(?:\*\*|__)?\s*[:：]\s*", "", retirement_comment).strip()
         income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
+        income_comment = re.sub(r"(?i)^\s*(?:\*\*|__)?\s*소득\s*개선\s*방향\s*(?:\*\*|__)?\s*[:：]\s*", "", income_comment).strip()
         # Keep the two cards readable even if Gemini emits extra blank lines.
         retirement_comment = re.sub(r"\n{3,}", "\n\n", retirement_comment)
         income_comment = re.sub(r"\n{3,}", "\n\n", income_comment)
