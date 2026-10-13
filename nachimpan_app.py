@@ -250,7 +250,7 @@ def call_gemini_text(prompt_text):
     last_error = ""
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
-        "generationConfig": {"maxOutputTokens": 900, "temperature": 0.45},
+        "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.45},
     }
     for api_version, model_name in get_cached_gemini_models(api_key):
         try:
