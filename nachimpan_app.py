@@ -239,14 +239,14 @@ def get_cached_gemini_models(api_key):
 
 
 def call_gemini_text(prompt_text):
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_KEY")
     if not api_key:
         try:
-            api_key = st.secrets.get("GEMINI_API_KEY", "")
+            api_key = st.secrets.get("GEMINI_API_KEY", "") or st.secrets.get("Gemini_API_KEY", "")
         except Exception:
             api_key = ""
     if not api_key:
-        return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
+        return "", "Streamlit Secrets에서 GEMINI_API_KEY 또는 Gemini_API_KEY를 찾지 못했습니다. 여행 가계부 앱과 나침반 앱의 Secrets는 별도로 관리됩니다."
     last_error = ""
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
@@ -354,23 +354,26 @@ if selected_page == "우리집 가계부":
     cols[3].metric("순자산", fmt_eok(s["net_worth"]))
     st.markdown("#### 미래 자산·연금 궤적")
     cur_age = int(st.session_state.person_age)
-    retire_age = int(st.session_state.get("retirement_age") or cur_age)
+    retirement_value = st.session_state.get("retirement_age")
+    # 은퇴 나이를 아직 입력하지 않았다면 임의로 현재 나이를 은퇴 시점으로 쓰지 않습니다.
+    retire_age = int(retirement_value) if retirement_value is not None else None
     annual_savings = s["surplus"] * 12
-    years = list(range(cur_age, max(cur_age+1, 81), 5))
-    if retire_age not in years: years.append(retire_age)
-    years = sorted(set(a for a in years if a >= cur_age and a <= 100))
+    years = sorted(set([cur_age] + list(range(((cur_age // 5) + 1) * 5, 81, 5)) + ([retire_age] if retire_age is not None and cur_age <= retire_age <= 100 else [])))
     vals = []
     for age in years:
-        if age <= retire_age:
-            vals.append(s["net_worth"] + annual_savings * (age-cur_age))
-        else:
-            pension_gap = max(0, 250 - float(getv("income_pension",0)))
-            vals.append(s["net_worth"] + annual_savings * max(0,retire_age-cur_age) - pension_gap*12*(age-retire_age))
+        working_years = max(0, age-cur_age) if retire_age is None else max(0, min(age, retire_age)-cur_age)
+        projected = s["net_worth"] + annual_savings * working_years
+        if retire_age is not None and age > retire_age and st.session_state.get("income_pension") is not None:
+            # 연금 미입력 시 가상의 생활비/연금 부족액을 만들지 않습니다.
+            pension_gap = max(0, 250 - float(getv("income_pension", 0)))
+            projected -= pension_gap * 12 * (age-retire_age)
+        vals.append(projected)
     fig = go.Figure(go.Scatter(x=years,y=vals,mode="lines+markers",line=dict(color="#f59e0b",width=3),name="단순 가정에 따른 순자산"))
-    fig.add_vline(x=retire_age, line_dash="dash", line_color="#38bdf8")
+    if retire_age is not None:
+        fig.add_vline(x=retire_age, line_dash="dash", line_color="#38bdf8")
     fig.update_layout(height=360,margin=dict(l=18,r=18,t=28,b=42),paper_bgcolor="#0b1120",plot_bgcolor="#0b1120",font_color="#e2e8f0",xaxis_title="나이",yaxis_title="순자산 (만원)",autosize=True)
     st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False,"scrollZoom":False,"doubleClick":False,"staticPlot":True})
-    st.caption("단순 가정에 따른 예시 계산입니다. 물가·수익률·세금·주거비 변화는 반영하지 않았으며, 예측이나 보장은 아닙니다.")
+    st.caption("현재 순자산에서 시작해 입력된 월 잔액을 단순히 누적한 개념도입니다. 은퇴 나이나 연금액을 입력하지 않은 경우 임의의 값을 가정하지 않습니다. 물가·수익률·세금·주거비 변화는 반영하지 않았으며, 예측이나 보장은 아닙니다.")
 
     _, next_col = st.columns([5,1])
     with next_col:
@@ -390,13 +393,23 @@ elif selected_page == "삶과\n생계수단" or selected_page == "삶과 생계�
     cols[1].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🛢️</div><b>큰 물통</b><p class='small-muted'>전문성·규모가 커져 한 번에 담는 양이 늘어나는 모습</p></div>",unsafe_allow_html=True)
     cols[2].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🚰</div><b>파이프라인</b><p class='small-muted'>시스템·자산에서 소득 흐름이 생기는 모습</p></div>",unsafe_allow_html=True)
     st.markdown("### 은퇴 예상 나이 (지금 하는 일을 그만두는 나이)")
-    st.number_input("은퇴 예상 나이 (지금 하는 일을 그만두는 나이)", min_value=int(st.session_state.person_age), max_value=100,
-                    value=st.session_state.get("retirement_age"), step=1, key="retirement_age")
-
+    with st.form("retirement_form"):
+        retirement_input = st.number_input(
+            "은퇴 예상 나이 (지금 하는 일을 그만두는 나이)",
+            min_value=int(st.session_state.person_age), max_value=100,
+            value=int(st.session_state["retirement_age"]) if st.session_state.get("retirement_age") is not None else int(st.session_state.person_age),
+            step=1, key="retirement_age_input",
+        )
+        retirement_saved = st.form_submit_button("확인", use_container_width=True)
+    if retirement_saved:
+        st.session_state["retirement_age"] = int(retirement_input)
+        st.success("은퇴 예상 나이가 반영되었습니다.")
 
     _, next_col = st.columns([5,1])
     with next_col:
         if st.button("다음 →", key="livelihood_next", use_container_width=True, type="primary"):
+            # Submit the value already held by the widget before navigating.
+            st.session_state["retirement_age"] = int(st.session_state.get("retirement_age_input", retirement_input))
             st.session_state["_pending_nav"] = "인생의 사계절"
             st.rerun()
 
