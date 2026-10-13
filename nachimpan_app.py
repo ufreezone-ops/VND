@@ -41,8 +41,11 @@ st.markdown("""
 /* 시작 팝업은 화면 중앙, 제목·입력·버튼 글자도 중앙 정렬 */
 div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
-div[data-testid="stDialog"] h2 { position:absolute !important; left:50% !important; transform:translateX(-50%) !important; width:max-content !important; max-width:calc(100% - 90px) !important; text-align:center !important; }
-div[data-testid="stDialog"] label, div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align:center !important; }
+div[data-testid="stDialog"] [data-testid="stDialogHeader"] { display:flex !important; justify-content:center !important; align-items:center !important; }
+div[data-testid="stDialog"] [data-testid="stDialogHeader"] h2 { position:static !important; transform:none !important; width:100% !important; text-align:center !important; padding-left:36px !important; }
+div[data-testid="stDialog"] label { display:block !important; width:100% !important; text-align:center !important; }
+div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content:center !important; width:100% !important; }
+div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align:center !important; }
 div[data-testid="stDialog"] input { text-align:center !important; }
 /* 시작 팝업 나이 입력의 +/- 조절 버튼 제거 */
 div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
@@ -51,10 +54,10 @@ div[data-testid="stDialog"] input[type="number"] { appearance:textfield; -moz-ap
 .quad, .quad-active { min-height:145px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:12px 10px; }
 .income-card { min-height:180px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:18px 14px; }
 /* 첫 화면은 표지 이미지가 배경 */
-.cover-bg { position: relative; min-height: 72vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display:flex; align-items:center; justify-content:center; }
+.cover-bg { position: relative; min-height: 10vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display:flex; align-items:center; justify-content:center; }
 .cover-shade { position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,17,32,.05),rgba(8,17,32,.25)); }
-.cover-caption { position:relative; z-index:1; text-align:center; color:#fff; text-shadow:0 2px 16px rgba(0,0,0,.7); padding:28px; }
-.cover-caption h1 { font-size:clamp(32px,5vw,54px); color:#fff; }
+.cover-caption { position:relative; z-index:1; text-align:center; color:#fff; text-shadow:0 2px 16px rgba(0,0,0,.7); padding:8px; }
+.cover-caption h1 { margin:0; font-size:clamp(20px,3vw,30px); color:#fff; }
 /* 원래처럼 큼직한 4개 가로 탭 */
 .nav-link-container { padding: 8px !important; background:#0f172a !important; border:1px solid #263449 !important; border-radius:12px !important; margin:8px 0 24px !important; }
 .nav-link { min-height:52px !important; padding:14px 8px !important; font-size:16px !important; font-weight:700 !important; border-radius:9px !important; }
@@ -146,7 +149,7 @@ st.markdown(f"""
   <div class="cover-shade"></div>
   <div class="cover-caption">
     <h1>나침반</h1>
-    <div style="font-size:clamp(16px,2vw,22px);font-weight:650;">나를 돌아보고, 내일을 그리는 여정</div>
+    <div style="font-size:clamp(11px,1.2vw,14px);font-weight:600;">나를 돌아보고, 내일을 그리는 여정</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -154,7 +157,7 @@ st.markdown(f"""
 if not st.session_state.started:
     @st.dialog("나침반 산책을 시작합니다", width="small")
     def start_dialog():
-        st.markdown("<div style='text-align:center;color:#cbd5e1;margin-bottom:12px'>이름과 나이를 입력해 주세요.</div>", unsafe_allow_html=True)
+        st.markdown("", unsafe_allow_html=True)
         with st.form("start_form", clear_on_submit=False):
             name = st.text_input("이름 또는 별칭", placeholder="이름이나 편한 별칭", key="start_person_name")
             age_text = st.text_input("나이", placeholder="나이 입력", key="start_person_age_text", max_chars=3)
@@ -185,6 +188,11 @@ with st.sidebar:
     st.markdown(f"**익숙한 소득 형태:** {code or '아직 미정'}")
     st.caption(f"익명 고유번호 {st.session_state.anonymous_id}")
     st.caption("입력 내용은 이 화면의 세션에서 사용됩니다.")
+
+# 버튼 클릭 후에는 다음 rerun의 위젯 생성 전에 선택 탭을 반영합니다.
+_pending_nav = st.session_state.pop("_pending_nav", None)
+if _pending_nav in ["우리집 가계부", "삶과 생계수단", "인생의 사계절", "AI 시선"]:
+    st.session_state["main_navigation"] = _pending_nav
 
 # Original large horizontal navigation restored.
 selected = option_menu(
@@ -253,10 +261,15 @@ if selected == "우리집 가계부":
         }
         for key, value in submitted_values.items():
             st.session_state[key] = value
-        # 현재 탭에 머물며 입력값만 반영합니다.
+        # 입력 반영 사실을 알리고 선택된 ESBI 영역으로 화면을 이동합니다.
+        st.session_state["finance_saved_notice"] = True
 
     q = active_quadrant(st.session_state.get("job_form", ""))
-    st.markdown("#### 소득 형태를 바라보는 작은 지도 — ESBI")
+    st.markdown("#### ESBI")
+    st.markdown("<div id='selected-esbi'></div>", unsafe_allow_html=True)
+    if st.session_state.pop("finance_saved_notice", False):
+        st.success("입력 내용이 반영되었습니다.")
+        st.components.v1.html("<script>try { window.parent.document.getElementById('selected-esbi').scrollIntoView({behavior:'smooth',block:'center'}); } catch(e) {}</script>", height=0)
     cols = st.columns(4)
     for col, code in zip(cols, ["E","S","B","I"]):
         title, desc = ESBI[code]
@@ -288,13 +301,13 @@ if selected == "우리집 가계부":
     fig = go.Figure(go.Scatter(x=years,y=vals,mode="lines+markers",line=dict(color="#f59e0b",width=3),name="단순 가정에 따른 순자산"))
     fig.add_vline(x=retire_age, line_dash="dash", line_color="#38bdf8")
     fig.update_layout(height=300,margin=dict(l=10,r=10,t=20,b=10),paper_bgcolor="#0b1120",plot_bgcolor="#0b1120",font_color="#e2e8f0",xaxis_title="나이",yaxis_title="순자산 (만원)")
-    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
+    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False,"scrollZoom":False,"doubleClick":False,"staticPlot":True})
     st.caption("단순 가정에 따른 예시 계산입니다. 물가·수익률·세금·주거비 변화는 반영하지 않았으며, 예측이나 보장은 아닙니다.")
 
     _, next_col = st.columns([5,1])
     with next_col:
         if st.button("다음 →", key="finance_next", use_container_width=True, type="primary"):
-            st.session_state["main_navigation"] = "삶과 생계수단"
+            st.session_state["_pending_nav"] = "삶과 생계수단"
             st.rerun()
 
 # Page 2 — livelihood choice and small/large bucket/pipeline illustration
@@ -309,14 +322,14 @@ elif selected == "삶과 생계수단":
     cols[1].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🛢️</div><b>큰 물통</b><p class='small-muted'>전문성·규모가 커져 한 번에 담는 양이 늘어나는 모습</p></div>",unsafe_allow_html=True)
     cols[2].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🚰</div><b>파이프라인</b><p class='small-muted'>시스템·자산에서 소득 흐름이 생기는 모습</p></div>",unsafe_allow_html=True)
     st.markdown("### 은퇴 예상 나이 (지금 하는 일을 그만두는 나이)")
-    st.slider("은퇴 예상 나이", min_value=max(40,int(st.session_state.person_age)), max_value=85,
-              value=int(st.session_state.get("retirement_age", max(60,int(st.session_state.person_age)))), key="retirement_age")
+    st.number_input("은퇴 예상 나이 (지금 하는 일을 그만두는 나이)", min_value=int(st.session_state.person_age), max_value=100,
+                    value=int(st.session_state.get("retirement_age", int(st.session_state.person_age))), step=1, key="retirement_age")
 
 
     _, next_col = st.columns([5,1])
     with next_col:
         if st.button("다음 →", key="livelihood_next", use_container_width=True, type="primary"):
-            st.session_state["main_navigation"] = "인생의 사계절"
+            st.session_state["_pending_nav"] = "인생의 사계절"
             st.rerun()
 
 # Page 3 — seasons, family ages, illustrative lifecycle curve, official statistics
@@ -330,7 +343,10 @@ elif selected == "인생의 사계절":
     with st.form("family_form"):
         spouse_age = st.number_input("배우자 나이 (없거나 입력하지 않으려면 0)", min_value=0,max_value=120,value=int(st.session_state.get("spouse_age",0)),step=1)
         child_count = st.selectbox("자녀 수", ["입력 안 함","없음","1명","2명","3명 이상"], index=["입력 안 함","없음","1명","2명","3명 이상"].index(st.session_state.get("child_count","입력 안 함")))
-        child_age = st.number_input("첫째 자녀 나이 (선택)",min_value=0,max_value=100,value=int(st.session_state.get("child_age",0)),step=1)
+        if child_count in ["1명", "2명", "3명 이상"]:
+            child_age = st.number_input("첫째 자녀 나이 (선택)",min_value=0,max_value=100,value=int(st.session_state.get("child_age",0)),step=1)
+        else:
+            child_age = 0
         parent_age = st.number_input("부모님 나이 (선택)",min_value=0,max_value=120,value=int(st.session_state.get("parent_age",0)),step=1)
         save_family = st.form_submit_button("가족 정보 반영",use_container_width=True)
     if save_family:
@@ -350,33 +366,38 @@ elif selected == "인생의 사계절":
     fig.add_trace(go.Scatter(x=LIFECYCLE_BENCHMARK["age"],y=LIFECYCLE_BENCHMARK["labor_income"],mode="lines+markers",name="노동소득",line=dict(color="#38bdf8",width=3),hovertemplate="나이 %{x}세<br>노동소득 지수 %{y}<extra></extra>"))
     fig.add_trace(go.Scatter(x=LIFECYCLE_BENCHMARK["age"],y=LIFECYCLE_BENCHMARK["consumption"],mode="lines+markers",name="소비",line=dict(color="#f59e0b",width=3),hovertemplate="나이 %{x}세<br>소비 지수 %{y}<extra></extra>"))
     fig.add_vline(x=age,line_dash="dash",line_color="#f472b6",line_width=3,annotation_text=f"현재 {age}세",annotation_position="top")
-    fig.update_layout(height=370,margin=dict(l=10,r=10,t=35,b=10),paper_bgcolor="#0b1120",plot_bgcolor="#0b1120",font_color="#e2e8f0",xaxis_title="나이",yaxis_title="상대적 크기 (개념도)",legend=dict(orientation="h",y=1.1))
-    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
+    fig.update_layout(height=370,margin=dict(l=10,r=10,t=35,b=10),paper_bgcolor="#0b1120",plot_bgcolor="#0b1120",font_color="#e2e8f0",xaxis_title="나이",yaxis_title="상대적 크기 (개념도)",legend=dict(orientation="h",y=1.12,x=1,xanchor="right",yanchor="bottom"))
+    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False,"scrollZoom":False,"doubleClick":False,"staticPlot":True})
     st.markdown("### 국가데이터처 공식 통계 자료")
     st.markdown("2024년 국민이전계정은 연령별 소비와 노동소득의 차이를 보여줍니다. 개인의 실제 가계부나 은퇴 시점과 구분해 읽어야 합니다.")
     cols=st.columns(3)
     cols[0].metric("흑자 전환", "28세")
-    cols[1].metric("최대 흑자", "45세 · 1,932만 원")
+    cols[1].metric("최대 흑자", "45세")
+    cols[1].caption("1인당 연간 1,932만 원")
     cols[2].metric("적자 재전환", "61세")
     st.caption("공식 통계의 요약 수치이며, 평균적 흐름이지 개인의 운명이나 목표가 아닙니다.")
     st.link_button("📄 2024년 국민이전계정 PDF 열기",OFFICIAL_PDF_URL,use_container_width=True)
     st.link_button("🌐 국가데이터처 공식 발표 페이지",OFFICIAL_RELEASE_URL,use_container_width=True)
     st.caption(f"은퇴 예정 나이 {retirement}세 이후의 겨울: {max(0,88-retirement)}년 (기대수명 88세를 가정한 단순 계산)")
+    _, next_col = st.columns([5,1])
+    with next_col:
+        if st.button("다음 →", key="seasons_next", use_container_width=True, type="primary"):
+            st.session_state["_pending_nav"] = "AI 시선"
+            st.rerun()
 
 # Page 4 — AI perspective. Sends all currently entered answers, but only after explicit click.
 else:
     st.markdown("## AI 시선")
     st.markdown("AI는 판정자가 아니라, 입력한 내용을 다른 각도에서 바라보는 참고 관점입니다.")
-    model = st.selectbox("분석 관점", ["Gemini", "OpenAI 호환 API"], key="ai_model")
+    model = st.radio("분석 관점", ["ChatGPT", "Gemini", "Claude"], horizontal=True, key="ai_model")
     if st.button("분석",type="primary",use_container_width=True):
         summary = current_financial_summary()
         details = {
-            "이름/별칭": st.session_state.get("person_name"),
             "나이": st.session_state.get("person_age"),
             "소득 형태": st.session_state.get("job_form", ""),
             "월수입 항목": {k:getv(k,0) for k in ["income_self","income_spouse","income_other","income_pension"]},
             "월지출 항목": {k:getv(k,0) for k in ["expense_living","expense_loan","expense_other"]},
-            "자산 항목": {k:getv(k,0) for k in ["asset_cash","asset_financial","asset_home","asset_other"]},
+            "자산 항목": {k:getv(k,0) for k in ["asset_cash","asset_financial","asset_home","asset_deposit","asset_other"]},
             "부채 항목": {k:getv(k,0) for k in ["debt_home","debt_other"]},
             "삶과 시간 메모": st.session_state.get("life_choice_note", ""),
             "은퇴 예정 나이": st.session_state.get("retirement_age"),
@@ -385,21 +406,37 @@ else:
         st.session_state.ai_summary = summary
         st.session_state.ai_details = details
         st.session_state.ai_comment = None
-        api_key = os.environ.get("GEMINI_API_KEY")
+        def read_secret(key):
+            value = os.environ.get(key)
+            if not value:
+                try: value = st.secrets.get(key)
+                except Exception: value = None
+            return value
         try:
-            if not api_key:
-                try: api_key = st.secrets.get("GEMINI_API_KEY")
-                except Exception: api_key = None
-            if model == "Gemini" and api_key:
-                prompt = "한국어로 300자 이내의 짧고 비판단적인 재무 상태 코멘트를 작성하세요. 투자 권유, 단정, 수치 추정은 하지 말고 입력된 사실과 불확실성을 구분하세요. 데이터:\n" + json.dumps(details,ensure_ascii=False)
+            prompt = "한국어로 300자 이내의 짧고 비판단적인 재무 상태 코멘트를 작성하세요. 투자 권유, 단정, 수치 추정은 하지 말고 입력된 사실과 불확실성을 구분하세요. 데이터:\n" + json.dumps(details,ensure_ascii=False)
+            if model == "Gemini" and read_secret("GEMINI_API_KEY"):
+                api_key = read_secret("GEMINI_API_KEY")
                 payload = json.dumps({"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"maxOutputTokens":260,"temperature":0.4}}).encode("utf-8")
                 req = urllib.request.Request("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+api_key,data=payload,headers={"Content-Type":"application/json"},method="POST")
                 with urllib.request.urlopen(req,timeout=25) as response: result=json.loads(response.read().decode("utf-8"))
                 st.session_state.ai_comment = result["candidates"][0]["content"]["parts"][0]["text"][:300]
+            elif model == "ChatGPT" and read_secret("OPENAI_API_KEY"):
+                api_key = read_secret("OPENAI_API_KEY")
+                payload = json.dumps({"model":"gpt-4.1-mini","input":prompt,"max_output_tokens":260}).encode("utf-8")
+                req = urllib.request.Request("https://api.openai.com/v1/responses",data=payload,headers={"Content-Type":"application/json","Authorization":"Bearer "+api_key},method="POST")
+                with urllib.request.urlopen(req,timeout=25) as response: result=json.loads(response.read().decode("utf-8"))
+                st.session_state.ai_comment = "".join(block.get("text","") for item in result.get("output",[]) for block in item.get("content",[]) if block.get("type")=="output_text")[:300]
+            elif model == "Claude" and read_secret("ANTHROPIC_API_KEY"):
+                api_key = read_secret("ANTHROPIC_API_KEY")
+                payload = json.dumps({"model":"claude-3-5-haiku-latest","max_tokens":260,"messages":[{"role":"user","content":prompt}]}).encode("utf-8")
+                req = urllib.request.Request("https://api.anthropic.com/v1/messages",data=payload,headers={"Content-Type":"application/json","x-api-key":api_key,"anthropic-version":"2023-06-01"},method="POST")
+                with urllib.request.urlopen(req,timeout=25) as response: result=json.loads(response.read().decode("utf-8"))
+                st.session_state.ai_comment = "".join(block.get("text","") for block in result.get("content",[]) if block.get("type")=="text")[:300]
             else:
-                st.session_state.ai_comment = "실제 AI 코멘트를 생성하려면 앱 환경에 GEMINI_API_KEY를 설정해야 합니다. 아래 재무제표 요약은 입력값을 바탕으로 계산한 것이며, 아직 AI의 판단이나 조언은 아닙니다."
-        except Exception as exc:
-            st.session_state.ai_comment = "AI 분석 요청을 완료하지 못했습니다. 입력값 요약은 아래에서 확인할 수 있습니다. 연결 설정과 API 사용 한도를 확인해 주세요."
+                key_name = {"ChatGPT":"OPENAI_API_KEY", "Gemini":"GEMINI_API_KEY", "Claude":"ANTHROPIC_API_KEY"}[model]
+                st.session_state.ai_comment = f"{model} API 연결 설정이 없습니다. Streamlit secrets에 {key_name}를 설정한 뒤 다시 분석해 주세요."
+        except Exception:
+            st.session_state.ai_comment = "AI 분석 요청을 완료하지 못했습니다. API 키, 모델 사용 권한 및 사용 한도를 확인해 주세요."
     if st.session_state.get("ai_summary"):
         s=st.session_state.ai_summary
         st.markdown("### 재무제표 요약")
@@ -408,7 +445,7 @@ else:
         cols[1].metric("월지출 합계",money(s["expenses"]))
         cols[2].metric("월 잔액",money(s["surplus"]))
         cols[3].metric("순자산",fmt_eok(s["net_worth"]))
-        st.markdown("### AI의 짧은 코멘트")
+        st.markdown("### AI 코멘트")
         st.markdown(f"<div class='soft-card'>{st.session_state.get('ai_comment','')}</div>",unsafe_allow_html=True)
         st.caption("입력한 값과 AI 코멘트는 참고 자료입니다. 삶의 해석과 결정은 인터뷰이의 몫입니다.")
     else:
