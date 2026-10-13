@@ -41,9 +41,15 @@ st.markdown("""
 /* 시작 팝업은 화면 중앙, 제목·입력·버튼 글자도 중앙 정렬 */
 div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
-div[data-testid="stDialog"] h2, div[data-testid="stDialog"] label,
-div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align: center !important; }
-div[data-testid="stDialog"] input { text-align: center !important; }
+div[data-testid="stDialog"] h2 { position:absolute !important; left:50% !important; transform:translateX(-50%) !important; width:max-content !important; max-width:calc(100% - 90px) !important; text-align:center !important; }
+div[data-testid="stDialog"] label, div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align:center !important; }
+div[data-testid="stDialog"] input { text-align:center !important; }
+/* 시작 팝업 나이 입력의 +/- 조절 버튼 제거 */
+div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
+div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+div[data-testid="stDialog"] input[type="number"] { appearance:textfield; -moz-appearance:textfield; }
+.quad, .quad-active { min-height:145px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:12px 10px; }
+.income-card { min-height:180px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:18px 14px; }
 /* 첫 화면은 표지 이미지가 배경 */
 .cover-bg { position: relative; min-height: 72vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display:flex; align-items:center; justify-content:center; }
 .cover-shade { position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,17,32,.05),rgba(8,17,32,.25)); }
@@ -151,7 +157,13 @@ if not st.session_state.started:
         st.markdown("<div style='text-align:center;color:#cbd5e1;margin-bottom:12px'>이름과 나이를 입력해 주세요.</div>", unsafe_allow_html=True)
         with st.form("start_form", clear_on_submit=False):
             name = st.text_input("이름 또는 별칭", placeholder="이름이나 편한 별칭", key="start_person_name")
-            age = st.number_input("나이", min_value=1, max_value=120, value=None, step=1, placeholder="나이 입력", key="start_person_age")
+            age_text = st.text_input("나이", placeholder="나이 입력", key="start_person_age_text", max_chars=3)
+            try:
+                age = int(age_text) if age_text.strip() else None
+                if age is not None and not 1 <= age <= 120:
+                    age = None
+            except ValueError:
+                age = None
             submitted = st.form_submit_button("시작", use_container_width=True, type="primary")
         if submitted:
             if not name.strip() or age is None:
@@ -215,7 +227,8 @@ if selected == "우리집 가계부":
         with c:
             asset_cash = st.number_input("현금·예적금", min_value=0, value=st.session_state.get("asset_cash"), step=100, placeholder="금액")
             asset_financial = st.number_input("주식·채권 등 금융자산", min_value=0, value=st.session_state.get("asset_financial"), step=100, placeholder="금액")
-            asset_home = st.number_input("부동산·주택 시세", min_value=0, value=st.session_state.get("asset_home"), step=100, placeholder="금액")
+            st.markdown("**부동산 시세 및 전세보증금**")
+            asset_home = st.number_input("부동산 시세", min_value=0, value=st.session_state.get("asset_home"), step=100, placeholder="금액")
             asset_deposit = st.number_input("전세보증금", min_value=0, value=st.session_state.get("asset_deposit"), step=100, placeholder="금액")
             asset_other = st.number_input("기타 자산·사업 가치", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액")
         with d:
@@ -240,7 +253,7 @@ if selected == "우리집 가계부":
         }
         for key, value in submitted_values.items():
             st.session_state[key] = value
-        st.rerun()
+        # 현재 탭에 머물며 입력값만 반영합니다.
 
     q = active_quadrant(st.session_state.get("job_form", ""))
     st.markdown("#### 소득 형태를 바라보는 작은 지도 — ESBI")
@@ -278,22 +291,33 @@ if selected == "우리집 가계부":
     st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
     st.caption("단순 가정에 따른 예시 계산입니다. 물가·수익률·세금·주거비 변화는 반영하지 않았으며, 예측이나 보장은 아닙니다.")
 
+    _, next_col = st.columns([5,1])
+    with next_col:
+        if st.button("다음 →", key="finance_next", use_container_width=True, type="primary"):
+            st.session_state["main_navigation"] = "삶과 생계수단"
+            st.rerun()
+
 # Page 2 — livelihood choice and small/large bucket/pipeline illustration
 elif selected == "삶과 생계수단":
     st.markdown("## 삶과 생계수단")
     st.markdown("<div class='soft-card'><div class='eyebrow'>잠시 생각해 볼 질문</div><div class='question'>내가 생계를 유지해 온 방식은 나의 선택이었나? 주어진 상황에서 받아들인 것인가?</div></div>", unsafe_allow_html=True)
     st.text_area("떠오르는 생각이 있다면 적어두세요 (선택)", key="life_choice_note", height=90, placeholder="답을 정할 필요는 없습니다.")
     st.markdown("### 소득이 만들어지는 세 가지 모습")
-    st.caption("아래는 ESBI를 이해하기 위한 개념도입니다. 어느 방식이 누구에게나 더 낫다는 뜻은 아닙니다.")
+
     cols = st.columns(3)
-    cols[0].markdown("<div class='soft-card' style='text-align:center'><div style='font-size:38px'>🪣</div><b>작은 물통</b><p class='small-muted'>직접 일한 시간과 소득이 가까이 연결되는 모습</p></div>",unsafe_allow_html=True)
-    cols[1].markdown("<div class='soft-card' style='text-align:center'><div style='font-size:38px'>🛢️</div><b>큰 물통</b><p class='small-muted'>전문성·규모가 커져 한 번에 담는 양이 늘어나는 모습</p></div>",unsafe_allow_html=True)
-    cols[2].markdown("<div class='soft-card' style='text-align:center'><div style='font-size:38px'>🚰</div><b>파이프라인</b><p class='small-muted'>시스템·자산에서 소득 흐름이 생기는 모습</p></div>",unsafe_allow_html=True)
-    st.markdown("<div class='soft-card'>이 그림은 가능성을 설명하는 비유입니다. 파이프라인에도 구축 비용과 위험, 관리가 필요하며 소득이 보장되는 것은 아닙니다.</div>",unsafe_allow_html=True)
-    st.markdown("### 은퇴 시점 가정")
-    st.slider("은퇴 예정 나이", min_value=max(40,int(st.session_state.person_age)), max_value=85,
+    cols[0].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🪣</div><b>작은 물통</b><p class='small-muted'>직접 일한 시간과 소득이 가까이 연결되는 모습</p></div>",unsafe_allow_html=True)
+    cols[1].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🛢️</div><b>큰 물통</b><p class='small-muted'>전문성·규모가 커져 한 번에 담는 양이 늘어나는 모습</p></div>",unsafe_allow_html=True)
+    cols[2].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🚰</div><b>파이프라인</b><p class='small-muted'>시스템·자산에서 소득 흐름이 생기는 모습</p></div>",unsafe_allow_html=True)
+    st.markdown("### 은퇴 예상 나이 (지금 하는 일을 그만두는 나이)")
+    st.slider("은퇴 예상 나이", min_value=max(40,int(st.session_state.person_age)), max_value=85,
               value=int(st.session_state.get("retirement_age", max(60,int(st.session_state.person_age)))), key="retirement_age")
-    st.caption("이 나이를 바꾸면 ‘인생의 사계절’에 표시되는 가족의 미래 나이와 그래프가 함께 갱신됩니다.")
+
+
+    _, next_col = st.columns([5,1])
+    with next_col:
+        if st.button("다음 →", key="livelihood_next", use_container_width=True, type="primary"):
+            st.session_state["main_navigation"] = "인생의 사계절"
+            st.rerun()
 
 # Page 3 — seasons, family ages, illustrative lifecycle curve, official statistics
 elif selected == "인생의 사계절":
@@ -389,15 +413,3 @@ else:
         st.caption("입력한 값과 AI 코멘트는 참고 자료입니다. 삶의 해석과 결정은 인터뷰이의 몫입니다.")
     else:
         st.info("‘분석’을 누르면 입력 내용의 재무제표 요약을 먼저 보여주고, 설정이 되어 있는 경우 AI 코멘트를 덧붙입니다.")
-
-# Persistent reminder: six questions are the sunflower of the journey, not a required conclusion.
-with st.expander("🌻 나침반의 여섯 가지 질문"):
-    for question in [
-        "당신의 직업은 당신의 선택인가?",
-        "인생의 지출-수입곡선을 인식하고 있는가?",
-        "당신뿐 아니라, 가족들도 나이를 먹는 것을 인지하는가?",
-        "1년 평균 2천만원 저축, 와우... 그러면 집은 언제사는가?",
-        "AI는 당신의 재무상태를 어떻게 보고 하는가?",
-        "당신에게 새로운 선택과 선택할 용기가 필요한가?",
-    ]:
-        st.markdown(f"- {question}")
