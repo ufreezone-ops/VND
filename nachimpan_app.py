@@ -250,7 +250,7 @@ def call_gemini_text(prompt_text):
     last_error = ""
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
-        "generationConfig": {"maxOutputTokens": 260, "temperature": 0.4},
+        "generationConfig": {"maxOutputTokens": 900, "temperature": 0.45},
     }
     for api_version, model_name in get_cached_gemini_models(api_key):
         try:
@@ -265,7 +265,7 @@ def call_gemini_text(prompt_text):
                 parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
                 text_parts = [part.get("text", "") for part in parts if part.get("text")]
                 if text_parts:
-                    return "".join(text_parts).strip()[:300], ""
+                    return "".join(text_parts).strip(), ""
             else:
                 last_error = f"[{model_name}] {response.status_code}: {response.text[:160]}"
         except Exception as exc:
@@ -454,11 +454,16 @@ elif selected_page == "인생의\n사계절" or selected_page == "인생의 사�
             child_age2 = st.number_input("둘째 자녀 나이 (선택)",min_value=0,max_value=100,value=child_age2,step=1)
         if child_count == "3명 이상":
             child_age3 = st.number_input("셋째 자녀 나이 (선택)",min_value=0,max_value=100,value=child_age3,step=1)
-        parent_age = st.number_input("부모님 나이 (선택)",min_value=0,max_value=120,value=int(st.session_state.get("parent_age",0)),step=1)
+        col_father, col_mother = st.columns(2)
+        with col_father:
+            father_age = st.number_input("아버지 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("father_age", 0)), step=1)
+        with col_mother:
+            mother_age = st.number_input("어머니 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("mother_age", 0)), step=1)
         save_family = st.form_submit_button("가족 정보 반영",use_container_width=True)
     if save_family:
         st.session_state.spouse_age=spouse_age; st.session_state.child_count=child_count
-        st.session_state.child_age=child_age; st.session_state.child_age2=child_age2; st.session_state.child_age3=child_age3; st.session_state.parent_age=parent_age
+        st.session_state.child_age=child_age; st.session_state.child_age2=child_age2; st.session_state.child_age3=child_age3
+        st.session_state.father_age=father_age; st.session_state.mother_age=mother_age
         st.rerun()
 
     people = [(st.session_state.get("person_name","나"),age)]
@@ -466,7 +471,8 @@ elif selected_page == "인생의\n사계절" or selected_page == "인생의 사�
     if getv("child_age",0)>0: people.append(("첫째 자녀",int(getv("child_age"))))
     if getv("child_age2",0)>0: people.append(("둘째 자녀",int(getv("child_age2"))))
     if getv("child_age3",0)>0: people.append(("셋째 자녀",int(getv("child_age3"))))
-    if getv("parent_age",0)>0: people.append(("부모님",int(getv("parent_age"))))
+    if getv("father_age",0)>0: people.append(("아버지",int(getv("father_age"))))
+    if getv("mother_age",0)>0: people.append(("어머니",int(getv("mother_age"))))
     for name, current in people:
         future = current + years_left
         st.markdown(f"<div class='soft-card' style='display:flex;align-items:center;gap:14px;flex-wrap:wrap'><b style='min-width:75px'>{name}</b><span style='font-size:22px;font-weight:800'>{current}세</span><span style='font-size:23px;color:#f59e0b;padding:0 12px'>⟶</span><span style='font-size:22px;font-weight:800;color:#fde68a'>{future}세</span><span class='small-muted'>은퇴 예정 시점</span></div>",unsafe_allow_html=True)
@@ -512,15 +518,23 @@ else:
             "부채 항목": {k:getv(k,0) for k in ["debt_home","debt_other"]},
             "삶과 시간 메모": st.session_state.get("life_choice_note", ""),
             "은퇴 예정 나이": st.session_state.get("retirement_age"),
-            "가족 나이": {k:getv(k,0) for k in ["spouse_age","child_age","parent_age"]},
+            "가족 나이": {k:getv(k,0) for k in ["spouse_age","child_age","child_age2","child_age3","father_age","mother_age"]},
         }
         st.session_state.ai_summary = summary
         st.session_state.ai_details = details
         st.session_state.ai_comment = None
         try:
             prompt = (
-                "한국어로 300자 이내의 짧고 비판단적인 재무 상태 코멘트를 작성하세요. "
-                "투자 권유, 단정, 수치 추정은 하지 말고 입력된 사실과 불확실성을 구분하세요. 데이터:\\n"
+                "당신은 재무 상담을 대신하는 사람이 아니라, 인터뷰이가 자신의 삶과 재무 상황을 차분히 돌아보도록 돕는 성찰 파트너입니다. "
+                "반드시 한국어로 700~1,000자 정도의 충분히 구체적인 코멘트를 작성하세요. 한두 문장으로 끝내지 마세요.\n\n"
+                "아래 순서와 제목을 사용하세요.\n"
+                "1. 현재 재무 모습: 입력된 월수입·월지출·월 잔액·순자산을 바탕으로 확인되는 사실을 설명합니다.\n"
+                "2. 살펴볼 점: 수입과 지출의 관계, 자산과 부채의 구성에서 실제 데이터로 확인되는 특징을 설명합니다. 데이터가 없으면 추측하지 말고 확인할 수 없다고 씁니다.\n"
+                "3. 삶의 맥락: 입력된 직업·가족 나이·삶과 시간 메모가 있다면 재무 상황과 연결해 조심스럽게 성찰할 질문을 제시합니다. 입력되지 않은 가족 정보나 상황은 상상하지 않습니다.\n"
+                "4. 다음 대화 질문: 인터뷰이가 스스로 생각해 볼 열린 질문을 2~3개 제시합니다.\n\n"
+                "판단하거나 훈계하지 말고, 부유하다/가난하다 같은 평가를 피하세요. 투자 상품 추천, 세금·연금에 관한 단정, 입력에 없는 숫자나 미래 예측을 만들지 마세요. "
+                "월 잔액이 양수인지 음수인지 등 계산 가능한 사실은 정확히 다루고, 불확실성과 가정은 분명히 구분하세요. "
+                "금액 단위는 원본 입력의 만원 단위를 유지해 혼동을 피하세요. 데이터:\n"
                 + json.dumps(details, ensure_ascii=False)
             )
             comment, error = call_gemini_text(prompt)
