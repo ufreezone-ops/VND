@@ -7,6 +7,7 @@ import random
 import json
 import urllib.request
 import urllib.error
+import requests
 from datetime import date
 import base64
 import streamlit as st
@@ -26,7 +27,7 @@ st.markdown("""
 :root { color-scheme: dark; }
 .stApp { background: #0b1120; color: #f8fafc; }
 [data-testid="stSidebar"] { background: #0f172a; border-right: 1px solid #263449; }
-.block-container { padding-top: 0.45rem; padding-bottom: 1rem; max-width: 1180px; }
+.block-container { padding-top: 2.5rem; padding-bottom: 1rem; max-width: 1180px; }
 .hero { border: 1px solid #334155; border-radius: 20px; padding: 38px 30px; text-align: center;
         background: radial-gradient(circle at top, #243047 0%, #0f172a 68%); margin: 14px 0 22px; }
 .hero-mark { font-size: 52px; line-height: 1.3; }
@@ -41,7 +42,6 @@ st.markdown("""
 /* 시작 팝업은 화면 중앙, 제목·입력·버튼 글자도 중앙 정렬 */
 div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
-div[data-testid="stDialog"] [data-testid="stDialogHeader"] { display:flex !important; justify-content:center !important; align-items:center !important; }
 div[data-testid="stDialog"] [data-testid="stDialogHeader"] { position:relative !important; display:grid !important; grid-template-columns:1fr auto 1fr !important; }
 div[data-testid="stDialog"] [data-testid="stDialogHeader"] h2 { grid-column:2 !important; justify-self:center !important; position:static !important; transform:none !important; width:max-content !important; max-width:calc(100% - 56px) !important; text-align:center !important; padding:0 !important; margin:0 !important; }
 div[data-testid="stDialog"] [data-testid="stDialogHeader"] button { grid-column:3 !important; justify-self:end !important; }
@@ -86,7 +86,7 @@ LIFECYCLE_BENCHMARK = pd.DataFrame([
     {"age": 80, "labor_income": 10,  "consumption": 185},
 ])
 
-OFFICIAL_PDF_URL = "https://mods.go.kr/boardDownload.es?bid=11898&list_no=447028&seq=3#page=3"
+OFFICIAL_PDF_URL = "https://mods.go.kr/boardDownload.es?bid=11898&list_no=447028&seq=3#page=7"
 OFFICIAL_RELEASE_URL = "https://mods.go.kr/board.es?act=view&bid=11898&list_no=447028&mid=a10301130100"
 
 ESBI = {
@@ -214,6 +214,65 @@ selected = option_menu(
             "nav-link-selected":{"background-color":"#EA580C","color":"#FFFFFF","font-weight":"800","box-shadow":"0 3px 10px rgba(234,88,12,0.25)"}}
 )
 
+@st.cache_data(ttl=3600)
+def get_cached_gemini_models(api_key):
+    active_endpoints = []
+    for ver in ["v1beta", "v1"]:
+        try:
+            response = requests.get(
+                f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}",
+                timeout=3,
+            )
+            if response.status_code == 200:
+                for model_info in response.json().get("models", []):
+                    if "generateContent" in model_info.get("supportedGenerationMethods", []):
+                        clean_name = model_info.get("name", "").replace("models/", "")
+                        if "flash" in clean_name and "exp" not in clean_name and "preview" not in clean_name:
+                            active_endpoints.append((ver, clean_name))
+        except Exception:
+            pass
+    active_endpoints.sort(key=lambda item: (
+        0 if item == ("v1beta", "gemini-1.5-flash") else
+        1 if item == ("v1", "gemini-1.5-flash") else 2
+    ))
+    return active_endpoints or [("v1beta", "gemini-2.0-flash")]
+
+
+def call_gemini_text(prompt_text):
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        try:
+            api_key = st.secrets.get("GEMINI_API_KEY", "")
+        except Exception:
+            api_key = ""
+    if not api_key:
+        return "", "Streamlit Secrets에 GEMINI_API_KEY가 없습니다."
+    last_error = ""
+    payload = {
+        "contents": [{"parts": [{"text": prompt_text}]}],
+        "generationConfig": {"maxOutputTokens": 260, "temperature": 0.4},
+    }
+    for api_version, model_name in get_cached_gemini_models(api_key):
+        try:
+            response = requests.post(
+                f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={api_key}",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=25,
+            )
+            if response.status_code == 200:
+                result = response.json()
+                parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                text_parts = [part.get("text", "") for part in parts if part.get("text")]
+                if text_parts:
+                    return "".join(text_parts).strip()[:300], ""
+            else:
+                last_error = f"[{model_name}] {response.status_code}: {response.text[:160]}"
+        except Exception as exc:
+            last_error = f"[{model_name}] 요청 오류: {exc}"
+    return "", last_error or "Gemini 서버에서 응답을 받지 못했습니다."
+
+
 # Page 1 — Household finances
 selected_page = {"우리집\n가계부":"우리집 가계부", "삶과\n생계수단":"삶과 생계수단", "인생의\n사계절":"인생의 사계절", "AI\n시선":"AI 시선"}.get(selected, selected)
 if selected_page == "우리집 가계부":
@@ -309,7 +368,7 @@ if selected_page == "우리집 가계부":
             vals.append(s["net_worth"] + annual_savings * max(0,retire_age-cur_age) - pension_gap*12*(age-retire_age))
     fig = go.Figure(go.Scatter(x=years,y=vals,mode="lines+markers",line=dict(color="#f59e0b",width=3),name="단순 가정에 따른 순자산"))
     fig.add_vline(x=retire_age, line_dash="dash", line_color="#38bdf8")
-    fig.update_layout(height=300,margin=dict(l=10,r=10,t=20,b=10),paper_bgcolor="#0b1120",plot_bgcolor="#0b1120",font_color="#e2e8f0",xaxis_title="나이",yaxis_title="순자산 (만원)")
+    fig.update_layout(height=360,margin=dict(l=18,r=18,t=28,b=42),paper_bgcolor="#0b1120",plot_bgcolor="#0b1120",font_color="#e2e8f0",xaxis_title="나이",yaxis_title="순자산 (만원)",autosize=True)
     st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False,"scrollZoom":False,"doubleClick":False,"staticPlot":True})
     st.caption("단순 가정에 따른 예시 계산입니다. 물가·수익률·세금·주거비 변화는 반영하지 않았으며, 예측이나 보장은 아닙니다.")
 
@@ -350,24 +409,31 @@ elif selected_page == "인생의\n사계절" or selected_page == "인생의 사�
     retirement = int(retirement_value) if retirement_value is not None else age
     years_left = max(0, retirement-age)
     st.markdown("### 1. 가족 구성원과 나이")
+    child_options = ["입력 안 함","없음","1명","2명","3명 이상"]
+    child_count = st.selectbox(
+        "자녀 수", child_options,
+        index=child_options.index(st.session_state.get("child_count","입력 안 함"))
+        if st.session_state.get("child_count","입력 안 함") in child_options else 0,
+        key="child_count_live",
+    )
     with st.form("family_form"):
         spouse_age = st.number_input("배우자 나이 (없거나 입력하지 않으려면 0)", min_value=0,max_value=120,value=int(st.session_state.get("spouse_age",0)),step=1)
-        child_count = st.selectbox("자녀 수", ["입력 안 함","없음","1명","2명","3명 이상"], index=["입력 안 함","없음","1명","2명","3명 이상"].index(st.session_state.get("child_count","입력 안 함")))
-        child_age = 0
-        child_age2 = 0
-        child_age3 = 0
+        child_age = int(st.session_state.get("child_age",0)) if child_count in ["1명", "2명", "3명 이상"] else 0
+        child_age2 = int(st.session_state.get("child_age2",0)) if child_count in ["2명", "3명 이상"] else 0
+        child_age3 = int(st.session_state.get("child_age3",0)) if child_count == "3명 이상" else 0
         if child_count in ["1명", "2명", "3명 이상"]:
-            child_age = st.number_input("첫째 자녀 나이 (선택)",min_value=0,max_value=100,value=int(st.session_state.get("child_age",0)),step=1)
+            child_age = st.number_input("첫째 자녀 나이 (선택)",min_value=0,max_value=100,value=child_age,step=1)
         if child_count in ["2명", "3명 이상"]:
-            child_age2 = st.number_input("둘째 자녀 나이 (선택)",min_value=0,max_value=100,value=int(st.session_state.get("child_age2",0)),step=1)
+            child_age2 = st.number_input("둘째 자녀 나이 (선택)",min_value=0,max_value=100,value=child_age2,step=1)
         if child_count == "3명 이상":
-            child_age3 = st.number_input("셋째 자녀 나이 (선택)",min_value=0,max_value=100,value=int(st.session_state.get("child_age3",0)),step=1)
+            child_age3 = st.number_input("셋째 자녀 나이 (선택)",min_value=0,max_value=100,value=child_age3,step=1)
         parent_age = st.number_input("부모님 나이 (선택)",min_value=0,max_value=120,value=int(st.session_state.get("parent_age",0)),step=1)
         save_family = st.form_submit_button("가족 정보 반영",use_container_width=True)
     if save_family:
         st.session_state.spouse_age=spouse_age; st.session_state.child_count=child_count
         st.session_state.child_age=child_age; st.session_state.child_age2=child_age2; st.session_state.child_age3=child_age3; st.session_state.parent_age=parent_age
         st.rerun()
+
     people = [(st.session_state.get("person_name","나"),age)]
     if getv("spouse_age",0)>0: people.append(("배우자",int(getv("spouse_age"))))
     if getv("child_age",0)>0: people.append(("첫째 자녀",int(getv("child_age"))))
@@ -406,7 +472,8 @@ elif selected_page == "인생의\n사계절" or selected_page == "인생의 사�
 else:
     st.markdown("## AI 시선")
     st.markdown("AI는 판정자가 아니라, 입력한 내용을 다른 각도에서 바라보는 참고 관점입니다.")
-    model = st.radio("분석 관점", ["ChatGPT", "Gemini", "Claude"], horizontal=True, key="ai_model")
+    model = "Gemini"
+    st.caption("분석 관점: Gemini")
     if st.button("분석",type="primary",use_container_width=True):
         summary = current_financial_summary()
         details = {
@@ -423,37 +490,16 @@ else:
         st.session_state.ai_summary = summary
         st.session_state.ai_details = details
         st.session_state.ai_comment = None
-        def read_secret(key):
-            value = os.environ.get(key)
-            if not value:
-                try: value = st.secrets.get(key)
-                except Exception: value = None
-            return value
         try:
-            prompt = "한국어로 300자 이내의 짧고 비판단적인 재무 상태 코멘트를 작성하세요. 투자 권유, 단정, 수치 추정은 하지 말고 입력된 사실과 불확실성을 구분하세요. 데이터:\n" + json.dumps(details,ensure_ascii=False)
-            if model == "Gemini" and read_secret("GEMINI_API_KEY"):
-                api_key = read_secret("GEMINI_API_KEY")
-                payload = json.dumps({"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"maxOutputTokens":260,"temperature":0.4}}).encode("utf-8")
-                req = urllib.request.Request("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+api_key,data=payload,headers={"Content-Type":"application/json"},method="POST")
-                with urllib.request.urlopen(req,timeout=25) as response: result=json.loads(response.read().decode("utf-8"))
-                st.session_state.ai_comment = result["candidates"][0]["content"]["parts"][0]["text"][:300]
-            elif model == "ChatGPT" and read_secret("OPENAI_API_KEY"):
-                api_key = read_secret("OPENAI_API_KEY")
-                payload = json.dumps({"model":"gpt-4.1-mini","input":prompt,"max_output_tokens":260}).encode("utf-8")
-                req = urllib.request.Request("https://api.openai.com/v1/responses",data=payload,headers={"Content-Type":"application/json","Authorization":"Bearer "+api_key},method="POST")
-                with urllib.request.urlopen(req,timeout=25) as response: result=json.loads(response.read().decode("utf-8"))
-                st.session_state.ai_comment = "".join(block.get("text","") for item in result.get("output",[]) for block in item.get("content",[]) if block.get("type")=="output_text")[:300]
-            elif model == "Claude" and read_secret("ANTHROPIC_API_KEY"):
-                api_key = read_secret("ANTHROPIC_API_KEY")
-                payload = json.dumps({"model":"claude-3-5-haiku-latest","max_tokens":260,"messages":[{"role":"user","content":prompt}]}).encode("utf-8")
-                req = urllib.request.Request("https://api.anthropic.com/v1/messages",data=payload,headers={"Content-Type":"application/json","x-api-key":api_key,"anthropic-version":"2023-06-01"},method="POST")
-                with urllib.request.urlopen(req,timeout=25) as response: result=json.loads(response.read().decode("utf-8"))
-                st.session_state.ai_comment = "".join(block.get("text","") for block in result.get("content",[]) if block.get("type")=="text")[:300]
-            else:
-                key_name = {"ChatGPT":"OPENAI_API_KEY", "Gemini":"GEMINI_API_KEY", "Claude":"ANTHROPIC_API_KEY"}[model]
-                st.session_state.ai_comment = f"{model} API 연결 설정이 없습니다. Streamlit secrets에 {key_name}를 설정한 뒤 다시 분석해 주세요."
-        except Exception:
-            st.session_state.ai_comment = "AI 분석 요청을 완료하지 못했습니다. API 키, 모델 사용 권한 및 사용 한도를 확인해 주세요."
+            prompt = (
+                "한국어로 300자 이내의 짧고 비판단적인 재무 상태 코멘트를 작성하세요. "
+                "투자 권유, 단정, 수치 추정은 하지 말고 입력된 사실과 불확실성을 구분하세요. 데이터:\\n"
+                + json.dumps(details, ensure_ascii=False)
+            )
+            comment, error = call_gemini_text(prompt)
+            st.session_state.ai_comment = comment if comment else error
+        except Exception as exc:
+            st.session_state.ai_comment = f"Gemini 분석 요청을 완료하지 못했습니다. API 키, 모델 사용 권한 및 사용 한도를 확인해 주세요. ({exc})"
     if st.session_state.get("ai_summary"):
         s=st.session_state.ai_summary
         st.markdown("### 재무제표 요약")
