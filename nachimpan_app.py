@@ -548,7 +548,8 @@ else:
         try:
             prompt = (
                 "역할: 한국의 가계 재무와 은퇴 준비를 함께 검토하는 현실적이고 친근한 성찰 파트너입니다. 투자상품을 권유하지 말고, 근거 없이 낙관하거나 비관하지 마세요.\n\n"
-                "아래 두 코멘트만 한국어로 작성하세요. 전체 250~350자 정도, 쉬운 대화체로 쓰고 재무제표 숫자를 길게 되풀이하지 마세요. 두 코멘트는 각각 별도 제목과 문단으로 작성하고, 두 문단 사이에는 빈 줄을 반드시 한 줄 넣으세요.\n\n"
+                "아래 두 코멘트만 한국어로 작성하세요. 전체 250~350자 정도, 쉬운 대화체로 쓰고 재무제표 숫자를 길게 되풀이하지 마세요.\n"
+                "출력 형식은 반드시 아래와 같이 정확히 지키세요. 제목은 각각 [은퇴 안정성], [소득 개선 방향]을 그대로 사용하고, 각 제목은 한 번씩만 출력하세요. 두 항목 사이에는 빈 줄을 한 줄 넣으세요. 제목을 중복하거나 Markdown 제목(####), 굵게 표시(**)를 추가하지 마세요.\n\n"
                 "[은퇴 안정성]\n"
                 "첫 문장은 '은퇴 안정성: 유리한 편 / 판단 보류 / 불리한 편' 중 가장 적합한 하나를 골라 시작하세요. 현재 저축 여력뿐 아니라 순자산, 실제로 쓸 수 있는 자산, 부채, 은퇴까지 남은 기간을 함께 보세요. 결혼·출산·주거 계획이 입력되어 있다면 예상되는 비용 변화와 현재 자산의 여유를 함께 고려하세요. 계획이 '미정'이거나 정보가 부족하면 미래 비용을 사실처럼 가정하지 말고, 현재 숫자만으로 지나치게 낙관하지 마세요. 공식 비교 통계가 입력되지 않았다면 평균보다 낫다거나 못하다고 주장하지 마세요.\n\n"
                 "[소득 개선 방향]\n"
@@ -570,17 +571,36 @@ else:
         cols[3].metric("순자산",fmt_eok(s["net_worth"]))
         st.markdown("### AI 코멘트")
         comment_text = str(st.session_state.get("ai_comment", ""))
-        retirement_comment, income_comment = comment_text, ""
-        if "[소득 개선 방향]" in comment_text:
-            retirement_comment, income_comment = comment_text.split("[소득 개선 방향]", 1)
-            retirement_comment = retirement_comment.replace("[은퇴 안정성]", "").strip()
-            income_comment = income_comment.strip()
-        elif "소득 개선 방향:" in comment_text:
-            retirement_comment, income_comment = comment_text.split("소득 개선 방향:", 1)
-            retirement_comment = retirement_comment.strip()
-            income_comment = income_comment.strip()
+        # Be tolerant of Gemini formatting variations: [heading], Markdown heading,
+        # bold heading, or plain-text heading. Split at the first income heading.
+        import re
+        normalized = comment_text.replace("\r\n", "\n").replace("\r", "\n")
+        income_heading = re.compile(
+            r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$"
+        )
+        match = income_heading.search(normalized)
+        if match:
+            retirement_comment = normalized[:match.start()]
+            income_comment = normalized[match.end():]
         else:
-            retirement_comment = retirement_comment.replace("[은퇴 안정성]", "").strip()
+            # Also handle inline heading forms such as "**소득 개선 방향** 내용".
+            inline_match = re.search(
+                r"(?i)(?:\[\s*소득\s*개선\s*방향\s*\]|(?:\*\*|__)\s*소득\s*개선\s*방향\s*(?:\*\*|__)|소득\s*개선\s*방향\s*:)",
+                normalized,
+            )
+            if inline_match:
+                retirement_comment = normalized[:inline_match.start()]
+                income_comment = normalized[inline_match.end():]
+            else:
+                retirement_comment, income_comment = normalized, ""
+        retirement_comment = re.sub(r"(?im)^\s*(?:#{1,6}\s*)?(?:\[\s*)?은퇴\s*안정성\s*(?:\])?\s*:?\s*$", "", retirement_comment)
+        # Remove accidental duplicate inline heading from the retirement section.
+        retirement_comment = re.sub(r"(?i)(?:\*\*|__)\s*소득\s*개선\s*방향\s*(?:\*\*|__)\s*", "", retirement_comment)
+        retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
+        income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
+        # Keep the two cards readable even if Gemini emits extra blank lines.
+        retirement_comment = re.sub(r"\n{3,}", "\n\n", retirement_comment)
+        income_comment = re.sub(r"\n{3,}", "\n\n", income_comment)
         st.markdown("#### 은퇴 안정성")
         st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
         st.markdown("#### 소득 개선 방향")
