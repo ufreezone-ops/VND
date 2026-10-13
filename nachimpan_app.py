@@ -44,21 +44,39 @@ div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
 
 
-/* 시작 팝업 제목 중앙 정렬 */
+
+/* 시작 팝업 제목: 닫기 버튼과 분리하고 중앙 정렬 */
+div[data-testid="stDialog"] section[role="dialog"] {
+    position: relative !important;
+}
+
+div[data-testid="stDialog"] section[role="dialog"] > button[aria-label="Close"] {
+    position: absolute !important;
+    top: 12px !important;
+    right: 12px !important;
+    z-index: 2 !important;
+}
+
 div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] {
     display: block !important;
     width: 100% !important;
     box-sizing: border-box !important;
     text-align: center !important;
-    padding: 0 40px !important;
+    padding: 20px 32px 0 !important;
     margin: 0 0 1rem 0 !important;
+    line-height: 1.4 !important;
 }
 
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] span,
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] [data-testid="stMarkdownContainer"],
 div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] p {
+    display: block !important;
     width: 100% !important;
+    box-sizing: border-box !important;
     text-align: center !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
 }
+
 
 
 div[data-testid="stDialog"] label { display:block !important; width:100% !important; text-align:center !important; }
