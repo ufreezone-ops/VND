@@ -42,9 +42,6 @@ st.markdown("""
 /* 시작 팝업은 화면 중앙, 제목·입력·버튼 글자도 중앙 정렬 */
 div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
-
-
-
 /* 시작 팝업 제목: 닫기 버튼과 분리하고 중앙 정렬 */
 div[data-testid="stDialog"] section[role="dialog"] {
     position: relative !important;
@@ -76,9 +73,6 @@ div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] p {
     text-align: center !important;
     margin: 0 auto !important;
 }
-
-
-
 div[data-testid="stDialog"] label { display:block !important; width:100% !important; text-align:center !important; }
 div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content:center !important; width:100% !important; }
 div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align:center !important; }
@@ -557,9 +551,18 @@ elif selected_page == "인생의\n사계절" or selected_page == "인생의 사�
 else:
     st.markdown("## AI 시선")
     st.markdown("AI는 판정자가 아니라, 입력한 내용을 다른 각도에서 바라보는 참고 관점입니다.")
-    model = "Gemini"
-    st.caption("분석 관점: Gemini")
-    if st.button("분석",type="primary",use_container_width=True):
+    model = st.radio(
+        "분석할 AI 선택",
+        ["Gemini", "ChatGPT (준비 중)", "Claude (준비 중)"],
+        index=0,
+        key="ai_provider",
+        horizontal=True,
+    )
+    if model == "Gemini":
+        st.caption("현재 사용 가능: Gemini")
+    else:
+        st.info(f"{model}은 연결 준비 중입니다. 현재는 Gemini만 사용할 수 있습니다.")
+    if st.button("분석", type="primary", use_container_width=True, disabled=(model != "Gemini")):
         summary = current_financial_summary()
         details = {
             "나이": st.session_state.get("person_age"),
