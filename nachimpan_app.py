@@ -159,7 +159,9 @@ def active_quadrant(job):
     return ""
 
 def current_financial_summary():
-    income = sum(float(getv(k, 0)) for k in ["income_self", "income_spouse", "income_other", "income_pension"])
+    # 은퇴 이후 예상 연금은 현재 소득·월 잔액에 포함하지 않습니다.
+    # 은퇴 이후 자산 궤적 계산에서만 별도로 사용합니다.
+    income = sum(float(getv(k, 0)) for k in ["income_self", "income_spouse", "income_other"])
     expenses = sum(float(getv(k, 0)) for k in ["expense_living", "expense_loan", "expense_other"])
     assets = sum(float(getv(k, 0)) for k in ["asset_cash", "asset_financial", "asset_home", "asset_deposit", "asset_other"])
     debts = sum(float(getv(k, 0)) for k in ["debt_home", "debt_other"])
