@@ -533,9 +533,9 @@ with st.sidebar:
 # 5.00.00 | 메인 네비게이션 헤더 (Main Navigation Segment)
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 5.01.00 | 가로 4대 메뉴 네비게이터 (option_menu 단일 인스턴스)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 5.01.00 | 가로 4대 메뉴 네비게이터 (option_menu iframe 전용 색상 고정 복원)
+# ==============================================================================
 _pending_nav = st.session_state.pop("_pending_nav", None)
 nav_options = ["우리집\n가계부", "삶과\n생계수단", "인생의\n사계절", "AI\n시선"]
 _nav_targets = {
@@ -564,19 +564,32 @@ selected = option_menu(
     key=_nav_widget_key,
     styles={
         "container": {
-            "padding": "6px", "background-color": "var(--nc-card-bg)",
-            "border": "1px solid var(--nc-border)", "border-radius": "12px",
-            "margin-top": "6px", "margin-bottom": "22px", "width": "100%"
+            "padding": "8px",
+            "background-color": "#0F172A",
+            "border": "1px solid #263449",
+            "border-radius": "12px",
+            "margin-top": "6px",
+            "margin-bottom": "22px",
+            "width": "100%"
         },
         "icon": {"display": "none"},
         "nav-link": {
-            "font-size": "15.5px", "white-space": "pre-line", "line-height": "1.25",
-            "text-align": "center", "margin": "3px", "padding": "10px 6px",
-            "color": "var(--nc-subtext)", "border-radius": "8px", "min-height": "58px"
+            "font-size": "15.5px",
+            "white-space": "pre-line",
+            "line-height": "1.25",
+            "text-align": "center",
+            "margin": "3px 4px",
+            "padding": "10px 8px",
+            "color": "#CBD5E1",
+            "--hover-color": "#334155",
+            "border-radius": "9px",
+            "min-height": "60px"
         },
         "nav-link-selected": {
-            "background-color": "var(--nc-primary)", "color": "#FFFFFF",
-            "font-weight": "800", "box-shadow": "0 3px 10px rgba(234,88,12,0.3)"
+            "background-color": "#EA580C",
+            "color": "#FFFFFF",
+            "font-weight": "800",
+            "box-shadow": "0 3px 10px rgba(234,88,12,0.3)"
         }
     }
 )
