@@ -566,7 +566,7 @@ selected = option_menu(
         "container": {
             # 👇 [핵심 조절 레버] padding: (위 오른쪽 아래 왼쪽)
             # 윗쪽을 14px로 늘려 버튼 머리 위로 확실한 여백을 줍니다!
-            "padding": "14px 6px 8px 6px",
+            "padding": "16px 6px 8px 6px",
             
             "background-color": "#0F172A",
             "border": "none",
