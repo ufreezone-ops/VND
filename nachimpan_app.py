@@ -35,6 +35,11 @@ st.set_page_config(
 # ==============================================================================
 st.markdown("""
 <style>
+/* PC에서 탭 전환 시 스크롤바 유무로 화면이 좌우로 덜컹거리는 현상 방지 */
+html {
+    overflow-y: scroll !important;
+    scrollbar-gutter: stable;
+}
 /* ==========================================================================
    CSS Design Tokens (전역 색상 규칙)
    ========================================================================== */
@@ -585,7 +590,10 @@ selected = option_menu(
             "color": "#CBD5E1",
             "--hover-color": "#1E293B",
             "border-radius": "8px",
-            "min-height": "48px"
+            "min-height": "48px",
+            
+            # 👇 [추가] 4개 탭이 항상 25%씩 자리를 꽉 잡아서 글자가 굵어져도 옆 탭을 밀지 않음
+            "flex": "1"
         },
         "nav-link-selected": {
             "background-color": "#EA580C",
