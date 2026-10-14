@@ -24,8 +24,8 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-:root { color-scheme: dark; }
-.stApp { background: #0b1120; color: #f8fafc; }
+:root { color-scheme: light dark; }
+.stApp { background: var(--app-bg, #0b1120); color: var(--app-fg, #f8fafc); }
 [data-testid="stSidebar"] { background: #0f172a; border-right: 1px solid #263449; }
 .block-container { padding-top: 2.5rem; padding-bottom: 1rem; max-width: 1180px; }
 .hero { border: 1px solid #334155; border-radius: 20px; padding: 38px 30px; text-align: center;
@@ -94,6 +94,39 @@ div[data-testid="stDialog"] input[type="number"] { appearance:textfield; -moz-ap
 .nav-link i { font-size:18px !important; }
 @media (max-width: 700px) { .nav-link { min-height:48px !important; font-size:12px !important; padding:9px 2px !important; } }
 hr { border-color: #334155; }
+/* Light/System 모드에서도 입력 글자와 카드의 대비를 확보 */
+html[data-theme="light"] {
+    color-scheme: light;
+    --app-bg: #f8fafc;
+    --app-fg: #172033;
+}
+html[data-theme="light"] .stApp { background: #f8fafc !important; color: #172033 !important; }
+html[data-theme="light"] [data-testid="stSidebar"] { background: #eef2f7 !important; border-right-color: #cbd5e1 !important; }
+html[data-theme="light"] .soft-card,
+html[data-theme="light"] .nav-link-container { background: #ffffff !important; border-color: #cbd5e1 !important; }
+html[data-theme="light"] .hero { background: radial-gradient(circle at top, #ffffff 0%, #eaf0f8 78%) !important; border-color: #cbd5e1 !important; }
+html[data-theme="light"] .hero-title,
+html[data-theme="light"] .question { color: #172033 !important; }
+html[data-theme="light"] .hero-sub { color: #475569 !important; }
+html[data-theme="light"] .small-muted { color: #475569 !important; }
+html[data-theme="light"] .quad { background: #f1f5f9 !important; color: #172033 !important; border-color: #cbd5e1 !important; }
+html[data-theme="light"] .quad-active { background: #fef3c7 !important; color: #78350f !important; border-color: #d97706 !important; }
+html[data-theme="light"] [data-testid="stForm"],
+html[data-theme="light"] [data-testid="stVerticalBlockBorderWrapper"] > div { border-color: #cbd5e1 !important; }
+html[data-theme="light"] [data-testid="stWidgetLabel"],
+html[data-theme="light"] [data-testid="stMarkdownContainer"],
+html[data-theme="light"] label,
+html[data-theme="light"] p,
+html[data-theme="light"] h1,
+html[data-theme="light"] h2,
+html[data-theme="light"] h3,
+html[data-theme="light"] h4 { color: #172033; }
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] [data-baseweb="select"] > div { background-color: #ffffff !important; color: #172033 !important; border-color: #94a3b8 !important; }
+html[data-theme="light"] [data-testid="stCaptionContainer"] { color: #475569 !important; }
+html[data-theme="light"] .nav-link { color: #334155 !important; }
+html[data-theme="light"] .nav-link-selected { background-color: #c2410c !important; color: #ffffff !important; }
 @media (max-width: 700px) { .hero { padding: 26px 16px; } .hero-sub { font-size: 15px; } }
 </style>
 """, unsafe_allow_html=True)
@@ -313,7 +346,7 @@ if selected_page == "우리집 가계부":
         job_options = ["선택하세요", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
         previous_job = st.session_state.get("job_form", "선택하세요")
         job_index = job_options.index(previous_job) if previous_job in job_options else 0
-        job = st.selectbox("직업의 종류", job_options, index=job_index, key="job_form_input", label_visibility="collapsed")
+        job = st.selectbox("나의 직업은?", job_options, index=job_index, key="job_form_input")
 
         # 현재의 현금흐름: 들어오는 돈과 나가는 돈을 나란히 배치합니다.
         income_col, expense_col = st.columns(2)
