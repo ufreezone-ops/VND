@@ -30,10 +30,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ------------------------------------------------------------------------------
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (라이트 / 다크 / 시스템 완벽 대응)
-#          * 모든 색상 변수, 카드, 버튼, 텍스트 가독성을 이곳 한 곳에서 일괄 통제합니다.
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (1단계: 팝업창 중앙정렬 원본 복원)
+# ==============================================================================
 st.markdown("""
 <style>
 /* ==========================================================================
@@ -215,7 +214,7 @@ html[data-theme="light"],
 /* ==========================================================================
    Streamlit 위젯 가독성 강화 (Metric, Button, Input, Caption)
    ========================================================================== */
-/* 지표(Metric) - 라이트/다크 불문 선명한 대비 */
+/* 지표(Metric) */
 [data-testid="stMetricLabel"] *, [data-testid="stMetricLabel"] {
     color: var(--nc-subtext) !important;
     font-size: 14px !important;
@@ -266,9 +265,51 @@ button[kind="primary"] * {
     font-size: 16px !important;
 }
 
-/* 시작 다이얼로그 (중앙 정렬) */
+/* ==========================================================================
+   시작 팝업창 중앙 정렬 원본 복원 (닫기 버튼 분리, 제목/라벨/버튼 중앙 정렬)
+   ========================================================================== */
 div[data-testid="stDialog"] > div { margin: auto !important; }
+div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
+
+div[data-testid="stDialog"] section[role="dialog"] {
+    position: relative !important;
+}
+
+div[data-testid="stDialog"] section[role="dialog"] > button[aria-label="Close"] {
+    position: absolute !important;
+    top: 12px !important;
+    right: 12px !important;
+    z-index: 2 !important;
+}
+
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+    padding: 20px 32px 0 !important;
+    margin: 0 0 1rem 0 !important;
+    line-height: 1.4 !important;
+}
+
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] span,
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] [data-testid="stMarkdownContainer"],
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] p {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+    margin: 0 auto !important;
+}
+div[data-testid="stDialog"] label { display: block !important; width: 100% !important; text-align: center !important; }
+div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content: center !important; width: 100% !important; }
+div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align: center !important; }
 div[data-testid="stDialog"] input { text-align: center !important; }
+
+/* 시작 팝업 나이 입력의 +/- 조절 버튼 제거 */
+div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
+div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+div[data-testid="stDialog"] input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 
 /* 커버 스타일 */
 .cover-bg { position: relative; min-height: 68vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display:flex; align-items:center; justify-content:center; }
