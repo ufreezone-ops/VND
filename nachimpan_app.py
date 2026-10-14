@@ -564,10 +564,13 @@ selected = option_menu(
     key=_nav_widget_key,
     styles={
         "container": {
-            "padding": "8px 6px",
+            # 👇 [핵심 조절 레버] padding: (위 오른쪽 아래 왼쪽)
+            # 윗쪽을 14px로 늘려 버튼 머리 위로 확실한 여백을 줍니다!
+            "padding": "14px 6px 8px 6px",
+            
             "background-color": "#0F172A",
             "border": "none",
-            "border-radius": "0px",  # 바깥 라운딩 완전 제거
+            "border-radius": "0px",
             "margin": "0px",
             "width": "100%"
         },
