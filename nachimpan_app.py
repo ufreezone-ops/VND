@@ -589,7 +589,7 @@ elif selected_page == "삶과\n생계수단" or selected_page == "삶과 생계�
             value=int(st.session_state["retirement_age"]) if st.session_state.get("retirement_age") is not None else int(st.session_state.person_age),
             step=1, key="retirement_age_input",
         )
-        retirement_saved = st.form_submit_button("확인", use_container_width=True)
+        retirement_saved = st.form_submit_button("확인", use_container_width=True, type="primary")
     if retirement_saved:
         st.session_state["retirement_age"] = int(retirement_input)
         st.success("은퇴 예상 나이가 반영되었습니다.")
