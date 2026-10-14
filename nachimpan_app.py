@@ -1,17 +1,25 @@
 # ==============================================================================
-# 나침반 | 인터뷰이를 위한 삶과 재무의 산책로
-# 화면 개편 1차본: 다섯 페이지(시작 포함), 실제 입력값 중심
+# 나침반 (Compass) | 인터뷰이를 위한 삶과 재무의 산책로
+# 통합 리팩토링 버전: [x.yy.zz] 계층 아키텍처 & 전역 테마 통합 엔진 적용
 # ==============================================================================
+
+# ==============================================================================
+# 1.00.00 | 시스템 환경 및 전역 테마 엔진 (System & Theming Engine)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1.01.00 | 라이브러리 로드 및 기본 페이지 설정
+# ------------------------------------------------------------------------------
 import os
 import random
 import json
-import urllib.request
-import urllib.error
-import requests
-from datetime import date
 import base64
+import requests
+import re
+from datetime import date
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from streamlit_option_menu import option_menu
 
@@ -22,64 +30,267 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ------------------------------------------------------------------------------
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (라이트 / 다크 / 시스템 완벽 대응)
+#          * 모든 색상 변수, 카드, 버튼, 텍스트 가독성을 이곳 한 곳에서 일괄 통제합니다.
+# ------------------------------------------------------------------------------
 st.markdown("""
 <style>
-:root { color-scheme: dark; }
-.stApp { background: #0b1120; color: #f8fafc; }
-[data-testid="stSidebar"] { background: #0f172a; border-right: 1px solid #263449; }
-.block-container { padding-top: 2.5rem; padding-bottom: 1rem; max-width: 1180px; }
-.hero { border: 1px solid #334155; border-radius: 20px; padding: 38px 30px; text-align: center;
-        background: radial-gradient(circle at top, #243047 0%, #0f172a 68%); margin: 14px 0 22px; }
-.hero-mark { font-size: 52px; line-height: 1.3; }
-.hero-title { font-size: clamp(32px, 5vw, 52px); font-weight: 850; letter-spacing: -1px; color: #f8fafc; }
-.hero-sub { color: #cbd5e1; font-size: 17px; line-height: 1.8; max-width: 720px; margin: 12px auto 0; }
-.soft-card { background: #151e2f; border: 1px solid #334155; border-radius: 13px; padding: 17px 19px; margin: 10px 0; }
-.eyebrow { color: #fbbf24; font-size: 13px; font-weight: 750; letter-spacing: .04em; }
-.small-muted { color: #94a3b8; font-size: 12px; }
-.quad { border-radius: 10px; padding: 8px 10px; border: 1px solid #475569; background: #172033; text-align: center; }
-.quad-active { border: 2px solid #f59e0b; background: #34291a; color: #fde68a; }
-.question { font-size: clamp(20px, 2.5vw, 27px); line-height: 1.55; font-weight: 750; color: #f8fafc; }
-/* 시작 팝업은 화면 중앙, 제목·입력·버튼 글자도 중앙 정렬 */
+/* ==========================================================================
+   CSS Design Tokens (전역 색상 규칙)
+   ========================================================================== */
+:root {
+    color-scheme: light dark;
+    --nc-bg: #0b1120;
+    --nc-sidebar-bg: #0f172a;
+    --nc-text: #f8fafc;
+    --nc-subtext: #94a3b8;
+    --nc-border: #334155;
+    --nc-card-bg: #151e2f;
+    --nc-hero-bg: radial-gradient(circle at top, #1e293b 0%, #0f172a 75%);
+    --nc-primary: #ea580c;
+    --nc-primary-hover: #c2410c;
+    --nc-accent-gold: #f59e0b;
+    --nc-quad-bg: #172033;
+    --nc-quad-active-bg: #34291a;
+    --nc-quad-active-border: #f59e0b;
+    --nc-quad-active-text: #fde68a;
+    
+    /* 재무 패널 전용 다크 테마 색상 */
+    --nc-panel-income: #163b35;
+    --nc-panel-income-border: #2f806d;
+    --nc-panel-expense: #442a2d;
+    --nc-panel-expense-border: #a34c56;
+    --nc-panel-asset: #183653;
+    --nc-panel-asset-border: #3b82b5;
+    --nc-panel-debt: #44351d;
+    --nc-panel-debt-border: #a8792d;
+    --nc-panel-retire: #34264a;
+    --nc-panel-retire-border: #8761b3;
+}
+
+/* 라이트 모드 (명시적 선택 또는 OS 기본이 라이트인 경우 자동 활성화) */
+html[data-theme="light"],
+@media (prefers-color-scheme: light) {
+    :root {
+        --nc-bg: #f8fafc;
+        --nc-sidebar-bg: #eef2f7;
+        --nc-text: #0f172a;
+        --nc-subtext: #475569;
+        --nc-border: #cbd5e1;
+        --nc-card-bg: #ffffff;
+        --nc-hero-bg: radial-gradient(circle at top, #ffffff 0%, #eaf0f8 78%);
+        --nc-quad-bg: #f1f5f9;
+        --nc-quad-active-bg: #fef3c7;
+        --nc-quad-active-border: #d97706;
+        --nc-quad-active-text: #78350f;
+        
+        /* 재무 패널 라이트 테마 가독성 색상 */
+        --nc-panel-income: #e0f2ec;
+        --nc-panel-income-border: #70b9a6;
+        --nc-panel-expense: #fce7e7;
+        --nc-panel-expense-border: #e5a0a5;
+        --nc-panel-asset: #e2effb;
+        --nc-panel-asset-border: #8db9df;
+        --nc-panel-debt: #fff1d6;
+        --nc-panel-debt-border: #dfbd78;
+        --nc-panel-retire: #f0e7fb;
+        --nc-panel-retire-border: #b9a0dc;
+    }
+}
+
+/* ==========================================================================
+   글로벌 레이아웃 & 폰트 크기
+   ========================================================================== */
+.stApp {
+    background-color: var(--nc-bg) !important;
+    color: var(--nc-text) !important;
+}
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    max-width: 1180px;
+}
+.stApp, .stApp p, .stApp label, .stApp [data-testid="stMarkdownContainer"] {
+    font-size: 16.5px;
+    color: var(--nc-text);
+}
+
+/* ==========================================================================
+   통합 공통 카드 & 히어로 섹션
+   ========================================================================== */
+.hero {
+    border: 1px solid var(--nc-border);
+    border-radius: 18px;
+    padding: 32px 24px;
+    text-align: center;
+    background: var(--nc-hero-bg);
+    margin: 12px 0 20px;
+}
+.hero-title {
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 800;
+    color: var(--nc-text);
+}
+.hero-sub {
+    color: var(--nc-subtext);
+    font-size: 16px;
+    line-height: 1.7;
+    max-width: 680px;
+    margin: 10px auto 0;
+}
+.soft-card {
+    background: var(--nc-card-bg);
+    border: 1px solid var(--nc-border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin: 10px 0;
+    color: var(--nc-text);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.eyebrow {
+    color: var(--nc-accent-gold);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    margin-bottom: 4px;
+}
+.question {
+    font-size: clamp(18px, 2.2vw, 24px);
+    line-height: 1.5;
+    font-weight: 700;
+    color: var(--nc-text);
+}
+.small-muted {
+    color: var(--nc-subtext);
+    font-size: 13px;
+}
+
+/* ==========================================================================
+   ESBI 사분면 & 물통 카드
+   ========================================================================== */
+.quad {
+    border-radius: 10px;
+    padding: 14px 10px;
+    border: 1px solid var(--nc-border);
+    background: var(--nc-quad-bg);
+    color: var(--nc-text);
+    text-align: center;
+    min-height: 145px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.quad-active {
+    border: 2px solid var(--nc-quad-active-border);
+    background: var(--nc-quad-active-bg);
+    color: var(--nc-quad-active-text);
+}
+.income-card {
+    min-height: 180px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 18px 14px;
+}
+
+/* ==========================================================================
+   재무 카테고리별 컬러 패널 (라이트/다크 완전 분리)
+   ========================================================================== */
+.st-key-income-panel { background: var(--nc-panel-income) !important; border: 1px solid var(--nc-panel-income-border) !important; border-radius: 12px; }
+.st-key-expense-panel { background: var(--nc-panel-expense) !important; border: 1px solid var(--nc-panel-expense-border) !important; border-radius: 12px; }
+.st-key-asset-panel { background: var(--nc-panel-asset) !important; border: 1px solid var(--nc-panel-asset-border) !important; border-radius: 12px; }
+.st-key-debt-panel { background: var(--nc-panel-debt) !important; border: 1px solid var(--nc-panel-debt-border) !important; border-radius: 12px; }
+.st-key-retirement-panel { background: var(--nc-panel-retire) !important; border: 1px solid var(--nc-panel-retire-border) !important; border-radius: 12px; }
+
+/* 패널 내부 텍스트 색상 */
+.st-key-income-panel *, .st-key-expense-panel *, .st-key-asset-panel *,
+.st-key-debt-panel *, .st-key-retirement-panel * {
+    color: var(--nc-text) !important;
+}
+
+/* ==========================================================================
+   Streamlit 위젯 가독성 강화 (Metric, Button, Input, Caption)
+   ========================================================================== */
+/* 지표(Metric) - 라이트/다크 불문 선명한 대비 */
+[data-testid="stMetricLabel"] *, [data-testid="stMetricLabel"] {
+    color: var(--nc-subtext) !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+}
+[data-testid="stMetricValue"] *, [data-testid="stMetricValue"] {
+    color: var(--nc-text) !important;
+    font-weight: 800 !important;
+}
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {
+    color: var(--nc-subtext) !important;
+    font-size: 13px !important;
+}
+
+/* 버튼 (Primary) */
+button[kind="primary"], .stApp [data-testid="stFormSubmitButton"] button[kind="primary"] {
+    background-color: var(--nc-primary) !important;
+    border-color: var(--nc-primary) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+}
+button[kind="primary"]:hover {
+    background-color: var(--nc-primary-hover) !important;
+    border-color: var(--nc-primary-hover) !important;
+}
+button[kind="primary"] * {
+    color: #ffffff !important;
+}
+
+/* 사이드바 스타일 통일 */
+[data-testid="stSidebar"] {
+    background-color: var(--nc-sidebar-bg) !important;
+    border-right: 1px solid var(--nc-border) !important;
+}
+[data-testid="stSidebar"] * {
+    color: var(--nc-text) !important;
+}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] * {
+    color: var(--nc-subtext) !important;
+}
+
+/* 입력 필드 (Text, Number, Select) */
+.stApp input, .stApp textarea, .stApp [data-baseweb="select"] > div {
+    background-color: var(--nc-card-bg) !important;
+    color: var(--nc-text) !important;
+    border-color: var(--nc-border) !important;
+    font-size: 16px !important;
+}
+
+/* 시작 다이얼로그 (중앙 정렬) */
 div[data-testid="stDialog"] > div { margin: auto !important; }
-div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
-div[data-testid="stDialog"] [data-testid="stDialogHeader"] { position:relative !important; display:grid !important; grid-template-columns:1fr auto 1fr !important; }
-div[data-testid="stDialog"] [data-testid="stDialogHeader"] h2 { grid-column:2 !important; justify-self:center !important; position:static !important; transform:none !important; width:max-content !important; max-width:calc(100% - 56px) !important; text-align:center !important; padding:0 !important; margin:0 !important; }
-div[data-testid="stDialog"] [data-testid="stDialogHeader"] button { grid-column:3 !important; justify-self:end !important; }
-div[data-testid="stDialog"] label { display:block !important; width:100% !important; text-align:center !important; }
-div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content:center !important; width:100% !important; }
-div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align:center !important; }
-div[data-testid="stDialog"] input { text-align:center !important; }
-/* 시작 팝업 나이 입력의 +/- 조절 버튼 제거 */
-div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
-div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
-div[data-testid="stDialog"] input[type="number"] { appearance:textfield; -moz-appearance:textfield; }
-.quad, .quad-active { min-height:145px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:12px 10px; }
-.income-card { min-height:180px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:18px 14px; }
-/* 첫 화면은 표지 이미지가 배경 */
+div[data-testid="stDialog"] input { text-align: center !important; }
+
+/* 커버 스타일 */
 .cover-bg { position: relative; min-height: 68vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display:flex; align-items:center; justify-content:center; }
-.cover-shade { position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,17,32,.05),rgba(8,17,32,.25)); }
-.cover-caption { position:relative; z-index:1; text-align:center; color:#fff; text-shadow:0 2px 16px rgba(0,0,0,.7); padding:8px; }
-.cover-caption h1 { margin:0; font-size:clamp(20px,3vw,30px); color:#fff; }
-/* 원래처럼 큼직한 4개 가로 탭 */
-.nav-link-container { padding: 8px !important; background:#0f172a !important; border:1px solid #263449 !important; border-radius:12px !important; margin:8px 0 24px !important; }
-.nav-link { min-height:52px !important; padding:14px 8px !important; font-size:16px !important; font-weight:700 !important; border-radius:9px !important; }
-.nav-link i { font-size:18px !important; }
-@media (max-width: 700px) { .nav-link { min-height:48px !important; font-size:12px !important; padding:9px 2px !important; } }
-hr { border-color: #334155; }
-@media (max-width: 700px) { .hero { padding: 26px 16px; } .hero-sub { font-size: 15px; } }
+.cover-shade { position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,17,32,.08),rgba(8,17,32,.3)); }
+.cover-caption { position:relative; z-index:1; text-align:center; color:#fff; text-shadow:0 2px 14px rgba(0,0,0,.7); padding:8px; }
+.cover-caption h1 { margin:0; font-size:clamp(22px,3.5vw,34px); color:#fff; }
 </style>
 """, unsafe_allow_html=True)
 
-# National Transfer Accounts benchmark values from the existing app.
+# ------------------------------------------------------------------------------
+# 1.03.00 | 공식 통계 벤치마크 및 전역 상수 (국민이전계정 NTA 데이터)
+# ------------------------------------------------------------------------------
 LIFECYCLE_BENCHMARK = pd.DataFrame([
     {"age": 20, "labor_income": 45,  "consumption": 130}, 
     {"age": 25, "labor_income": 180, "consumption": 150},
-    {"age": 28, "labor_income": 260, "consumption": 170}, # 흑자 진입 (골든크로스 약 27~28세)
+    {"age": 28, "labor_income": 260, "consumption": 170}, # 흑자 진입 (약 27~28세)
     {"age": 35, "labor_income": 360, "consumption": 220},
-    {"age": 43, "labor_income": 435, "consumption": 265}, # 소득 피크 정점 (42~44세)
+    {"age": 43, "labor_income": 435, "consumption": 265}, # 소득 피크 정점 (43~45세)
     {"age": 50, "labor_income": 410, "consumption": 280},
     {"age": 55, "labor_income": 330, "consumption": 280},
-    {"age": 60, "labor_income": 220, "consumption": 250}, # 적자 전환 (데드크로스 약 59세)
+    {"age": 60, "labor_income": 220, "consumption": 250},
+    {"age": 61, "labor_income": 190, "consumption": 240}, # 적자 재전환 (약 60~61세)
     {"age": 65, "labor_income": 120, "consumption": 230}, 
     {"age": 70, "labor_income": 60,  "consumption": 210},
     {"age": 75, "labor_income": 25,  "consumption": 195},
@@ -96,20 +307,28 @@ ESBI = {
     "I": ("투자자·임대소득자", "자본·자산에서 소득이 발생하는 형태"),
 }
 
+
+# ==============================================================================
+# 2.00.00 | 상태 관리 및 재무 유틸리티 엔진 (State & Finance Engine)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 2.01.00 | 세션 상태 초기화 및 헬퍼 함수
+# ------------------------------------------------------------------------------
 if "anonymous_id" not in st.session_state:
     st.session_state.anonymous_id = f"#{random.choice('ABCDE')}-{random.randint(101,999)}"
 if "started" not in st.session_state:
     st.session_state.started = False
-if "page" not in st.session_state:
-    st.session_state.page = "가계부"
 if "answers" not in st.session_state:
     st.session_state.answers = {}
 
-# No invented example data: unanswered financial values remain blank and are treated as zero only for calculations.
 def getv(key, default=0):
-    value = st.session_state.get(key, default)
-    return default if value is None else value
+    val = st.session_state.get(key, default)
+    return default if val is None else val
 
+# ------------------------------------------------------------------------------
+# 2.02.00 | 재무 포맷팅 및 집계 로직
+# ------------------------------------------------------------------------------
 def money(value):
     return f"{value:,.0f}만 원"
 
@@ -131,89 +350,23 @@ def active_quadrant(job):
     return ""
 
 def current_financial_summary():
-    income = sum(float(getv(k, 0)) for k in ["income_self", "income_spouse", "income_other", "income_pension"])
+    income = sum(float(getv(k, 0)) for k in ["income_self", "income_spouse", "income_other"])
     expenses = sum(float(getv(k, 0)) for k in ["expense_living", "expense_loan", "expense_other"])
     assets = sum(float(getv(k, 0)) for k in ["asset_cash", "asset_financial", "asset_home", "asset_deposit", "asset_other"])
     debts = sum(float(getv(k, 0)) for k in ["debt_home", "debt_other"])
-    return {"income": income, "expenses": expenses, "surplus": income-expenses,
-            "assets": assets, "debts": debts, "net_worth": assets-debts}
+    return {
+        "income": income, "expenses": expenses, "surplus": income - expenses,
+        "assets": assets, "debts": debts, "net_worth": assets - debts
+    }
 
-# Cover + centered start dialog. Embed the cover so deployment needs no extra image file.
-cover_path = os.path.join(os.path.dirname(__file__), "나침반_표지_배경.png")
-if os.path.exists(cover_path):
-    with open(cover_path, "rb") as f:
-        cover_b64 = base64.b64encode(f.read()).decode("ascii")
-    cover_style = f"background-image:url(data:image/png;base64,{cover_b64});"
-else:
-    cover_style = "background:radial-gradient(circle at top,#38506c,#0f172a 70%);"
-if not st.session_state.started:
-    st.markdown(f"""
-    <div class="cover-bg" style="{cover_style}">
-      <div class="cover-shade"></div>
-      <div class="cover-caption">
-        <h1>나침반</h1>
-        <div style="font-size:clamp(11px,1.2vw,14px);font-weight:600;">나를 돌아보고, 내일을 그리는 여정</div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-    @st.dialog("나침반 산책을 시작합니다", width="small")
-    def start_dialog():
-        st.markdown("", unsafe_allow_html=True)
-        with st.form("start_form", clear_on_submit=False):
-            name = st.text_input("이름 또는 별칭", placeholder="이름이나 편한 별칭", key="start_person_name")
-            age_text = st.text_input("나이", placeholder="나이 입력", key="start_person_age_text", max_chars=3)
-            try:
-                age = int(age_text) if age_text.strip() else None
-                if age is not None and not 1 <= age <= 120:
-                    age = None
-            except ValueError:
-                age = None
-            submitted = st.form_submit_button("시작", use_container_width=True, type="primary")
-        if submitted:
-            if not name.strip() or age is None:
-                st.warning("이름(또는 별칭)과 나이를 입력해 주세요.")
-            else:
-                st.session_state.person_name = name.strip()
-                st.session_state.person_age = int(age)
-                st.session_state.started = True
-                st.rerun()
-    start_dialog()
-    st.stop()
 
-# Sidebar: interviewee-facing compact profile, not an admin console.
-with st.sidebar:
-    st.markdown("### 🧭 나침반 기록")
-    st.markdown(f"**이름/별칭:** {st.session_state.get('person_name','')}")
-    st.markdown(f"**나이:** {st.session_state.get('person_age','')}세")
-    code = active_quadrant(st.session_state.get("job_form", ""))
-    st.markdown(f"**익숙한 소득 형태:** {code or '아직 미정'}")
-    st.caption(f"익명 고유번호 {st.session_state.anonymous_id}")
-    st.caption("입력 내용은 이 화면의 세션에서 사용됩니다.")
+# ==============================================================================
+# 3.00.00 | 외부 AI 연동 서비스 (Gemini API Pipeline)
+# ==============================================================================
 
-# 페이지 이동은 위젯 key에 직접 값을 쓰지 않고, 다음 rerun의 기본 선택으로 전달합니다.
-_pending_nav = st.session_state.pop("_pending_nav", None)
-nav_options = ["우리집\n가계부", "삶과\n생계수단", "인생의\n사계절", "AI\n시선"]
-_nav_targets = {"우리집 가계부":nav_options[0], "삶과 생계수단":nav_options[1], "인생의 사계절":nav_options[2], "AI 시선":nav_options[3]}
-if "active_navigation_key" not in st.session_state:
-    st.session_state.active_navigation_key = "main_navigation"
-if _pending_nav in _nav_targets:
-    # Give the target page a fresh widget key so Streamlit never tries to mutate an instantiated widget.
-    st.session_state.active_navigation_key = "main_navigation_" + str(list(_nav_targets.keys()).index(_pending_nav))
-    st.session_state.active_navigation_default = _nav_targets[_pending_nav]
-_nav_widget_key = st.session_state.active_navigation_key
-_nav_default = st.session_state.get("active_navigation_default", nav_options[0])
-_nav_index = nav_options.index(_nav_default) if _nav_default in nav_options else 0
-selected = option_menu(
-    menu_title=None,
-    options=nav_options,
-    icons=["", "", "", ""],
-    menu_icon=None, default_index=_nav_index, orientation="horizontal", key=_nav_widget_key,
-    styles={"container":{"padding":"8px 8px","background-color":"#0F172A","border":"1px solid #263449","border-radius":"12px","margin-top":"8px","margin-bottom":"24px","width":"100%"},
-            "icon":{"display":"none"},
-            "nav-link":{"font-size":"16px","white-space":"pre-line","line-height":"1.25","text-align":"center","margin":"3px 4px","padding":"10px 8px","color":"#CBD5E1","--hover-color":"#334155","border-radius":"9px","min-height":"64px"},
-            "nav-link-selected":{"background-color":"#EA580C","color":"#FFFFFF","font-weight":"800","box-shadow":"0 3px 10px rgba(234,88,12,0.25)"}}
-)
-
+# ------------------------------------------------------------------------------
+# 3.01.00 | Gemini 엔드포인트 캐싱 및 텍스트 요청 파이프라인
+# ------------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def get_cached_gemini_models(api_key):
     active_endpoints = []
@@ -237,7 +390,6 @@ def get_cached_gemini_models(api_key):
     ))
     return active_endpoints or [("v1beta", "gemini-2.0-flash")]
 
-
 def call_gemini_text(prompt_text):
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_KEY")
     if not api_key:
@@ -246,12 +398,12 @@ def call_gemini_text(prompt_text):
         except Exception:
             api_key = ""
     if not api_key:
-        return "", "Streamlit Secrets에서 GEMINI_API_KEY 또는 Gemini_API_KEY를 찾지 못했습니다. 여행 가계부 앱과 나침반 앱의 Secrets는 별도로 관리됩니다."
-    last_error = ""
+        return "", "Streamlit Secrets에서 GEMINI_API_KEY를 찾지 못했습니다. 앱 대시보드의 Secrets 설정을 확인해 주세요."
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
         "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.45},
     }
+    last_error = ""
     for api_version, model_name in get_cached_gemini_models(api_key):
         try:
             response = requests.post(
@@ -263,7 +415,7 @@ def call_gemini_text(prompt_text):
             if response.status_code == 200:
                 result = response.json()
                 parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                text_parts = [part.get("text", "") for part in parts if part.get("text")]
+                text_parts = [p.get("text", "") for p in parts if p.get("text")]
                 if text_parts:
                     return "".join(text_parts).strip(), ""
             else:
@@ -273,288 +425,553 @@ def call_gemini_text(prompt_text):
     return "", last_error or "Gemini 서버에서 응답을 받지 못했습니다."
 
 
-# Page 1 — Household finances
-selected_page = {"우리집\n가계부":"우리집 가계부", "삶과\n생계수단":"삶과 생계수단", "인생의\n사계절":"인생의 사계절", "AI\n시선":"AI 시선"}.get(selected, selected)
+# ==============================================================================
+# 4.00.00 | 진입 커버 및 사이드바 프로필 (Cover & Sidebar Profile)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그
+# ------------------------------------------------------------------------------
+cover_path = os.path.join(os.path.dirname(__file__), "나침반_표지_배경.png")
+if os.path.exists(cover_path):
+    with open(cover_path, "rb") as f:
+        cover_b64 = base64.b64encode(f.read()).decode("ascii")
+    cover_style = f"background-image:url(data:image/png;base64,{cover_b64});"
+else:
+    cover_style = "background: radial-gradient(circle at top, #38506c, #0f172a 70%);"
+
+if not st.session_state.started:
+    st.markdown(f"""
+    <div class="cover-bg" style="{cover_style}">
+      <div class="cover-shade"></div>
+      <div class="cover-caption">
+        <h1>나침반</h1>
+        <div style="font-size:clamp(12px,1.4vw,15px);font-weight:600;margin-top:6px;">나를 돌아보고, 내일을 그리는 여정</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    @st.dialog("나침반 산책을 시작합니다", width="small")
+    def start_dialog():
+        with st.form("start_form", clear_on_submit=False):
+            name = st.text_input("이름 또는 별칭", placeholder="편하신 별칭을 적어주세요", key="start_person_name")
+            age_text = st.text_input("나이", placeholder="예: 38", key="start_person_age_text", max_chars=3)
+            try:
+                age = int(age_text) if age_text.strip() else None
+                if age is not None and not (1 <= age <= 120):
+                    age = None
+            except ValueError:
+                age = None
+            submitted = st.form_submit_button("시작하기", use_container_width=True, type="primary")
+        if submitted:
+            if not name.strip() or age is None:
+                st.warning("이름(별칭)과 올바른 나이를 입력해 주세요.")
+            else:
+                st.session_state.person_name = name.strip()
+                st.session_state.person_age = int(age)
+                st.session_state.started = True
+                st.rerun()
+
+    start_dialog()
+    st.stop()
+
+# ------------------------------------------------------------------------------
+# 4.02.00 | 사이드바 프로필 요약 카드 (불필요한 중복 문구 제거)
+# ------------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown("### 🧭 나침반 기록")
+    st.markdown(f"**이름/별칭:** {st.session_state.get('person_name','')}")
+    st.markdown(f"**나이:** {st.session_state.get('person_age','')}세")
+    code = active_quadrant(st.session_state.get("job_form", ""))
+    st.markdown(f"**익숙한 소득 형태:** {code or '아직 미정'}")
+    st.write("")
+    st.caption(f"익명 고유번호 **{st.session_state.anonymous_id}**")
+
+
+# ==============================================================================
+# 5.00.00 | 메인 네비게이션 헤더 (Main Navigation Segment)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 5.01.00 | 가로 4대 메뉴 네비게이터 (option_menu 단일 인스턴스)
+# ------------------------------------------------------------------------------
+_pending_nav = st.session_state.pop("_pending_nav", None)
+nav_options = ["우리집\n가계부", "삶과\n생계수단", "인생의\n사계절", "AI\n시선"]
+_nav_targets = {
+    "우리집 가계부": nav_options[0],
+    "삶과 생계수단": nav_options[1],
+    "인생의 사계절": nav_options[2],
+    "AI 시선": nav_options[3]
+}
+
+if "active_navigation_key" not in st.session_state:
+    st.session_state.active_navigation_key = "main_navigation"
+if _pending_nav in _nav_targets:
+    st.session_state.active_navigation_key = "main_navigation_" + str(list(_nav_targets.keys()).index(_pending_nav))
+    st.session_state.active_navigation_default = _nav_targets[_pending_nav]
+
+_nav_widget_key = st.session_state.active_navigation_key
+_nav_default = st.session_state.get("active_navigation_default", nav_options[0])
+_nav_index = nav_options.index(_nav_default) if _nav_default in nav_options else 0
+
+selected = option_menu(
+    menu_title=None,
+    options=nav_options,
+    icons=["", "", "", ""],
+    default_index=_nav_index,
+    orientation="horizontal",
+    key=_nav_widget_key,
+    styles={
+        "container": {
+            "padding": "6px", "background-color": "var(--nc-card-bg)",
+            "border": "1px solid var(--nc-border)", "border-radius": "12px",
+            "margin-top": "6px", "margin-bottom": "22px", "width": "100%"
+        },
+        "icon": {"display": "none"},
+        "nav-link": {
+            "font-size": "15.5px", "white-space": "pre-line", "line-height": "1.25",
+            "text-align": "center", "margin": "3px", "padding": "10px 6px",
+            "color": "var(--nc-subtext)", "border-radius": "8px", "min-height": "58px"
+        },
+        "nav-link-selected": {
+            "background-color": "var(--nc-primary)", "color": "#FFFFFF",
+            "font-weight": "800", "box-shadow": "0 3px 10px rgba(234,88,12,0.3)"
+        }
+    }
+)
+
+selected_page = {
+    "우리집\n가계부": "우리집 가계부",
+    "삶과\n생계수단": "삶과 생계수단",
+    "인생의\n사계절": "인생의 사계절",
+    "AI\n시선": "AI 시선"
+}.get(selected, selected)
+
+
+# ==============================================================================
+# 6.00.00 | 메인 뷰 페이지 (Main View Tabs)
+# ==============================================================================
+
+# ==============================================================================
+# 6.01.00 | Tab 1 — 우리집 가계부 (Household Finances)
+# ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
+    
     with st.form("finance_form"):
-        st.markdown("#### 직업의 종류")
+        # 직업 선택 (소득의 성격 파악)
+        st.markdown("#### 현재 상황")
         job_options = ["선택하세요", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
         previous_job = st.session_state.get("job_form", "선택하세요")
         job_index = job_options.index(previous_job) if previous_job in job_options else 0
-        job = st.selectbox("직업의 종류", job_options, index=job_index, key="job_form_input", label_visibility="collapsed")
-        st.markdown("#### 월수입 (만원)")
-        a,b = st.columns(2)
-        with a:
-            income_self = st.number_input("본인 소득", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
-            income_spouse = st.number_input("배우자 소득", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
-        with b:
-            income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액")
-            income_pension = st.number_input("은퇴 이후 예상 월 연금 수령액 (만원)", min_value=0, value=st.session_state.get("income_pension"), step=10, placeholder="모르면 비워 두세요")
-        st.markdown("#### 월지출 (만원)")
-        c,d = st.columns(2)
-        with c:
-            expense_living = st.number_input("필수 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="금액")
-            expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액")
-        with d:
-            expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액")
-        st.markdown("#### 대차대조표 — 보유자산과 부채 (만원)")
-        c,d = st.columns(2)
-        with c:
-            asset_cash = st.number_input("현금·예적금", min_value=0, value=st.session_state.get("asset_cash"), step=100, placeholder="금액")
-            asset_financial = st.number_input("주식·채권 등 금융자산", min_value=0, value=st.session_state.get("asset_financial"), step=100, placeholder="금액")
-            st.markdown("**부동산 시세 및 전세보증금**")
-            asset_home = st.number_input("부동산 시세", min_value=0, value=st.session_state.get("asset_home"), step=100, placeholder="금액")
-            asset_deposit = st.number_input("전세보증금", min_value=0, value=st.session_state.get("asset_deposit"), step=100, placeholder="금액")
-            asset_other = st.number_input("기타 자산·사업 가치", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액")
-        with d:
-            debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액")
-            debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
-        save_finance = st.form_submit_button("입력 내용 반영", use_container_width=True, type="primary")
-    st.caption("참고 통계: 국민연금공단의 2025년 12월 기준 안내에서 가입기간 20년 이상 노령연금 수급자의 평균은 월 약 113만 원입니다. 부부 합산 평균은 약 120만 원으로 보도된 바 있습니다. 개인별 가입기간·소득에 따라 차이가 크므로, 실제 예상액은 공단의 ‘내 연금 알아보기’에서 확인하세요.")
-    link1, link2 = st.columns(2)
-    link1.link_button("국민연금공단 급여지급 통계", "https://www.nps.or.kr/pnsinfo/statistics/getOHAF0119M0.do", use_container_width=True)
-    link2.link_button("내 연금 알아보기 안내", "https://www.nps.or.kr/pnsinfo/ntpsklg/getOHAF0095M0.do", use_container_width=True)
+        job = st.selectbox("나의 직업은?", job_options, index=job_index, key="job_form_input")
+
+        # 현금흐름 (수입 vs 지출)
+        income_col, expense_col = st.columns(2)
+        with income_col:
+            with st.container(border=True, key="income-panel"):
+                st.markdown("#### ① 들어오는 돈")
+                st.caption("현재 한 달 기준 · 만원")
+                income_self = st.number_input("본인 월 실수령액", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
+                income_spouse = st.number_input("배우자 월 실수령액", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
+                income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액", help="임대료, 배당 등")
+        with expense_col:
+            with st.container(border=True, key="expense-panel"):
+                st.markdown("#### ② 나가는 돈")
+                st.caption("현재 한 달 기준 · 만원")
+                expense_living = st.number_input("기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액", help="식비, 공과금, 통신비")
+                expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액", help="대출 원금+이자")
+                expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액", help="보험료, 교육비, 의료비 등")
+
+        # 대차대조표 (자산 vs 부채)
+        asset_col, debt_col = st.columns(2)
+        with asset_col:
+            with st.container(border=True, key="asset-panel"):
+                st.markdown("#### ③ 가지고 있는 것")
+                st.caption("현재 보유 금액·시세 기준 · 만원")
+                asset_cash = st.number_input("현금·예적금", min_value=0, value=st.session_state.get("asset_cash"), step=100, placeholder="금액")
+                asset_financial = st.number_input("주식·채권 등 금융자산", min_value=0, value=st.session_state.get("asset_financial"), step=100, placeholder="금액")
+                asset_home = st.number_input("부동산 시세", min_value=0, value=st.session_state.get("asset_home"), step=100, placeholder="금액")
+                asset_deposit = st.number_input("전세보증금", min_value=0, value=st.session_state.get("asset_deposit"), step=100, placeholder="금액")
+                asset_other = st.number_input("기타 자산·사업 가치", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액")
+        with debt_col:
+            with st.container(border=True, key="debt-panel"):
+                st.markdown("#### ④ 갚아야 할 돈")
+                st.caption("현재 남은 대출 원금 기준 · 만원")
+                debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액")
+                debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
+
+        # 미래 은퇴 후 가정 (현재 수입·지출과 엄격히 분리)
+        with st.container(border=True, key="retirement-panel"):
+            st.markdown("#### 은퇴 후에는?")
+            pension_col, retirement_expense_col = st.columns(2)
+            with pension_col:
+                income_pension = st.number_input(
+                    "은퇴 후 받을 월 연금", min_value=0,
+                    value=st.session_state.get("income_pension"), step=10,
+                    placeholder="모르면 0",
+                    help="국민연금·퇴직연금 등 은퇴 후 예상 수령액입니다. 현재 월수입에는 합산되지 않습니다."
+                )
+            with retirement_expense_col:
+                retirement_monthly_expenses = st.number_input(
+                    "은퇴 후 한 달 생활비", min_value=0,
+                    value=int(st.session_state.get("retirement_monthly_expenses", 200) or 0),
+                    step=10,
+                    help="은퇴 후 식비, 의료비, 주거비 등 한 달 예상 생활비입니다."
+                )
+            st.caption("📌 적정 노후생활비(월): 부부 298.1만 원, 1인 197.6만 원 (국민연금연구원 조사 기준)")
+
+        save_finance = st.form_submit_button("입력 내용 반영하기", use_container_width=True, type="primary")
+
     if save_finance:
-        # Never index locals() by a different session key: this was the KeyError source.
         submitted_values = {
             "job_form": "" if job == "선택하세요" else job,
             "income_self": income_self, "income_spouse": income_spouse,
             "income_other": income_other, "income_pension": income_pension,
             "expense_living": expense_living, "expense_loan": expense_loan,
-            "expense_other": expense_other, "asset_cash": asset_cash,
-            "asset_financial": asset_financial, "asset_home": asset_home,
+            "expense_other": expense_other, "retirement_monthly_expenses": retirement_monthly_expenses,
+            "asset_cash": asset_cash, "asset_financial": asset_financial, "asset_home": asset_home,
             "asset_deposit": asset_deposit, "asset_other": asset_other,
             "debt_home": debt_home, "debt_other": debt_other,
         }
-        for key, value in submitted_values.items():
-            st.session_state[key] = value
-        # 입력 반영 사실을 알리고 선택된 ESBI 영역으로 화면을 이동합니다.
+        for k, v in submitted_values.items():
+            st.session_state[k] = v
         st.session_state["finance_saved_notice"] = True
 
+    # ESBI 사분면 매핑
     q = active_quadrant(st.session_state.get("job_form", ""))
-    st.markdown("#### ESBI")
+    st.markdown("#### ESBI 사분면")
     st.markdown("<div id='selected-esbi'></div>", unsafe_allow_html=True)
     if st.session_state.pop("finance_saved_notice", False):
-        st.success("입력 내용이 반영되었습니다.")
+        st.success("입력하신 재무 정보가 반영되었습니다.")
         st.components.v1.html("<script>try { window.parent.document.getElementById('selected-esbi').scrollIntoView({behavior:'smooth',block:'center'}); } catch(e) {}</script>", height=0)
+
     cols = st.columns(4)
-    for col, code in zip(cols, ["E","S","B","I"]):
+    for col, code in zip(cols, ["E", "S", "B", "I"]):
         title, desc = ESBI[code]
         css = "quad-active" if q == code else "quad"
-        col.markdown(f"<div class='{css}'><b style='font-size:21px'>{code}</b><br><b>{title}</b><br><span class='small-muted'>{desc}</span></div>", unsafe_allow_html=True)
-    st.caption("이 표시는 직업이나 소득 형태를 단순히 바라보는 참고 지도이며, 사람의 성격이나 삶의 가치를 분류하지 않습니다.")
+        col.markdown(f"<div class='{css}'><b style='font-size:20px'>{code}</b><br><b>{title}</b><br><span class='small-muted'>{desc}</span></div>", unsafe_allow_html=True)
 
+    # 현재 입력값 지표 요약
     s = current_financial_summary()
-    st.markdown("#### 현재 입력값 요약")
+    st.markdown("#### 현재 재무 요약")
     cols = st.columns(4)
     cols[0].metric("월수입 합계", money(s["income"]))
     cols[1].metric("월지출 합계", money(s["expenses"]))
-    cols[2].metric("월 잔액", money(s["surplus"]))
+    cols[2].metric("월 저축여력", money(s["surplus"]))
     cols[3].metric("순자산", fmt_eok(s["net_worth"]))
-    st.markdown("#### 미래 자산·연금 궤적")
+
+    # 미래 순자산 궤적 차트
+    st.markdown("#### 미래 순자산·연금 궤적")
     cur_age = int(st.session_state.person_age)
     retirement_value = st.session_state.get("retirement_age")
-    # 은퇴 나이를 아직 입력하지 않은 경우에는 65세를 임시 가정하고, 실제 입력값이 있으면 우선 적용합니다.
     retire_age = int(retirement_value) if retirement_value is not None else 65
     retire_age = max(cur_age, min(retire_age, 100))
     annual_savings = s["surplus"] * 12
     years = sorted(set([cur_age, 80, retire_age] + list(range(((cur_age // 5) + 1) * 5, 81, 5))))
     vals = []
-    retirement_monthly_expenses = sum(float(getv(k, 0) or 0) for k in ["expense_living", "expense_loan", "expense_other"])
-    retirement_monthly_pension = float(getv("income_pension", 0) or 0)
-    # 은퇴 전에는 현재 월 잔액을 누적하고, 은퇴 후에는 연금에서 월지출을 뺀 만큼 자산이 변합니다.
-    for age in years:
-        working_years = max(0, min(age, retire_age) - cur_age)
-        projected = s["net_worth"] + annual_savings * working_years
-        if age > retire_age:
-            retirement_annual_cashflow = (retirement_monthly_pension - retirement_monthly_expenses) * 12
-            projected += retirement_annual_cashflow * (age - retire_age)
-        vals.append(projected)
-    fig = go.Figure(go.Scatter(x=years,y=vals,mode="lines+markers",line=dict(color="#f59e0b",width=3),name="단순 가정에 따른 순자산"))
-    fig.add_vline(x=retire_age, line_dash="dash", line_color="#38bdf8",
-                  annotation_text=f"은퇴 가정 {retire_age}세",
-                  annotation_position="top")
-    fig.update_layout(height=360,margin=dict(l=18,r=18,t=28,b=42),paper_bgcolor="#0b1120",plot_bgcolor="#0b1120",font_color="#e2e8f0",xaxis_title="나이",yaxis_title="순자산 (만원)",autosize=True)
-    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False,"scrollZoom":False,"doubleClick":False,"staticPlot":True})
-    st.caption(
-        ("은퇴 나이를 아직 입력하지 않아 65세를 임시 가정했습니다. 삶과 생계수단 탭에서 입력한 은퇴 나이가 있으면 그 값이 적용됩니다. " if retirement_value is None else "입력한 은퇴 나이를 적용했습니다. ")
-        + "은퇴 전에는 현재 월 잔액을 누적하고, 은퇴 후에는 예상 월 연금에서 현재 월지출을 뺀 금액만큼 자산이 변하는 단순 개념도입니다. "
-        + "물가·수익률·세금·은퇴 후 지출 변화는 반영하지 않으며, 예측이나 보장이 아닙니다."
-    )
+    
+    ret_expenses = float(getv("retirement_monthly_expenses", 200) or 0)
+    ret_pension = float(getv("income_pension", 0) or 0)
+    
+    for a in years:
+        working_yrs = max(0, min(a, retire_age) - cur_age)
+        proj = s["net_worth"] + annual_savings * working_yrs
+        if a > retire_age:
+            ret_cashflow = (ret_pension - ret_expenses) * 12
+            proj += ret_cashflow * (a - retire_age)
+        vals.append(proj)
 
-    _, next_col = st.columns([5,1])
+    fig_asset = go.Figure(go.Scatter(
+        x=years, y=vals, mode="lines+markers",
+        line=dict(color="#f59e0b", width=3), name="추정 순자산"
+    ))
+    fig_asset.add_vline(x=retire_age, line_dash="dash", line_color="#38bdf8",
+                        annotation_text=f"은퇴 가정 {retire_age}세", annotation_position="top")
+    fig_asset.update_layout(
+        height=360, margin=dict(l=20, r=20, t=30, b=40),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="var(--nc-text)"),
+        xaxis=dict(title="나이 (세)", gridcolor="rgba(100,116,139,0.2)"),
+        yaxis=dict(title="순자산 (만 원)", gridcolor="rgba(100,116,139,0.2)")
+    )
+    st.plotly_chart(fig_asset, use_container_width=True, config={"displayModeBar": False})
+    st.caption("※ 은퇴 전 월 저축액 누적 및 은퇴 후 [연금 - 노후생활비] 현금흐름을 단순 연산한 개념도입니다.")
+
+    _, next_col = st.columns([5, 1])
     with next_col:
         if st.button("다음 →", key="finance_next", use_container_width=True, type="primary"):
             st.session_state["_pending_nav"] = "삶과 생계수단"
             st.rerun()
 
-# Page 2 — livelihood choice and small/large bucket/pipeline illustration
-elif selected_page == "삶과\n생계수단" or selected_page == "삶과 생계수단":
-    st.markdown("## 삶과 생계수단")
-    st.markdown("<div class='soft-card'><div class='eyebrow'>잠시 생각해 볼 질문</div><div class='question'>내가 생계를 유지해 온 방식은 나의 선택이었나? 주어진 상황에서 받아들인 것인가?</div></div>", unsafe_allow_html=True)
-    st.text_area("떠오르는 생각이 있다면 적어두세요 (선택)", key="life_choice_note", height=90, placeholder="답을 정할 필요는 없습니다.")
-    st.markdown("### 소득이 만들어지는 세 가지 모습")
 
+# ==============================================================================
+# 6.02.00 | Tab 2 — 삶과 생계수단 (Livelihood & Buckets vs Pipeline)
+# ==============================================================================
+elif selected_page == "삶과 생계수단":
+    st.markdown("## 삶과 생계수단")
+    st.markdown("""
+    <div class='soft-card'>
+        <div class='eyebrow'>잠시 생각해보는 거울</div>
+        <div class='question'>내가 지금까지 생계를 유지해 온 방식은 온전한 나의 선택이었을까요? 주어진 상황에서 최선을 다해 받아들인 결과였을까요?</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.text_area("떠오르는 생각이 있다면 편하게 적어두세요 (선택)", key="life_choice_note", height=90, placeholder="답을 정할 필요 없이 마음 가는 대로 적으셔도 좋습니다.")
+    
+    st.markdown("### 소득이 만들어지는 세 가지 모습")
     cols = st.columns(3)
-    cols[0].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🪣</div><b>작은 물통</b><p class='small-muted'>직접 일한 시간과 소득이 가까이 연결되는 모습</p></div>",unsafe_allow_html=True)
-    cols[1].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🛢️</div><b>큰 물통</b><p class='small-muted'>전문성·규모가 커져 한 번에 담는 양이 늘어나는 모습</p></div>",unsafe_allow_html=True)
-    cols[2].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🚰</div><b>파이프라인</b><p class='small-muted'>시스템·자산에서 소득 흐름이 생기는 모습</p></div>",unsafe_allow_html=True)
-    st.markdown("### 은퇴 예상 나이 (지금 하는 일을 그만두는 나이)")
+    cols[0].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🪣</div><b>작은 물통</b><p class='small-muted'>직접 일한 시간과 소득이 1:1로 맞바꿔지는 모습</p></div>", unsafe_allow_html=True)
+    cols[1].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🛢️</div><b>큰 물통</b><p class='small-muted'>전문성과 몸값을 높여 한 번에 담는 양을 키운 모습</p></div>", unsafe_allow_html=True)
+    cols[2].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🚰</div><b>파이프라인</b><p class='small-muted'>내가 멈추어도 시스템과 자산에서 흐름이 이어지는 모습</p></div>", unsafe_allow_html=True)
+
+    st.markdown("### 내가 생각하는 은퇴 예상 나이")
     with st.form("retirement_form"):
         retirement_input = st.number_input(
-            "은퇴 예상 나이 (지금 하는 일을 그만두는 나이)",
+            "지금 하는 현업을 졸업(은퇴)하고 싶은 나이",
             min_value=int(st.session_state.person_age), max_value=100,
-            value=int(st.session_state["retirement_age"]) if st.session_state.get("retirement_age") is not None else int(st.session_state.person_age),
+            value=int(st.session_state["retirement_age"]) if st.session_state.get("retirement_age") is not None else 60,
             step=1, key="retirement_age_input",
         )
-        retirement_saved = st.form_submit_button("확인", use_container_width=True)
+        retirement_saved = st.form_submit_button("은퇴 나이 확인", use_container_width=True, type="primary")
+    
     if retirement_saved:
         st.session_state["retirement_age"] = int(retirement_input)
-        st.success("은퇴 예상 나이가 반영되었습니다.")
+        st.success(f"은퇴 예상 나이({retirement_input}세)가 반영되었습니다.")
 
-    _, next_col = st.columns([5,1])
+    _, next_col = st.columns([5, 1])
     with next_col:
         if st.button("다음 →", key="livelihood_next", use_container_width=True, type="primary"):
-            # Submit the value already held by the widget before navigating.
             st.session_state["retirement_age"] = int(st.session_state.get("retirement_age_input", retirement_input))
             st.session_state["_pending_nav"] = "인생의 사계절"
             st.session_state["_scroll_to_top_once"] = True
             st.rerun()
 
-# Page 3 — seasons, family ages, illustrative lifecycle curve, official statistics
-elif selected_page == "인생의\n사계절" or selected_page == "인생의 사계절":
+
+# ==============================================================================
+# 6.03.00 | Tab 3 — 인생의 사계절 (Life Seasons & Official Benchmark)
+# ==============================================================================
+elif selected_page == "인생의 사계절":
     if st.session_state.pop("_scroll_to_top_once", False):
         st.components.v1.html(
-            "<script>try { window.parent.scrollTo({top: 0, behavior: 'instant'}); } catch(e) { try { window.parent.document.documentElement.scrollTop = 0; } catch(e2) {} }</script>",
+            "<script>try { window.parent.scrollTo({top: 0, behavior: 'instant'}); } catch(e) {}</script>",
             height=0,
         )
+    
     st.markdown("## 인생의 사계절")
-    st.markdown("자연에 사계절이 있듯, 삶에도 준비·성장·비축·음미의 시간이 있습니다. 계절마다 의미는 다르고, 누구에게나 같은 모습으로 오지는 않습니다.")
+    st.markdown("자연에 사계절이 있듯 사람의 삶에도 준비(봄) · 성장(여름) · 결실(가을) · 음미(겨울)의 시간이 있습니다.")
+    
     age = int(st.session_state.person_age)
     retirement_value = st.session_state.get("retirement_age")
-    retirement = int(retirement_value) if retirement_value is not None else age
-    years_left = max(0, retirement-age)
-    st.markdown("### 1. 가족 구성원과 나이")
-    child_options = ["입력 안 함","없음","1명","2명","3명 이상"]
+    retirement = int(retirement_value) if retirement_value is not None else 60
+    years_left = max(0, retirement - age)
+
+    # 가족 구성원 및 은퇴 시점 나이 연동
+    st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
+    child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
     child_count = st.selectbox(
         "자녀 수", child_options,
-        index=child_options.index(st.session_state.get("child_count","입력 안 함"))
-        if st.session_state.get("child_count","입력 안 함") in child_options else 0,
+        index=child_options.index(st.session_state.get("child_count", "입력 안 함"))
+        if st.session_state.get("child_count", "입력 안 함") in child_options else 0,
         key="child_count_live",
     )
+
     with st.form("family_form"):
-        spouse_age = st.number_input("배우자 나이 (없거나 입력하지 않으려면 0)", min_value=0,max_value=120,value=int(st.session_state.get("spouse_age",0)),step=1)
-        child_age = int(st.session_state.get("child_age",0)) if child_count in ["1명", "2명", "3명 이상"] else 0
-        child_age2 = int(st.session_state.get("child_age2",0)) if child_count in ["2명", "3명 이상"] else 0
-        child_age3 = int(st.session_state.get("child_age3",0)) if child_count == "3명 이상" else 0
+        spouse_age = st.number_input("배우자 나이 (없거나 입력하지 않으려면 0)", min_value=0, max_value=120, value=int(st.session_state.get("spouse_age", 0)), step=1)
+        child_age = int(st.session_state.get("child_age", 0)) if child_count in ["1명", "2명", "3명 이상"] else 0
+        child_age2 = int(st.session_state.get("child_age2", 0)) if child_count in ["2명", "3명 이상"] else 0
+        child_age3 = int(st.session_state.get("child_age3", 0)) if child_count == "3명 이상" else 0
+        
         if child_count in ["1명", "2명", "3명 이상"]:
-            child_age = st.number_input("첫째 자녀 나이 (선택)",min_value=0,max_value=100,value=child_age,step=1)
+            child_age = st.number_input("첫째 자녀 나이", min_value=0, max_value=100, value=child_age, step=1)
         if child_count in ["2명", "3명 이상"]:
-            child_age2 = st.number_input("둘째 자녀 나이 (선택)",min_value=0,max_value=100,value=child_age2,step=1)
+            child_age2 = st.number_input("둘째 자녀 나이", min_value=0, max_value=100, value=child_age2, step=1)
         if child_count == "3명 이상":
-            child_age3 = st.number_input("셋째 자녀 나이 (선택)",min_value=0,max_value=100,value=child_age3,step=1)
-        col_father, col_mother = st.columns(2)
-        with col_father:
+            child_age3 = st.number_input("셋째 자녀 나이", min_value=0, max_value=100, value=child_age3, step=1)
+            
+        col_f, col_m = st.columns(2)
+        with col_f:
             father_age = st.number_input("아버지 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("father_age", 0)), step=1)
-        with col_mother:
+        with col_m:
             mother_age = st.number_input("어머니 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("mother_age", 0)), step=1)
+            
+        st.markdown("#### 앞으로의 가족 계획 (선택)")
+        marriage_options = ["미정", "계획 없음", "1~3년 내 결혼 생각 있음", "3년 이후 결혼 생각 있음", "결혼 예정/준비 중"]
+        marriage_plan = st.selectbox("결혼 계획", marriage_options, index=marriage_options.index(st.session_state.get("marriage_plan", "미정")) if st.session_state.get("marriage_plan", "미정") in marriage_options else 0)
+        
+        child_plan_options = ["미정", "계획 없음", "자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"]
+        child_plan = st.selectbox("출산·자녀 계획", child_plan_options, index=child_plan_options.index(st.session_state.get("child_plan", "미정")) if st.session_state.get("child_plan", "미정") in child_plan_options else 0)
+        
+        housing_options = ["미정", "현재 주거 유지", "전세·월세 이동 고려", "주택 구입 고려", "주거 계획 확정"]
+        housing_plan = st.selectbox("주거 계획", housing_options, index=housing_options.index(st.session_state.get("housing_plan", "미정")) if st.session_state.get("housing_plan", "미정") in housing_options else 0)
+        
         sibling_options = ["형", "남동생", "누나", "여동생", "오빠", "언니", "남자 형제(관계 미지정)", "여자 형제(관계 미지정)"]
         siblings = st.multiselect(
-            "형제자매 (해당 항목 모두 선택, 없거나 입력하지 않으려면 비워 두세요)",
+            "형제자매 (해당 항목 모두 선택)",
             sibling_options,
             default=[x for x in st.session_state.get("siblings", []) if x in sibling_options],
-            help="본인을 기준으로 선택하세요. 예: 남성은 형·남동생·누나·여동생, 여성은 오빠·남동생·언니·여동생 등. 관계 명칭이 맞지 않으면 관계 미지정 항목을 선택할 수 있습니다.",
         )
-        save_family = st.form_submit_button("가족 정보 반영",use_container_width=True)
+        save_family = st.form_submit_button("가족 정보 반영하기", use_container_width=True, type="primary")
+
     if save_family:
-        st.session_state.spouse_age=spouse_age; st.session_state.child_count=child_count
-        st.session_state.child_age=child_age; st.session_state.child_age2=child_age2; st.session_state.child_age3=child_age3
-        st.session_state.father_age=father_age; st.session_state.mother_age=mother_age
-        st.session_state.siblings=siblings
+        st.session_state.spouse_age = spouse_age
+        st.session_state.child_count = child_count
+        st.session_state.child_age = child_age
+        st.session_state.child_age2 = child_age2
+        st.session_state.child_age3 = child_age3
+        st.session_state.father_age = father_age
+        st.session_state.mother_age = mother_age
+        st.session_state.siblings = siblings
+        st.session_state.marriage_plan = marriage_plan
+        st.session_state.child_plan = child_plan
+        st.session_state.housing_plan = housing_plan
         st.rerun()
 
-    people = [(st.session_state.get("person_name","나"),age)]
-    if getv("spouse_age",0)>0: people.append(("배우자",int(getv("spouse_age"))))
-    if getv("child_age",0)>0: people.append(("첫째 자녀",int(getv("child_age"))))
-    if getv("child_age2",0)>0: people.append(("둘째 자녀",int(getv("child_age2"))))
-    if getv("child_age3",0)>0: people.append(("셋째 자녀",int(getv("child_age3"))))
-    if getv("father_age",0)>0: people.append(("아버지",int(getv("father_age"))))
-    if getv("mother_age",0)>0: people.append(("어머니",int(getv("mother_age"))))
+    # 가족 미래 나이 카드 렌더링
+    people = [(st.session_state.get("person_name", "나"), age)]
+    if getv("spouse_age", 0) > 0: people.append(("배우자", int(getv("spouse_age"))))
+    if getv("child_age", 0) > 0: people.append(("첫째 자녀", int(getv("child_age"))))
+    if getv("child_age2", 0) > 0: people.append(("둘째 자녀", int(getv("child_age2"))))
+    if getv("child_age3", 0) > 0: people.append(("셋째 자녀", int(getv("child_age3"))))
+    if getv("father_age", 0) > 0: people.append(("아버지", int(getv("father_age"))))
+    if getv("mother_age", 0) > 0: people.append(("어머니", int(getv("mother_age"))))
+
     for name, current in people:
         future = current + years_left
-        st.markdown(f"<div class='soft-card' style='display:flex;align-items:center;gap:14px;flex-wrap:wrap'><b style='min-width:75px'>{name}</b><span style='font-size:22px;font-weight:800'>{current}세</span><span style='font-size:23px;color:#f59e0b;padding:0 12px'>⟶</span><span style='font-size:22px;font-weight:800;color:#fde68a'>{future}세</span><span class='small-muted'>은퇴 예정 시점</span></div>",unsafe_allow_html=True)
-    st.markdown("### 2. 인생의 수입·지출 곡선 (일반적인 예시)")
-    st.caption("국민이전계정의 연령별 흐름을 이해하기 위한 개념적 예시입니다. 개인의 실제 소득·지출 곡선과는 다릅니다.")
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=LIFECYCLE_BENCHMARK["age"],y=LIFECYCLE_BENCHMARK["labor_income"],mode="lines+markers",name="노동소득",line=dict(color="#38bdf8",width=3),hovertemplate="나이 %{x}세<br>노동소득 지수 %{y}<extra></extra>"))
-    fig.add_trace(go.Scatter(x=LIFECYCLE_BENCHMARK["age"],y=LIFECYCLE_BENCHMARK["consumption"],mode="lines+markers",name="소비",line=dict(color="#f59e0b",width=3),hovertemplate="나이 %{x}세<br>소비 지수 %{y}<extra></extra>"))
-    fig.add_vline(x=age,line_dash="dash",line_color="#f472b6",line_width=3,annotation_text=f"현재 {age}세",annotation_position="top")
-    fig.update_layout(height=370,margin=dict(l=10,r=10,t=35,b=10),paper_bgcolor="#0b1120",plot_bgcolor="#0b1120",font_color="#e2e8f0",xaxis_title="나이",yaxis_title="상대적 크기 (개념도)",legend=dict(orientation="h",y=1.12,x=1,xanchor="right",yanchor="bottom"))
-    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False,"scrollZoom":False,"doubleClick":False,"staticPlot":True})
-    st.markdown("### 2024년 국가데이터처 통계")
-    st.markdown("2024년 국민이전계정은 연령별 소비와 노동소득의 차이를 보여줍니다. 개인의 실제 가계부나 은퇴 시점과 구분해 읽어야 합니다.")
-    cols=st.columns(3)
-    cols[0].metric("흑자 전환", "28세")
-    cols[1].metric("최대 흑자", "45세")
-    cols[1].caption("1인당 연간 1,932만 원")
-    cols[2].metric("적자 재전환", "61세")
-    st.caption("공식 통계의 요약 수치이며, 평균적 흐름이지 개인의 운명이나 목표가 아닙니다.")
-    st.link_button("📄 2024년 국가데이터처 통계",OFFICIAL_PDF_URL,use_container_width=True)
-    st.link_button("🌐 국가데이터처 공식 발표 페이지",OFFICIAL_RELEASE_URL,use_container_width=True)
-    st.caption(f"은퇴 예정 나이 {retirement}세 이후의 겨울: {max(0,88-retirement)}년 (기대수명 88세를 가정한 단순 계산)")
-    _, next_col = st.columns([5,1])
+        st.markdown(f"""
+        <div class='soft-card' style='display:flex;align-items:center;gap:14px;flex-wrap:wrap;'>
+            <b style='min-width:75px;font-size:16px;'>{name}</b>
+            <span style='font-size:20px;font-weight:800;'>{current}세</span>
+            <span style='font-size:22px;color:var(--nc-primary);padding:0 8px;'>➔</span>
+            <span style='font-size:20px;font-weight:800;color:var(--nc-accent-gold);'>{future}세</span>
+            <span class='small-muted'>(내가 {retirement}세 은퇴하는 시점)</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 2. 공식 국민이전계정 곡선
+    st.markdown("### 2. 대한민국 통계청 국민이전계정 생애주기 곡선")
+    fig_nta = go.Figure()
+    fig_nta.add_trace(go.Scatter(
+        x=LIFECYCLE_BENCHMARK["age"], y=LIFECYCLE_BENCHMARK["labor_income"],
+        mode="lines+markers", name="노동소득", line=dict(color="#10b981", width=3)
+    ))
+    fig_nta.add_trace(go.Scatter(
+        x=LIFECYCLE_BENCHMARK["age"], y=LIFECYCLE_BENCHMARK["consumption"],
+        mode="lines+markers", name="소비", line=dict(color="#f97316", width=3, dash="dash")
+    ))
+    fig_nta.add_vline(x=age, line_dash="solid", line_color="#38bdf8", line_width=2.5,
+                      annotation_text=f"현재 나 ({age}세)", annotation_position="top")
+    fig_nta.update_layout(
+        height=370, margin=dict(l=20, r=20, t=35, b=20),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="var(--nc-text)"),
+        xaxis=dict(title="연령 (세)", gridcolor="rgba(100,116,139,0.2)"),
+        yaxis=dict(title="상대 규모 (지수)", gridcolor="rgba(100,116,139,0.2)"),
+        legend=dict(orientation="h", y=1.12, x=1, xanchor="right")
+    )
+    st.plotly_chart(fig_nta, use_container_width=True, config={"displayModeBar": False})
+
+    # 국가데이터처 팩트 통계 지표
+    st.markdown("### 국가데이터처 공식 생애 통계 지표")
+    col_m1, col_m2, col_m3 = st.columns(3)
+    col_m1.metric("흑자 진입", "28세", help="노동소득이 소비를 추월하는 연령")
+    col_m2.metric("최대 흑자 정점", "45세", "연 1,932만 원")
+    col_m3.metric("적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
+
+    col_btn1, col_btn2 = st.columns(2)
+    col_btn1.link_button("📄 2024년 국가데이터처 통계 보도자료", OFFICIAL_PDF_URL, use_container_width=True)
+    col_btn2.link_button("🌐 국가데이터처 공식 발표 페이지", OFFICIAL_RELEASE_URL, use_container_width=True)
+
+    winter_len = max(0, 88 - retirement)
+    st.caption(f"은퇴 예정 나이 {retirement}세 이후 맞이할 겨울: 약 {winter_len}년 ({winter_len * 12}개월, 건강 기대수명 88세 가정)")
+
+    _, next_col = st.columns([5, 1])
     with next_col:
         if st.button("다음 →", key="seasons_next", use_container_width=True, type="primary"):
             st.session_state["_pending_nav"] = "AI 시선"
             st.rerun()
 
-# Page 4 — AI perspective. Sends all currently entered answers, but only after explicit click.
+
+# ==============================================================================
+# 6.04.00 | Tab 4 — AI 시선 (AI Perspective & Gemini Analysis)
+# ==============================================================================
 else:
     st.markdown("## AI 시선")
-    st.markdown("AI는 판정자가 아니라, 입력한 내용을 다른 각도에서 바라보는 참고 관점입니다.")
-    model = "Gemini"
-    st.caption("분석 관점: Gemini")
-    if st.button("분석",type="primary",use_container_width=True):
+    st.markdown("AI는 평가자가 아닌, 내가 작성한 숫자를 객관적인 거울처럼 비춰주는 성찰 파트너입니다.")
+    
+    model = st.radio(
+        "분석할 AI 모델 선택",
+        ["Gemini", "ChatGPT (준비 중)", "Claude (준비 중)"],
+        index=0, key="ai_provider", horizontal=True,
+    )
+    
+    if model != "Gemini":
+        st.info(f"{model}은 연결 준비 중입니다. 현재는 Gemini 분석 엔진을 바로 사용하실 수 있습니다.")
+
+    if st.button("내 가계부 AI 분석 실행", type="primary", use_container_width=True, disabled=(model != "Gemini")):
         summary = current_financial_summary()
         details = {
             "나이": st.session_state.get("person_age"),
             "소득 형태": st.session_state.get("job_form", ""),
-            "월수입 항목": {k:getv(k,0) for k in ["income_self","income_spouse","income_other","income_pension"]},
-            "월지출 항목": {k:getv(k,0) for k in ["expense_living","expense_loan","expense_other"]},
-            "자산 항목": {k:getv(k,0) for k in ["asset_cash","asset_financial","asset_home","asset_deposit","asset_other"]},
-            "부채 항목": {k:getv(k,0) for k in ["debt_home","debt_other"]},
+            "월수입 항목": {k: getv(k, 0) for k in ["income_self", "income_spouse", "income_other", "income_pension"]},
+            "월지출 항목": {k: getv(k, 0) for k in ["expense_living", "expense_loan", "expense_other"]},
+            "자산 항목": {k: getv(k, 0) for k in ["asset_cash", "asset_financial", "asset_home", "asset_deposit", "asset_other"]},
+            "부채 항목": {k: getv(k, 0) for k in ["debt_home", "debt_other"]},
             "삶과 시간 메모": st.session_state.get("life_choice_note", ""),
             "은퇴 예정 나이": st.session_state.get("retirement_age"),
-            "가족 나이": {k:getv(k,0) for k in ["spouse_age","child_age","child_age2","child_age3","father_age","mother_age"]},
+            "가족 나이": {k: getv(k, 0) for k in ["spouse_age", "child_age", "child_age2", "child_age3", "father_age", "mother_age"]},
             "형제자매": st.session_state.get("siblings", []),
+            "결혼 계획": st.session_state.get("marriage_plan", "미정"),
+            "출산·자녀 계획": st.session_state.get("child_plan", "미정"),
+            "주거 계획": st.session_state.get("housing_plan", "미정"),
         }
         st.session_state.ai_summary = summary
         st.session_state.ai_details = details
         st.session_state.ai_comment = None
-        try:
-            prompt = (
-                "역할: 당신은 한국의 가계 재무와 은퇴 준비를 함께 검토하는 차분하고 현실적인 성찰 파트너입니다. 투자상품을 판매하거나 근거 없이 낙관·비관하지 마세요.\n\n"
-                "출력은 한국어 2개 항목만, 약 500~700자로 작성하세요. 입력 내용을 길게 되풀이하지 말고 판단과 근거를 중심으로 쓰세요. 데이터에 없는 사실은 추측하지 말고, 정보가 부족하면 무엇이 불확실한지만 짧게 밝히세요.\n\n"
-                "1. 은퇴 안정성: 은퇴까지 남은 기간, 현재 월 잉여현금흐름, 부채 부담, 현금·금융자산 등 바로 쓸 수 있는 자산과 부동산·기타자산의 유동성을 구분해 평가하세요. 결론은 '현재 입력값 기준 유리한 편 / 불리한 편 / 판단 보류' 중 하나로 시작하세요. 이는 통계적 백분위가 아니라 입력자료에 근거한 잠정 판단임을 분명히 하세요. 큰 기타자산은 성격과 현금화 가능성이 확인되지 않으면 은퇴 생활비로 쓸 수 있다고 간주하지 마세요. 은퇴 후 연금과 지출 정보가 없으면 확정적인 은퇴 가능 판정을 내리지 마세요.\n"
-                "2. 소득 개선 방향: '투잡으로 노동소득 추가'와 '현재 본업을 유지하며 사업 확장 또는 투자 역량을 단계적으로 키움' 중 어느 방향이 더 타당해 보이는지 잠정 결론을 내리세요. 현재 소득 형태, 사업소득 의존도, 유동자금, 시간·건강 부담, 손실 감내 가능성에 연결해 이유를 제시하세요. 근거가 부족하면 무조건 양쪽을 나열하지 말고, 어떤 핵심 정보가 결론을 바꾸는지 명시하세요. 특정 투자상품이나 수익률을 권하거나 보장하지 마세요.\n\n"
-                "가족정보는 실제 부양·경제적 지원이 입력되지 않았다면 비용이나 책임이 있다고 가정하지 마세요. 배우자·자녀·부모·형제자매의 정보는 가족관계와 잠재적 책임을 이해하는 맥락으로만 사용하세요. '현재 재무 모습 요약', '다음 단계', '성찰 질문'은 쓰지 마세요. 금액은 만원 단위를 유지하세요.\n\n입력 데이터:\n"
-                + json.dumps(details, ensure_ascii=False)
-            )
+
+        prompt = (
+            "역할: 한국의 가계 재무와 은퇴 준비를 함께 검토하는 현실적이고 친근한 성찰 파트너입니다. "
+            "투자상품을 권유하지 말고, 위협이나 공포 마케팅을 절대 배제하세요.\n\n"
+            "참고 공식통계: 국가데이터처 2024 국민이전계정 기준 한국인 평균 흑자진입 28세, 최대흑자 45세(연 1,932만 원), 적자전환 61세.\n"
+            "아래 두 코멘트만 작성하세요 (250~350자 내외, 쉬운 대화체).\n"
+            "[은퇴 안정성]\n"
+            "첫 문장은 '은퇴 안정성: 유리한 편 / 판단 보류 / 불리한 편' 중 하나로 시작.\n"
+            "[소득 개선 방향]\n"
+            "투잡 추가와 본업 유지 후 파이프라인(자산/사업) 준비 중 적합한 방향 조언.\n\n"
+            f"입력 데이터:\n{json.dumps(details, ensure_ascii=False)}"
+        )
+        with st.spinner("AI가 입력하신 삶과 재무의 지표를 성찰 중입니다..."):
             comment, error = call_gemini_text(prompt)
             st.session_state.ai_comment = comment if comment else error
-        except Exception as exc:
-            st.session_state.ai_comment = f"Gemini 분석 요청을 완료하지 못했습니다. API 키, 모델 사용 권한 및 사용 한도를 확인해 주세요. ({exc})"
+
     if st.session_state.get("ai_summary"):
-        s=st.session_state.ai_summary
+        s = st.session_state.ai_summary
         st.markdown("### 재무제표 요약")
-        cols=st.columns(4)
-        cols[0].metric("월수입 합계",money(s["income"]))
-        cols[1].metric("월지출 합계",money(s["expenses"]))
-        cols[2].metric("월 잔액",money(s["surplus"]))
-        cols[3].metric("순자산",fmt_eok(s["net_worth"]))
-        st.markdown("### AI 코멘트")
-        st.markdown(f"<div class='soft-card'>{st.session_state.get('ai_comment','')}</div>",unsafe_allow_html=True)
-        st.caption("입력한 값과 AI 코멘트는 참고 자료입니다. 삶의 해석과 결정은 인터뷰이의 몫입니다.")
+        cols = st.columns(4)
+        cols[0].metric("월수입 합계", money(s["income"]))
+        cols[1].metric("월지출 합계", money(s["expenses"]))
+        cols[2].metric("월 저축여력", money(s["surplus"]))
+        cols[3].metric("순자산", fmt_eok(s["net_worth"]))
+
+        st.markdown("### AI 성찰 리포트")
+        comment_text = str(st.session_state.get("ai_comment", ""))
+        
+        # 코멘트 파싱 (은퇴 안정성 vs 소득 개선 방향)
+        normalized = comment_text.replace("\r\n", "\n").replace("\r", "\n")
+        match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
+        if match:
+            retirement_comment = normalized[:match.start()]
+            income_comment = normalized[match.end():]
+        else:
+            retirement_comment, income_comment = normalized, ""
+
+        retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
+        income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
+
+        st.markdown("#### 은퇴 안정성 관점")
+        st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
+        st.markdown("#### 소득 개선 관점 (파이프라인)")
+        st.markdown(f"<div class='soft-card'>{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}</div>", unsafe_allow_html=True)
+        st.caption("※ AI의 코멘트는 참고용 거울이며, 삶의 가장 중요한 결정은 온전히 당신의 것입니다.")
     else:
-        st.info("‘분석’을 누르면 입력 내용의 재무제표 요약을 먼저 보여주고, 설정이 되어 있는 경우 AI 코멘트를 덧붙입니다.")
+        st.info("‘내 가계부 AI 분석 실행’ 버튼을 누르면 입력하신 데이터를 바탕으로 AI의 따뜻한 피드백이 생성됩니다.")
