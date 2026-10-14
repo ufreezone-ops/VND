@@ -328,6 +328,15 @@ if selected_page == "우리집 가계부":
             expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액")
         with d:
             expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액")
+        st.markdown("#### 은퇴 이후 가정 (만원/월)")
+        retirement_monthly_expenses = st.number_input(
+            "은퇴 이후 예상 월 생활비",
+            min_value=0,
+            value=int(st.session_state.get("retirement_monthly_expenses", 200) or 0),
+            step=10,
+            help="은퇴 이후에도 발생할 식비·주거비·공과금·의료비 등 월 지출의 합계입니다. 현재 월지출과 별도로 입력하세요.",
+        )
+        st.caption("참고: 국민연금연구원의 2024년 조사에서 50세 이상 중고령자가 생각한 적정 노후생활비는 개인 월 197.6만 원, 부부 월 298.1만 원이었습니다. 기본값 200만 원은 개인 기준의 참고값일 뿐이며, 가구원 수와 주거·의료비에 맞게 조정하세요.")
         st.markdown("#### 대차대조표 — 보유자산과 부채 (만원)")
         c,d = st.columns(2)
         with c:
@@ -352,8 +361,8 @@ if selected_page == "우리집 가계부":
             "income_self": income_self, "income_spouse": income_spouse,
             "income_other": income_other, "income_pension": income_pension,
             "expense_living": expense_living, "expense_loan": expense_loan,
-            "expense_other": expense_other, "asset_cash": asset_cash,
-            "asset_financial": asset_financial, "asset_home": asset_home,
+            "expense_other": expense_other, "retirement_monthly_expenses": retirement_monthly_expenses,
+            "asset_cash": asset_cash, "asset_financial": asset_financial, "asset_home": asset_home,
             "asset_deposit": asset_deposit, "asset_other": asset_other,
             "debt_home": debt_home, "debt_other": debt_other,
         }
@@ -391,9 +400,11 @@ if selected_page == "우리집 가계부":
     annual_savings = s["surplus"] * 12
     years = sorted(set([cur_age, 80, retire_age] + list(range(((cur_age // 5) + 1) * 5, 81, 5))))
     vals = []
-    retirement_monthly_expenses = sum(float(getv(k, 0) or 0) for k in ["expense_living", "expense_loan", "expense_other"])
+    # 은퇴 후 지출은 현재 지출을 자동 대입하지 않고, 별도 입력한 가정을 사용합니다.
+    # 기존 사용자 데이터에 해당 항목이 없으면 개인 기준 참고값 200만원을 적용합니다.
+    retirement_monthly_expenses = float(getv("retirement_monthly_expenses", 200) or 0)
     retirement_monthly_pension = float(getv("income_pension", 0) or 0)
-    # 은퇴 전에는 현재 월 잔액을 누적하고, 은퇴 후에는 연금에서 월지출을 뺀 만큼 자산이 변합니다.
+    # 은퇴 전에는 현재 월 잔액을 누적하고, 은퇴 후에는 연금에서 은퇴 후 월지출을 뺀 만큼 자산이 변합니다.
     for age in years:
         working_years = max(0, min(age, retire_age) - cur_age)
         projected = s["net_worth"] + annual_savings * working_years
@@ -409,8 +420,8 @@ if selected_page == "우리집 가계부":
     st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False,"scrollZoom":False,"doubleClick":False,"staticPlot":True})
     st.caption(
         ("은퇴 나이를 아직 입력하지 않아 65세를 임시 가정했습니다. 삶과 생계수단 탭에서 입력한 은퇴 나이가 있으면 그 값이 적용됩니다. " if retirement_value is None else "입력한 은퇴 나이를 적용했습니다. ")
-        + "은퇴 전에는 현재 월 잔액을 누적하고, 은퇴 후에는 예상 월 연금에서 현재 월지출을 뺀 금액만큼 자산이 변하는 단순 개념도입니다. "
-        + "물가·수익률·세금·은퇴 후 지출 변화는 반영하지 않으며, 예측이나 보장이 아닙니다."
+        + f"은퇴 전에는 현재 월 잔액을 누적하고, 은퇴 후에는 예상 월 연금 {retirement_monthly_pension:,.0f}만 원에서 별도 입력한 은퇴 후 월 생활비 {retirement_monthly_expenses:,.0f}만 원을 뺀 금액만큼 자산이 변하는 단순 개념도입니다. "
+        + "은퇴 후 생활비 기본값 200만 원은 국민연금연구원의 개인 기준 적정 노후생활비 조사 결과를 참고한 가정이며, 가구 상황에 맞게 조정해야 합니다. 물가·수익률·세금·은퇴 후 지출 변화는 반영하지 않으며, 예측이나 보장이 아닙니다."
     )
 
     _, next_col = st.columns([5,1])
