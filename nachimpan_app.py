@@ -534,7 +534,7 @@ with st.sidebar:
 # ==============================================================================
 
 # ==============================================================================
-# 5.01.00 | 가로 4대 메뉴 네비게이터 (상하 여백 및 황금 비율 안착)
+# 5.01.00 | 가로 4대 메뉴 네비게이터 (바깥 라운딩 완전 제거)
 # ==============================================================================
 _pending_nav = st.session_state.pop("_pending_nav", None)
 nav_options = ["우리집\n가계부", "삶과\n생계수단", "인생의\n사계절", "AI\n시선"]
@@ -564,11 +564,11 @@ selected = option_menu(
     key=_nav_widget_key,
     styles={
         "container": {
-            "padding": "10px 6px 5px 6px",
+            "padding": "8px 6px",
             "background-color": "#0F172A",
-            "border": "1px solid #263449",
-            "border-radius": "10px",
-            "margin": "4px auto 8px auto",
+            "border": "none",
+            "border-radius": "0px",  # 바깥 라운딩 완전 제거
+            "margin": "0px",
             "width": "100%"
         },
         "icon": {"display": "none"},
@@ -582,7 +582,7 @@ selected = option_menu(
             "color": "#CBD5E1",
             "--hover-color": "#1E293B",
             "border-radius": "8px",
-            "min-height": "50px"  # 2줄 텍스트가 위아래 여백과 함께 쏙 들어가는 높이
+            "min-height": "48px"
         },
         "nav-link-selected": {
             "background-color": "#EA580C",
