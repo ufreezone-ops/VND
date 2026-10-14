@@ -100,6 +100,34 @@ div[data-testid="stDialog"] input[type="number"] { appearance:textfield; -moz-ap
     font-weight: 600 !important;
     opacity: 1 !important;
 }
+/* 버튼과 통계 지표도 라이트/다크 테마에서 충분한 대비 유지 */
+.stApp [data-testid="stFormSubmitButton"] button[kind="primary"],
+.stApp button[kind="primary"] {
+    background-color: #c85d1a !important;
+    border-color: #c85d1a !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+}
+.stApp [data-testid="stFormSubmitButton"] button[kind="primary"] *,
+.stApp button[kind="primary"] * {
+    color: #ffffff !important;
+    opacity: 1 !important;
+}
+.stApp [data-testid="stMetricLabel"],
+.stApp [data-testid="stMetricLabel"] *,
+.stApp [data-testid="stMetricValue"],
+.stApp [data-testid="stMetricValue"] *,
+.stApp [data-testid="stMetricDelta"] {
+    color: var(--text-color, #172033) !important;
+    opacity: 1 !important;
+}
+.stApp [data-testid="stMetricLabel"] { font-weight: 650 !important; }
+.stApp [data-testid="stCaptionContainer"],
+.stApp [data-testid="stCaptionContainer"] * {
+    color: var(--text-color, #475569) !important;
+    opacity: 1 !important;
+}
+
 /* Light/Dark 전환 시 앱 바탕·기본 글자색도 Streamlit 테마를 따름 */
 .stApp,
 [data-testid="stAppViewContainer"],
@@ -654,7 +682,7 @@ elif selected_page == "인생의\n사계절" or selected_page == "인생의 사�
             default=[x for x in st.session_state.get("siblings", []) if x in sibling_options],
             help="본인을 기준으로 선택하세요. 예: 남성은 형·남동생·누나·여동생, 여성은 오빠·남동생·언니·여동생 등. 관계 명칭이 맞지 않으면 관계 미지정 항목을 선택할 수 있습니다.",
         )
-        save_family = st.form_submit_button("가족 정보 반영",use_container_width=True)
+        save_family = st.form_submit_button("가족 정보 반영", use_container_width=True, type="primary")
     if save_family:
         st.session_state.spouse_age=spouse_age; st.session_state.child_count=child_count
         st.session_state.child_age=child_age; st.session_state.child_age2=child_age2; st.session_state.child_age3=child_age3
