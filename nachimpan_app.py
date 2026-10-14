@@ -308,54 +308,68 @@ selected_page = {"우리집\n가계부":"우리집 가계부", "삶과\n생계�
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     with st.form("finance_form"):
-        st.markdown("#### 직업의 종류")
+        # 직업은 소득의 성격을 이해하기 위한 보조 정보로 먼저 배치합니다.
+        st.markdown("#### 먼저, 현재 상황")
         job_options = ["선택하세요", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
         previous_job = st.session_state.get("job_form", "선택하세요")
         job_index = job_options.index(previous_job) if previous_job in job_options else 0
         job = st.selectbox("직업의 종류", job_options, index=job_index, key="job_form_input", label_visibility="collapsed")
-        st.markdown("#### 월수입 (만원)")
-        a,b = st.columns(2)
-        with a:
-            income_self = st.number_input("본인 소득", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
-            income_spouse = st.number_input("배우자 소득", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
-        with b:
-            income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액")
-            income_pension = st.number_input(
-                "은퇴 후 받을 월 연금 (만원)",
-                min_value=0,
-                value=st.session_state.get("income_pension"),
-                step=10,
-                placeholder="모르면 0",
-                help="국민연금·퇴직연금·개인연금 등 은퇴 후 받을 것으로 예상하는 월 금액입니다. 현재 월수입에는 포함되지 않습니다.",
-            )
-        st.markdown("#### 월지출 (만원)")
-        c,d = st.columns(2)
-        with c:
-            expense_living = st.number_input("식비·공과금 등 기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액", help="식비, 공과금, 통신비처럼 매달 기본적으로 드는 비용입니다.")
-            expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액")
-        with d:
-            expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액")
-        st.markdown("#### 은퇴 이후 가정 (만원/월)")
-        retirement_monthly_expenses = st.number_input(
-            "은퇴 후 한 달 생활비 (만원)",
-            min_value=0,
-            value=int(st.session_state.get("retirement_monthly_expenses", 200) or 0),
-            step=10,
-            help="은퇴 후 식비·주거비·공과금·의료비 등 한 달에 쓸 돈입니다. 현재 지출과 별도로 입력하세요. 잘 모르겠다면 아래 도움말의 통계를 참고하세요.",
-        )
-        st.caption("적정 노후생활비(월): 1인 197.6만 원, 부부 298.1만 원 (국민연금연구원 2024년 조사). 가구원 수와 주거·의료비에 맞게 조정하세요.")
-        st.markdown("#### 대차대조표 — 보유자산과 부채 (만원)")
-        c,d = st.columns(2)
-        with c:
-            asset_cash = st.number_input("현금·예적금", min_value=0, value=st.session_state.get("asset_cash"), step=100, placeholder="금액")
-            asset_financial = st.number_input("주식·채권 등 금융자산", min_value=0, value=st.session_state.get("asset_financial"), step=100, placeholder="금액")
-            st.markdown("**부동산 시세 및 전세보증금**")
-            asset_home = st.number_input("부동산 시세", min_value=0, value=st.session_state.get("asset_home"), step=100, placeholder="금액")
-            asset_deposit = st.number_input("전세보증금", min_value=0, value=st.session_state.get("asset_deposit"), step=100, placeholder="금액")
-            asset_other = st.number_input("기타 자산·사업 가치", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액")
-        with d:
-            debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액")
-            debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
+
+        # 현재의 현금흐름: 들어오는 돈과 나가는 돈을 나란히 배치합니다.
+        income_col, expense_col = st.columns(2)
+        with income_col:
+            with st.container(border=True):
+                st.markdown("#### ① 들어오는 돈")
+                st.caption("현재 한 달 기준 · 만원")
+                income_self = st.number_input("본인 월 실수령액", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
+                income_spouse = st.number_input("배우자 월 실수령액", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
+                income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액", help="임대료, 이자, 배당 등 현재 들어오는 기타 소득입니다.")
+        with expense_col:
+            with st.container(border=True):
+                st.markdown("#### ② 나가는 돈")
+                st.caption("현재 한 달 기준 · 만원")
+                expense_living = st.number_input("기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액", help="식비, 공과금, 통신비처럼 매달 기본적으로 드는 비용입니다.")
+                expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액", help="대출 원금과 이자를 합쳐 매달 갚는 금액입니다.")
+                expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액", help="보험료, 교육비, 의료비, 자동차 유지비, 경조사비 등 기본 생활비 외 지출을 포함합니다.")
+
+        # 현재 보유 상태: 자산과 부채를 한 쌍으로 배치합니다.
+        asset_col, debt_col = st.columns(2)
+        with asset_col:
+            with st.container(border=True):
+                st.markdown("#### ③ 가지고 있는 것")
+                st.caption("현재 보유 금액·시세 기준 · 만원")
+                asset_cash = st.number_input("현금·예적금", min_value=0, value=st.session_state.get("asset_cash"), step=100, placeholder="금액")
+                asset_financial = st.number_input("주식·채권 등 금융자산", min_value=0, value=st.session_state.get("asset_financial"), step=100, placeholder="금액")
+                asset_home = st.number_input("부동산 시세", min_value=0, value=st.session_state.get("asset_home"), step=100, placeholder="금액", help="현재 집이나 보유 부동산의 대략적인 시세입니다.")
+                asset_deposit = st.number_input("전세보증금", min_value=0, value=st.session_state.get("asset_deposit"), step=100, placeholder="금액", help="현재 돌려받을 수 있는 전세보증금입니다. 전세대출은 부채에 따로 입력하세요.")
+                asset_other = st.number_input("기타 자산·사업 가치", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액", help="위 항목에 포함되지 않는 자산입니다. 현금화하기 어려운 자산은 참고용으로 입력하세요.")
+        with debt_col:
+            with st.container(border=True):
+                st.markdown("#### ④ 갚아야 할 돈")
+                st.caption("현재 남은 대출 원금 기준 · 만원")
+                debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액", help="주택담보대출과 전세대출의 현재 남은 원금입니다.")
+                debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액", help="신용대출, 자동차 할부, 학자금대출, 카드론 등 남은 금액입니다.")
+
+        # 미래 가정은 현재의 수입·지출과 섞이지 않도록 별도 영역으로 분리합니다.
+        with st.container(border=True):
+            st.markdown("#### 은퇴 후에는? (월 · 만원)")
+            pension_col, retirement_expense_col = st.columns(2)
+            with pension_col:
+                income_pension = st.number_input(
+                    "은퇴 후 받을 월 연금", min_value=0,
+                    value=st.session_state.get("income_pension"), step=10,
+                    placeholder="모르면 0",
+                    help="국민연금·퇴직연금·개인연금 등 은퇴 후 받을 것으로 예상하는 월 금액입니다. 현재 월수입에는 포함되지 않습니다.",
+                )
+            with retirement_expense_col:
+                retirement_monthly_expenses = st.number_input(
+                    "은퇴 후 한 달 생활비", min_value=0,
+                    value=int(st.session_state.get("retirement_monthly_expenses", 200) or 0),
+                    step=10,
+                    help="은퇴 후 식비·주거비·공과금·의료비 등 한 달에 쓸 돈입니다. 현재 지출과 별도로 입력하세요.",
+                )
+            st.caption("적정 노후생활비(월): 1인 197.6만 원, 부부 298.1만 원 (국민연금연구원 2024년 조사). 가구원 수와 주거·의료비에 맞게 조정하세요.")
+
         save_finance = st.form_submit_button("입력 내용 반영", use_container_width=True, type="primary")
     st.caption("참고 통계: 국민연금공단의 2025년 12월 기준 안내에서 가입기간 20년 이상 노령연금 수급자의 평균은 월 약 113만 원입니다. 부부 합산 평균은 약 120만 원으로 보도된 바 있습니다. 개인별 가입기간·소득에 따라 차이가 크므로, 실제 예상액은 공단의 ‘내 연금 알아보기’에서 확인하세요.")
     link1, link2 = st.columns(2)
