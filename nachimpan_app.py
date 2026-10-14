@@ -564,7 +564,7 @@ selected = option_menu(
     key=_nav_widget_key,
     styles={
         "container": {
-            "padding": "8px",
+            "padding": "16px",
             "background-color": "#0F172A",
             "border": "1px solid #263449",
             "border-radius": "10px",
