@@ -92,6 +92,14 @@ div[data-testid="stDialog"] input[type="number"] { appearance:textfield; -moz-ap
 .stApp, .stApp p, .stApp label, .stApp [data-testid="stWidgetLabel"],
 .stApp [data-testid="stMarkdownContainer"] { font-size: 17px; }
 .stApp [data-testid="stCaptionContainer"] { font-size: 14px; }
+/* 직업 선택 라벨: Streamlit 테마의 실제 글자색 변수를 사용해 Light/Dark 모두 대응 */
+.stApp [data-testid="stSelectbox"] [data-testid="stWidgetLabel"],
+.stApp [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] label,
+.stApp [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] p {
+    color: var(--text-color, #31333f) !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+}
 .stApp input, .stApp textarea, .stApp [data-baseweb="select"] { font-size: 17px !important; }
 .stApp [data-testid="stNumberInput"] button { min-width: 34px; }
 .stApp h1 { font-size: clamp(30px, 3.5vw, 38px); }
