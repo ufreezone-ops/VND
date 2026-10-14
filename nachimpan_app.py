@@ -487,7 +487,7 @@ if not st.session_state.started:
       <div class="cover-shade"></div>
       <div class="cover-caption">
         <h1>나침반</h1>
-        <div style="font-size:clamp(12px,1.4vw,15px);font-weight:600;margin-top:10px;">나를 돌아보고, 내일을 그리는 여정</div>
+        <div style="font-size:clamp(12px,1.4vw,15px);font-weight:600;margin-top:6px;">나를 돌아보고, 내일을 그리는 여정</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -568,7 +568,7 @@ selected = option_menu(
             "background-color": "#0F172A",
             "border": "1px solid #263449",
             "border-radius": "10px",
-            "margin": "0px auto",
+            "margin": "4px auto 8px auto",
             "width": "100%"
         },
         "icon": {"display": "none"},
