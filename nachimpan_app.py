@@ -30,151 +30,106 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ------------------------------------------------------------------------------
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (라이트 / 다크 / 시스템 완벽 대응)
-#          * 모든 색상 변수, 카드, 버튼, 텍스트 가독성을 이곳 한 곳에서 일괄 통제합니다.
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (라이트/다크 완벽 반응형 엔진)
+# ==============================================================================
 st.markdown("""
 <style>
 /* ==========================================================================
-   CSS Design Tokens (전역 색상 규칙)
+   1. Streamlit 네이티브 테마 변수 기반 동적 컬러 시스템
    ========================================================================== */
 :root {
-    color-scheme: light dark;
-    --nc-bg: #0b1120;
-    --nc-sidebar-bg: #0f172a;
-    --nc-text: #f8fafc;
-    --nc-subtext: #94a3b8;
-    --nc-border: #334155;
-    --nc-card-bg: #151e2f;
-    --nc-hero-bg: radial-gradient(circle at top, #1e293b 0%, #0f172a 75%);
     --nc-primary: #ea580c;
     --nc-primary-hover: #c2410c;
     --nc-accent-gold: #f59e0b;
-    --nc-quad-bg: #172033;
-    --nc-quad-active-bg: #34291a;
-    --nc-quad-active-border: #f59e0b;
-    --nc-quad-active-text: #fde68a;
-    
-    /* 재무 패널 전용 다크 테마 색상 */
-    --nc-panel-income: #163b35;
-    --nc-panel-income-border: #2f806d;
-    --nc-panel-expense: #442a2d;
-    --nc-panel-expense-border: #a34c56;
-    --nc-panel-asset: #183653;
-    --nc-panel-asset-border: #3b82b5;
-    --nc-panel-debt: #44351d;
-    --nc-panel-debt-border: #a8792d;
-    --nc-panel-retire: #34264a;
-    --nc-panel-retire-border: #8761b3;
 }
 
-/* 라이트 모드 (명시적 선택 또는 OS 기본이 라이트인 경우 자동 활성화) */
-html[data-theme="light"],
-@media (prefers-color-scheme: light) {
-    :root {
-        --nc-bg: #f8fafc;
-        --nc-sidebar-bg: #eef2f7;
-        --nc-text: #0f172a;
-        --nc-subtext: #475569;
-        --nc-border: #cbd5e1;
-        --nc-card-bg: #ffffff;
-        --nc-hero-bg: radial-gradient(circle at top, #ffffff 0%, #eaf0f8 78%);
-        --nc-quad-bg: #f1f5f9;
-        --nc-quad-active-bg: #fef3c7;
-        --nc-quad-active-border: #d97706;
-        --nc-quad-active-text: #78350f;
-        
-        /* 재무 패널 라이트 테마 가독성 색상 */
-        --nc-panel-income: #e0f2ec;
-        --nc-panel-income-border: #70b9a6;
-        --nc-panel-expense: #fce7e7;
-        --nc-panel-expense-border: #e5a0a5;
-        --nc-panel-asset: #e2effb;
-        --nc-panel-asset-border: #8db9df;
-        --nc-panel-debt: #fff1d6;
-        --nc-panel-debt-border: #dfbd78;
-        --nc-panel-retire: #f0e7fb;
-        --nc-panel-retire-border: #b9a0dc;
-    }
-}
-
-/* ==========================================================================
-   글로벌 레이아웃 & 폰트 크기
-   ========================================================================== */
+/* 다크 모드 (Streamlit 기본 어두운 배경일 때) */
 .stApp {
-    background-color: var(--nc-bg) !important;
-    color: var(--nc-text) !important;
-}
-.block-container {
-    padding-top: 2rem;
-    padding-bottom: 2rem;
-    max-width: 1180px;
-}
-.stApp, .stApp p, .stApp label, .stApp [data-testid="stMarkdownContainer"] {
-    font-size: 16.5px;
-    color: var(--nc-text);
+    background-color: var(--background-color, #0b1120) !important;
+    color: var(--text-color, #f8fafc) !important;
 }
 
 /* ==========================================================================
-   통합 공통 카드 & 히어로 섹션
+   2. 시작 팝업창 정성스러운 중앙 정렬 CSS (100% 원본 복원)
    ========================================================================== */
-.hero {
-    border: 1px solid var(--nc-border);
-    border-radius: 18px;
-    padding: 32px 24px;
-    text-align: center;
-    background: var(--nc-hero-bg);
-    margin: 12px 0 20px;
+div[data-testid="stDialog"] > div { margin: auto !important; }
+div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
+div[data-testid="stDialog"] section[role="dialog"] { position: relative !important; }
+div[data-testid="stDialog"] section[role="dialog"] > button[aria-label="Close"] {
+    position: absolute !important;
+    top: 12px !important;
+    right: 12px !important;
+    z-index: 2 !important;
 }
-.hero-title {
-    font-size: clamp(28px, 4vw, 44px);
-    font-weight: 800;
-    color: var(--nc-text);
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+    padding: 20px 32px 0 !important;
+    margin: 0 0 1rem 0 !important;
+    line-height: 1.4 !important;
 }
-.hero-sub {
-    color: var(--nc-subtext);
-    font-size: 16px;
-    line-height: 1.7;
-    max-width: 680px;
-    margin: 10px auto 0;
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] span,
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] [data-testid="stMarkdownContainer"],
+div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] p {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+    margin: 0 auto !important;
 }
+div[data-testid="stDialog"] label { display:block !important; width:100% !important; text-align:center !important; }
+div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content:center !important; width:100% !important; }
+div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align:center !important; }
+div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
+div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+div[data-testid="stDialog"] input[type="number"] { appearance:textfield; -moz-appearance:textfield; }
+
+/* ==========================================================================
+   3. 입력창 & Placeholder (금액, 모르면 0, Choose options 등) 시인성 완전 해결
+   ========================================================================== */
+/* 입력창 배경 및 테두리가 Streamlit 테마에 유연하게 반응 */
+.stApp input, .stApp textarea, .stApp [data-baseweb="select"] > div {
+    background-color: var(--secondary-background-color, rgba(128,128,128,0.1)) !important;
+    color: var(--text-color, inherit) !important;
+    border: 1px solid rgba(128, 128, 128, 0.3) !important;
+    font-size: 16.5px !important;
+}
+
+/* Placeholder(힌트 문구) 글자색을 테마 글자색의 75% 불투명도로 선명하게 강제 설정 */
+.stApp input::placeholder,
+.stApp textarea::placeholder,
+.stApp [data-baseweb="select"] [class*="placeholder"],
+.stApp [data-baseweb="select"] div[aria-hidden="true"] {
+    color: var(--text-color, #94a3b8) !important;
+    opacity: 0.75 !important;
+    -webkit-text-fill-color: var(--text-color, #94a3b8) !important;
+}
+
+/* ==========================================================================
+   4. 카드 및 패널 스타일
+   ========================================================================== */
 .soft-card {
-    background: var(--nc-card-bg);
-    border: 1px solid var(--nc-border);
+    background-color: var(--secondary-background-color, rgba(128, 128, 128, 0.08)) !important;
+    border: 1px solid rgba(128, 128, 128, 0.25) !important;
     border-radius: 14px;
     padding: 18px 20px;
     margin: 10px 0;
-    color: var(--nc-text);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    color: var(--text-color, inherit);
 }
-.eyebrow {
-    color: var(--nc-accent-gold);
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: .04em;
-    margin-bottom: 4px;
-}
-.question {
-    font-size: clamp(18px, 2.2vw, 24px);
-    line-height: 1.5;
-    font-weight: 700;
-    color: var(--nc-text);
-}
-.small-muted {
-    color: var(--nc-subtext);
-    font-size: 13px;
-}
+.eyebrow { color: var(--nc-accent-gold); font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.question { font-size: clamp(18px, 2.2vw, 24px); line-height: 1.5; font-weight: 700; color: var(--text-color, inherit); }
+.small-muted { color: var(--text-color, #94a3b8); opacity: 0.8; font-size: 13px; }
 
-/* ==========================================================================
-   ESBI 사분면 & 물통 카드
-   ========================================================================== */
+/* ESBI 및 물통 카드 */
 .quad {
     border-radius: 10px;
     padding: 14px 10px;
-    border: 1px solid var(--nc-border);
-    background: var(--nc-quad-bg);
-    color: var(--nc-text);
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    background-color: var(--secondary-background-color, rgba(128, 128, 128, 0.08));
+    color: var(--text-color, inherit);
     text-align: center;
     min-height: 145px;
     display: flex;
@@ -182,9 +137,9 @@ html[data-theme="light"],
     justify-content: center;
 }
 .quad-active {
-    border: 2px solid var(--nc-quad-active-border);
-    background: var(--nc-quad-active-bg);
-    color: var(--nc-quad-active-text);
+    border: 2px solid var(--nc-accent-gold) !important;
+    background-color: rgba(245, 158, 11, 0.15) !important;
+    color: var(--text-color, inherit) !important;
 }
 .income-card {
     min-height: 180px;
@@ -197,78 +152,37 @@ html[data-theme="light"],
     padding: 18px 14px;
 }
 
-/* ==========================================================================
-   재무 카테고리별 컬러 패널 (라이트/다크 완전 분리)
-   ========================================================================== */
-.st-key-income-panel { background: var(--nc-panel-income) !important; border: 1px solid var(--nc-panel-income-border) !important; border-radius: 12px; }
-.st-key-expense-panel { background: var(--nc-panel-expense) !important; border: 1px solid var(--nc-panel-expense-border) !important; border-radius: 12px; }
-.st-key-asset-panel { background: var(--nc-panel-asset) !important; border: 1px solid var(--nc-panel-asset-border) !important; border-radius: 12px; }
-.st-key-debt-panel { background: var(--nc-panel-debt) !important; border: 1px solid var(--nc-panel-debt-border) !important; border-radius: 12px; }
-.st-key-retirement-panel { background: var(--nc-panel-retire) !important; border: 1px solid var(--nc-panel-retire-border) !important; border-radius: 12px; }
-
-/* 패널 내부 텍스트 색상 */
-.st-key-income-panel *, .st-key-expense-panel *, .st-key-asset-panel *,
-.st-key-debt-panel *, .st-key-retirement-panel * {
-    color: var(--nc-text) !important;
-}
+/* 가계부 4대 컬러 패널 */
+.st-key-income-panel { background: rgba(16, 185, 129, 0.12) !important; border: 1px solid rgba(16, 185, 129, 0.35) !important; border-radius: 12px; }
+.st-key-expense-panel { background: rgba(239, 68, 68, 0.12) !important; border: 1px solid rgba(239, 68, 68, 0.35) !important; border-radius: 12px; }
+.st-key-asset-panel { background: rgba(56, 189, 248, 0.12) !important; border: 1px solid rgba(56, 189, 248, 0.35) !important; border-radius: 12px; }
+.st-key-debt-panel { background: rgba(245, 158, 11, 0.12) !important; border: 1px solid rgba(245, 158, 11, 0.35) !important; border-radius: 12px; }
+.st-key-retirement-panel { background: rgba(168, 85, 247, 0.12) !important; border: 1px solid rgba(168, 85, 247, 0.35) !important; border-radius: 12px; }
 
 /* ==========================================================================
-   Streamlit 위젯 가독성 강화 (Metric, Button, Input, Caption)
+   5. 링크 버튼 & 사이드바 & 일반 위젯 가독성
    ========================================================================== */
-/* 지표(Metric) - 라이트/다크 불문 선명한 대비 */
-[data-testid="stMetricLabel"] *, [data-testid="stMetricLabel"] {
-    color: var(--nc-subtext) !important;
-    font-size: 14px !important;
-    font-weight: 600 !important;
-}
-[data-testid="stMetricValue"] *, [data-testid="stMetricValue"] {
-    color: var(--nc-text) !important;
-    font-weight: 800 !important;
-}
-[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {
-    color: var(--nc-subtext) !important;
-    font-size: 13px !important;
-}
-
-/* 버튼 (Primary) */
-button[kind="primary"], .stApp [data-testid="stFormSubmitButton"] button[kind="primary"] {
-    background-color: var(--nc-primary) !important;
-    border-color: var(--nc-primary) !important;
-    color: #ffffff !important;
+/* 공식 통계 링크 버튼 시인성 */
+.stApp a[data-testid="stLinkButton"] {
+    background-color: var(--secondary-background-color, #1e293b) !important;
+    color: var(--text-color, #f8fafc) !important;
+    border: 1px solid rgba(128, 128, 128, 0.4) !important;
     font-weight: 700 !important;
     border-radius: 8px !important;
+    text-align: center !important;
 }
-button[kind="primary"]:hover {
-    background-color: var(--nc-primary-hover) !important;
-    border-color: var(--nc-primary-hover) !important;
-}
-button[kind="primary"] * {
-    color: #ffffff !important;
+.stApp a[data-testid="stLinkButton"]:hover {
+    border-color: var(--nc-primary) !important;
+    color: var(--nc-primary) !important;
 }
 
-/* 사이드바 스타일 통일 */
+/* 사이드바 */
 [data-testid="stSidebar"] {
-    background-color: var(--nc-sidebar-bg) !important;
-    border-right: 1px solid var(--nc-border) !important;
+    background-color: var(--secondary-background-color, #0f172a) !important;
 }
 [data-testid="stSidebar"] * {
-    color: var(--nc-text) !important;
+    color: var(--text-color, inherit) !important;
 }
-[data-testid="stSidebar"] [data-testid="stCaptionContainer"] * {
-    color: var(--nc-subtext) !important;
-}
-
-/* 입력 필드 (Text, Number, Select) */
-.stApp input, .stApp textarea, .stApp [data-baseweb="select"] > div {
-    background-color: var(--nc-card-bg) !important;
-    color: var(--nc-text) !important;
-    border-color: var(--nc-border) !important;
-    font-size: 16px !important;
-}
-
-/* 시작 다이얼로그 (중앙 정렬) */
-div[data-testid="stDialog"] > div { margin: auto !important; }
-div[data-testid="stDialog"] input { text-align: center !important; }
 
 /* 커버 스타일 */
 .cover-bg { position: relative; min-height: 68vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display:flex; align-items:center; justify-content:center; }
@@ -475,9 +389,9 @@ if not st.session_state.started:
     start_dialog()
     st.stop()
 
-# ------------------------------------------------------------------------------
-# 4.02.00 | 사이드바 프로필 요약 카드 (불필요한 중복 문구 제거)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 4.02.00 | 사이드바 프로필 요약 카드
+# ==============================================================================
 with st.sidebar:
     st.markdown("### 🧭 나침반 기록")
     st.markdown(f"**이름/별칭:** {st.session_state.get('person_name','')}")
@@ -485,7 +399,13 @@ with st.sidebar:
     code = active_quadrant(st.session_state.get("job_form", ""))
     st.markdown(f"**익숙한 소득 형태:** {code or '아직 미정'}")
     st.write("")
-    st.caption(f"익명 고유번호 **{st.session_state.anonymous_id}**")
+    # 라이트/다크 모드 모두에서 선명한 익명 고유번호 배지
+    st.markdown(f"""
+    <div style="background: rgba(128,128,128,0.12); border: 1px solid rgba(128,128,128,0.3); border-radius: 8px; padding: 10px 14px; text-align: center;">
+        <span style="font-size: 0.8rem; opacity: 0.8;">익명 고유번호</span><br>
+        <b style="font-size: 1.05rem; color: #f59e0b;">{st.session_state.anonymous_id}</b>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ==============================================================================
@@ -766,7 +686,7 @@ elif selected_page == "인생의 사계절":
     retirement = int(retirement_value) if retirement_value is not None else 60
     years_left = max(0, retirement - age)
 
-    # 가족 구성원 및 은퇴 시점 나이 연동
+    # 1. 가족 구성원 및 은퇴 시점 나이 연동
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
     child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
     child_count = st.selectbox(
@@ -840,50 +760,71 @@ elif selected_page == "인생의 사계절":
         future = current + years_left
         st.markdown(f"""
         <div class='soft-card' style='display:flex;align-items:center;gap:14px;flex-wrap:wrap;'>
-            <b style='min-width:75px;font-size:16px;'>{name}</b>
-            <span style='font-size:20px;font-weight:800;'>{current}세</span>
+            <b style='min-width:75px;font-size:16.5px;'>{name}</b>
+            <span style='font-size:21px;font-weight:800;'>{current}세</span>
             <span style='font-size:22px;color:var(--nc-primary);padding:0 8px;'>➔</span>
-            <span style='font-size:20px;font-weight:800;color:var(--nc-accent-gold);'>{future}세</span>
+            <span style='font-size:21px;font-weight:800;color:var(--nc-accent-gold);'>{future}세</span>
             <span class='small-muted'>(내가 {retirement}세 은퇴하는 시점)</span>
         </div>
         """, unsafe_allow_html=True)
 
-    # 2. 공식 국민이전계정 곡선
+    # 2. 공식 국민이전계정 곡선 (글자 크기 확대, 세로축 제목 삭제, 범례 선명화)
     st.markdown("### 2. 대한민국 통계청 국민이전계정 생애주기 곡선")
     fig_nta = go.Figure()
     fig_nta.add_trace(go.Scatter(
         x=LIFECYCLE_BENCHMARK["age"], y=LIFECYCLE_BENCHMARK["labor_income"],
-        mode="lines+markers", name="노동소득", line=dict(color="#10b981", width=3)
+        mode="lines+markers", name="노동소득",
+        line=dict(color="#10b981", width=3.5),
+        marker=dict(size=7)
     ))
     fig_nta.add_trace(go.Scatter(
         x=LIFECYCLE_BENCHMARK["age"], y=LIFECYCLE_BENCHMARK["consumption"],
-        mode="lines+markers", name="소비", line=dict(color="#f97316", width=3, dash="dash")
+        mode="lines+markers", name="소비",
+        line=dict(color="#f97316", width=3.5, dash="dash"),
+        marker=dict(size=7)
     ))
-    fig_nta.add_vline(x=age, line_dash="solid", line_color="#38bdf8", line_width=2.5,
-                      annotation_text=f"현재 나 ({age}세)", annotation_position="top")
+    fig_nta.add_vline(
+        x=age, line_dash="solid", line_color="#38bdf8", line_width=2.5,
+        annotation_text=f"현재 나 ({age}세)",
+        annotation_position="top",
+        annotation_font=dict(size=14, color="#38bdf8")
+    )
     fig_nta.update_layout(
-        height=370, margin=dict(l=20, r=20, t=35, b=20),
+        height=390, margin=dict(l=20, r=20, t=35, b=20),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="var(--nc-text)"),
-        xaxis=dict(title="연령 (세)", gridcolor="rgba(100,116,139,0.2)"),
-        yaxis=dict(title="상대 규모 (지수)", gridcolor="rgba(100,116,139,0.2)"),
-        legend=dict(orientation="h", y=1.12, x=1, xanchor="right")
+        xaxis=dict(
+            title=dict(text="연령 (세)", font=dict(size=14, color="#94a3b8")),
+            tickfont=dict(size=13, color="#94a3b8"),
+            gridcolor="rgba(128,128,128,0.2)"
+        ),
+        yaxis=dict(
+            title=None,  # 세로축 제목 '상대 규모(지수)' 삭제
+            tickfont=dict(size=13, color="#94a3b8"),
+            gridcolor="rgba(128,128,128,0.2)"
+        ),
+        legend=dict(
+            orientation="h", y=1.12, x=1, xanchor="right",
+            font=dict(size=14, color="#f8fafc" if st.session_state.get("dark_mode", True) else "#0f172a")
+        )
     )
     st.plotly_chart(fig_nta, use_container_width=True, config={"displayModeBar": False})
 
-    # 국가데이터처 팩트 통계 지표
+    # 3. 국가데이터처 팩트 통계 지표 (화살표 이모티콘 삭제, 하단 겨울 문구 통삭제)
     st.markdown("### 국가데이터처 공식 생애 통계 지표")
     col_m1, col_m2, col_m3 = st.columns(3)
-    col_m1.metric("흑자 진입", "28세", help="노동소득이 소비를 추월하는 연령")
-    col_m2.metric("최대 흑자 정점", "45세", "연 1,932만 원")
-    col_m3.metric("적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
+    with col_m1:
+        st.metric("흑자 진입", "28세", help="노동소득이 소비를 추월하는 연령")
+    with col_m2:
+        st.metric("최대 흑자 정점", "45세")
+        st.caption("연간 1,932만 원")  # 위 화살표(↑) 삭제 후 깔끔한 캡션으로 전환
+    with col_m3:
+        st.metric("적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
 
     col_btn1, col_btn2 = st.columns(2)
-    col_btn1.link_button("📄 2024년 국가데이터처 통계 보도자료", OFFICIAL_PDF_URL, use_container_width=True)
-    col_btn2.link_button("🌐 국가데이터처 공식 발표 페이지", OFFICIAL_RELEASE_URL, use_container_width=True)
-
-    winter_len = max(0, 88 - retirement)
-    st.caption(f"은퇴 예정 나이 {retirement}세 이후 맞이할 겨울: 약 {winter_len}년 ({winter_len * 12}개월, 건강 기대수명 88세 가정)")
+    with col_btn1:
+        st.link_button("📄 2024년 국가데이터처 통계 보도자료", OFFICIAL_PDF_URL, use_container_width=True)
+    with col_btn2:
+        st.link_button("🌐 국가데이터처 공식 발표 페이지", OFFICIAL_RELEASE_URL, use_container_width=True)
 
     _, next_col = st.columns([5, 1])
     with next_col:
