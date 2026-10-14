@@ -88,6 +88,37 @@ div[data-testid="stDialog"] input[type="number"] { appearance:textfield; -moz-ap
 .cover-shade { position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,17,32,.05),rgba(8,17,32,.25)); }
 .cover-caption { position:relative; z-index:1; text-align:center; color:#fff; text-shadow:0 2px 16px rgba(0,0,0,.7); padding:8px; }
 .cover-caption h1 { margin:0; font-size:clamp(20px,3vw,30px); color:#fff; }
+/* 전체 글자 크기를 키워 읽기 편하게 */
+.stApp, .stApp p, .stApp label, .stApp [data-testid="stWidgetLabel"],
+.stApp [data-testid="stMarkdownContainer"] { font-size: 17px; }
+.stApp [data-testid="stCaptionContainer"] { font-size: 14px; }
+.stApp input, .stApp textarea, .stApp [data-baseweb="select"] { font-size: 17px !important; }
+.stApp [data-testid="stNumberInput"] button { min-width: 34px; }
+.stApp h1 { font-size: clamp(30px, 3.5vw, 38px); }
+.stApp h2 { font-size: clamp(26px, 3vw, 32px); }
+.stApp h3 { font-size: clamp(22px, 2.5vw, 27px); }
+.stApp h4 { font-size: 21px; }
+/* 재무 카테고리별 배경색 */
+.st-key-income-panel { background: #163b35 !important; border-color: #2f806d !important; }
+.st-key-expense-panel { background: #442a2d !important; border-color: #a34c56 !important; }
+.st-key-asset-panel { background: #183653 !important; border-color: #3b82b5 !important; }
+.st-key-debt-panel { background: #44351d !important; border-color: #a8792d !important; }
+.st-key-retirement-panel { background: #34264a !important; border-color: #8761b3 !important; }
+.st-key-income-panel [data-testid="stMarkdownContainer"], .st-key-income-panel [data-testid="stWidgetLabel"],
+.st-key-expense-panel [data-testid="stMarkdownContainer"], .st-key-expense-panel [data-testid="stWidgetLabel"],
+.st-key-asset-panel [data-testid="stMarkdownContainer"], .st-key-asset-panel [data-testid="stWidgetLabel"],
+.st-key-debt-panel [data-testid="stMarkdownContainer"], .st-key-debt-panel [data-testid="stWidgetLabel"],
+.st-key-retirement-panel [data-testid="stMarkdownContainer"], .st-key-retirement-panel [data-testid="stWidgetLabel"] { color: #f8fafc; }
+html[data-theme="light"] .st-key-income-panel { background: #e0f2ec !important; border-color: #70b9a6 !important; }
+html[data-theme="light"] .st-key-expense-panel { background: #fce7e7 !important; border-color: #e5a0a5 !important; }
+html[data-theme="light"] .st-key-asset-panel { background: #e2effb !important; border-color: #8db9df !important; }
+html[data-theme="light"] .st-key-debt-panel { background: #fff1d6 !important; border-color: #dfbd78 !important; }
+html[data-theme="light"] .st-key-retirement-panel { background: #f0e7fb !important; border-color: #b9a0dc !important; }
+html[data-theme="light"] .st-key-income-panel [data-testid="stMarkdownContainer"], html[data-theme="light"] .st-key-income-panel [data-testid="stWidgetLabel"],
+html[data-theme="light"] .st-key-expense-panel [data-testid="stMarkdownContainer"], html[data-theme="light"] .st-key-expense-panel [data-testid="stWidgetLabel"],
+html[data-theme="light"] .st-key-asset-panel [data-testid="stMarkdownContainer"], html[data-theme="light"] .st-key-asset-panel [data-testid="stWidgetLabel"],
+html[data-theme="light"] .st-key-debt-panel [data-testid="stMarkdownContainer"], html[data-theme="light"] .st-key-debt-panel [data-testid="stWidgetLabel"],
+html[data-theme="light"] .st-key-retirement-panel [data-testid="stMarkdownContainer"], html[data-theme="light"] .st-key-retirement-panel [data-testid="stWidgetLabel"] { color: #172033 !important; }
 /* 원래처럼 큼직한 4개 가로 탭 */
 .nav-link-container { padding: 8px !important; background:#0f172a !important; border:1px solid #263449 !important; border-radius:12px !important; margin:8px 0 24px !important; }
 .nav-link { min-height:52px !important; padding:14px 8px !important; font-size:16px !important; font-weight:700 !important; border-radius:9px !important; }
@@ -342,7 +373,7 @@ if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     with st.form("finance_form"):
         # 직업은 소득의 성격을 이해하기 위한 보조 정보로 먼저 배치합니다.
-        st.markdown("#### 먼저, 현재 상황")
+        st.markdown("#### 현재 상황")
         job_options = ["선택하세요", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
         previous_job = st.session_state.get("job_form", "선택하세요")
         job_index = job_options.index(previous_job) if previous_job in job_options else 0
@@ -351,14 +382,14 @@ if selected_page == "우리집 가계부":
         # 현재의 현금흐름: 들어오는 돈과 나가는 돈을 나란히 배치합니다.
         income_col, expense_col = st.columns(2)
         with income_col:
-            with st.container(border=True):
+            with st.container(border=True, key="income-panel"):
                 st.markdown("#### ① 들어오는 돈")
                 st.caption("현재 한 달 기준 · 만원")
                 income_self = st.number_input("본인 월 실수령액", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
                 income_spouse = st.number_input("배우자 월 실수령액", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
                 income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액", help="임대료, 이자, 배당 등 현재 들어오는 기타 소득입니다.")
         with expense_col:
-            with st.container(border=True):
+            with st.container(border=True, key="expense-panel"):
                 st.markdown("#### ② 나가는 돈")
                 st.caption("현재 한 달 기준 · 만원")
                 expense_living = st.number_input("기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액", help="식비, 공과금, 통신비처럼 매달 기본적으로 드는 비용입니다.")
@@ -368,7 +399,7 @@ if selected_page == "우리집 가계부":
         # 현재 보유 상태: 자산과 부채를 한 쌍으로 배치합니다.
         asset_col, debt_col = st.columns(2)
         with asset_col:
-            with st.container(border=True):
+            with st.container(border=True, key="asset-panel"):
                 st.markdown("#### ③ 가지고 있는 것")
                 st.caption("현재 보유 금액·시세 기준 · 만원")
                 asset_cash = st.number_input("현금·예적금", min_value=0, value=st.session_state.get("asset_cash"), step=100, placeholder="금액")
@@ -377,15 +408,15 @@ if selected_page == "우리집 가계부":
                 asset_deposit = st.number_input("전세보증금", min_value=0, value=st.session_state.get("asset_deposit"), step=100, placeholder="금액", help="현재 돌려받을 수 있는 전세보증금입니다. 전세대출은 부채에 따로 입력하세요.")
                 asset_other = st.number_input("기타 자산·사업 가치", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액", help="위 항목에 포함되지 않는 자산입니다. 현금화하기 어려운 자산은 참고용으로 입력하세요.")
         with debt_col:
-            with st.container(border=True):
+            with st.container(border=True, key="debt-panel"):
                 st.markdown("#### ④ 갚아야 할 돈")
                 st.caption("현재 남은 대출 원금 기준 · 만원")
                 debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액", help="주택담보대출과 전세대출의 현재 남은 원금입니다.")
                 debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액", help="신용대출, 자동차 할부, 학자금대출, 카드론 등 남은 금액입니다.")
 
         # 미래 가정은 현재의 수입·지출과 섞이지 않도록 별도 영역으로 분리합니다.
-        with st.container(border=True):
-            st.markdown("#### 은퇴 후에는? (월 · 만원)")
+        with st.container(border=True, key="retirement-panel"):
+            st.markdown("#### 은퇴 후에는?")
             pension_col, retirement_expense_col = st.columns(2)
             with pension_col:
                 income_pension = st.number_input(
