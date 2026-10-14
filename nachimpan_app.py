@@ -320,23 +320,30 @@ if selected_page == "우리집 가계부":
             income_spouse = st.number_input("배우자 소득", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
         with b:
             income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액")
-            income_pension = st.number_input("은퇴 이후 예상 월 연금 수령액 (만원)", min_value=0, value=st.session_state.get("income_pension"), step=10, placeholder="모르면 비워 두세요")
+            income_pension = st.number_input(
+                "은퇴 후 받을 월 연금 (만원)",
+                min_value=0,
+                value=st.session_state.get("income_pension"),
+                step=10,
+                placeholder="모르면 0",
+                help="국민연금·퇴직연금·개인연금 등 은퇴 후 받을 것으로 예상하는 월 금액입니다. 현재 월수입에는 포함되지 않습니다.",
+            )
         st.markdown("#### 월지출 (만원)")
         c,d = st.columns(2)
         with c:
-            expense_living = st.number_input("필수 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="금액")
+            expense_living = st.number_input("식비·공과금 등 기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액", help="식비, 공과금, 통신비처럼 매달 기본적으로 드는 비용입니다.")
             expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액")
         with d:
             expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액")
         st.markdown("#### 은퇴 이후 가정 (만원/월)")
         retirement_monthly_expenses = st.number_input(
-            "은퇴 이후 예상 월 생활비",
+            "은퇴 후 한 달 생활비 (만원)",
             min_value=0,
             value=int(st.session_state.get("retirement_monthly_expenses", 200) or 0),
             step=10,
-            help="은퇴 이후에도 발생할 식비·주거비·공과금·의료비 등 월 지출의 합계입니다. 현재 월지출과 별도로 입력하세요.",
+            help="은퇴 후 식비·주거비·공과금·의료비 등 한 달에 쓸 돈입니다. 현재 지출과 별도로 입력하세요. 잘 모르겠다면 아래 도움말의 통계를 참고하세요.",
         )
-        st.caption("참고: 국민연금연구원의 2024년 조사에서 50세 이상 중고령자가 생각한 적정 노후생활비는 개인 월 197.6만 원, 부부 월 298.1만 원이었습니다. 기본값 200만 원은 개인 기준의 참고값일 뿐이며, 가구원 수와 주거·의료비에 맞게 조정하세요.")
+        st.caption("적정 노후생활비(월): 1인 197.6만 원, 부부 298.1만 원 (국민연금연구원 2024년 조사). 가구원 수와 주거·의료비에 맞게 조정하세요.")
         st.markdown("#### 대차대조표 — 보유자산과 부채 (만원)")
         c,d = st.columns(2)
         with c:
