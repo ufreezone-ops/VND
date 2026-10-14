@@ -534,7 +534,7 @@ with st.sidebar:
 # ==============================================================================
 
 # ==============================================================================
-# 5.01.00 | 가로 4대 메뉴 네비게이터 (option_menu iframe 전용 색상 고정 복원)
+# 5.01.00 | 가로 4대 메뉴 네비게이터 (라이트 모드 빛샘/테두리 틈새 완전 차단)
 # ==============================================================================
 _pending_nav = st.session_state.pop("_pending_nav", None)
 nav_options = ["우리집\n가계부", "삶과\n생계수단", "인생의\n사계절", "AI\n시선"]
@@ -564,12 +564,11 @@ selected = option_menu(
     key=_nav_widget_key,
     styles={
         "container": {
-            "padding": "8px",
+            "padding": "4px",
             "background-color": "#0F172A",
-            "border": "1px solid #263449",
-            "border-radius": "12px",
-            "margin-top": "6px",
-            "margin-bottom": "22px",
+            "border": "none",
+            "border-radius": "10px",
+            "margin": "0px !important",
             "width": "100%"
         },
         "icon": {"display": "none"},
@@ -578,18 +577,18 @@ selected = option_menu(
             "white-space": "pre-line",
             "line-height": "1.25",
             "text-align": "center",
-            "margin": "3px 4px",
-            "padding": "10px 8px",
+            "margin": "2px",
+            "padding": "10px 4px",
             "color": "#CBD5E1",
-            "--hover-color": "#334155",
-            "border-radius": "9px",
-            "min-height": "60px"
+            "--hover-color": "#1E293B",
+            "border-radius": "8px",
+            "min-height": "58px"
         },
         "nav-link-selected": {
             "background-color": "#EA580C",
             "color": "#FFFFFF",
             "font-weight": "800",
-            "box-shadow": "0 3px 10px rgba(234,88,12,0.3)"
+            "box-shadow": "none"
         }
     }
 )
@@ -600,7 +599,6 @@ selected_page = {
     "인생의\n사계절": "인생의 사계절",
     "AI\n시선": "AI 시선"
 }.get(selected, selected)
-
 
 # ==============================================================================
 # 6.00.00 | 메인 뷰 페이지 (Main View Tabs)
