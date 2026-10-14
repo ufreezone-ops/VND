@@ -534,7 +534,7 @@ with st.sidebar:
 # ==============================================================================
 
 # ==============================================================================
-# 5.01.00 | 가로 4대 메뉴 네비게이터 (상단 텍스트 잘림 및 모서리 빛샘 완전 차단)
+# 5.01.00 | 가로 4대 메뉴 네비게이터 (상하 여백 및 황금 비율 안착)
 # ==============================================================================
 _pending_nav = st.session_state.pop("_pending_nav", None)
 nav_options = ["우리집\n가계부", "삶과\n생계수단", "인생의\n사계절", "AI\n시선"]
@@ -564,25 +564,25 @@ selected = option_menu(
     key=_nav_widget_key,
     styles={
         "container": {
-            "padding": "6px 4px",
+            "padding": "8px",
             "background-color": "#0F172A",
-            "border": "none",
-            "border-radius": "0px",  # 모서리 깎임으로 인한 하얀 귀퉁이 빛샘 원천 차단
-            "margin": "0px",
+            "border": "1px solid #263449",
+            "border-radius": "10px",
+            "margin": "0px auto",
             "width": "100%"
         },
         "icon": {"display": "none"},
         "nav-link": {
-            "font-size": "15.5px",
+            "font-size": "15px",
             "white-space": "pre-line",
-            "line-height": "1.3",
+            "line-height": "1.25",
             "text-align": "center",
-            "margin": "3px 4px",
-            "padding": "10px 6px",
+            "margin": "0px 3px",
+            "padding": "8px 4px",
             "color": "#CBD5E1",
             "--hover-color": "#1E293B",
             "border-radius": "8px",
-            "min-height": "64px"  # 글자가 위아래로 잘리지 않도록 안정적인 높이 확보
+            "min-height": "50px"  # 2줄 텍스트가 위아래 여백과 함께 쏙 들어가는 높이
         },
         "nav-link-selected": {
             "background-color": "#EA580C",
