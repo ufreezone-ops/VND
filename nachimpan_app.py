@@ -25,20 +25,20 @@ st.set_page_config(
 st.markdown("""
 <style>
 :root { color-scheme: light dark; }
-.stApp { background: var(--app-bg, #0b1120); color: var(--app-fg, #f8fafc); }
-[data-testid="stSidebar"] { background: #0f172a; border-right: 1px solid #263449; }
+.stApp { background: var(--background-color, #0b1120) !important; color: var(--text-color, #f8fafc) !important; }
+[data-testid="stSidebar"] { background: var(--secondary-background-color, #0f172a) !important; border-right: 1px solid var(--border-color, #263449) !important; }
 .block-container { padding-top: 2.5rem; padding-bottom: 1rem; max-width: 1180px; }
-.hero { border: 1px solid #334155; border-radius: 20px; padding: 38px 30px; text-align: center;
-        background: radial-gradient(circle at top, #243047 0%, #0f172a 68%); margin: 14px 0 22px; }
+.hero { border: 1px solid var(--border-color, #334155); border-radius: 20px; padding: 38px 30px; text-align: center;
+        background: var(--secondary-background-color, #0f172a); margin: 14px 0 22px; }
 .hero-mark { font-size: 52px; line-height: 1.3; }
-.hero-title { font-size: clamp(32px, 5vw, 52px); font-weight: 850; letter-spacing: -1px; color: #f8fafc; }
-.hero-sub { color: #cbd5e1; font-size: 17px; line-height: 1.8; max-width: 720px; margin: 12px auto 0; }
-.soft-card { background: #151e2f; border: 1px solid #334155; border-radius: 13px; padding: 17px 19px; margin: 10px 0; }
+.hero-title { font-size: clamp(32px, 5vw, 52px); font-weight: 850; letter-spacing: -1px; color: var(--text-color, #f8fafc); }
+.hero-sub { color: var(--text-color, #cbd5e1); font-size: 17px; line-height: 1.8; max-width: 720px; margin: 12px auto 0; }
+.soft-card { background: var(--secondary-background-color, #151e2f); border: 1px solid var(--border-color, #334155); border-radius: 13px; padding: 17px 19px; margin: 10px 0; }
 .eyebrow { color: #fbbf24; font-size: 13px; font-weight: 750; letter-spacing: .04em; }
-.small-muted { color: #94a3b8; font-size: 12px; }
+.small-muted { color: var(--text-color, #94a3b8); font-size: 12px; }
 .quad { border-radius: 10px; padding: 8px 10px; border: 1px solid #475569; background: #172033; text-align: center; }
 .quad-active { border: 2px solid #f59e0b; background: #34291a; color: #fde68a; }
-.question { font-size: clamp(20px, 2.5vw, 27px); line-height: 1.55; font-weight: 750; color: #f8fafc; }
+.question { font-size: clamp(20px, 2.5vw, 27px); line-height: 1.55; font-weight: 750; color: var(--text-color, #f8fafc); }
 /* 시작 팝업은 화면 중앙, 제목·입력·버튼 글자도 중앙 정렬 */
 div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
@@ -92,13 +92,20 @@ div[data-testid="stDialog"] input[type="number"] { appearance:textfield; -moz-ap
 .stApp, .stApp p, .stApp label, .stApp [data-testid="stWidgetLabel"],
 .stApp [data-testid="stMarkdownContainer"] { font-size: 17px; }
 .stApp [data-testid="stCaptionContainer"] { font-size: 14px; }
-/* 직업 선택 라벨: Streamlit 테마의 실제 글자색 변수를 사용해 Light/Dark 모두 대응 */
-.stApp [data-testid="stSelectbox"] [data-testid="stWidgetLabel"],
-.stApp [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] label,
-.stApp [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] p {
-    color: var(--text-color, #31333f) !important;
+/* 입력 라벨은 Streamlit이 선택한 테마의 글자색을 사용 */
+.stApp [data-testid="stWidgetLabel"],
+.stApp [data-testid="stWidgetLabel"] label,
+.stApp [data-testid="stWidgetLabel"] p {
+    color: var(--text-color, inherit) !important;
     font-weight: 600 !important;
     opacity: 1 !important;
+}
+/* Light/Dark 전환 시 앱 바탕·기본 글자색도 Streamlit 테마를 따름 */
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"] {
+    background-color: var(--background-color, #0b1120) !important;
+    color: var(--text-color, #f8fafc) !important;
 }
 .stApp input, .stApp textarea, .stApp [data-baseweb="select"] { font-size: 17px !important; }
 .stApp [data-testid="stNumberInput"] button { min-width: 34px; }
@@ -128,11 +135,11 @@ html[data-theme="light"] .st-key-asset-panel [data-testid="stMarkdownContainer"]
 html[data-theme="light"] .st-key-debt-panel [data-testid="stMarkdownContainer"], html[data-theme="light"] .st-key-debt-panel [data-testid="stWidgetLabel"],
 html[data-theme="light"] .st-key-retirement-panel [data-testid="stMarkdownContainer"], html[data-theme="light"] .st-key-retirement-panel [data-testid="stWidgetLabel"] { color: #172033 !important; }
 /* 원래처럼 큼직한 4개 가로 탭 */
-.nav-link-container { padding: 8px !important; background:#0f172a !important; border:1px solid #263449 !important; border-radius:12px !important; margin:8px 0 24px !important; }
+.nav-link-container { padding: 8px !important; background:var(--secondary-background-color, #0f172a) !important; border:1px solid var(--border-color, #263449) !important; border-radius:12px !important; margin:8px 0 24px !important; }
 .nav-link { min-height:52px !important; padding:14px 8px !important; font-size:16px !important; font-weight:700 !important; border-radius:9px !important; }
 .nav-link i { font-size:18px !important; }
 @media (max-width: 700px) { .nav-link { min-height:48px !important; font-size:12px !important; padding:9px 2px !important; } }
-hr { border-color: #334155; }
+hr { border-color: var(--border-color, #334155); }
 /* Light/System 모드에서도 입력 글자와 카드의 대비를 확보 */
 html[data-theme="light"] {
     color-scheme: light;
@@ -160,9 +167,14 @@ html[data-theme="light"] h1,
 html[data-theme="light"] h2,
 html[data-theme="light"] h3,
 html[data-theme="light"] h4 { color: #172033; }
-html[data-theme="light"] input,
-html[data-theme="light"] textarea,
-html[data-theme="light"] [data-baseweb="select"] > div { background-color: #ffffff !important; color: #172033 !important; border-color: #94a3b8 !important; }
+/* 입력창은 Streamlit 테마의 기본·보조 배경과 글자색을 사용 */
+.stApp input,
+.stApp textarea,
+.stApp [data-baseweb="select"] > div {
+    background-color: var(--secondary-background-color, #151e2f) !important;
+    color: var(--text-color, #f8fafc) !important;
+    border-color: var(--border-color, #475569) !important;
+}
 html[data-theme="light"] [data-testid="stCaptionContainer"] { color: #475569 !important; }
 html[data-theme="light"] .nav-link { color: #334155 !important; }
 html[data-theme="light"] .nav-link-selected { background-color: #c2410c !important; color: #ffffff !important; }
