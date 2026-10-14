@@ -175,6 +175,41 @@ html[data-theme="light"] h4 { color: #172033; }
     color: var(--text-color, #f8fafc) !important;
     border-color: var(--border-color, #475569) !important;
 }
+
+/* 사이드바: 모든 글자와 보조 문구를 현재 테마의 글자색에 맞춤 */
+[data-testid="stSidebar"],
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"],
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h4 {
+    color: var(--text-color, #f8fafc) !important;
+    opacity: 1 !important;
+}
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"],
+[data-testid="stSidebar"] label {
+    font-size: 17px !important;
+    font-weight: 600 !important;
+}
+
+/* 입력값과 placeholder(금액·월 금액·모르면 0 등): 라벨과 같은 테마 대비 적용 */
+.stApp input,
+.stApp textarea,
+.stApp input::placeholder,
+.stApp textarea::placeholder,
+.stApp [data-baseweb="select"] [role="combobox"] {
+    color: var(--text-color, #f8fafc) !important;
+    opacity: 1 !important;
+    font-size: 17px !important;
+}
+.stApp input::placeholder,
+.stApp textarea::placeholder {
+    -webkit-text-fill-color: var(--text-color, #f8fafc) !important;
+}
 html[data-theme="light"] [data-testid="stCaptionContainer"] { color: #475569 !important; }
 html[data-theme="light"] .nav-link { color: #334155 !important; }
 html[data-theme="light"] .nav-link-selected { background-color: #c2410c !important; color: #ffffff !important; }
