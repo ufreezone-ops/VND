@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (팝업창 소프트 세이지 그린 톤다운)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (팝업 제목 삭제 & 슬림한 입력창)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -155,9 +155,7 @@ input::placeholder, textarea::placeholder,
     font-size: 15px !important;
 }
 
-/* ==========================================================================
-   st.pills 버튼 스타일
-   ========================================================================== */
+/* st.pills 버튼 스타일 */
 div[data-testid="stButtonGroup"],
 div[data-testid="stPills"],
 div[data-testid="stSegmentedControl"] {
@@ -205,79 +203,82 @@ div[data-testid="stNumberInput"] button { display: none !important; }
 div[data-testid="stNumberInput"] input { padding-right: 12px !important; }
 
 /* ==========================================================================
-   시작 팝업창 (소프트 세이지 그린 계열 톤다운: #E8EFE9)
+   시작 팝업창 (제목 삭제 & 컴팩트한 절반 폭 입력창)
    ========================================================================== */
 div[data-testid="stDialog"] > div { margin: auto !important; }
-div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
+div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: center !important; }
 
-/* 👇 [핵심] 밝으면서도 눈이 편안한 은은한 세이지 그린 톤다운 */
+/* 팝업 모달 본체: 콤팩트하고 아담한 카드로 슬림화 */
 div[data-testid="stDialog"] section[role="dialog"] {
     position: relative !important;
     background-color: #E8EFE9 !important;
     border: 1.5px solid #C5D4C7 !important;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38) !important;
     border-radius: 18px !important;
+    max-width: 380px !important;
+    width: 90vw !important;
+    padding: 36px 20px 24px !important;
 }
 
 div[data-testid="stDialog"] section[role="dialog"] > button[aria-label="Close"] {
     position: absolute !important;
-    top: 14px !important;
-    right: 14px !important;
+    top: 12px !important;
+    right: 12px !important;
     z-index: 2 !important;
 }
 
-/* 팝업 제목: 세이지 그린과 조화로운 딥 포레스트 차콜 */
+/* 👇 [요청 2] 중복 제목 완전 삭제 */
 div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] {
-    display: block !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-    text-align: center !important;
-    padding: 24px 32px 0 !important;
-    margin: 0 0 1rem 0 !important;
-    line-height: 1.4 !important;
-}
-div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] span,
-div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] [data-testid="stMarkdownContainer"],
-div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] p {
-    display: block !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-    text-align: center !important;
-    margin: 0 auto !important;
-    color: #1A2E26 !important;
-    font-weight: 850 !important;
-    font-size: 22px !important;
+    display: none !important;
 }
 
+/* 라벨 스타일 */
 div[data-testid="stDialog"] label { 
     display: block !important; 
     width: 100% !important; 
     text-align: center !important;
     color: #2D4A3E !important;
-    font-size: 15.5px !important;
+    font-size: 15px !important;
     font-weight: 700 !important;
+    margin-bottom: 2px !important;
 }
 div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content: center !important; width: 100% !important; }
 
-/* 팝업 내부 입력창: 세이지 그린 배경 위에서 깨끗하게 정돈 */
+/* 👇 [요청 2] 이름/나이 입력창 폭을 절반(220px)으로 축소 & 정중앙 정렬 */
+div[data-testid="stDialog"] div[data-baseweb="input"] {
+    max-width: 220px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #B8CABE !important;
+    border-radius: 8px !important;
+}
+
 div[data-testid="stDialog"] input { 
     text-align: center !important; 
-    background-color: #FFFFFF !important;
+    background-color: transparent !important;
     color: #1A2E26 !important;
-    border: 1px solid #B8CABE !important;
-    font-size: 16.5px !important;
+    font-size: 16px !important;
+    border: none !important;
 }
-div[data-testid="stDialog"] button { text-align: center !important; font-size: 17px !important; }
 
+/* 시작하기 버튼도 입력창 폭에 맞춰 슬림하게 중앙 정렬 */
+div[data-testid="stDialog"] [data-testid="stFormSubmitButton"] {
+    display: flex !important;
+    justify-content: center !important;
+    margin-top: 12px !important;
+}
+div[data-testid="stDialog"] [data-testid="stFormSubmitButton"] button {
+    max-width: 220px !important;
+    width: 220px !important;
+    font-size: 16px !important;
+    padding: 9px !important;
+}
+
+/* 시작 팝업 나이 입력의 +/- 스핀 버튼 제거 */
 div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
 div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 div[data-testid="stDialog"] input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
-
-/* 커버 디자인 기본 스타일 */
-.cover-bg { position: relative; min-height: 72vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; }
-.cover-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11, 17, 32, 0.15) 0%, rgba(11, 17, 32, 0.45) 100%); }
-.cover-caption { position: relative; z-index: 1; text-align: center; color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,0.8); padding: 12px; }
-.cover-caption h1 { margin: 0; font-size: clamp(26px, 4vw, 42px); color: #fff; font-weight: 850; letter-spacing: 2px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -433,7 +434,7 @@ def call_gemini_text(prompt_text):
 # ==============================================================================
 
 # ==============================================================================
-# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그 (초고화질 표지 단독 렌더링 & 시작 버튼)
+# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그 (버튼명 '시작' 심플화)
 # ==============================================================================
 cover_file_path = None
 possible_covers = [
@@ -447,8 +448,8 @@ for c_name in possible_covers:
         cover_file_path = c_path
         break
 
-# 이름/나이 입력 다이얼로그 (버튼을 누르면 열림)
-@st.dialog("나침반 산책을 시작합니다", width="small")
+# 이름/나이 입력 다이얼로그 (중복 제목 제거 & 콤팩트 구성)
+@st.dialog(" ", width="small")
 def start_dialog():
     with st.form("start_form", clear_on_submit=False):
         name = st.text_input("이름 또는 별칭", placeholder="편하신 별칭을 적어주세요", key="start_person_name")
@@ -459,7 +460,7 @@ def start_dialog():
                 age = None
         except ValueError:
             age = None
-        submitted = st.form_submit_button("산책 시작하기", use_container_width=True, type="primary")
+        submitted = st.form_submit_button("시작하기", use_container_width=True, type="primary")
     if submitted:
         if not name.strip() or age is None:
             st.warning("이름(별칭)과 올바른 나이를 입력해 주세요.")
@@ -471,15 +472,12 @@ def start_dialog():
 
 # 시작 전: 표지 화면 렌더링
 if not st.session_state.started:
-    # PC에서는 멋진 책처럼 중앙에 배치, 모바일에서는 100% 꽉 찬 너비로 반응
     col_left, col_center, col_right = st.columns([1, 1.8, 1])
     
     with col_center:
         if cover_file_path:
-            # 1. 덧씌우는 글자 일체 없이 원본 고화질 그대로 단독 렌더링
             st.image(cover_file_path, use_container_width=True)
         else:
-            # 이미지 파일이 없을 경우의 임시 카드
             st.markdown("""
             <div style="background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); border-radius: 18px; padding: 60px 20px; text-align: center; border: 1px solid #334155;">
                 <div style="font-size: 40px; margin-bottom: 10px;">🧭</div>
@@ -488,10 +486,10 @@ if not st.session_state.started:
             </div>
             """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
         
-        # 2. 표지 바로 아래에 위치한 '시작하기' 메인 버튼
-        if st.button("🧭 나침반 산책 시작하기", use_container_width=True, type="primary"):
+        # 👇 [요청 1] '나침반 산책 시작하기' -> '시작'으로 간결화
+        if st.button("시작", use_container_width=True, type="primary"):
             start_dialog()
             
     st.stop()
