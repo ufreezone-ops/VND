@@ -559,19 +559,18 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (전업주부 동등 탑재 & 잔글씨 완전 삭제)
+# 6.01.00 | Tab 1 — 우리집 가계부 (우리집 재무 현황 & 2x2 세로 점선 분할)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     
     with st.form("finance_form"):
         # ----------------------------------------------------------------------
-        # ⓪ 우리집 소득 성격 (전업주부 동등 탑재, 불필요한 설명글 삭제)
+        # ⓪ 우리집 소득 성격
         # ----------------------------------------------------------------------
         with st.container(border=True, key="job-panel"):
             st.markdown("### ⓪ 우리집 소득 성격")
             
-            # 나의 직업과 배우자의 직업 목록을 완벽히 대등하게 일치
             job_options = ["직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
             job_spouse_options = ["해당 없음", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
             
@@ -583,7 +582,6 @@ if selected_page == "우리집 가계부":
             if prev_spouse_job not in job_spouse_options:
                 prev_spouse_job = "해당 없음"
             
-            # 1) 나의 직업 (글자 크기 17px로 확대)
             st.markdown("<div style='font-size: 17px; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;'>나의 직업은?</div>", unsafe_allow_html=True)
             job_selected = st.pills(
                 "나의 직업은?",
@@ -595,7 +593,6 @@ if selected_page == "우리집 가계부":
             
             st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
             
-            # 2) 배우자의 직업
             st.markdown("<div style='font-size: 17px; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;'>배우자의 직업은? (선택)</div>", unsafe_allow_html=True)
             job_spouse_selected = st.pills(
                 "배우자의 직업은?",
@@ -608,7 +605,7 @@ if selected_page == "우리집 가계부":
         st.write("")
 
         # ----------------------------------------------------------------------
-        # ① 들어오는 돈 vs ② 나가는 돈 (작은 캡션 삭제, 제목에 단위 명시)
+        # ① 들어오는 돈 vs ② 나가는 돈
         # ----------------------------------------------------------------------
         income_col, expense_col = st.columns(2)
         with income_col:
@@ -643,7 +640,7 @@ if selected_page == "우리집 가계부":
                 debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
 
         # ----------------------------------------------------------------------
-        # 은퇴 후 가정 (자잘한 안내문 삭제, 핵심만 시원하게)
+        # 은퇴 후 가정
         # ----------------------------------------------------------------------
         with st.container(border=True, key="retirement-panel"):
             st.markdown("### 은퇴 후에는? (월, 만원)")
@@ -683,17 +680,18 @@ if selected_page == "우리집 가계부":
         st.session_state["finance_saved_notice"] = True
 
     # --------------------------------------------------------------------------
-    # 듀얼 ESBI 사분면 매핑 (글자 크기 시원하게 확대 & 중앙 정렬)
+    # 우리집 재무 현황 (ESBI 2x2 동일 규격 카드 & 세로 굵은 점선 분할)
     # --------------------------------------------------------------------------
     q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
 
-    st.markdown("### 우리집 ESBI 사분면 좌표계")
+    st.markdown("### 우리집 재무 현황")
     st.markdown("<div id='selected-esbi'></div>", unsafe_allow_html=True)
     if st.session_state.pop("finance_saved_notice", False):
         st.success("입력하신 재무 정보가 반영되었습니다.")
         st.components.v1.html("<script>try { window.parent.document.getElementById('selected-esbi').scrollIntoView({behavior:'smooth',block:'center'}); } catch(e) {}</script>", height=0)
 
+    # 4개 분면 카드 UI 생성 함수 (동일한 고정 높이 165px로 크기 완전 일치)
     def get_quad_ui(code, title, desc):
         is_self = (q_self == code)
         is_spouse = (q_spouse == code)
@@ -709,40 +707,35 @@ if selected_page == "우리집 가계부":
             
         badges = []
         if is_self:
-            badges.append("<span style='background:#EA580C; color:#FFFFFF; font-size:12.5px; font-weight:800; padding:2px 8px; border-radius:4px;'>나</span>")
+            badges.append("<span style='background:#EA580C; color:#FFFFFF; font-size:12px; font-weight:800; padding:2px 8px; border-radius:4px;'>나</span>")
         if is_spouse:
-            badges.append("<span style='background:#0284C7; color:#FFFFFF; font-size:12.5px; font-weight:800; padding:2px 8px; border-radius:4px;'>배우자</span>")
+            badges.append("<span style='background:#0284C7; color:#FFFFFF; font-size:12px; font-weight:800; padding:2px 8px; border-radius:4px;'>배우자</span>")
         
-        badge_row = f"<div style='min-height:26px; margin-bottom:4px; display:flex; justify-content:center; gap:6px;'>{' '.join(badges)}</div>" if badges else "<div style='min-height:26px; margin-bottom:4px;'></div>"
+        badge_row = f"<div style='min-height:24px; margin-bottom:4px; display:flex; justify-content:center; gap:6px;'>{' '.join(badges)}</div>" if badges else "<div style='min-height:24px; margin-bottom:4px;'></div>"
         
-        # 글자 크기를 돋보기 없이도 보이도록 시원하게 확대 (코드 28px, 타이틀 18px, 설명 14px)
-        return f'<div style="{border_style} border-radius: 12px; padding: 20px 14px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 155px; box-sizing: border-box;">{badge_row}<div style="font-size: 28px; font-weight: 850; color: #F8FAFC; line-height: 1.1;">{code}</div><div style="font-size: 18px; font-weight: 700; color: #F1F5F9; margin: 4px 0 6px 0;">{title}</div><div style="font-size: 14px; color: #CBD5E1; line-height: 1.45; word-break: keep-all; text-align: center;">{desc}</div></div>'
+        return f'<div style="{border_style} border-radius: 12px; padding: 18px 12px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 165px; box-sizing: border-box; width: 100%;">{badge_row}<div style="font-size: 28px; font-weight: 850; color: #F8FAFC; line-height: 1.1;">{code}</div><div style="font-size: 17.5px; font-weight: 700; color: #F1F5F9; margin: 4px 0 6px 0;">{title}</div><div style="font-size: 14px; color: #CBD5E1; line-height: 1.4; word-break: keep-all; text-align: center;">{desc}</div></div>'
 
-    card_e = get_quad_ui("E", ESBI["E"][0], ESBI["E"][1])
-    card_b = get_quad_ui("B", ESBI["B"][0], ESBI["B"][1])
-    card_s = get_quad_ui("S", ESBI["S"][0], ESBI["S"][1])
-    card_i = get_quad_ui("I", ESBI["I"][0], ESBI["I"][1])
+    # 새로운 설명 문구 적용
+    card_e = get_quad_ui("E", "직장인", "나의 시간과 돈을 바꿈.<br><span style='color:#F59E0B; font-weight:600;'>(작은 물통)</span>")
+    card_s = get_quad_ui("S", "자영업·전문직", "나의 시간과 돈을 바꿈.<br><span style='color:#F59E0B; font-weight:600;'>(큰 물통)</span>")
+    card_b = get_quad_ui("B", "사업가", "나의 회사가 돈을 만듦.<br><span style='color:#38BDF8; font-weight:600;'>(파이프라인)</span>")
+    card_i = get_quad_ui("I", "투자자·임대소득자", "나의 자산이 돈을 만듦.<br><span style='color:#38BDF8; font-weight:600;'>(파이프라인)</span>")
 
+    # 상단 배너 삭제 & ES와 BI 사이에 세로 굵은 점선(3px dashed) 분할
     esbi_html = f"""<div style="margin: 16px 0 24px 0;">
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; text-align: center;">
-<div style="background: rgba(30, 41, 59, 0.7); padding: 12px 10px; border-radius: 8px; border-left: 4px solid #94A3B8;">
-<div style="font-size: 15.5px; font-weight: 700; color: #F1F5F9;">⏳ E · S [노동소득]</div>
-<div style="font-size: 13.5px; color: #CBD5E1; margin-top: 3px;">시간을 파는 삶 (물통)</div>
-</div>
-<div style="background: rgba(30, 41, 59, 0.7); padding: 12px 10px; border-radius: 8px; border-left: 4px solid #F59E0B;">
-<div style="font-size: 15.5px; font-weight: 700; color: #FBBF24;">🚰 B · I [자산소득]</div>
-<div style="font-size: 13.5px; color: #FDE68A; margin-top: 3px;">자산이 일하는 삶 (파이프라인)</div>
-</div>
-</div>
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0px; align-items: stretch;">
+<div style="display: flex; flex-direction: column; gap: 14px; padding-right: 14px; border-right: 3.5px dashed #475569;">
 <div>{card_e}</div>
-<div>{card_b}</div>
 <div>{card_s}</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px; padding-left: 14px;">
+<div>{card_b}</div>
 <div>{card_i}</div>
 </div>
-<div style="text-align: center; margin-top: 10px;">
+</div>
+<div style="text-align: center; margin-top: 14px;">
 <span style="font-size: 14px; color: #94A3B8;">
-🧱 좌측(E·S)에서 우측(B·I)으로 넘어가는 것은 <b>소득의 종류를 완전히 바꾸는 거대한 결단</b>입니다.
+🧱 좌측(E·S)에서 우측(B·I)으로 넘어가는 것은 소득의 성격을 바꾸는 과정입니다.
 </span>
 </div>
 </div>"""
