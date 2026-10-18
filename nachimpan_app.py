@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (시니어 배려 폰트 대형화)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (시작 팝업 톤다운 & 고대비 가독성)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -156,7 +156,7 @@ input::placeholder, textarea::placeholder,
 }
 
 /* ==========================================================================
-   st.pills 버튼 크기 대형화 (16px 폰트 & 넉넉한 터치 영역)
+   st.pills 버튼 스타일
    ========================================================================== */
 div[data-testid="stButtonGroup"],
 div[data-testid="stPills"],
@@ -174,10 +174,10 @@ div[data-testid="stSegmentedControl"] button {
     background: #1E293B !important;
     color: #CBD5E1 !important;
     border: 1px solid #334155 !important;
-    font-size: 15.5px !important;  /* 시니어 배려 폰트 확대 */
+    font-size: 15.5px !important;
     font-weight: 600 !important;
     border-radius: 8px !important;
-    padding: 9px 15px !important;  /* 터치 영역 시원하게 확대 */
+    padding: 9px 15px !important;
     margin: 0 !important;
     box-shadow: none !important;
 }
@@ -204,22 +204,35 @@ div[data-testid="stPills"] button[aria-selected="true"] {
 div[data-testid="stNumberInput"] button { display: none !important; }
 div[data-testid="stNumberInput"] input { padding-right: 12px !important; }
 
-/* 시작 팝업창 정성스러운 중앙 정렬 */
+/* ==========================================================================
+   시작 팝업창 (눈부신 순백색 톤다운 & 고대비 단정 스타일)
+   ========================================================================== */
 div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
-div[data-testid="stDialog"] section[role="dialog"] { position: relative !important; }
+
+/* 👇 [핵심] 눈부신 순백색(#FFF)을 차분하고 고급스러운 소프트 쿨그레이로 톤다운 */
+div[data-testid="stDialog"] section[role="dialog"] {
+    position: relative !important;
+    background-color: #eef2f6 !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35) !important;
+    border-radius: 16px !important;
+}
+
 div[data-testid="stDialog"] section[role="dialog"] > button[aria-label="Close"] {
     position: absolute !important;
     top: 12px !important;
     right: 12px !important;
     z-index: 2 !important;
 }
+
+/* 팝업 제목 및 라벨 가독성 */
 div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] {
     display: block !important;
     width: 100% !important;
     box-sizing: border-box !important;
     text-align: center !important;
-    padding: 20px 32px 0 !important;
+    padding: 24px 32px 0 !important;
     margin: 0 0 1rem 0 !important;
     line-height: 1.4 !important;
 }
@@ -231,11 +244,30 @@ div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] p {
     box-sizing: border-box !important;
     text-align: center !important;
     margin: 0 auto !important;
+    color: #0f172a !important;
+    font-weight: 800 !important;
 }
-div[data-testid="stDialog"] label { display: block !important; width: 100% !important; text-align: center !important; }
+
+div[data-testid="stDialog"] label { 
+    display: block !important; 
+    width: 100% !important; 
+    text-align: center !important;
+    color: #334155 !important;
+    font-size: 15.5px !important;
+    font-weight: 700 !important;
+}
 div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content: center !important; width: 100% !important; }
-div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align: center !important; }
-div[data-testid="stDialog"] input { text-align: center !important; }
+
+/* 팝업 내부 입력창: 톤다운된 카드 위에서 깨끗한 흰색 박스로 정돈 */
+div[data-testid="stDialog"] input { 
+    text-align: center !important; 
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border: 1px solid #cbd5e1 !important;
+    font-size: 16.5px !important;
+}
+div[data-testid="stDialog"] button { text-align: center !important; font-size: 17px !important; }
+
 div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
 div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 div[data-testid="stDialog"] input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
