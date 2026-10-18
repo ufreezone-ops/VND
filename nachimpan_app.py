@@ -201,6 +201,15 @@ html[data-theme="light"],
     padding: 18px 14px;
 }
 
+/* ⓪ 직업 선택 패널 (4개 패널과 동등한 묵직한 위상 부여) */
+.st-key-job-panel { 
+    background: rgba(30, 41, 59, 0.45) !important; 
+    border: 1.5px solid #475569 !important; 
+    border-radius: 12px; 
+    padding: 16px 18px !important;
+}
+.st-key-job-panel * { color: var(--nc-text) !important; }
+
 /* ==========================================================================
    재무 카테고리별 컬러 패널 (라이트/다크 완전 분리)
    ========================================================================== */
@@ -521,17 +530,36 @@ if not st.session_state.started:
     start_dialog()
     st.stop()
 
-# ------------------------------------------------------------------------------
-# 4.02.00 | 사이드바 프로필 요약 카드 (불필요한 중복 문구 제거)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 4.02.00 | 사이드바 프로필 요약 카드 (익명 고유번호 타이틀 격상 & 듀얼 프로필)
+# ==============================================================================
 with st.sidebar:
-    st.markdown("### 🧭 나침반 기록")
-    st.markdown(f"**이름/별칭:** {st.session_state.get('person_name','')}")
-    st.markdown(f"**나이:** {st.session_state.get('person_age','')}세")
-    code = active_quadrant(st.session_state.get("job_form", ""))
-    st.markdown(f"**익숙한 소득 형태:** {code or '아직 미정'}")
-    st.write("")
-    st.caption(f"익명 고유번호 **{st.session_state.anonymous_id}**")
+    # 1. 익명 고유번호를 최상단 메인 타이틀로 배치 (크고 선명한 프리미엄 배지)
+    st.markdown(f"""
+    <div style="background: rgba(245, 158, 11, 0.12); border: 1.5px solid #f59e0b; border-radius: 12px; padding: 14px 16px; text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 12.5px; color: #f59e0b; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 2px;">🧭 익명 진단 고유번호</div>
+        <div style="font-size: 24px; font-weight: 850; color: #f8fafc; letter-spacing: 1.5px;">{st.session_state.anonymous_id}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 2. 나의 프로필 정보 (셀프 거울 호칭 적용)
+    st.markdown("#### 나의 기본 정보")
+    st.markdown(f"**나의 이름/별칭:** {st.session_state.get('person_name','')}")
+    st.markdown(f"**나의 나이:** {st.session_state.get('person_age','')}세")
+
+    # 3. 우리집 듀얼 소득 형태 연동
+    q_self = active_quadrant(st.session_state.get("job_form", ""))
+    q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
+
+    types_desc = []
+    if q_self:
+        types_desc.append(f"나({q_self})")
+    if q_spouse:
+        types_desc.append(f"배우자({q_spouse})")
+
+    dual_income_str = " + ".join(types_desc) if types_desc else "아직 미선택"
+    st.markdown(f"**우리집 소득 형태:** {dual_income_str}")
+    st.caption("※ 나침반은 외부 서버에 저장되지 않는 일회성 안전 세션입니다.")
 
 
 # ==============================================================================
@@ -616,37 +644,60 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (Household Finances)
+# 6.01.00 | Tab 1 — 우리집 가계부 (듀얼 직업 패널 & 나 중심 셀프 호칭)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     
     with st.form("finance_form"):
-        # 직업 선택 (소득의 성격 파악)
-        st.markdown("#### 현재 상황")
-        job_options = ["선택하세요", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
-        previous_job = st.session_state.get("job_form", "선택하세요")
-        job_index = job_options.index(previous_job) if previous_job in job_options else 0
-        job = st.selectbox("나의 직업은?", job_options, index=job_index, key="job_form_input")
+        # ----------------------------------------------------------------------
+        # ⓪ 현재 상황: 우리집 소득의 성격 (독립 패널로 위상 격상 & 대등 듀얼 병기)
+        # ----------------------------------------------------------------------
+        with st.container(border=True, key="job-panel"):
+            st.markdown("#### ⓪ 현재 상황: 우리집 소득의 성격")
+            st.caption("가계 경제를 지탱하는 일과 소득의 구조를 파악합니다.")
+            
+            job_col1, job_col2 = st.columns(2)
+            
+            # 1) 나의 직업
+            with job_col1:
+                job_options = ["선택하세요", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
+                previous_job = st.session_state.get("job_form", "선택하세요")
+                job_index = job_options.index(previous_job) if previous_job in job_options else 0
+                job = st.selectbox("나의 직업은?", job_options, index=job_index, key="job_form_input")
+            
+            # 2) 배우자의 직업 (선택 - 싱글 배려)
+            with job_col2:
+                job_spouse_options = ["해당 없음 (싱글 등)", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
+                previous_spouse_job = st.session_state.get("job_spouse_form", "해당 없음 (싱글 등)")
+                spouse_job_index = job_spouse_options.index(previous_spouse_job) if previous_spouse_job in job_spouse_options else 0
+                job_spouse = st.selectbox("배우자의 직업은? (선택)", job_spouse_options, index=spouse_job_index, key="job_spouse_form_input")
 
-        # 현금흐름 (수입 vs 지출)
+        st.write("")
+
+        # ----------------------------------------------------------------------
+        # ① 들어오는 돈 vs ② 나가는 돈 (호칭: '본인' -> '나의' 전면 교정)
+        # ----------------------------------------------------------------------
         income_col, expense_col = st.columns(2)
         with income_col:
             with st.container(border=True, key="income-panel"):
                 st.markdown("#### ① 들어오는 돈")
                 st.caption("현재 한 달 기준 · 만원")
-                income_self = st.number_input("본인 월 실수령액", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
+                # '본인' -> '나의' 로 교정
+                income_self = st.number_input("나의 월 실수령액", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
                 income_spouse = st.number_input("배우자 월 실수령액", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
-                income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액", help="임대료, 배당 등")
+                income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액", help="임대료, 배당, 부수입 등")
         with expense_col:
             with st.container(border=True, key="expense-panel"):
                 st.markdown("#### ② 나가는 돈")
                 st.caption("현재 한 달 기준 · 만원")
-                expense_living = st.number_input("기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액", help="식비, 공과금, 통신비")
-                expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액", help="대출 원금+이자")
+                expense_living = st.number_input("기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액", help="식비, 공과금, 통신비 등")
+                expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액", help="대출 원금+이자 매달 상환액")
                 expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액", help="보험료, 교육비, 의료비 등")
 
-        # 대차대조표 (자산 vs 부채)
+        # ----------------------------------------------------------------------
+        # ③ 가지고 있는 것 vs ④ 갚아야 할 돈
+        # ----------------------------------------------------------------------
         asset_col, debt_col = st.columns(2)
         with asset_col:
             with st.container(border=True, key="asset-panel"):
@@ -664,7 +715,9 @@ if selected_page == "우리집 가계부":
                 debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액")
                 debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
 
-        # 미래 은퇴 후 가정 (현재 수입·지출과 엄격히 분리)
+        # ----------------------------------------------------------------------
+        # 은퇴 후 가정
+        # ----------------------------------------------------------------------
         with st.container(border=True, key="retirement-panel"):
             st.markdown("#### 은퇴 후에는?")
             pension_col, retirement_expense_col = st.columns(2)
@@ -673,7 +726,7 @@ if selected_page == "우리집 가계부":
                     "은퇴 후 받을 월 연금", min_value=0,
                     value=st.session_state.get("income_pension"), step=10,
                     placeholder="모르면 0",
-                    help="국민연금·퇴직연금 등 은퇴 후 예상 수령액입니다. 현재 월수입에는 합산되지 않습니다."
+                    help="국민연금·퇴직연금 등 예상 수령액입니다. 현재 월수입에는 합산되지 않습니다."
                 )
             with retirement_expense_col:
                 retirement_monthly_expenses = st.number_input(
@@ -689,6 +742,7 @@ if selected_page == "우리집 가계부":
     if save_finance:
         submitted_values = {
             "job_form": "" if job == "선택하세요" else job,
+            "job_spouse_form": "" if "해당 없음" in job_spouse else job_spouse,
             "income_self": income_self, "income_spouse": income_spouse,
             "income_other": income_other, "income_pension": income_pension,
             "expense_living": expense_living, "expense_loan": expense_loan,
@@ -701,9 +755,13 @@ if selected_page == "우리집 가계부":
             st.session_state[k] = v
         st.session_state["finance_saved_notice"] = True
 
-    # ESBI 사분면 매핑
-    q = active_quadrant(st.session_state.get("job_form", ""))
-    st.markdown("#### ESBI 사분면")
+    # --------------------------------------------------------------------------
+    # 듀얼 ESBI 사분면 매핑 (나 & 배우자 뱃지 동시 표시)
+    # --------------------------------------------------------------------------
+    q_self = active_quadrant(st.session_state.get("job_form", ""))
+    q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
+
+    st.markdown("#### 우리집 ESBI 사분면 지도")
     st.markdown("<div id='selected-esbi'></div>", unsafe_allow_html=True)
     if st.session_state.pop("finance_saved_notice", False):
         st.success("입력하신 재무 정보가 반영되었습니다.")
@@ -712,10 +770,33 @@ if selected_page == "우리집 가계부":
     cols = st.columns(4)
     for col, code in zip(cols, ["E", "S", "B", "I"]):
         title, desc = ESBI[code]
-        css = "quad-active" if q == code else "quad"
-        col.markdown(f"<div class='{css}'><b style='font-size:20px'>{code}</b><br><b>{title}</b><br><span class='small-muted'>{desc}</span></div>", unsafe_allow_html=True)
+        is_self = (q_self == code)
+        is_spouse = (q_spouse == code)
+        is_active = is_self or is_spouse
+        
+        css = "quad-active" if is_active else "quad"
+        
+        # 나 & 배우자 뱃지 구성
+        badges = []
+        if is_self:
+            badges.append("<span style='background:#EA580C; color:#FFFFFF; font-size:11px; font-weight:800; padding:2px 7px; border-radius:4px; margin-right:3px;'>나</span>")
+        if is_spouse:
+            badges.append("<span style='background:#0284C7; color:#FFFFFF; font-size:11px; font-weight:800; padding:2px 7px; border-radius:4px;'>배우자</span>")
+        
+        badge_html = f"<div style='margin-bottom:6px;'>{' '.join(badges)}</div>" if badges else "<div style='height:21px;'></div>"
 
-    # 현재 입력값 지표 요약
+        col.markdown(f"""
+        <div class='{css}'>
+            {badge_html}
+            <b style='font-size:21px;'>{code}</b><br>
+            <b style='font-size:16px;'>{title}</b><br>
+            <span class='small-muted'>{desc}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 현재 입력값 지표 요약 & 미래 순자산 궤적 차트
+    # --------------------------------------------------------------------------
     s = current_financial_summary()
     st.markdown("#### 현재 재무 요약")
     cols = st.columns(4)
@@ -724,7 +805,6 @@ if selected_page == "우리집 가계부":
     cols[2].metric("월 저축여력", money(s["surplus"]))
     cols[3].metric("순자산", fmt_eok(s["net_worth"]))
 
-    # 미래 순자산 궤적 차트
     st.markdown("#### 미래 순자산·연금 궤적")
     cur_age = int(st.session_state.person_age)
     retirement_value = st.session_state.get("retirement_age")
