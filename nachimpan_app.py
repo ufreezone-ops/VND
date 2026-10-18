@@ -31,15 +31,20 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (1단계: 팝업창 중앙정렬 원본 복원)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (+ - 버튼 숨김 & 드롭다운 화살표 복원)
 # ==============================================================================
 st.markdown("""
 <style>
-/* PC에서 탭 전환 시 스크롤바 유무로 화면이 좌우로 덜컹거리는 현상 방지 */
-html {
+/* ==========================================================================
+   0. Streamlit 실제 스크롤 컨테이너에 스크롤바 상시 고정 (1,2,3,4탭 흔들림 박멸)
+   ========================================================================== */
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+.stMain {
     overflow-y: scroll !important;
     scrollbar-gutter: stable;
 }
+
 /* ==========================================================================
    CSS Design Tokens (전역 색상 규칙)
    ========================================================================== */
@@ -60,7 +65,6 @@ html {
     --nc-quad-active-border: #f59e0b;
     --nc-quad-active-text: #fde68a;
     
-    /* 재무 패널 전용 다크 테마 색상 */
     --nc-panel-income: #163b35;
     --nc-panel-income-border: #2f806d;
     --nc-panel-expense: #442a2d;
@@ -73,7 +77,6 @@ html {
     --nc-panel-retire-border: #8761b3;
 }
 
-/* 라이트 모드 (명시적 선택 또는 OS 기본이 라이트인 경우 자동 활성화) */
 html[data-theme="light"],
 @media (prefers-color-scheme: light) {
     :root {
@@ -89,7 +92,6 @@ html[data-theme="light"],
         --nc-quad-active-border: #d97706;
         --nc-quad-active-text: #78350f;
         
-        /* 재무 패널 라이트 테마 가독성 색상 */
         --nc-panel-income: #e0f2ec;
         --nc-panel-income-border: #70b9a6;
         --nc-panel-expense: #fce7e7;
@@ -103,9 +105,7 @@ html[data-theme="light"],
     }
 }
 
-/* ==========================================================================
-   글로벌 레이아웃 & 폰트 크기
-   ========================================================================== */
+/* 글로벌 레이아웃 */
 .stApp {
     background-color: var(--nc-bg) !important;
     color: var(--nc-text) !important;
@@ -120,9 +120,7 @@ html[data-theme="light"],
     color: var(--nc-text);
 }
 
-/* ==========================================================================
-   통합 공통 카드 & 히어로 섹션
-   ========================================================================== */
+/* 카드 및 박스 */
 .hero {
     border: 1px solid var(--nc-border);
     border-radius: 18px;
@@ -170,9 +168,7 @@ html[data-theme="light"],
     font-size: 13px;
 }
 
-/* ==========================================================================
-   ESBI 사분면 & 물통 카드
-   ========================================================================== */
+/* ESBI 사분면 & 물통 카드 */
 .quad {
     border-radius: 10px;
     padding: 14px 10px;
@@ -201,7 +197,7 @@ html[data-theme="light"],
     padding: 18px 14px;
 }
 
-/* ⓪ 직업 선택 패널 (4개 패널과 동등한 묵직한 위상 부여) */
+/* 재무 컬러 패널 */
 .st-key-job-panel { 
     background: rgba(30, 41, 59, 0.45) !important; 
     border: 1.5px solid #475569 !important; 
@@ -210,25 +206,18 @@ html[data-theme="light"],
 }
 .st-key-job-panel * { color: var(--nc-text) !important; }
 
-/* ==========================================================================
-   재무 카테고리별 컬러 패널 (라이트/다크 완전 분리)
-   ========================================================================== */
 .st-key-income-panel { background: var(--nc-panel-income) !important; border: 1px solid var(--nc-panel-income-border) !important; border-radius: 12px; }
 .st-key-expense-panel { background: var(--nc-panel-expense) !important; border: 1px solid var(--nc-panel-expense-border) !important; border-radius: 12px; }
 .st-key-asset-panel { background: var(--nc-panel-asset) !important; border: 1px solid var(--nc-panel-asset-border) !important; border-radius: 12px; }
 .st-key-debt-panel { background: var(--nc-panel-debt) !important; border: 1px solid var(--nc-panel-debt-border) !important; border-radius: 12px; }
 .st-key-retirement-panel { background: var(--nc-panel-retire) !important; border: 1px solid var(--nc-panel-retire-border) !important; border-radius: 12px; }
 
-/* 패널 내부 텍스트 색상 */
 .st-key-income-panel *, .st-key-expense-panel *, .st-key-asset-panel *,
 .st-key-debt-panel *, .st-key-retirement-panel * {
     color: var(--nc-text) !important;
 }
 
-/* ==========================================================================
-   Streamlit 위젯 가독성 강화 (Metric, Button, Input, Caption)
-   ========================================================================== */
-/* 지표(Metric) */
+/* Metric, Button, Sidebar */
 [data-testid="stMetricLabel"] *, [data-testid="stMetricLabel"] {
     color: var(--nc-subtext) !important;
     font-size: 14px !important;
@@ -243,7 +232,6 @@ html[data-theme="light"],
     font-size: 13px !important;
 }
 
-/* 버튼 (Primary) */
 button[kind="primary"], .stApp [data-testid="stFormSubmitButton"] button[kind="primary"] {
     background-color: var(--nc-primary) !important;
     border-color: var(--nc-primary) !important;
@@ -259,7 +247,6 @@ button[kind="primary"] * {
     color: #ffffff !important;
 }
 
-/* 사이드바 스타일 통일 */
 [data-testid="stSidebar"] {
     background-color: var(--nc-sidebar-bg) !important;
     border-right: 1px solid var(--nc-border) !important;
@@ -267,11 +254,10 @@ button[kind="primary"] * {
 [data-testid="stSidebar"] * {
     color: var(--nc-text) !important;
 }
-[data-testid="stSidebar"] [data-testid="stCaptionContainer"] * {
-    color: var(--nc-subtext) !important;
-}
 
-/* 입력 필드 (Text, Number, Select) */
+/* ==========================================================================
+   입력 필드 스타일 & [핵심] number_input의 +/- 버튼 완전 제거
+   ========================================================================== */
 .stApp input, .stApp textarea, .stApp [data-baseweb="select"] > div {
     background-color: var(--nc-card-bg) !important;
     color: var(--nc-text) !important;
@@ -279,23 +265,35 @@ button[kind="primary"] * {
     font-size: 16px !important;
 }
 
+/* 👇 [핵심] 숫자 입력창 우측의 거추장스러운 +/- 증감 버튼 숨김 */
+div[data-testid="stNumberInput"] button {
+    display: none !important;
+}
+div[data-testid="stNumberInput"] input {
+    padding-right: 12px !important;
+}
+
+/* 👇 [핵심] 드롭다운(Selectbox) 우측 화살표 아이콘 또렷하게 노출 */
+div[data-baseweb="select"] svg {
+    fill: var(--nc-subtext) !important;
+    color: var(--nc-subtext) !important;
+}
+div[data-baseweb="select"] > div:last-child {
+    background-color: transparent !important;
+}
+
 /* ==========================================================================
-   시작 팝업창 중앙 정렬 원본 복원 (닫기 버튼 분리, 제목/라벨/버튼 중앙 정렬)
+   시작 팝업창 정성스러운 중앙 정렬
    ========================================================================== */
 div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
-
-div[data-testid="stDialog"] section[role="dialog"] {
-    position: relative !important;
-}
-
+div[data-testid="stDialog"] section[role="dialog"] { position: relative !important; }
 div[data-testid="stDialog"] section[role="dialog"] > button[aria-label="Close"] {
     position: absolute !important;
     top: 12px !important;
     right: 12px !important;
     z-index: 2 !important;
 }
-
 div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] {
     display: block !important;
     width: 100% !important;
@@ -305,7 +303,6 @@ div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] {
     margin: 0 0 1rem 0 !important;
     line-height: 1.4 !important;
 }
-
 div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] span,
 div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] [data-testid="stMarkdownContainer"],
 div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] p {
@@ -319,8 +316,6 @@ div[data-testid="stDialog"] label { display: block !important; width: 100% !impo
 div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content: center !important; width: 100% !important; }
 div[data-testid="stDialog"] input, div[data-testid="stDialog"] button { text-align: center !important; }
 div[data-testid="stDialog"] input { text-align: center !important; }
-
-/* 시작 팝업 나이 입력의 +/- 조절 버튼 제거 */
 div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
 div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 div[data-testid="stDialog"] input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
@@ -531,14 +526,14 @@ if not st.session_state.started:
     st.stop()
 
 # ==============================================================================
-# 4.02.00 | 사이드바 프로필 요약 카드 (익명 고유번호 타이틀 격상 & 듀얼 프로필)
+# 4.02.00 | 사이드바 프로필 요약 카드 (은은한 그레이톤 익명 배지)
 # ==============================================================================
 with st.sidebar:
-    # 1. 익명 고유번호를 최상단 메인 타이틀로 배치 (크고 선명한 프리미엄 배지)
+    # 1. 익명 고유번호: 튀지 않는 차분한 회색톤으로 은은하게 톤다운
     st.markdown(f"""
-    <div style="background: rgba(245, 158, 11, 0.12); border: 1.5px solid #f59e0b; border-radius: 12px; padding: 14px 16px; text-align: center; margin-bottom: 20px;">
-        <div style="font-size: 12.5px; color: #f59e0b; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 2px;">🧭 익명 진단 고유번호</div>
-        <div style="font-size: 24px; font-weight: 850; color: #f8fafc; letter-spacing: 1.5px;">{st.session_state.anonymous_id}</div>
+    <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: 0.04em;">익명 진단 고유번호</div>
+        <div style="font-size: 20px; font-weight: 750; color: #cbd5e1; letter-spacing: 1px; margin-top: 3px;">{st.session_state.anonymous_id}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -644,14 +639,14 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (듀얼 직업 패널 & 나 중심 셀프 호칭)
+# 6.01.00 | Tab 1 — 우리집 가계부 (배우자 직업 옵션 '해당 없음' 정돈)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     
     with st.form("finance_form"):
         # ----------------------------------------------------------------------
-        # ⓪ 현재 상황: 우리집 소득의 성격 (독립 패널로 위상 격상 & 대등 듀얼 병기)
+        # ⓪ 현재 상황: 우리집 소득의 성격 (정중한 '해당 없음' 옵션 적용)
         # ----------------------------------------------------------------------
         with st.container(border=True, key="job-panel"):
             st.markdown("#### ⓪ 현재 상황: 우리집 소득의 성격")
@@ -666,24 +661,23 @@ if selected_page == "우리집 가계부":
                 job_index = job_options.index(previous_job) if previous_job in job_options else 0
                 job = st.selectbox("나의 직업은?", job_options, index=job_index, key="job_form_input")
             
-            # 2) 배우자의 직업 (선택 - 싱글 배려)
+            # 2) 배우자의 직업 ('해당 없음'으로 정중하게 단정 배제)
             with job_col2:
-                job_spouse_options = ["해당 없음 (싱글 등)", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
-                previous_spouse_job = st.session_state.get("job_spouse_form", "해당 없음 (싱글 등)")
+                job_spouse_options = ["해당 없음", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
+                previous_spouse_job = st.session_state.get("job_spouse_form", "해당 없음")
                 spouse_job_index = job_spouse_options.index(previous_spouse_job) if previous_spouse_job in job_spouse_options else 0
                 job_spouse = st.selectbox("배우자의 직업은? (선택)", job_spouse_options, index=spouse_job_index, key="job_spouse_form_input")
 
         st.write("")
 
         # ----------------------------------------------------------------------
-        # ① 들어오는 돈 vs ② 나가는 돈 (호칭: '본인' -> '나의' 전면 교정)
+        # ① 들어오는 돈 vs ② 나가는 돈 (나의 월 실수령액)
         # ----------------------------------------------------------------------
         income_col, expense_col = st.columns(2)
         with income_col:
             with st.container(border=True, key="income-panel"):
                 st.markdown("#### ① 들어오는 돈")
                 st.caption("현재 한 달 기준 · 만원")
-                # '본인' -> '나의' 로 교정
                 income_self = st.number_input("나의 월 실수령액", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
                 income_spouse = st.number_input("배우자 월 실수령액", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
                 income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액", help="임대료, 배당, 부수입 등")
@@ -742,7 +736,7 @@ if selected_page == "우리집 가계부":
     if save_finance:
         submitted_values = {
             "job_form": "" if job == "선택하세요" else job,
-            "job_spouse_form": "" if "해당 없음" in job_spouse else job_spouse,
+            "job_spouse_form": "" if job_spouse == "해당 없음" else job_spouse,
             "income_self": income_self, "income_spouse": income_spouse,
             "income_other": income_other, "income_pension": income_pension,
             "expense_living": expense_living, "expense_loan": expense_loan,
@@ -776,7 +770,6 @@ if selected_page == "우리집 가계부":
         
         css = "quad-active" if is_active else "quad"
         
-        # 나 & 배우자 뱃지 구성
         badges = []
         if is_self:
             badges.append("<span style='background:#EA580C; color:#FFFFFF; font-size:11px; font-weight:800; padding:2px 7px; border-radius:4px; margin-right:3px;'>나</span>")
