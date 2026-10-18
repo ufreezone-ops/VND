@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (+ - 버튼 숨김 & 드롭다운 화살표 복원)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (Placeholder & 드롭다운 화살표 완벽 해결)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -256,7 +256,7 @@ button[kind="primary"] * {
 }
 
 /* ==========================================================================
-   입력 필드 스타일 & [핵심] number_input의 +/- 버튼 완전 제거
+   입력 필드 스타일 & [핵심] Placeholder 선명화 및 드롭다운 흰박스 박멸
    ========================================================================== */
 .stApp input, .stApp textarea, .stApp [data-baseweb="select"] > div {
     background-color: var(--nc-card-bg) !important;
@@ -265,21 +265,34 @@ button[kind="primary"] * {
     font-size: 16px !important;
 }
 
-/* 👇 [핵심] 숫자 입력창 우측의 거추장스러운 +/- 증감 버튼 숨김 */
+/* 👇 [핵심 1] '금액', '월 금액', '모르면 0' 등 힌트 문구 선명화 (라이트/다크 불문 고대비 강제 고정) */
+input::placeholder,
+textarea::placeholder,
+.stApp input::placeholder,
+.stApp textarea::placeholder {
+    color: #94a3b8 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+    opacity: 1 !important;
+}
+
+/* 👇 [핵심 2] 드롭다운 우측 흰색 네모 상자 투명화 & 화살표 아이콘 또렷하게 노출 */
+div[data-baseweb="select"] * {
+    background-color: transparent !important;
+}
+div[data-baseweb="select"] > div {
+    background-color: var(--nc-card-bg) !important;
+}
+div[data-baseweb="select"] svg {
+    fill: #94a3b8 !important;
+    color: #94a3b8 !important;
+}
+
+/* 👇 [핵심 3] 숫자 입력창 우측의 거추장스러운 +/- 증감 버튼 숨김 */
 div[data-testid="stNumberInput"] button {
     display: none !important;
 }
 div[data-testid="stNumberInput"] input {
     padding-right: 12px !important;
-}
-
-/* 👇 [핵심] 드롭다운(Selectbox) 우측 화살표 아이콘 또렷하게 노출 */
-div[data-baseweb="select"] svg {
-    fill: var(--nc-subtext) !important;
-    color: var(--nc-subtext) !important;
-}
-div[data-baseweb="select"] > div:last-child {
-    background-color: transparent !important;
 }
 
 /* ==========================================================================
@@ -639,17 +652,17 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (배우자 직업 옵션 '해당 없음' 정돈)
+# 6.01.00 | Tab 1 — 우리집 가계부 (⓪ 우리집 소득 성격 라임 정돈)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     
     with st.form("finance_form"):
         # ----------------------------------------------------------------------
-        # ⓪ 현재 상황: 우리집 소득의 성격 (정중한 '해당 없음' 옵션 적용)
+        # ⓪ 우리집 소득 성격 (①~④와 완벽한 라임 정돈)
         # ----------------------------------------------------------------------
         with st.container(border=True, key="job-panel"):
-            st.markdown("#### ⓪ 현재 상황: 우리집 소득의 성격")
+            st.markdown("#### ⓪ 우리집 소득 성격")
             st.caption("가계 경제를 지탱하는 일과 소득의 구조를 파악합니다.")
             
             job_col1, job_col2 = st.columns(2)
@@ -661,7 +674,7 @@ if selected_page == "우리집 가계부":
                 job_index = job_options.index(previous_job) if previous_job in job_options else 0
                 job = st.selectbox("나의 직업은?", job_options, index=job_index, key="job_form_input")
             
-            # 2) 배우자의 직업 ('해당 없음'으로 정중하게 단정 배제)
+            # 2) 배우자의 직업 ('해당 없음' 정중한 옵션)
             with job_col2:
                 job_spouse_options = ["해당 없음", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
                 previous_spouse_job = st.session_state.get("job_spouse_form", "해당 없음")
@@ -671,7 +684,7 @@ if selected_page == "우리집 가계부":
         st.write("")
 
         # ----------------------------------------------------------------------
-        # ① 들어오는 돈 vs ② 나가는 돈 (나의 월 실수령액)
+        # ① 들어오는 돈 vs ② 나가는 돈
         # ----------------------------------------------------------------------
         income_col, expense_col = st.columns(2)
         with income_col:
