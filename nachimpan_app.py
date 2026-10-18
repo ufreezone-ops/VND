@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (드롭다운 button 태그 우선순위 강제 차단)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (st.pills 원터치 버튼 스타일 완비)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -152,7 +152,7 @@ html[data-theme="light"],
     background: rgba(30, 41, 59, 0.45) !important; 
     border: 1.5px solid #475569 !important; 
     border-radius: 12px; 
-    padding: 16px 18px !important;
+    padding: 18px 20px !important;
 }
 .st-key-job-panel * { color: var(--nc-text) !important; }
 
@@ -200,28 +200,32 @@ input::placeholder, textarea::placeholder,
 }
 
 /* ==========================================================================
-   👇 [핵심] HTML 최상위 우선순위 강제 차단: BaseWeb 내부의 <button> 태그 흰색 박멸
+   👇 [핵심] st.pills (원터치 알약 세그먼트 버튼) 프리미엄 스타일링
    ========================================================================== */
-html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div {
-    background-color: #151e2f !important;
+div[data-testid="stPills"] {
+    gap: 6px !important;
+}
+div[data-testid="stPills"] button {
+    background-color: #1E293B !important;
+    color: #CBD5E1 !important;
     border: 1px solid #334155 !important;
+    font-size: 14.5px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    padding: 7px 14px !important;
+    transition: all 0.2s ease-in-out !important;
 }
-
-/* BaseWeb이 Emotion으로 주입하는 모든 button, div, span 배경 강제 무력화 */
-html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] button,
-html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] [role="button"],
-html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] div,
-html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] span,
-html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] * {
-    background-color: transparent !important;
-    background: transparent !important;
-    box-shadow: none !important;
+div[data-testid="stPills"] button:hover {
+    background-color: #334155 !important;
+    color: #F8FAFC !important;
 }
-
-/* 화살표 SVG 아이콘을 선명한 슬레이트 그레이로 강제 표출 */
-html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] svg {
-    fill: #94a3b8 !important;
-    color: #94a3b8 !important;
+div[data-testid="stPills"] button[aria-checked="true"] {
+    background-color: #EA580C !important;
+    background: linear-gradient(135deg, #EA580C 0%, #C2410C 100%) !important;
+    color: #FFFFFF !important;
+    border-color: #EA580C !important;
+    font-weight: 800 !important;
+    box-shadow: 0 2px 8px rgba(234, 88, 12, 0.35) !important;
 }
 
 /* 숫자 입력창 +/- 버튼 숨김 */
@@ -583,32 +587,52 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (ESBI 2x2 그리드 정상 렌더링 복원)
+# 6.01.00 | Tab 1 — 우리집 가계부 (st.pills 원터치 직업 선택 UI 전면 적용)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     
     with st.form("finance_form"):
         # ----------------------------------------------------------------------
-        # ⓪ 우리집 소득 성격
+        # ⓪ 우리집 소득 성격 (st.pills 원터치 알약 매트릭스 탑재)
         # ----------------------------------------------------------------------
         with st.container(border=True, key="job-panel"):
             st.markdown("#### ⓪ 우리집 소득 성격")
-            st.caption("가계 경제를 지탱하는 일과 소득의 구조를 파악합니다.")
+            st.caption("가계 경제를 지탱하는 일과 소득의 구조를 파악합니다 (터치하여 선택).")
             
             job_col1, job_col2 = st.columns(2)
             
+            job_options = ["직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
+            job_spouse_options = ["해당 없음", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
+            
+            # 이전 선택값 불러오기 (기본값: 나의 직업 '직장인', 배우자 '해당 없음')
+            prev_job = st.session_state.get("job_form", "직장인")
+            if prev_job not in job_options:
+                prev_job = "직장인"
+                
+            prev_spouse_job = st.session_state.get("job_spouse_form", "해당 없음")
+            if prev_spouse_job not in job_spouse_options:
+                prev_spouse_job = "해당 없음"
+            
             with job_col1:
-                job_options = ["선택하세요", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
-                previous_job = st.session_state.get("job_form", "선택하세요")
-                job_index = job_options.index(previous_job) if previous_job in job_options else 0
-                job = st.selectbox("나의 직업은?", job_options, index=job_index, key="job_form_input")
+                st.markdown("<span style='font-size: 15px; font-weight: 700; color: #F1F5F9;'>나의 직업은?</span>", unsafe_allow_html=True)
+                job_selected = st.pills(
+                    "나의 직업은?",
+                    job_options,
+                    default=prev_job,
+                    key="pills_job_self",
+                    label_visibility="collapsed"
+                )
             
             with job_col2:
-                job_spouse_options = ["해당 없음", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
-                previous_spouse_job = st.session_state.get("job_spouse_form", "해당 없음")
-                spouse_job_index = job_spouse_options.index(previous_spouse_job) if previous_spouse_job in job_spouse_options else 0
-                job_spouse = st.selectbox("배우자의 직업은? (선택)", job_spouse_options, index=spouse_job_index, key="job_spouse_form_input")
+                st.markdown("<span style='font-size: 15px; font-weight: 700; color: #F1F5F9;'>배우자의 직업은? (선택)</span>", unsafe_allow_html=True)
+                job_spouse_selected = st.pills(
+                    "배우자의 직업은?",
+                    job_spouse_options,
+                    default=prev_spouse_job,
+                    key="pills_job_spouse",
+                    label_visibility="collapsed"
+                )
 
         st.write("")
 
@@ -676,9 +700,12 @@ if selected_page == "우리집 가계부":
         save_finance = st.form_submit_button("입력 내용 반영하기", use_container_width=True, type="primary")
 
     if save_finance:
+        final_job = job_selected if job_selected else "직장인"
+        final_spouse_job = "" if (not job_spouse_selected or job_spouse_selected == "해당 없음") else job_spouse_selected
+        
         submitted_values = {
-            "job_form": "" if job == "선택하세요" else job,
-            "job_spouse_form": "" if job_spouse == "해당 없음" else job_spouse,
+            "job_form": final_job,
+            "job_spouse_form": final_spouse_job,
             "income_self": income_self, "income_spouse": income_spouse,
             "income_other": income_other, "income_pension": income_pension,
             "expense_living": expense_living, "expense_loan": expense_loan,
@@ -692,9 +719,9 @@ if selected_page == "우리집 가계부":
         st.session_state["finance_saved_notice"] = True
 
     # --------------------------------------------------------------------------
-    # 듀얼 ESBI 사분면 매핑 (들여쓰기 공백 제거로 코드노출 원천 차단)
+    # 듀얼 ESBI 사분면 매핑 (2x2 수학 좌표계 완벽 작동)
     # --------------------------------------------------------------------------
-    q_self = active_quadrant(st.session_state.get("job_form", ""))
+    q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
 
     st.markdown("#### 우리집 ESBI 사분면 좌표계")
@@ -731,7 +758,6 @@ if selected_page == "우리집 가계부":
     card_s = get_quad_ui("S", ESBI["S"][0], ESBI["S"][1])
     card_i = get_quad_ui("I", ESBI["I"][0], ESBI["I"][1])
 
-    # 들여쓰기 공백을 0칸으로 밀착하여 코드블록 오작동 원천 차단
     esbi_html = f"""<div style="margin: 16px 0 24px 0;">
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; text-align: center;">
 <div style="background: rgba(30, 41, 59, 0.6); padding: 9px 8px; border-radius: 8px; border-left: 3.5px solid #94A3B8;">
