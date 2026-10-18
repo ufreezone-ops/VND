@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (드롭다운 흰박스 박멸 완결판)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (드롭다운 button 태그 우선순위 강제 차단)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -200,24 +200,26 @@ input::placeholder, textarea::placeholder,
 }
 
 /* ==========================================================================
-   👇 [드롭다운 흰색 사각형 완벽 박멸 & 화살표 복원 최종 해결책]
+   👇 [핵심] HTML 최상위 우선순위 강제 차단: BaseWeb 내부의 <button> 태그 흰색 박멸
    ========================================================================== */
-/* 1. 셀렉트박스 전체 컨트롤러 배경 */
-div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div {
     background-color: #151e2f !important;
-    border-color: var(--nc-border) !important;
+    border: 1px solid #334155 !important;
 }
 
-/* 2. 문제의 우측 끝 흰색 블록 컨테이너(EndEnhancer) 투명화 강제 */
-div[data-testid="stSelectbox"] [data-baseweb="select"] > div > div:last-child,
-div[data-testid="stSelectbox"] [data-baseweb="select"] div[aria-hidden="true"],
-div[data-testid="stSelectbox"] [data-baseweb="select"] span {
+/* BaseWeb이 Emotion으로 주입하는 모든 button, div, span 배경 강제 무력화 */
+html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] button,
+html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] [role="button"],
+html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] div,
+html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] span,
+html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] * {
     background-color: transparent !important;
     background: transparent !important;
+    box-shadow: none !important;
 }
 
-/* 3. 화살표(SVG) 아이콘 색상을 선명한 슬레이트 그레이로 표출 */
-div[data-testid="stSelectbox"] [data-baseweb="select"] svg {
+/* 화살표 SVG 아이콘을 선명한 슬레이트 그레이로 강제 표출 */
+html body .stApp [data-testid="stSelectbox"] [data-baseweb="select"] svg {
     fill: #94a3b8 !important;
     color: #94a3b8 !important;
 }
