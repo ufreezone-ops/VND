@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (팝업창 일체형 슬림화 완성)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (310px 슬림 팝업 & 완벽 정중앙)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -203,45 +203,37 @@ div[data-testid="stNumberInput"] button { display: none !important; }
 div[data-testid="stNumberInput"] input { padding-right: 12px !important; }
 
 /* ==========================================================================
-   시작 팝업창 (바깥 흰 상자 박멸 & 일체형 340px 슬림 카드 완성)
+   시작 팝업창 (310px 컴팩트 슬림 다이얼로그 & PC/모바일 정중앙 고정)
    ========================================================================== */
-/* 1. 바깥 모달 박스 자체의 크기를 340px로 축소하고 세이지그린 색상 부여 */
-div[data-testid="stDialog"] > div,
+/* 1. BaseWeb 실제 모달 카드 [role="dialog"]를 310px 슬림 카드로 정밀 타격 */
 div[data-testid="stDialog"] [role="dialog"] {
+    width: 310px !important;
+    max-width: 88vw !important;
     background-color: #E8EFE9 !important;
     border: 1.5px solid #C5D4C7 !important;
     border-radius: 18px !important;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38) !important;
-    max-width: 340px !important;
-    width: 90vw !important;
-    margin: auto !important;
-    padding: 0 !important;
-    overflow: hidden !important;
+    padding: 30px 20px 22px 20px !important;
+    box-sizing: border-box !important;
+    position: relative !important;
 }
 
-/* 2. 내부 요소들의 중복 배경/흰색 껍데기/이중 테두리 100% 제거 */
-div[data-testid="stDialog"] section[role="dialog"],
-div[data-testid="stDialog"] section[role="dialog"] > div,
+/* 2. 내부 래퍼 및 폼의 중복 테두리/배경 제거 */
+div[data-testid="stDialog"] [role="dialog"] > div,
+div[data-testid="stDialog"] [role="dialog"] section,
 div[data-testid="stDialog"] [data-testid="stForm"] {
     background-color: transparent !important;
     border: none !important;
     box-shadow: none !important;
     width: 100% !important;
-    max-width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
 }
 
-/* 폼 내부 안쪽 여백 정돈 */
-div[data-testid="stDialog"] [data-testid="stForm"] {
-    padding: 36px 22px 24px 22px !important;
-    box-sizing: border-box !important;
-}
-
-/* 닫기(X) 버튼 */
+/* 3. 닫기(X) 버튼 */
 div[data-testid="stDialog"] button[aria-label="Close"] {
     position: absolute !important;
-    top: 12px !important;
+    top: 10px !important;
     right: 12px !important;
     z-index: 99 !important;
     background: transparent !important;
@@ -249,30 +241,31 @@ div[data-testid="stDialog"] button[aria-label="Close"] {
     border: none !important;
 }
 
-/* 중복 제목 완전 삭제 */
+/* 4. 중복 제목 완전 삭제 */
 div[data-testid="stDialog"] h2[slot="title"] {
     display: none !important;
 }
 
-/* 라벨 스타일 */
+/* 5. 라벨 스타일 (정중앙 15px) */
 div[data-testid="stDialog"] label { 
     display: block !important; 
     width: 100% !important; 
     text-align: center !important;
     color: #2D4A3E !important;
-    font-size: 15.5px !important;
+    font-size: 15px !important;
     font-weight: 700 !important;
     margin-bottom: 4px !important;
 }
 div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content: center !important; width: 100% !important; }
 
-/* 3. 입력창 스타일: 깨끗한 흰색 인풋 */
+/* 6. 입력창 (깨끗한 흰색 슬림 인풋) */
 div[data-testid="stDialog"] div[data-baseweb="input"] {
     background-color: #FFFFFF !important;
     border: 1px solid #B8CABE !important;
     border-radius: 8px !important;
     width: 100% !important;
     box-sizing: border-box !important;
+    margin-bottom: 12px !important;
 }
 
 div[data-testid="stDialog"] input { 
@@ -281,11 +274,12 @@ div[data-testid="stDialog"] input {
     color: #1A2E26 !important;
     font-size: 16px !important;
     border: none !important;
+    padding: 8px 10px !important;
 }
 
-/* 4. 제출(시작하기) 버튼 */
+/* 7. 시작하기 버튼 */
 div[data-testid="stDialog"] [data-testid="stFormSubmitButton"] {
-    margin-top: 10px !important;
+    margin-top: 6px !important;
     width: 100% !important;
 }
 div[data-testid="stDialog"] [data-testid="stFormSubmitButton"] button {
@@ -297,7 +291,7 @@ div[data-testid="stDialog"] [data-testid="stFormSubmitButton"] button {
     border-radius: 8px !important;
 }
 
-/* 시작 팝업 나이 입력의 +/- 스핀 버튼 제거 */
+/* 8. 시작 팝업 나이 입력의 +/- 스핀 버튼 제거 */
 div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
 div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 div[data-testid="stDialog"] input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
