@@ -433,57 +433,67 @@ def call_gemini_text(prompt_text):
 # ==============================================================================
 
 # ==============================================================================
-# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그 (HTML 깨짐 원천 차단 & 이미지 연동)
+# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그 (초고화질 표지 단독 렌더링 & 시작 버튼)
 # ==============================================================================
-# 깃허브에 업로드된 cover.png 또는 나침반_표지_배경.png 감지
+cover_file_path = None
 possible_covers = [
     "cover.png", "cover.jpg", "cover.jpeg",
-    "나침반_표지_배경.png", "나침반_표지_배경.jpg", "나침판_표지_배경.png"
+    "나침반_표지_배경.png", "나침판_표지_배경.png"
 ]
-cover_b64 = None
 
 for c_name in possible_covers:
     c_path = os.path.join(os.path.dirname(__file__), c_name)
     if os.path.exists(c_path):
-        with open(c_path, "rb") as f:
-            cover_b64 = base64.b64encode(f.read()).decode("ascii")
+        cover_file_path = c_path
         break
 
-if cover_b64:
-    cover_bg_style = f"background-image: url('data:image/png;base64,{cover_b64}'); background-size: cover; background-position: center;"
-else:
-    # 이미지가 업로드되기 전까지 깨지지 않고 안정적으로 작동하는 딥 네이비 지평선 그라데이션
-    cover_bg_style = "background: radial-gradient(circle at 50% 30%, #1e293b 0%, #0f172a 70%, #0b1120 100%);"
-
-if not st.session_state.started:
-    # 한 줄 HTML 렌더링으로 코드 노출 버그 원천 차단
-    st.markdown(
-        f'<div style="min-height: 72vh; border-radius: 18px; {cover_bg_style} display: flex; align-items: center; justify-content: center; box-shadow: 0 16px 40px rgba(0,0,0,0.5);"><div style="text-align: center; color: #FFFFFF; padding: 20px; text-shadow: 0 2px 14px rgba(0,0,0,0.8);"><div style="font-size: 16px; font-weight: 600; color: #E2E8F0; letter-spacing: 2px; margin-bottom: 8px;">나를 돌아보고, 내일을 그리는 여정</div><div style="font-size: 36px; margin-bottom: 6px;">🧭</div><h1 style="font-size: clamp(32px, 5vw, 50px); font-weight: 900; letter-spacing: 6px; margin: 0 0 10px 0;">나 침 반</h1><div style="font-size: clamp(15px, 2vw, 19px); font-weight: 600; color: #F8FAFC; margin-bottom: 24px;">당신의 삶을 위한 질문과 시각의 산책로</div><div style="font-size: 14px; color: #CBD5E1;">지금, 당신의 이야기가 시작됩니다.</div></div></div>',
-        unsafe_allow_html=True
-    )
-
-    @st.dialog("나침반 산책을 시작합니다", width="small")
-    def start_dialog():
-        with st.form("start_form", clear_on_submit=False):
-            name = st.text_input("이름 또는 별칭", placeholder="편하신 별칭을 적어주세요", key="start_person_name")
-            age_text = st.text_input("나이", placeholder="예: 38", key="start_person_age_text", max_chars=3)
-            try:
-                age = int(age_text) if age_text.strip() else None
-                if age is not None and not (1 <= age <= 120):
-                    age = None
-            except ValueError:
+# 이름/나이 입력 다이얼로그 (버튼을 누르면 열림)
+@st.dialog("나침반 산책을 시작합니다", width="small")
+def start_dialog():
+    with st.form("start_form", clear_on_submit=False):
+        name = st.text_input("이름 또는 별칭", placeholder="편하신 별칭을 적어주세요", key="start_person_name")
+        age_text = st.text_input("나이", placeholder="예: 38", key="start_person_age_text", max_chars=3)
+        try:
+            age = int(age_text) if age_text.strip() else None
+            if age is not None and not (1 <= age <= 120):
                 age = None
-            submitted = st.form_submit_button("시작하기", use_container_width=True, type="primary")
-        if submitted:
-            if not name.strip() or age is None:
-                st.warning("이름(별칭)과 올바른 나이를 입력해 주세요.")
-            else:
-                st.session_state.person_name = name.strip()
-                st.session_state.person_age = int(age)
-                st.session_state.started = True
-                st.rerun()
+        except ValueError:
+            age = None
+        submitted = st.form_submit_button("산책 시작하기", use_container_width=True, type="primary")
+    if submitted:
+        if not name.strip() or age is None:
+            st.warning("이름(별칭)과 올바른 나이를 입력해 주세요.")
+        else:
+            st.session_state.person_name = name.strip()
+            st.session_state.person_age = int(age)
+            st.session_state.started = True
+            st.rerun()
 
-    start_dialog()
+# 시작 전: 표지 화면 렌더링
+if not st.session_state.started:
+    # PC에서는 멋진 책처럼 중앙에 배치, 모바일에서는 100% 꽉 찬 너비로 반응
+    col_left, col_center, col_right = st.columns([1, 1.8, 1])
+    
+    with col_center:
+        if cover_file_path:
+            # 1. 덧씌우는 글자 일체 없이 원본 고화질 그대로 단독 렌더링
+            st.image(cover_file_path, use_container_width=True)
+        else:
+            # 이미지 파일이 없을 경우의 임시 카드
+            st.markdown("""
+            <div style="background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); border-radius: 18px; padding: 60px 20px; text-align: center; border: 1px solid #334155;">
+                <div style="font-size: 40px; margin-bottom: 10px;">🧭</div>
+                <h1 style="color: #FFFFFF; font-size: 32px; font-weight: 850; margin: 0 0 10px 0;">나 침 반</h1>
+                <div style="color: #94A3B8; font-size: 15px;">당신의 삶을 위한 질문과 시간의 산책로</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        
+        # 2. 표지 바로 아래에 위치한 '시작하기' 메인 버튼
+        if st.button("🧭 나침반 산책 시작하기", use_container_width=True, type="primary"):
+            start_dialog()
+            
     st.stop()
     
 # ==============================================================================
