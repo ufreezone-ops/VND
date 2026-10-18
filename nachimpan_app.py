@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (시작 팝업 톤다운 & 고대비 가독성)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (팝업창 소프트 세이지 그린 톤다운)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -205,28 +205,28 @@ div[data-testid="stNumberInput"] button { display: none !important; }
 div[data-testid="stNumberInput"] input { padding-right: 12px !important; }
 
 /* ==========================================================================
-   시작 팝업창 (눈부신 순백색 톤다운 & 고대비 단정 스타일)
+   시작 팝업창 (소프트 세이지 그린 계열 톤다운: #E8EFE9)
    ========================================================================== */
 div[data-testid="stDialog"] > div { margin: auto !important; }
 div[data-testid="stDialog"] [data-testid="stVerticalBlock"] { align-items: stretch; }
 
-/* 👇 [핵심] 눈부신 순백색(#FFF)을 차분하고 고급스러운 소프트 쿨그레이로 톤다운 */
+/* 👇 [핵심] 밝으면서도 눈이 편안한 은은한 세이지 그린 톤다운 */
 div[data-testid="stDialog"] section[role="dialog"] {
     position: relative !important;
-    background-color: #eef2f6 !important;
-    border: 1px solid #cbd5e1 !important;
-    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35) !important;
-    border-radius: 16px !important;
+    background-color: #E8EFE9 !important;
+    border: 1.5px solid #C5D4C7 !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38) !important;
+    border-radius: 18px !important;
 }
 
 div[data-testid="stDialog"] section[role="dialog"] > button[aria-label="Close"] {
     position: absolute !important;
-    top: 12px !important;
-    right: 12px !important;
+    top: 14px !important;
+    right: 14px !important;
     z-index: 2 !important;
 }
 
-/* 팝업 제목 및 라벨 가독성 */
+/* 팝업 제목: 세이지 그린과 조화로운 딥 포레스트 차콜 */
 div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] {
     display: block !important;
     width: 100% !important;
@@ -244,26 +244,27 @@ div[data-testid="stDialog"] section[role="dialog"] > h2[slot="title"] p {
     box-sizing: border-box !important;
     text-align: center !important;
     margin: 0 auto !important;
-    color: #0f172a !important;
-    font-weight: 800 !important;
+    color: #1A2E26 !important;
+    font-weight: 850 !important;
+    font-size: 22px !important;
 }
 
 div[data-testid="stDialog"] label { 
     display: block !important; 
     width: 100% !important; 
     text-align: center !important;
-    color: #334155 !important;
+    color: #2D4A3E !important;
     font-size: 15.5px !important;
     font-weight: 700 !important;
 }
 div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content: center !important; width: 100% !important; }
 
-/* 팝업 내부 입력창: 톤다운된 카드 위에서 깨끗한 흰색 박스로 정돈 */
+/* 팝업 내부 입력창: 세이지 그린 배경 위에서 깨끗하게 정돈 */
 div[data-testid="stDialog"] input { 
     text-align: center !important; 
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    border: 1px solid #cbd5e1 !important;
+    background-color: #FFFFFF !important;
+    color: #1A2E26 !important;
+    border: 1px solid #B8CABE !important;
     font-size: 16.5px !important;
 }
 div[data-testid="stDialog"] button { text-align: center !important; font-size: 17px !important; }
@@ -272,11 +273,11 @@ div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
 div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 div[data-testid="stDialog"] input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 
-/* 커버 스타일 */
-.cover-bg { position: relative; min-height: 68vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display:flex; align-items:center; justify-content:center; }
-.cover-shade { position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,17,32,.08),rgba(8,17,32,.3)); }
-.cover-caption { position:relative; z-index:1; text-align:center; color:#fff; text-shadow:0 2px 14px rgba(0,0,0,.7); padding:8px; }
-.cover-caption h1 { margin:0; font-size:clamp(22px,3.5vw,34px); color:#fff; }
+/* 커버 디자인 기본 스타일 */
+.cover-bg { position: relative; min-height: 72vh; border-radius: 18px; overflow: hidden; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; }
+.cover-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11, 17, 32, 0.15) 0%, rgba(11, 17, 32, 0.45) 100%); }
+.cover-caption { position: relative; z-index: 1; text-align: center; color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,0.8); padding: 12px; }
+.cover-caption h1 { margin: 0; font-size: clamp(26px, 4vw, 42px); color: #fff; font-weight: 850; letter-spacing: 2px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -431,24 +432,46 @@ def call_gemini_text(prompt_text):
 # 4.00.00 | 진입 커버 및 사이드바 프로필 (Cover & Sidebar Profile)
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그
-# ------------------------------------------------------------------------------
-cover_path = os.path.join(os.path.dirname(__file__), "나침반_표지_배경.png")
-if os.path.exists(cover_path):
-    with open(cover_path, "rb") as f:
-        cover_b64 = base64.b64encode(f.read()).decode("ascii")
-    cover_style = f"background-image:url(data:image/png;base64,{cover_b64});"
+# ==============================================================================
+# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그 (표지 이미지 다중 경로 감지)
+# ==============================================================================
+# 이미지 파일 탐색 (나침반_표지_배경.png, cover.png, cover.jpg 등 자동 인식)
+possible_filenames = [
+    "나침반_표지_배경.png", "나침반_표지_배경.jpg", 
+    "cover.png", "cover.jpg", "cover.jpeg",
+    "나침판_표지_배경.png"
+]
+cover_b64 = None
+
+for fname in possible_filenames:
+    c_path = os.path.join(os.path.dirname(__file__), fname)
+    if os.path.exists(c_path):
+        with open(c_path, "rb") as f:
+            cover_b64 = base64.b64encode(f.read()).decode("ascii")
+        break
+
+if cover_b64:
+    cover_style = f"background-image: url('data:image/png;base64,{cover_b64}');"
 else:
-    cover_style = "background: radial-gradient(circle at top, #38506c, #0f172a 70%);"
+    # 이미지가 아직 업로드되지 않았을 때의 자연스러운 산과 하늘 풍경 그라데이션
+    cover_style = "background: radial-gradient(circle at top, #486581 0%, #102a43 60%, #0b1120 100%);"
 
 if not st.session_state.started:
     st.markdown(f"""
     <div class="cover-bg" style="{cover_style}">
       <div class="cover-shade"></div>
       <div class="cover-caption">
-        <h1>나침반</h1>
-        <div style="font-size:clamp(12px,1.4vw,15px);font-weight:600;margin-top:6px;">나를 돌아보고, 내일을 그리는 여정</div>
+        <div style="font-size: clamp(13px, 1.6vw, 17px); font-weight: 600; color: #E2E8F0; margin-bottom: 8px;">
+            나를 돌아보고, 내일을 그리는 여정
+        </div>
+        <div style="font-size: 32px; margin-bottom: 4px;">🧭</div>
+        <h1>나 침 반</h1>
+        <div style="font-size: clamp(14px, 1.8vw, 18px); font-weight: 600; color: #F8FAFC; margin-top: 8px;">
+            당신의 삶을 위한 질문과 시각의 산책로
+        </div>
+        <div style="font-size: 13px; color: #CBD5E1; margin-top: 24px; font-weight: 500;">
+            지금, 당신의 이야기가 시작됩니다.
+        </div>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -476,7 +499,7 @@ if not st.session_state.started:
 
     start_dialog()
     st.stop()
-
+    
 # ==============================================================================
 # 4.02.00 | 사이드바 프로필 요약 카드 (은은한 그레이톤 익명 배지)
 # ==============================================================================
