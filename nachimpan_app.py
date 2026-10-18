@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (st.pills 원터치 버튼 스타일 완비)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (st.pills 실제 DOM 정밀 타격)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -46,7 +46,7 @@ st.markdown("""
 }
 
 /* ==========================================================================
-   CSS Design Tokens (전역 색상 규칙)
+   CSS Design Tokens (딥 네이비 & 웜 골드 절대 봉인 유지)
    ========================================================================== */
 :root {
     color-scheme: light dark;
@@ -72,30 +72,6 @@ st.markdown("""
     --nc-panel-debt-border: #a8792d;
     --nc-panel-retire: #34264a;
     --nc-panel-retire-border: #8761b3;
-}
-
-html[data-theme="light"],
-@media (prefers-color-scheme: light) {
-    :root {
-        --nc-bg: #f8fafc;
-        --nc-sidebar-bg: #eef2f7;
-        --nc-text: #0f172a;
-        --nc-subtext: #475569;
-        --nc-border: #cbd5e1;
-        --nc-card-bg: #ffffff;
-        --nc-hero-bg: radial-gradient(circle at top, #ffffff 0%, #eaf0f8 78%);
-        
-        --nc-panel-income: #e0f2ec;
-        --nc-panel-income-border: #70b9a6;
-        --nc-panel-expense: #fce7e7;
-        --nc-panel-expense-border: #e5a0a5;
-        --nc-panel-asset: #e2effb;
-        --nc-panel-asset-border: #8db9df;
-        --nc-panel-debt: #fff1d6;
-        --nc-panel-debt-border: #dfbd78;
-        --nc-panel-retire: #f0e7fb;
-        --nc-panel-retire-border: #b9a0dc;
-    }
 }
 
 /* 글로벌 레이아웃 */
@@ -200,26 +176,46 @@ input::placeholder, textarea::placeholder,
 }
 
 /* ==========================================================================
-   👇 [핵심] st.pills (원터치 알약 세그먼트 버튼) 프리미엄 스타일링
+   👇 [핵심 타격] st.pills 실제 DOM(stButtonGroup) 줄바꿈 & 딥네이비 컬러 강제
    ========================================================================== */
-div[data-testid="stPills"] {
-    gap: 6px !important;
+/* 1. 가로 3개씩 유연하게 떨어지도록 flex-wrap 강제 허용 */
+div[data-testid="stButtonGroup"],
+div[data-testid="stPills"],
+div[data-testid="stSegmentedControl"] {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    overflow-x: visible !important;
 }
-div[data-testid="stPills"] button {
+
+/* 2. 모든 버튼의 기본 다크 슬레이트 배경 및 글자색 강제 고정 */
+div[data-testid="stButtonGroup"] button,
+div[data-testid="stPills"] button,
+div[data-testid="stSegmentedControl"] button {
     background-color: #1E293B !important;
+    background: #1E293B !important;
     color: #CBD5E1 !important;
     border: 1px solid #334155 !important;
-    font-size: 14.5px !important;
+    font-size: 14px !important;
     font-weight: 600 !important;
     border-radius: 8px !important;
-    padding: 7px 14px !important;
-    transition: all 0.2s ease-in-out !important;
+    padding: 8px 12px !important;
+    margin: 0 !important;
+    box-shadow: none !important;
 }
+
+/* 호버 시 */
+div[data-testid="stButtonGroup"] button:hover,
 div[data-testid="stPills"] button:hover {
     background-color: #334155 !important;
     color: #F8FAFC !important;
 }
-div[data-testid="stPills"] button[aria-checked="true"] {
+
+/* 3. 선택된 활성 버튼: 오렌지색 선명하게 점등 */
+div[data-testid="stButtonGroup"] button[aria-checked="true"],
+div[data-testid="stButtonGroup"] button[aria-selected="true"],
+div[data-testid="stPills"] button[aria-checked="true"],
+div[data-testid="stPills"] button[aria-selected="true"] {
     background-color: #EA580C !important;
     background: linear-gradient(135deg, #EA580C 0%, #C2410C 100%) !important;
     color: #FFFFFF !important;
@@ -587,25 +583,22 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (st.pills 원터치 직업 선택 UI 전면 적용)
+# 6.01.00 | Tab 1 — 우리집 가계부 (직업 선택 3열 배치 & ESBI 2x2 연동)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     
     with st.form("finance_form"):
         # ----------------------------------------------------------------------
-        # ⓪ 우리집 소득 성격 (st.pills 원터치 알약 매트릭스 탑재)
+        # ⓪ 우리집 소득 성격 (3열 줄바꿈으로 가독성 극대화)
         # ----------------------------------------------------------------------
         with st.container(border=True, key="job-panel"):
             st.markdown("#### ⓪ 우리집 소득 성격")
             st.caption("가계 경제를 지탱하는 일과 소득의 구조를 파악합니다 (터치하여 선택).")
             
-            job_col1, job_col2 = st.columns(2)
-            
             job_options = ["직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
             job_spouse_options = ["해당 없음", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
             
-            # 이전 선택값 불러오기 (기본값: 나의 직업 '직장인', 배우자 '해당 없음')
             prev_job = st.session_state.get("job_form", "직장인")
             if prev_job not in job_options:
                 prev_job = "직장인"
@@ -614,25 +607,27 @@ if selected_page == "우리집 가계부":
             if prev_spouse_job not in job_spouse_options:
                 prev_spouse_job = "해당 없음"
             
-            with job_col1:
-                st.markdown("<span style='font-size: 15px; font-weight: 700; color: #F1F5F9;'>나의 직업은?</span>", unsafe_allow_html=True)
-                job_selected = st.pills(
-                    "나의 직업은?",
-                    job_options,
-                    default=prev_job,
-                    key="pills_job_self",
-                    label_visibility="collapsed"
-                )
+            # 1) 나의 직업
+            st.markdown("<span style='font-size: 15.5px; font-weight: 700; color: #F1F5F9;'>나의 직업은?</span>", unsafe_allow_html=True)
+            job_selected = st.pills(
+                "나의 직업은?",
+                job_options,
+                default=prev_job,
+                key="pills_job_self",
+                label_visibility="collapsed"
+            )
             
-            with job_col2:
-                st.markdown("<span style='font-size: 15px; font-weight: 700; color: #F1F5F9;'>배우자의 직업은? (선택)</span>", unsafe_allow_html=True)
-                job_spouse_selected = st.pills(
-                    "배우자의 직업은?",
-                    job_spouse_options,
-                    default=prev_spouse_job,
-                    key="pills_job_spouse",
-                    label_visibility="collapsed"
-                )
+            st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+            
+            # 2) 배우자의 직업
+            st.markdown("<span style='font-size: 15.5px; font-weight: 700; color: #F1F5F9;'>배우자의 직업은? (선택)</span>", unsafe_allow_html=True)
+            job_spouse_selected = st.pills(
+                "배우자의 직업은?",
+                job_spouse_options,
+                default=prev_spouse_job,
+                key="pills_job_spouse",
+                label_visibility="collapsed"
+            )
 
         st.write("")
 
@@ -719,7 +714,7 @@ if selected_page == "우리집 가계부":
         st.session_state["finance_saved_notice"] = True
 
     # --------------------------------------------------------------------------
-    # 듀얼 ESBI 사분면 매핑 (2x2 수학 좌표계 완벽 작동)
+    # 듀얼 ESBI 사분면 매핑 (2x2 수학 좌표계)
     # --------------------------------------------------------------------------
     q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
