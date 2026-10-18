@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (310px 슬림 팝업 & 완벽 정중앙)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (다이얼로그 제거 & 깃털처럼 가벼운 CSS)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -87,17 +87,6 @@ st.markdown("""
 .stApp, .stApp p, .stApp label, .stApp [data-testid="stMarkdownContainer"] {
     font-size: 17px !important;
     color: var(--nc-text);
-}
-
-/* 카드 및 박스 */
-.soft-card {
-    background: var(--nc-card-bg);
-    border: 1px solid var(--nc-border);
-    border-radius: 14px;
-    padding: 18px 20px;
-    margin: 10px 0;
-    color: var(--nc-text);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
 /* 재무 컬러 패널 */
@@ -203,98 +192,52 @@ div[data-testid="stNumberInput"] button { display: none !important; }
 div[data-testid="stNumberInput"] input { padding-right: 12px !important; }
 
 /* ==========================================================================
-   시작 팝업창 (310px 컴팩트 슬림 다이얼로그 & PC/모바일 정중앙 고정)
+   👇 [새로운 시작 카드] 표지 아래 안착하는 단정하고 가벼운 세이지그린 카드
    ========================================================================== */
-/* 1. BaseWeb 실제 모달 카드 [role="dialog"]를 310px 슬림 카드로 정밀 타격 */
-div[data-testid="stDialog"] [role="dialog"] {
-    width: 310px !important;
-    max-width: 88vw !important;
+.st-key-start-card {
     background-color: #E8EFE9 !important;
     border: 1.5px solid #C5D4C7 !important;
-    border-radius: 18px !important;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38) !important;
-    padding: 30px 20px 22px 20px !important;
-    box-sizing: border-box !important;
-    position: relative !important;
+    border-radius: 16px !important;
+    padding: 22px 24px !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25) !important;
 }
 
-/* 2. 내부 래퍼 및 폼의 중복 테두리/배경 제거 */
-div[data-testid="stDialog"] [role="dialog"] > div,
-div[data-testid="stDialog"] [role="dialog"] section,
-div[data-testid="stDialog"] [data-testid="stForm"] {
-    background-color: transparent !important;
+.st-key-start-card [data-testid="stForm"] {
     border: none !important;
-    box-shadow: none !important;
-    width: 100% !important;
     padding: 0 !important;
-    margin: 0 !important;
 }
 
-/* 3. 닫기(X) 버튼 */
-div[data-testid="stDialog"] button[aria-label="Close"] {
-    position: absolute !important;
-    top: 10px !important;
-    right: 12px !important;
-    z-index: 99 !important;
-    background: transparent !important;
-    color: #2D4A3E !important;
-    border: none !important;
-}
-
-/* 4. 중복 제목 완전 삭제 */
-div[data-testid="stDialog"] h2[slot="title"] {
-    display: none !important;
-}
-
-/* 5. 라벨 스타일 (정중앙 15px) */
-div[data-testid="stDialog"] label { 
+.st-key-start-card label { 
     display: block !important; 
     width: 100% !important; 
     text-align: center !important;
     color: #2D4A3E !important;
-    font-size: 15px !important;
+    font-size: 15.5px !important;
     font-weight: 700 !important;
     margin-bottom: 4px !important;
 }
-div[data-testid="stDialog"] [data-testid="stWidgetLabel"] { justify-content: center !important; width: 100% !important; }
+.st-key-start-card [data-testid="stWidgetLabel"] { justify-content: center !important; width: 100% !important; }
 
-/* 6. 입력창 (깨끗한 흰색 슬림 인풋) */
-div[data-testid="stDialog"] div[data-baseweb="input"] {
+.st-key-start-card div[data-baseweb="input"] {
     background-color: #FFFFFF !important;
     border: 1px solid #B8CABE !important;
     border-radius: 8px !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
     margin-bottom: 12px !important;
 }
 
-div[data-testid="stDialog"] input { 
+.st-key-start-card input { 
     text-align: center !important; 
     background-color: transparent !important;
     color: #1A2E26 !important;
-    font-size: 16px !important;
-    border: none !important;
-    padding: 8px 10px !important;
-}
-
-/* 7. 시작하기 버튼 */
-div[data-testid="stDialog"] [data-testid="stFormSubmitButton"] {
-    margin-top: 6px !important;
-    width: 100% !important;
-}
-div[data-testid="stDialog"] [data-testid="stFormSubmitButton"] button {
-    width: 100% !important;
     font-size: 16.5px !important;
-    padding: 10px !important;
-    background-color: var(--nc-primary, #EA580C) !important;
-    color: #FFFFFF !important;
-    border-radius: 8px !important;
+    border: none !important;
 }
 
-/* 8. 시작 팝업 나이 입력의 +/- 스핀 버튼 제거 */
-div[data-testid="stDialog"] input[type="number"]::-webkit-inner-spin-button,
-div[data-testid="stDialog"] input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-div[data-testid="stDialog"] input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+.st-key-start-card [data-testid="stFormSubmitButton"] button {
+    margin-top: 6px !important;
+    background-color: var(--nc-primary, #EA580C) !important;
+    font-size: 17px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -450,7 +393,7 @@ def call_gemini_text(prompt_text):
 # ==============================================================================
 
 # ==============================================================================
-# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그 (버튼명 '시작' 심플화)
+# 4.01.00 | 첫 진입 표지 (말썽 많은 팝업 폐기 -> 가볍고 단정한 시작 카드)
 # ==============================================================================
 cover_file_path = None
 possible_covers = [
@@ -464,33 +407,11 @@ for c_name in possible_covers:
         cover_file_path = c_path
         break
 
-# 이름/나이 입력 다이얼로그 (중복 제목 제거 & 콤팩트 구성)
-@st.dialog(" ", width="small")
-def start_dialog():
-    with st.form("start_form", clear_on_submit=False):
-        name = st.text_input("이름 또는 별칭", placeholder="편하신 별칭을 적어주세요", key="start_person_name")
-        age_text = st.text_input("나이", placeholder="예: 38", key="start_person_age_text", max_chars=3)
-        try:
-            age = int(age_text) if age_text.strip() else None
-            if age is not None and not (1 <= age <= 120):
-                age = None
-        except ValueError:
-            age = None
-        submitted = st.form_submit_button("시작하기", use_container_width=True, type="primary")
-    if submitted:
-        if not name.strip() or age is None:
-            st.warning("이름(별칭)과 올바른 나이를 입력해 주세요.")
-        else:
-            st.session_state.person_name = name.strip()
-            st.session_state.person_age = int(age)
-            st.session_state.started = True
-            st.rerun()
-
-# 시작 전: 표지 화면 렌더링
 if not st.session_state.started:
     col_left, col_center, col_right = st.columns([1, 1.8, 1])
     
     with col_center:
+        # 1. 고화질 표지 단독 렌더링
         if cover_file_path:
             st.image(cover_file_path, use_container_width=True)
         else:
@@ -504,9 +425,28 @@ if not st.session_state.started:
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
         
-        # 👇 [요청 1] '나침반 산책 시작하기' -> '시작'으로 간결화
-        if st.button("시작", use_container_width=True, type="primary"):
-            start_dialog()
+        # 2. 표지 아래에 가볍고 단정하게 안착하는 세이지 그린 시작 카드 (팝업 완전 대체)
+        with st.container(border=True, key="start-card"):
+            with st.form("start_form", clear_on_submit=False):
+                name = st.text_input("이름 또는 별칭", placeholder="편하신 별칭을 적어주세요", key="start_person_name")
+                age_text = st.text_input("나이", placeholder="예: 38", key="start_person_age_text", max_chars=3)
+                try:
+                    age = int(age_text) if age_text.strip() else None
+                    if age is not None and not (1 <= age <= 120):
+                        age = None
+                except ValueError:
+                    age = None
+                    
+                submitted = st.form_submit_button("나침반 산책 시작", use_container_width=True, type="primary")
+                
+            if submitted:
+                if not name.strip() or age is None:
+                    st.warning("이름(별칭)과 올바른 나이를 입력해 주세요.")
+                else:
+                    st.session_state.person_name = name.strip()
+                    st.session_state.person_age = int(age)
+                    st.session_state.started = True
+                    st.rerun()
             
     st.stop()
     
