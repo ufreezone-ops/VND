@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (드롭다운 흰박스 박멸)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (드롭다운 흰박스 박멸 완결판)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -183,8 +183,8 @@ button[kind="primary"], .stApp [data-testid="stFormSubmitButton"] button[kind="p
 [data-testid="stSidebar"] { background-color: var(--nc-sidebar-bg) !important; border-right: 1px solid var(--nc-border) !important; }
 [data-testid="stSidebar"] * { color: var(--nc-text) !important; }
 
-/* 입력 필드 스타일 */
-.stApp input, .stApp textarea, .stApp [data-baseweb="select"] > div {
+/* 입력 필드 기본 배경 */
+.stApp input, .stApp textarea {
     background-color: var(--nc-card-bg) !important;
     color: var(--nc-text) !important;
     border-color: var(--nc-border) !important;
@@ -199,15 +199,25 @@ input::placeholder, textarea::placeholder,
     opacity: 1 !important;
 }
 
-/* 👇 [핵심 해결] 드롭다운 우측 흰색 사각형 박스 완전 제거 및 화살표 복원 */
-div[data-baseweb="select"] [class*="EndEnhancer"],
-div[data-baseweb="select"] [class*="StyledEndEnhancer"],
-div[data-baseweb="select"] div[role="button"],
-div[data-baseweb="select"] div:has(> svg) {
+/* ==========================================================================
+   👇 [드롭다운 흰색 사각형 완벽 박멸 & 화살표 복원 최종 해결책]
+   ========================================================================== */
+/* 1. 셀렉트박스 전체 컨트롤러 배경 */
+div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+    background-color: #151e2f !important;
+    border-color: var(--nc-border) !important;
+}
+
+/* 2. 문제의 우측 끝 흰색 블록 컨테이너(EndEnhancer) 투명화 강제 */
+div[data-testid="stSelectbox"] [data-baseweb="select"] > div > div:last-child,
+div[data-testid="stSelectbox"] [data-baseweb="select"] div[aria-hidden="true"],
+div[data-testid="stSelectbox"] [data-baseweb="select"] span {
     background-color: transparent !important;
     background: transparent !important;
 }
-div[data-baseweb="select"] svg {
+
+/* 3. 화살표(SVG) 아이콘 색상을 선명한 슬레이트 그레이로 표출 */
+div[data-testid="stSelectbox"] [data-baseweb="select"] svg {
     fill: #94a3b8 !important;
     color: #94a3b8 !important;
 }
