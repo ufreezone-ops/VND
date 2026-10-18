@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (다이얼로그 제거 & 깃털처럼 가벼운 CSS)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (다이얼로그 삭제 & 인라인 툴바 스타일)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -89,6 +89,17 @@ st.markdown("""
     color: var(--nc-text);
 }
 
+/* 카드 및 박스 */
+.soft-card {
+    background: var(--nc-card-bg);
+    border: 1px solid var(--nc-border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin: 10px 0;
+    color: var(--nc-text);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
 /* 재무 컬러 패널 */
 .st-key-job-panel { 
     background: rgba(30, 41, 59, 0.45) !important; 
@@ -126,7 +137,7 @@ button[kind="primary"], .stApp [data-testid="stFormSubmitButton"] button[kind="p
 [data-testid="stSidebar"] { background-color: var(--nc-sidebar-bg) !important; border-right: 1px solid var(--nc-border) !important; }
 [data-testid="stSidebar"] * { color: var(--nc-text) !important; }
 
-/* 입력 필드 (크고 선명하게 17px) */
+/* 일반 입력 필드 */
 .stApp input, .stApp textarea {
     background-color: var(--nc-card-bg) !important;
     color: var(--nc-text) !important;
@@ -192,55 +203,36 @@ div[data-testid="stNumberInput"] button { display: none !important; }
 div[data-testid="stNumberInput"] input { padding-right: 12px !important; }
 
 /* ==========================================================================
-   👇 [새로운 시작 카드] 표지 아래 안착하는 단정하고 가벼운 세이지그린 카드
+   표지 아래 인라인 3칸 시작 툴바 전용 스타일 (수평 높이 일치)
    ========================================================================== */
-.st-key-start-card {
-    background-color: #E8EFE9 !important;
-    border: 1.5px solid #C5D4C7 !important;
-    border-radius: 16px !important;
-    padding: 22px 24px !important;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25) !important;
-}
-
-.st-key-start-card [data-testid="stForm"] {
+/* 시작 폼 테두리 제거 */
+div[data-testid="stForm"]:has(input[id*="start_person"]) {
     border: none !important;
     padding: 0 !important;
+    background: transparent !important;
 }
 
-.st-key-start-card label { 
-    display: block !important; 
-    width: 100% !important; 
-    text-align: center !important;
-    color: #2D4A3E !important;
-    font-size: 15.5px !important;
-    font-weight: 700 !important;
-    margin-bottom: 4px !important;
-}
-.st-key-start-card [data-testid="stWidgetLabel"] { justify-content: center !important; width: 100% !important; }
-
-.st-key-start-card div[data-baseweb="input"] {
+/* 시작 입력창 2개: 중앙 정렬 & 화이트 깔끔한 배경 */
+input[id*="start_person"] {
     background-color: #FFFFFF !important;
-    border: 1px solid #B8CABE !important;
+    color: #0F172A !important;
+    border: 1.5px solid #94A3B8 !important;
     border-radius: 8px !important;
-    margin-bottom: 12px !important;
+    text-align: center !important;
+    font-size: 16px !important;
+    height: 44px !important;
 }
 
-.st-key-start-card input { 
-    text-align: center !important; 
-    background-color: transparent !important;
-    color: #1A2E26 !important;
-    font-size: 16.5px !important;
-    border: none !important;
-}
-
-.st-key-start-card [data-testid="stFormSubmitButton"] button {
-    margin-top: 6px !important;
-    background-color: var(--nc-primary, #EA580C) !important;
+/* 시작 버튼: 입력창과 높이(44px) 수평 일치 */
+div[data-testid="stForm"]:has(input[id*="start_person"]) button {
+    height: 44px !important;
     font-size: 17px !important;
+    font-weight: 800 !important;
+    border-radius: 8px !important;
+    padding: 0 10px !important;
 }
 </style>
 """, unsafe_allow_html=True)
-
 # ------------------------------------------------------------------------------
 # 1.03.00 | 공식 통계 벤치마크 및 전역 상수 (국민이전계정 NTA 데이터)
 # ------------------------------------------------------------------------------
@@ -393,7 +385,7 @@ def call_gemini_text(prompt_text):
 # ==============================================================================
 
 # ==============================================================================
-# 4.01.00 | 첫 진입 표지 (말썽 많은 팝업 폐기 -> 가볍고 단정한 시작 카드)
+# 4.01.00 | 첫 진입 표지 및 2줄 인라인 시작 바 (팝업 0% / 3열 가로 툴바)
 # ==============================================================================
 cover_file_path = None
 possible_covers = [
@@ -408,6 +400,7 @@ for c_name in possible_covers:
         break
 
 if not st.session_state.started:
+    # PC에서는 멋진 책처럼 중앙에 배치, 모바일에서는 100% 너비로 반응
     col_left, col_center, col_right = st.columns([1, 1.8, 1])
     
     with col_center:
@@ -425,23 +418,33 @@ if not st.session_state.started:
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
         
-        # 2. 표지 아래에 가볍고 단정하게 안착하는 세이지 그린 시작 카드 (팝업 완전 대체)
-        with st.container(border=True, key="start-card"):
-            with st.form("start_form", clear_on_submit=False):
-                name = st.text_input("이름 또는 별칭", placeholder="편하신 별칭을 적어주세요", key="start_person_name")
-                age_text = st.text_input("나이", placeholder="예: 38", key="start_person_age_text", max_chars=3)
-                try:
-                    age = int(age_text) if age_text.strip() else None
-                    if age is not None and not (1 <= age <= 120):
-                        age = None
-                except ValueError:
-                    age = None
-                    
-                submitted = st.form_submit_button("나침반 산책 시작", use_container_width=True, type="primary")
+        # 2. 표지 바로 아래 2줄 3칸 슬림 시작 바
+        with st.form("start_inline_form", clear_on_submit=False):
+            in_col1, in_col2, in_col3 = st.columns([2.0, 1.1, 1.1])
+            
+            with in_col1:
+                st.markdown("<div style='font-size: 15px; font-weight: 700; color: #F1F5F9; margin-bottom: 6px; text-align: center;'>이름(별칭)</div>", unsafe_allow_html=True)
+                name = st.text_input("이름(별칭)", placeholder="이름 또는 별칭", key="start_person_name", label_visibility="collapsed")
                 
+            with in_col2:
+                st.markdown("<div style='font-size: 15px; font-weight: 700; color: #F1F5F9; margin-bottom: 6px; text-align: center;'>나이</div>", unsafe_allow_html=True)
+                age_text = st.text_input("나이", placeholder="예: 38", key="start_person_age_text", max_chars=3, label_visibility="collapsed")
+                
+            with in_col3:
+                # 1행 수평 맞춤용 빈 공간 (라벨 높이와 정확히 일치)
+                st.markdown("<div style='font-size: 15px; font-weight: 700; margin-bottom: 6px; text-align: center;'>&nbsp;</div>", unsafe_allow_html=True)
+                submitted = st.form_submit_button("시작", use_container_width=True, type="primary")
+
+            try:
+                age = int(age_text) if age_text.strip() else None
+                if age is not None and not (1 <= age <= 120):
+                    age = None
+            except ValueError:
+                age = None
+
             if submitted:
                 if not name.strip() or age is None:
-                    st.warning("이름(별칭)과 올바른 나이를 입력해 주세요.")
+                    st.warning("이름(별칭)과 나이를 올바르게 입력해 주세요.")
                 else:
                     st.session_state.person_name = name.strip()
                     st.session_state.person_age = int(age)
