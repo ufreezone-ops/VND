@@ -571,7 +571,7 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (ESBI 2x2 수학좌표계 & '모르면 빈칸으로' 정돈)
+# 6.01.00 | Tab 1 — 우리집 가계부 (ESBI 2x2 그리드 정상 렌더링 복원)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
@@ -640,7 +640,7 @@ if selected_page == "우리집 가계부":
                 debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
 
         # ----------------------------------------------------------------------
-        # 은퇴 후 가정 ('모르면 빈칸으로 두세요' 정중한 교정)
+        # 은퇴 후 가정
         # ----------------------------------------------------------------------
         with st.container(border=True, key="retirement-panel"):
             st.markdown("#### 은퇴 후에는?")
@@ -649,7 +649,7 @@ if selected_page == "우리집 가계부":
                 income_pension = st.number_input(
                     "은퇴 후 받을 월 연금", min_value=0,
                     value=st.session_state.get("income_pension"), step=10,
-                    placeholder="모르면 빈칸으로 두세요",  # 👈 정중한 힌트 문구 적용
+                    placeholder="모르면 빈칸으로 두세요",
                     help="국민연금·퇴직연금 등 예상 수령액입니다. 현재 월수입에는 합산되지 않습니다."
                 )
             with retirement_expense_col:
@@ -680,7 +680,7 @@ if selected_page == "우리집 가계부":
         st.session_state["finance_saved_notice"] = True
 
     # --------------------------------------------------------------------------
-    # 듀얼 ESBI 사분면 매핑 (2x2 수학 좌표계 & 보이지 않는 거대한 벽 시각화)
+    # 듀얼 ESBI 사분면 매핑 (들여쓰기 공백 제거로 코드노출 원천 차단)
     # --------------------------------------------------------------------------
     q_self = active_quadrant(st.session_state.get("job_form", ""))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
@@ -691,12 +691,10 @@ if selected_page == "우리집 가계부":
         st.success("입력하신 재무 정보가 반영되었습니다.")
         st.components.v1.html("<script>try { window.parent.document.getElementById('selected-esbi').scrollIntoView({behavior:'smooth',block:'center'}); } catch(e) {}</script>", height=0)
 
-    # 4개 분면 스타일 및 뱃지 생성 함수
     def get_quad_ui(code, title, desc):
         is_self = (q_self == code)
         is_spouse = (q_spouse == code)
         
-        # 테두리: 나(오렌지 실선) / 배우자(청색 점선) / 둘 다(이중 하이라이트)
         if is_self and is_spouse:
             border_style = "border: 2.5px solid #EA580C; outline: 2.5px dashed #38BDF8; outline-offset: -5px; background: rgba(234, 88, 12, 0.14);"
         elif is_self:
@@ -714,50 +712,39 @@ if selected_page == "우리집 가계부":
         
         badge_row = f"<div style='min-height:24px; margin-bottom:4px; display:flex; justify-content:center; gap:4px;'>{' '.join(badges)}</div>" if badges else "<div style='min-height:24px; margin-bottom:4px;'></div>"
         
-        return f"""
-        <div style="{border_style} border-radius: 12px; padding: 18px 12px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 145px; box-sizing: border-box;">
-            {badge_row}
-            <div style="font-size: 26px; font-weight: 850; color: #F8FAFC; line-height: 1.1;">{code}</div>
-            <div style="font-size: 16.5px; font-weight: 700; color: #F1F5F9; margin: 4px 0 6px 0;">{title}</div>
-            <div style="font-size: 12px; color: #94A3B8; line-height: 1.45; word-break: keep-all; text-align: center;">{desc}</div>
-        </div>
-        """
+        return f'<div style="{border_style} border-radius: 12px; padding: 18px 12px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 145px; box-sizing: border-box;">{badge_row}<div style="font-size: 26px; font-weight: 850; color: #F8FAFC; line-height: 1.1;">{code}</div><div style="font-size: 16.5px; font-weight: 700; color: #F1F5F9; margin: 4px 0 6px 0;">{title}</div><div style="font-size: 12px; color: #94A3B8; line-height: 1.45; word-break: keep-all; text-align: center;">{desc}</div></div>'
 
-    # ESBI 각 분면 UI 연산
     card_e = get_quad_ui("E", ESBI["E"][0], ESBI["E"][1])
     card_b = get_quad_ui("B", ESBI["B"][0], ESBI["B"][1])
     card_s = get_quad_ui("S", ESBI["S"][0], ESBI["S"][1])
     card_i = get_quad_ui("I", ESBI["I"][0], ESBI["I"][1])
 
-    # 2x2 수학 좌표계 & 보이지 않는 벽 렌더링 (모바일에서도 2열 그리드 항시 고정)
-    st.markdown(f"""
-    <div style="margin: 16px 0 24px 0;">
-        <!-- 상단 대비 헤더: 좌(E·S) vs 우(B·I) 거대한 패러다임의 벽 -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; text-align: center;">
-            <div style="background: rgba(30, 41, 59, 0.6); padding: 9px 8px; border-radius: 8px; border-left: 3.5px solid #94A3B8;">
-                <div style="font-size: 13.5px; font-weight: 700; color: #E2E8F0;">⏳ E · S [노동소득]</div>
-                <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">시간을 파는 삶 (물통)</div>
-            </div>
-            <div style="background: rgba(30, 41, 59, 0.6); padding: 9px 8px; border-radius: 8px; border-left: 3.5px solid #F59E0B;">
-                <div style="font-size: 13.5px; font-weight: 700; color: #FBBF24;">🚰 B · I [자산소득]</div>
-                <div style="font-size: 11px; color: #FDE68A; margin-top: 2px;">자산이 일하는 삶 (파이프라인)</div>
-            </div>
-        </div>
+    # 들여쓰기 공백을 0칸으로 밀착하여 코드블록 오작동 원천 차단
+    esbi_html = f"""<div style="margin: 16px 0 24px 0;">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; text-align: center;">
+<div style="background: rgba(30, 41, 59, 0.6); padding: 9px 8px; border-radius: 8px; border-left: 3.5px solid #94A3B8;">
+<div style="font-size: 13.5px; font-weight: 700; color: #E2E8F0;">⏳ E · S [노동소득]</div>
+<div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">시간을 파는 삶 (물통)</div>
+</div>
+<div style="background: rgba(30, 41, 59, 0.6); padding: 9px 8px; border-radius: 8px; border-left: 3.5px solid #F59E0B;">
+<div style="font-size: 13.5px; font-weight: 700; color: #FBBF24;">🚰 B · I [자산소득]</div>
+<div style="font-size: 11px; color: #FDE68A; margin-top: 2px;">자산이 일하는 삶 (파이프라인)</div>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+<div>{card_e}</div>
+<div>{card_b}</div>
+<div>{card_s}</div>
+<div>{card_i}</div>
+</div>
+<div style="text-align: center; margin-top: 8px;">
+<span style="font-size: 11.5px; color: #64748B;">
+🧱 좌측(E·S)에서 우측(B·I)으로 넘어가는 것은 단순히 일자리를 바꾸는 것이 아니라, <b>소득의 종류를 완전히 바꾸는 거대한 결단</b>입니다.
+</span>
+</div>
+</div>"""
 
-        <!-- 2x2 매트릭스 그리드 (E vs B / S vs I) -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <div>{card_e}</div>
-            <div>{card_b}</div>
-            <div>{card_s}</div>
-            <div>{card_i}</div>
-        </div>
-        <div style="text-align: center; margin-top: 8px;">
-            <span style="font-size: 11.5px; color: #64748B;">
-                🧱 좌측(E·S)에서 우측(B·I)으로 넘어가는 것은 단순히 일자리를 바꾸는 것이 아니라, <b>소득의 종류를 완전히 바꾸는 거대한 결단</b>입니다.
-            </span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(esbi_html, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
     # 현재 입력값 지표 요약 & 미래 순자산 궤적 차트
@@ -811,7 +798,6 @@ if selected_page == "우리집 가계부":
         if st.button("다음 →", key="finance_next", use_container_width=True, type="primary"):
             st.session_state["_pending_nav"] = "삶과 생계수단"
             st.rerun()
-
 
 # ==============================================================================
 # 6.02.00 | Tab 2 — 삶과 생계수단 (Livelihood & Buckets vs Pipeline)
