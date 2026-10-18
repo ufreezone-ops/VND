@@ -385,7 +385,7 @@ def call_gemini_text(prompt_text):
 # ==============================================================================
 
 # ==============================================================================
-# 4.01.00 | 첫 진입 표지 및 2줄 인라인 시작 바 (팝업 0% / 3열 가로 툴바)
+# 4.01.00 | 첫 진입 표지 및 인라인 시작 바 (라벨 폰트 18px 볼드 확대)
 # ==============================================================================
 cover_file_path = None
 possible_covers = [
@@ -400,11 +400,9 @@ for c_name in possible_covers:
         break
 
 if not st.session_state.started:
-    # PC에서는 멋진 책처럼 중앙에 배치, 모바일에서는 100% 너비로 반응
     col_left, col_center, col_right = st.columns([1, 1.8, 1])
     
     with col_center:
-        # 1. 고화질 표지 단독 렌더링
         if cover_file_path:
             st.image(cover_file_path, use_container_width=True)
         else:
@@ -418,21 +416,20 @@ if not st.session_state.started:
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
         
-        # 2. 표지 바로 아래 2줄 3칸 슬림 시작 바
+        # 표지 바로 아래 2줄 3칸 인라인 시작 바 (라벨 폰트 18px 시원하게 확대)
         with st.form("start_inline_form", clear_on_submit=False):
             in_col1, in_col2, in_col3 = st.columns([2.0, 1.1, 1.1])
             
             with in_col1:
-                st.markdown("<div style='font-size: 15px; font-weight: 700; color: #F1F5F9; margin-bottom: 6px; text-align: center;'>이름(별칭)</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size: 18px; font-weight: 800; color: #F8FAFC; margin-bottom: 6px; text-align: center;'>이름(별칭)</div>", unsafe_allow_html=True)
                 name = st.text_input("이름(별칭)", placeholder="이름 또는 별칭", key="start_person_name", label_visibility="collapsed")
                 
             with in_col2:
-                st.markdown("<div style='font-size: 15px; font-weight: 700; color: #F1F5F9; margin-bottom: 6px; text-align: center;'>나이</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size: 18px; font-weight: 800; color: #F8FAFC; margin-bottom: 6px; text-align: center;'>나이</div>", unsafe_allow_html=True)
                 age_text = st.text_input("나이", placeholder="예: 38", key="start_person_age_text", max_chars=3, label_visibility="collapsed")
                 
             with in_col3:
-                # 1행 수평 맞춤용 빈 공간 (라벨 높이와 정확히 일치)
-                st.markdown("<div style='font-size: 15px; font-weight: 700; margin-bottom: 6px; text-align: center;'>&nbsp;</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size: 18px; font-weight: 800; margin-bottom: 6px; text-align: center;'>&nbsp;</div>", unsafe_allow_html=True)
                 submitted = st.form_submit_button("시작", use_container_width=True, type="primary")
 
             try:
@@ -567,7 +564,7 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (우리집 재무 현황 & 2x2 세로 점선 분할)
+# 6.01.00 | Tab 1 — 우리집 가계부 (통계 기반 미래 순자산·연금 궤적 전면 개편)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
@@ -688,7 +685,7 @@ if selected_page == "우리집 가계부":
         st.session_state["finance_saved_notice"] = True
 
     # --------------------------------------------------------------------------
-    # 우리집 재무 현황 (ESBI 2x2 동일 규격 카드 & 세로 굵은 점선 분할)
+    # 우리집 재무 현황 (2x2 동일 규격 카드 & 세로 굵은 점선 분할)
     # --------------------------------------------------------------------------
     q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
@@ -699,7 +696,6 @@ if selected_page == "우리집 가계부":
         st.success("입력하신 재무 정보가 반영되었습니다.")
         st.components.v1.html("<script>try { window.parent.document.getElementById('selected-esbi').scrollIntoView({behavior:'smooth',block:'center'}); } catch(e) {}</script>", height=0)
 
-    # 4개 분면 카드 UI 생성 함수 (동일한 고정 높이 165px로 크기 완전 일치)
     def get_quad_ui(code, title, desc):
         is_self = (q_self == code)
         is_spouse = (q_spouse == code)
@@ -723,13 +719,11 @@ if selected_page == "우리집 가계부":
         
         return f'<div style="{border_style} border-radius: 12px; padding: 18px 12px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 165px; box-sizing: border-box; width: 100%;">{badge_row}<div style="font-size: 28px; font-weight: 850; color: #F8FAFC; line-height: 1.1;">{code}</div><div style="font-size: 17.5px; font-weight: 700; color: #F1F5F9; margin: 4px 0 6px 0;">{title}</div><div style="font-size: 14px; color: #CBD5E1; line-height: 1.4; word-break: keep-all; text-align: center;">{desc}</div></div>'
 
-    # 새로운 설명 문구 적용
     card_e = get_quad_ui("E", "직장인", "나의 시간과 돈을 바꿈.<br><span style='color:#F59E0B; font-weight:600;'>(작은 물통)</span>")
     card_s = get_quad_ui("S", "자영업·전문직", "나의 시간과 돈을 바꿈.<br><span style='color:#F59E0B; font-weight:600;'>(큰 물통)</span>")
     card_b = get_quad_ui("B", "사업가", "나의 회사가 돈을 만듦.<br><span style='color:#38BDF8; font-weight:600;'>(파이프라인)</span>")
     card_i = get_quad_ui("I", "투자자·임대소득자", "나의 자산이 돈을 만듦.<br><span style='color:#38BDF8; font-weight:600;'>(파이프라인)</span>")
 
-    # 상단 배너 삭제 & ES와 BI 사이에 세로 굵은 점선(3px dashed) 분할
     esbi_html = f"""<div style="margin: 16px 0 24px 0;">
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0px; align-items: stretch;">
 <div style="display: flex; flex-direction: column; gap: 14px; padding-right: 14px; border-right: 3.5px dashed #475569;">
@@ -751,7 +745,7 @@ if selected_page == "우리집 가계부":
     st.markdown(esbi_html, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 현재 입력값 지표 요약 & 미래 순자산 궤적 차트
+    # 현재 재무 요약
     # --------------------------------------------------------------------------
     s = current_financial_summary()
     st.markdown("### 현재 재무 요약")
@@ -761,40 +755,139 @@ if selected_page == "우리집 가계부":
     cols[2].metric("월 저축여력", money(s["surplus"]))
     cols[3].metric("순자산", fmt_eok(s["net_worth"]))
 
+    # --------------------------------------------------------------------------
+    # 미래 순자산·연금 궤적 (통계청 임금/물가상승률 모델링 & 억 원 단위 시각화)
+    # --------------------------------------------------------------------------
     st.markdown("### 미래 순자산·연금 궤적")
+    
     cur_age = int(st.session_state.person_age)
-    retirement_value = st.session_state.get("retirement_age")
-    retire_age = int(retirement_value) if retirement_value is not None else 65
-    retire_age = max(cur_age, min(retire_age, 100))
-    annual_savings = s["surplus"] * 12
-    years = sorted(set([cur_age, 80, retire_age] + list(range(((cur_age // 5) + 1) * 5, 81, 5))))
-    vals = []
+    retire_val = st.session_state.get("retirement_age")
+    retire_age = int(retire_val) if retire_val is not None else 65
+    retire_age = max(cur_age, min(retire_age, 90))
     
-    ret_expenses = float(getv("retirement_monthly_expenses", 200) or 0)
-    ret_pension = float(getv("income_pension", 0) or 0)
+    # 1. 초기 순자산 (억 원 단위)
+    start_asset_eok = s["net_worth"] / 10000.0
+    monthly_surplus = s["surplus"]
     
-    for a in years:
-        working_yrs = max(0, min(a, retire_age) - cur_age)
-        proj = s["net_worth"] + annual_savings * working_yrs
-        if a > retire_age:
-            ret_cashflow = (ret_pension - ret_expenses) * 12
-            proj += ret_cashflow * (a - retire_age)
-        vals.append(proj)
+    # 2. 통계청 실질 임금상승률 반영 (연평균 명목임금 3.0% - 물가 2.0% = 실질 저축성장률 약 1.5%)
+    real_growth_rate = 0.015
+    
+    # [구간 1] 은퇴 전: 자산 축적기 연산
+    ages_accum = list(range(cur_age, retire_age + 1))
+    vals_accum = []
+    current_asset = start_asset_eok
+    
+    for idx, a in enumerate(ages_accum):
+        vals_accum.append(current_asset)
+        # 매년 실질 임금상승분을 감안한 저축액 누적
+        annual_save = (monthly_surplus * 12 * ((1 + real_growth_rate) ** idx)) / 10000.0
+        current_asset += annual_save
 
-    fig_asset = go.Figure(go.Scatter(
-        x=years, y=vals, mode="lines+markers",
-        line=dict(color="#f59e0b", width=3.5), name="추정 순자산"
+    peak_asset_eok = vals_accum[-1]
+
+    # [구간 2] 은퇴 후: 자산 인출·연금기 연산 (은퇴나이 ~ 90세)
+    ret_pension = float(getv("income_pension", 0) or 0)
+    ret_expenses = float(getv("retirement_monthly_expenses", 200) or 0)
+    annual_ret_cashflow_eok = ((ret_pension - ret_expenses) * 12) / 10000.0  # 억 원 단위
+
+    ages_retire = list(range(retire_age, 91))
+    vals_retire = []
+    ret_asset = peak_asset_eok
+    depletion_age = None
+
+    for idx, a in enumerate(ages_retire):
+        vals_retire.append(ret_asset)
+        if idx > 0 and ret_asset <= 0 and depletion_age is None:
+            depletion_age = a
+        ret_asset += annual_ret_cashflow_eok
+
+    # Plotly 차트 구성
+    fig_asset = go.Figure()
+
+    # 기준선 (0억 원)
+    fig_asset.add_hline(y=0, line_dash="solid", line_color="#334155", line_width=1.5)
+
+    # 1. 은퇴 전 [자산 축적기] 곡선 (골드 실선 & 은은한 음영)
+    fig_asset.add_trace(go.Scatter(
+        x=ages_accum, y=vals_accum,
+        mode="lines+markers",
+        line=dict(color="#F59E0B", width=3.5),
+        marker=dict(size=6),
+        fill='tozeroy',
+        fillcolor='rgba(245, 158, 11, 0.12)',
+        name="🌱 자산 축적기 (근로저축 + 실질임금상승)",
+        hovertemplate="나이: %{x}세<br>추정 순자산: <b>%{y:.2f}억 원</b><extra></extra>"
     ))
-    fig_asset.add_vline(x=retire_age, line_dash="dash", line_color="#38bdf8",
-                        annotation_text=f"은퇴 가정 {retire_age}세", annotation_position="top")
-    fig_asset.update_layout(
-        height=360, margin=dict(l=20, r=20, t=30, b=40),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="var(--nc-text)", size=13),
-        xaxis=dict(title="나이 (세)", gridcolor="rgba(100,116,139,0.2)"),
-        yaxis=dict(title="순자산 (만 원)", gridcolor="rgba(100,116,139,0.2)")
+
+    # 2. 은퇴 후 [자산 인출기] 곡선 (스카이블루 실선 & 소프트 음영)
+    fig_asset.add_trace(go.Scatter(
+        x=ages_retire, y=vals_retire,
+        mode="lines+markers",
+        line=dict(color="#38BDF8", width=3.5),
+        marker=dict(size=6),
+        fill='tozeroy',
+        fillcolor='rgba(56, 189, 248, 0.08)',
+        name="🍂 자산 인출기 (연금 - 노후생활비)",
+        hovertemplate="나이: %{x}세<br>추정 순자산: <b>%{y:.2f}억 원</b><extra></extra>"
+    ))
+
+    # 은퇴 시점 기준선 & 피크 자산 깃발
+    fig_asset.add_vline(x=retire_age, line_dash="dash", line_color="#F8FAFC", line_width=2)
+    fig_asset.add_annotation(
+        x=retire_age, y=peak_asset_eok,
+        text=f"은퇴 정점 {retire_age}세 ({peak_asset_eok:.1f}억 원)",
+        showarrow=True, arrowhead=2, arrowcolor="#F59E0B",
+        font=dict(size=13, color="#FDE68A", family="sans-serif"),
+        ay=-38, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#F59E0B", borderpad=4
     )
+
+    # 자산 소진 시점 표시 (소진되는 경우에만)
+    if depletion_age and depletion_age <= 90:
+        fig_asset.add_annotation(
+            x=depletion_age, y=0,
+            text=f"자산 소진 ({depletion_age}세)",
+            showarrow=True, arrowhead=2, arrowcolor="#EF4444",
+            font=dict(size=12.5, color="#FCA5A5"),
+            ay=35, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#EF4444", borderpad=3
+        )
+
+    fig_asset.update_layout(
+        height=380,
+        margin=dict(l=20, r=20, t=30, b=35),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#E2E8F0", size=13),
+        xaxis=dict(
+            title=dict(text="나이 (세)", font=dict(size=14, color="#94A3B8")),
+            tickfont=dict(size=13, color="#94A3B8"),
+            gridcolor="rgba(100, 116, 139, 0.2)",
+            tickmode="linear", tick0=20, dtick=5
+        ),
+        yaxis=dict(
+            title=dict(text="추정 순자산 (억 원)", font=dict(size=14, color="#94A3B8")),
+            tickfont=dict(size=13, color="#94A3B8"),
+            ticksuffix="억",
+            tickformat=",.1f",
+            gridcolor="rgba(100, 116, 139, 0.2)"
+        ),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(size=12.5, color="#F1F5F9")
+        ),
+        hovermode="x unified"
+    )
+
     st.plotly_chart(fig_asset, use_container_width=True, config={"displayModeBar": False})
+
+    # 그래프 팩트 기반 성찰 안내 카드
+    st.markdown(f"""
+    <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 10px; padding: 14px 16px; margin-top: 10px;">
+        <div style="font-size: 13.5px; color: #CBD5E1; line-height: 1.6;">
+            • <b>🌱 은퇴 전 (만 {cur_age}세 ~ {retire_age}세)</b>: 통계청 평균 임금상승률(3.0%) 및 물가상승률(2.0%)을 반영한 실질 저축액 누적 추이입니다.<br>
+            • <b>🍂 은퇴 후 ({retire_age}세 ~ 90세)</b>: 예상 월 연금({ret_pension:,.0f}만 원)에서 노후 월 생활비({ret_expenses:,.0f}만 원)를 뺀 순현금흐름({annual_ret_cashflow_eok*10000:,.0f}만 원/년)에 따른 순자산 변화입니다.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     _, next_col = st.columns([5, 1])
     with next_col:
