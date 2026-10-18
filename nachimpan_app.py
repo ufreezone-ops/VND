@@ -433,48 +433,83 @@ def call_gemini_text(prompt_text):
 # ==============================================================================
 
 # ==============================================================================
-# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그 (표지 이미지 다중 경로 감지)
+# 4.01.00 | 첫 진입 표지 및 온보딩 다이얼로그 (고화질 내장형 나침반 아트 커버)
 # ==============================================================================
-# 이미지 파일 탐색 (나침반_표지_배경.png, cover.png, cover.jpg 등 자동 인식)
-possible_filenames = [
-    "나침반_표지_배경.png", "나침반_표지_배경.jpg", 
-    "cover.png", "cover.jpg", "cover.jpeg",
-    "나침판_표지_배경.png"
-]
-cover_b64 = None
+# 별도 이미지 파일이 없어도 즉시 웅장하게 렌더링되는 시네마틱 나침반 벡터 표지
+cover_art_html = """
+<div style="position: relative; min-height: 75vh; border-radius: 20px; overflow: hidden; 
+            background: linear-gradient(180deg, #0b1526 0%, #152744 40%, #3a4b63 70%, #d99a4e 95%, #ea7a32 100%);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6); display: flex; flex-direction: column; 
+            align-items: center; justify-content: center; padding: 30px 20px; text-align: center; box-sizing: border-box;">
+    
+    <!-- 1. 산맥 실루엣 배경 레이어 (SVG) -->
+    <svg style="position: absolute; bottom: 0; left: 0; width: 100%; height: 45%; z-index: 1; pointer-events: none;" 
+         viewBox="0 0 1200 400" preserveAspectRatio="none">
+        <!-- 뒤쪽 겹산 -->
+        <path d="M0,400 L0,220 Q200,160 450,240 T900,200 Q1050,150 1200,230 L1200,400 Z" fill="#1b2a3f" opacity="0.6"/>
+        <!-- 앞쪽 바위 능선 -->
+        <path d="M0,400 L0,290 Q250,230 500,310 T1000,270 Q1120,240 1200,300 L1200,400 Z" fill="#0b1320"/>
+    </svg>
 
-for fname in possible_filenames:
-    c_path = os.path.join(os.path.dirname(__file__), fname)
-    if os.path.exists(c_path):
-        with open(c_path, "rb") as f:
-            cover_b64 = base64.b64encode(f.read()).decode("ascii")
-        break
+    <!-- 2. 은은한 지평선 노을 안개 -->
+    <div style="position: absolute; inset: 0; background: radial-gradient(circle at 50% 75%, rgba(245, 158, 11, 0.22) 0%, rgba(11, 21, 38, 0) 65%); z-index: 2;"></div>
 
-if cover_b64:
-    cover_style = f"background-image: url('data:image/png;base64,{cover_b64}');"
-else:
-    # 이미지가 아직 업로드되지 않았을 때의 자연스러운 산과 하늘 풍경 그라데이션
-    cover_style = "background: radial-gradient(circle at top, #486581 0%, #102a43 60%, #0b1120 100%);"
-
-if not st.session_state.started:
-    st.markdown(f"""
-    <div class="cover-bg" style="{cover_style}">
-      <div class="cover-shade"></div>
-      <div class="cover-caption">
-        <div style="font-size: clamp(13px, 1.6vw, 17px); font-weight: 600; color: #E2E8F0; margin-bottom: 8px;">
+    <!-- 3. 메인 콘텐츠 (첨부2 표지 서정성 100% 복원) -->
+    <div style="position: relative; z-index: 3; max-width: 600px; padding: 10px;">
+        
+        <!-- 상단 부제 -->
+        <div style="font-size: 16px; font-weight: 600; color: #E2E8F0; letter-spacing: 2px; margin-bottom: 22px; text-shadow: 0 2px 8px rgba(0,0,0,0.8);">
             나를 돌아보고, 내일을 그리는 여정
         </div>
-        <div style="font-size: 32px; margin-bottom: 4px;">🧭</div>
-        <h1>나 침 반</h1>
-        <div style="font-size: clamp(14px, 1.8vw, 18px); font-weight: 600; color: #F8FAFC; margin-top: 8px;">
+
+        <!-- 정밀 황동 나침반 심볼 (SVG) -->
+        <div style="display: flex; justify-content: center; margin-bottom: 16px;">
+            <svg width="86" height="86" viewBox="0 0 100 100" style="filter: drop-shadow(0 6px 16px rgba(0,0,0,0.6));">
+                <!-- 외곽 황동 링 -->
+                <circle cx="50" cy="50" r="44" fill="none" stroke="#F59E0B" stroke-width="2.5" opacity="0.85"/>
+                <circle cx="50" cy="50" r="40" fill="#0F172A" stroke="#B45309" stroke-width="1.5"/>
+                <!-- 8방위 눈금선 -->
+                <line x1="50" y1="14" x2="50" y2="20" stroke="#FBBF24" stroke-width="2"/>
+                <line x1="50" y1="80" x2="50" y2="86" stroke="#FBBF24" stroke-width="2"/>
+                <line x1="14" y1="50" x2="20" y2="50" stroke="#FBBF24" stroke-width="2"/>
+                <line x1="80" y1="50" x2="86" y2="50" stroke="#FBBF24" stroke-width="2"/>
+                <line x1="25" y1="25" x2="30" y2="30" stroke="#CBD5E1" stroke-width="1.5" opacity="0.6"/>
+                <line x1="75" y1="75" x2="70" y2="70" stroke="#CBD5E1" stroke-width="1.5" opacity="0.6"/>
+                <line x1="25" y1="75" x2="30" y2="70" stroke="#CBD5E1" stroke-width="1.5" opacity="0.6"/>
+                <line x1="75" y1="25" x2="70" y2="30" stroke="#CBD5E1" stroke-width="1.5" opacity="0.6"/>
+                <!-- 나침반 별침 (북극/남극) -->
+                <polygon points="50,18 55,50 50,45 45,50" fill="#38BDF8"/>
+                <polygon points="50,82 55,50 50,55 45,50" fill="#CBD5E1" opacity="0.7"/>
+                <polygon points="18,50 50,55 45,50 50,45" fill="#CBD5E1" opacity="0.7"/>
+                <polygon points="82,50 50,55 55,50 50,45" fill="#CBD5E1" opacity="0.7"/>
+                <!-- 중심 보석 피벗 -->
+                <circle cx="50" cy="50" r="4" fill="#F59E0B" stroke="#78350F" stroke-width="1"/>
+            </svg>
+        </div>
+
+        <!-- 메인 타이틀: 나 침 반 (ㅂ 수정 완료) -->
+        <h1 style="font-size: clamp(38px, 6vw, 56px); font-weight: 900; color: #FFFFFF; letter-spacing: 8px; margin: 0 0 14px 0; text-shadow: 0 4px 20px rgba(0,0,0,0.9); font-family: 'Apple SD Gothic Neo', 'Pretendard', sans-serif;">
+            나 침 반
+        </h1>
+
+        <!-- 메인 슬로건 -->
+        <div style="font-size: clamp(16px, 2.2vw, 20px); font-weight: 600; color: #F8FAFC; letter-spacing: 1px; text-shadow: 0 2px 10px rgba(0,0,0,0.85); margin-bottom: 28px;">
             당신의 삶을 위한 질문과 시각의 산책로
         </div>
-        <div style="font-size: 13px; color: #CBD5E1; margin-top: 24px; font-weight: 500;">
+
+        <!-- 하단 시작 문구 & 장식선 -->
+        <div style="font-size: 14.5px; color: #E2E8F0; font-weight: 500; text-shadow: 0 2px 8px rgba(0,0,0,0.8); margin-bottom: 8px;">
             지금, 당신의 이야기가 시작됩니다.
         </div>
-      </div>
+        <div style="width: 44px; height: 1.5px; background-color: rgba(255, 255, 255, 0.6); margin: 0 auto;"></div>
+
     </div>
-    """, unsafe_allow_html=True)
+</div>
+"""
+
+if not st.session_state.started:
+    # 표지 렌더링
+    st.markdown(cover_art_html, unsafe_allow_html=True)
 
     @st.dialog("나침반 산책을 시작합니다", width="small")
     def start_dialog():
