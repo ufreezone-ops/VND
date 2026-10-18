@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (st.pills 실제 DOM 정밀 타격)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (시니어 배려 폰트 대형화)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -46,7 +46,7 @@ st.markdown("""
 }
 
 /* ==========================================================================
-   CSS Design Tokens (딥 네이비 & 웜 골드 절대 봉인 유지)
+   CSS Design Tokens (전역 색상 규칙)
    ========================================================================== */
 :root {
     color-scheme: light dark;
@@ -74,7 +74,7 @@ st.markdown("""
     --nc-panel-retire-border: #8761b3;
 }
 
-/* 글로벌 레이아웃 */
+/* 기본 폰트 17px로 대형화하여 전 연령 가독성 확보 */
 .stApp {
     background-color: var(--nc-bg) !important;
     color: var(--nc-text) !important;
@@ -85,31 +85,11 @@ st.markdown("""
     max-width: 1180px;
 }
 .stApp, .stApp p, .stApp label, .stApp [data-testid="stMarkdownContainer"] {
-    font-size: 16.5px;
+    font-size: 17px !important;
     color: var(--nc-text);
 }
 
-/* 히어로 & 카드 */
-.hero {
-    border: 1px solid var(--nc-border);
-    border-radius: 18px;
-    padding: 32px 24px;
-    text-align: center;
-    background: var(--nc-hero-bg);
-    margin: 12px 0 20px;
-}
-.hero-title {
-    font-size: clamp(28px, 4vw, 44px);
-    font-weight: 800;
-    color: var(--nc-text);
-}
-.hero-sub {
-    color: var(--nc-subtext);
-    font-size: 16px;
-    line-height: 1.7;
-    max-width: 680px;
-    margin: 10px auto 0;
-}
+/* 카드 및 박스 */
 .soft-card {
     background: var(--nc-card-bg);
     border: 1px solid var(--nc-border);
@@ -119,16 +99,13 @@ st.markdown("""
     color: var(--nc-text);
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
-.eyebrow { color: var(--nc-accent-gold); font-size: 13px; font-weight: 700; margin-bottom: 4px; }
-.question { font-size: clamp(18px, 2.2vw, 24px); line-height: 1.5; font-weight: 700; color: var(--nc-text); }
-.small-muted { color: var(--nc-subtext); font-size: 13px; }
 
 /* 재무 컬러 패널 */
 .st-key-job-panel { 
     background: rgba(30, 41, 59, 0.45) !important; 
     border: 1.5px solid #475569 !important; 
     border-radius: 12px; 
-    padding: 18px 20px !important;
+    padding: 20px 22px !important;
 }
 .st-key-job-panel * { color: var(--nc-text) !important; }
 
@@ -144,27 +121,29 @@ st.markdown("""
 }
 
 /* Metric, Button, Sidebar */
-[data-testid="stMetricLabel"] *, [data-testid="stMetricLabel"] { color: var(--nc-subtext) !important; font-size: 14px !important; font-weight: 600 !important; }
-[data-testid="stMetricValue"] *, [data-testid="stMetricValue"] { color: var(--nc-text) !important; font-weight: 800 !important; }
-[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * { color: var(--nc-subtext) !important; font-size: 13px !important; }
+[data-testid="stMetricLabel"] *, [data-testid="stMetricLabel"] { color: var(--nc-subtext) !important; font-size: 15px !important; font-weight: 600 !important; }
+[data-testid="stMetricValue"] *, [data-testid="stMetricValue"] { color: var(--nc-text) !important; font-weight: 800 !important; font-size: 26px !important; }
 
 button[kind="primary"], .stApp [data-testid="stFormSubmitButton"] button[kind="primary"] {
     background-color: var(--nc-primary) !important;
     border-color: var(--nc-primary) !important;
     color: #ffffff !important;
     font-weight: 700 !important;
+    font-size: 17px !important;
     border-radius: 8px !important;
+    padding: 10px !important;
 }
 
 [data-testid="stSidebar"] { background-color: var(--nc-sidebar-bg) !important; border-right: 1px solid var(--nc-border) !important; }
 [data-testid="stSidebar"] * { color: var(--nc-text) !important; }
 
-/* 입력 필드 기본 배경 */
+/* 입력 필드 (크고 선명하게 17px) */
 .stApp input, .stApp textarea {
     background-color: var(--nc-card-bg) !important;
     color: var(--nc-text) !important;
     border-color: var(--nc-border) !important;
-    font-size: 16px !important;
+    font-size: 17px !important;
+    padding: 10px 12px !important;
 }
 
 /* Placeholder 고대비 강제 고정 */
@@ -173,12 +152,12 @@ input::placeholder, textarea::placeholder,
     color: #94a3b8 !important;
     -webkit-text-fill-color: #94a3b8 !important;
     opacity: 1 !important;
+    font-size: 15px !important;
 }
 
 /* ==========================================================================
-   👇 [핵심 타격] st.pills 실제 DOM(stButtonGroup) 줄바꿈 & 딥네이비 컬러 강제
+   st.pills 버튼 크기 대형화 (16px 폰트 & 넉넉한 터치 영역)
    ========================================================================== */
-/* 1. 가로 3개씩 유연하게 떨어지도록 flex-wrap 강제 허용 */
 div[data-testid="stButtonGroup"],
 div[data-testid="stPills"],
 div[data-testid="stSegmentedControl"] {
@@ -188,7 +167,6 @@ div[data-testid="stSegmentedControl"] {
     overflow-x: visible !important;
 }
 
-/* 2. 모든 버튼의 기본 다크 슬레이트 배경 및 글자색 강제 고정 */
 div[data-testid="stButtonGroup"] button,
 div[data-testid="stPills"] button,
 div[data-testid="stSegmentedControl"] button {
@@ -196,22 +174,20 @@ div[data-testid="stSegmentedControl"] button {
     background: #1E293B !important;
     color: #CBD5E1 !important;
     border: 1px solid #334155 !important;
-    font-size: 14px !important;
+    font-size: 15.5px !important;  /* 시니어 배려 폰트 확대 */
     font-weight: 600 !important;
     border-radius: 8px !important;
-    padding: 8px 12px !important;
+    padding: 9px 15px !important;  /* 터치 영역 시원하게 확대 */
     margin: 0 !important;
     box-shadow: none !important;
 }
 
-/* 호버 시 */
 div[data-testid="stButtonGroup"] button:hover,
 div[data-testid="stPills"] button:hover {
     background-color: #334155 !important;
     color: #F8FAFC !important;
 }
 
-/* 3. 선택된 활성 버튼: 오렌지색 선명하게 점등 */
 div[data-testid="stButtonGroup"] button[aria-checked="true"],
 div[data-testid="stButtonGroup"] button[aria-selected="true"],
 div[data-testid="stPills"] button[aria-checked="true"],
@@ -583,20 +559,20 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (직업 선택 3열 배치 & ESBI 2x2 연동)
+# 6.01.00 | Tab 1 — 우리집 가계부 (전업주부 동등 탑재 & 잔글씨 완전 삭제)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     
     with st.form("finance_form"):
         # ----------------------------------------------------------------------
-        # ⓪ 우리집 소득 성격 (3열 줄바꿈으로 가독성 극대화)
+        # ⓪ 우리집 소득 성격 (전업주부 동등 탑재, 불필요한 설명글 삭제)
         # ----------------------------------------------------------------------
         with st.container(border=True, key="job-panel"):
-            st.markdown("#### ⓪ 우리집 소득 성격")
-            st.caption("가계 경제를 지탱하는 일과 소득의 구조를 파악합니다 (터치하여 선택).")
+            st.markdown("### ⓪ 우리집 소득 성격")
             
-            job_options = ["직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "그외"]
+            # 나의 직업과 배우자의 직업 목록을 완벽히 대등하게 일치
+            job_options = ["직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
             job_spouse_options = ["해당 없음", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
             
             prev_job = st.session_state.get("job_form", "직장인")
@@ -607,8 +583,8 @@ if selected_page == "우리집 가계부":
             if prev_spouse_job not in job_spouse_options:
                 prev_spouse_job = "해당 없음"
             
-            # 1) 나의 직업
-            st.markdown("<span style='font-size: 15.5px; font-weight: 700; color: #F1F5F9;'>나의 직업은?</span>", unsafe_allow_html=True)
+            # 1) 나의 직업 (글자 크기 17px로 확대)
+            st.markdown("<div style='font-size: 17px; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;'>나의 직업은?</div>", unsafe_allow_html=True)
             job_selected = st.pills(
                 "나의 직업은?",
                 job_options,
@@ -617,10 +593,10 @@ if selected_page == "우리집 가계부":
                 label_visibility="collapsed"
             )
             
-            st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
             
             # 2) 배우자의 직업
-            st.markdown("<span style='font-size: 15.5px; font-weight: 700; color: #F1F5F9;'>배우자의 직업은? (선택)</span>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size: 17px; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;'>배우자의 직업은? (선택)</div>", unsafe_allow_html=True)
             job_spouse_selected = st.pills(
                 "배우자의 직업은?",
                 job_spouse_options,
@@ -632,23 +608,21 @@ if selected_page == "우리집 가계부":
         st.write("")
 
         # ----------------------------------------------------------------------
-        # ① 들어오는 돈 vs ② 나가는 돈
+        # ① 들어오는 돈 vs ② 나가는 돈 (작은 캡션 삭제, 제목에 단위 명시)
         # ----------------------------------------------------------------------
         income_col, expense_col = st.columns(2)
         with income_col:
             with st.container(border=True, key="income-panel"):
-                st.markdown("#### ① 들어오는 돈")
-                st.caption("현재 한 달 기준 · 만원")
+                st.markdown("### ① 들어오는 돈 (월, 만원)")
                 income_self = st.number_input("나의 월 실수령액", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
                 income_spouse = st.number_input("배우자 월 실수령액", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
-                income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액", help="임대료, 배당, 부수입 등")
+                income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액")
         with expense_col:
             with st.container(border=True, key="expense-panel"):
-                st.markdown("#### ② 나가는 돈")
-                st.caption("현재 한 달 기준 · 만원")
-                expense_living = st.number_input("기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액", help="식비, 공과금, 통신비 등")
-                expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액", help="대출 원금+이자 매달 상환액")
-                expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액", help="보험료, 교육비, 의료비 등")
+                st.markdown("### ② 나가는 돈 (월, 만원)")
+                expense_living = st.number_input("기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액")
+                expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액")
+                expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액")
 
         # ----------------------------------------------------------------------
         # ③ 가지고 있는 것 vs ④ 갚아야 할 돈
@@ -656,8 +630,7 @@ if selected_page == "우리집 가계부":
         asset_col, debt_col = st.columns(2)
         with asset_col:
             with st.container(border=True, key="asset-panel"):
-                st.markdown("#### ③ 가지고 있는 것")
-                st.caption("현재 보유 금액·시세 기준 · 만원")
+                st.markdown("### ③ 가지고 있는 것 (시세, 만원)")
                 asset_cash = st.number_input("현금·예적금", min_value=0, value=st.session_state.get("asset_cash"), step=100, placeholder="금액")
                 asset_financial = st.number_input("주식·채권 등 금융자산", min_value=0, value=st.session_state.get("asset_financial"), step=100, placeholder="금액")
                 asset_home = st.number_input("부동산 시세", min_value=0, value=st.session_state.get("asset_home"), step=100, placeholder="금액")
@@ -665,32 +638,28 @@ if selected_page == "우리집 가계부":
                 asset_other = st.number_input("기타 자산·사업 가치", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액")
         with debt_col:
             with st.container(border=True, key="debt-panel"):
-                st.markdown("#### ④ 갚아야 할 돈")
-                st.caption("현재 남은 대출 원금 기준 · 만원")
+                st.markdown("### ④ 갚아야 할 돈 (원금, 만원)")
                 debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액")
                 debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
 
         # ----------------------------------------------------------------------
-        # 은퇴 후 가정
+        # 은퇴 후 가정 (자잘한 안내문 삭제, 핵심만 시원하게)
         # ----------------------------------------------------------------------
         with st.container(border=True, key="retirement-panel"):
-            st.markdown("#### 은퇴 후에는?")
+            st.markdown("### 은퇴 후에는? (월, 만원)")
             pension_col, retirement_expense_col = st.columns(2)
             with pension_col:
                 income_pension = st.number_input(
                     "은퇴 후 받을 월 연금", min_value=0,
                     value=st.session_state.get("income_pension"), step=10,
-                    placeholder="모르면 빈칸으로 두세요",
-                    help="국민연금·퇴직연금 등 예상 수령액입니다. 현재 월수입에는 합산되지 않습니다."
+                    placeholder="모르면 빈칸으로 두세요"
                 )
             with retirement_expense_col:
                 retirement_monthly_expenses = st.number_input(
                     "은퇴 후 한 달 생활비", min_value=0,
                     value=int(st.session_state.get("retirement_monthly_expenses", 200) or 0),
-                    step=10,
-                    help="은퇴 후 식비, 의료비, 주거비 등 한 달 예상 생활비입니다."
+                    step=10
                 )
-            st.caption("📌 적정 노후생활비(월): 부부 298.1만 원, 1인 197.6만 원 (국민연금연구원 조사 기준)")
 
         save_finance = st.form_submit_button("입력 내용 반영하기", use_container_width=True, type="primary")
 
@@ -714,12 +683,12 @@ if selected_page == "우리집 가계부":
         st.session_state["finance_saved_notice"] = True
 
     # --------------------------------------------------------------------------
-    # 듀얼 ESBI 사분면 매핑 (2x2 수학 좌표계)
+    # 듀얼 ESBI 사분면 매핑 (글자 크기 시원하게 확대 & 중앙 정렬)
     # --------------------------------------------------------------------------
     q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
 
-    st.markdown("#### 우리집 ESBI 사분면 좌표계")
+    st.markdown("### 우리집 ESBI 사분면 좌표계")
     st.markdown("<div id='selected-esbi'></div>", unsafe_allow_html=True)
     if st.session_state.pop("finance_saved_notice", False):
         st.success("입력하신 재무 정보가 반영되었습니다.")
@@ -730,23 +699,24 @@ if selected_page == "우리집 가계부":
         is_spouse = (q_spouse == code)
         
         if is_self and is_spouse:
-            border_style = "border: 2.5px solid #EA580C; outline: 2.5px dashed #38BDF8; outline-offset: -5px; background: rgba(234, 88, 12, 0.14);"
+            border_style = "border: 2.5px solid #EA580C; outline: 2.5px dashed #38BDF8; outline-offset: -5px; background: rgba(234, 88, 12, 0.16);"
         elif is_self:
-            border_style = "border: 2.5px solid #EA580C; background: rgba(234, 88, 12, 0.12);"
+            border_style = "border: 2.5px solid #EA580C; background: rgba(234, 88, 12, 0.14);"
         elif is_spouse:
-            border_style = "border: 2.5px dashed #38BDF8; background: rgba(56, 189, 248, 0.12);"
+            border_style = "border: 2.5px dashed #38BDF8; background: rgba(56, 189, 248, 0.14);"
         else:
             border_style = "border: 1px solid #334155; background: rgba(15, 23, 42, 0.7);"
             
         badges = []
         if is_self:
-            badges.append("<span style='background:#EA580C; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:2px 8px; border-radius:4px;'>나</span>")
+            badges.append("<span style='background:#EA580C; color:#FFFFFF; font-size:12.5px; font-weight:800; padding:2px 8px; border-radius:4px;'>나</span>")
         if is_spouse:
-            badges.append("<span style='background:#0284C7; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:2px 8px; border-radius:4px;'>배우자</span>")
+            badges.append("<span style='background:#0284C7; color:#FFFFFF; font-size:12.5px; font-weight:800; padding:2px 8px; border-radius:4px;'>배우자</span>")
         
-        badge_row = f"<div style='min-height:24px; margin-bottom:4px; display:flex; justify-content:center; gap:4px;'>{' '.join(badges)}</div>" if badges else "<div style='min-height:24px; margin-bottom:4px;'></div>"
+        badge_row = f"<div style='min-height:26px; margin-bottom:4px; display:flex; justify-content:center; gap:6px;'>{' '.join(badges)}</div>" if badges else "<div style='min-height:26px; margin-bottom:4px;'></div>"
         
-        return f'<div style="{border_style} border-radius: 12px; padding: 18px 12px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 145px; box-sizing: border-box;">{badge_row}<div style="font-size: 26px; font-weight: 850; color: #F8FAFC; line-height: 1.1;">{code}</div><div style="font-size: 16.5px; font-weight: 700; color: #F1F5F9; margin: 4px 0 6px 0;">{title}</div><div style="font-size: 12px; color: #94A3B8; line-height: 1.45; word-break: keep-all; text-align: center;">{desc}</div></div>'
+        # 글자 크기를 돋보기 없이도 보이도록 시원하게 확대 (코드 28px, 타이틀 18px, 설명 14px)
+        return f'<div style="{border_style} border-radius: 12px; padding: 20px 14px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 155px; box-sizing: border-box;">{badge_row}<div style="font-size: 28px; font-weight: 850; color: #F8FAFC; line-height: 1.1;">{code}</div><div style="font-size: 18px; font-weight: 700; color: #F1F5F9; margin: 4px 0 6px 0;">{title}</div><div style="font-size: 14px; color: #CBD5E1; line-height: 1.45; word-break: keep-all; text-align: center;">{desc}</div></div>'
 
     card_e = get_quad_ui("E", ESBI["E"][0], ESBI["E"][1])
     card_b = get_quad_ui("B", ESBI["B"][0], ESBI["B"][1])
@@ -754,25 +724,25 @@ if selected_page == "우리집 가계부":
     card_i = get_quad_ui("I", ESBI["I"][0], ESBI["I"][1])
 
     esbi_html = f"""<div style="margin: 16px 0 24px 0;">
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; text-align: center;">
-<div style="background: rgba(30, 41, 59, 0.6); padding: 9px 8px; border-radius: 8px; border-left: 3.5px solid #94A3B8;">
-<div style="font-size: 13.5px; font-weight: 700; color: #E2E8F0;">⏳ E · S [노동소득]</div>
-<div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">시간을 파는 삶 (물통)</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; text-align: center;">
+<div style="background: rgba(30, 41, 59, 0.7); padding: 12px 10px; border-radius: 8px; border-left: 4px solid #94A3B8;">
+<div style="font-size: 15.5px; font-weight: 700; color: #F1F5F9;">⏳ E · S [노동소득]</div>
+<div style="font-size: 13.5px; color: #CBD5E1; margin-top: 3px;">시간을 파는 삶 (물통)</div>
 </div>
-<div style="background: rgba(30, 41, 59, 0.6); padding: 9px 8px; border-radius: 8px; border-left: 3.5px solid #F59E0B;">
-<div style="font-size: 13.5px; font-weight: 700; color: #FBBF24;">🚰 B · I [자산소득]</div>
-<div style="font-size: 11px; color: #FDE68A; margin-top: 2px;">자산이 일하는 삶 (파이프라인)</div>
+<div style="background: rgba(30, 41, 59, 0.7); padding: 12px 10px; border-radius: 8px; border-left: 4px solid #F59E0B;">
+<div style="font-size: 15.5px; font-weight: 700; color: #FBBF24;">🚰 B · I [자산소득]</div>
+<div style="font-size: 13.5px; color: #FDE68A; margin-top: 3px;">자산이 일하는 삶 (파이프라인)</div>
 </div>
 </div>
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
 <div>{card_e}</div>
 <div>{card_b}</div>
 <div>{card_s}</div>
 <div>{card_i}</div>
 </div>
-<div style="text-align: center; margin-top: 8px;">
-<span style="font-size: 11.5px; color: #64748B;">
-🧱 좌측(E·S)에서 우측(B·I)으로 넘어가는 것은 단순히 일자리를 바꾸는 것이 아니라, <b>소득의 종류를 완전히 바꾸는 거대한 결단</b>입니다.
+<div style="text-align: center; margin-top: 10px;">
+<span style="font-size: 14px; color: #94A3B8;">
+🧱 좌측(E·S)에서 우측(B·I)으로 넘어가는 것은 <b>소득의 종류를 완전히 바꾸는 거대한 결단</b>입니다.
 </span>
 </div>
 </div>"""
@@ -783,14 +753,14 @@ if selected_page == "우리집 가계부":
     # 현재 입력값 지표 요약 & 미래 순자산 궤적 차트
     # --------------------------------------------------------------------------
     s = current_financial_summary()
-    st.markdown("#### 현재 재무 요약")
+    st.markdown("### 현재 재무 요약")
     cols = st.columns(4)
     cols[0].metric("월수입 합계", money(s["income"]))
     cols[1].metric("월지출 합계", money(s["expenses"]))
     cols[2].metric("월 저축여력", money(s["surplus"]))
     cols[3].metric("순자산", fmt_eok(s["net_worth"]))
 
-    st.markdown("#### 미래 순자산·연금 궤적")
+    st.markdown("### 미래 순자산·연금 궤적")
     cur_age = int(st.session_state.person_age)
     retirement_value = st.session_state.get("retirement_age")
     retire_age = int(retirement_value) if retirement_value is not None else 65
@@ -812,19 +782,18 @@ if selected_page == "우리집 가계부":
 
     fig_asset = go.Figure(go.Scatter(
         x=years, y=vals, mode="lines+markers",
-        line=dict(color="#f59e0b", width=3), name="추정 순자산"
+        line=dict(color="#f59e0b", width=3.5), name="추정 순자산"
     ))
     fig_asset.add_vline(x=retire_age, line_dash="dash", line_color="#38bdf8",
                         annotation_text=f"은퇴 가정 {retire_age}세", annotation_position="top")
     fig_asset.update_layout(
         height=360, margin=dict(l=20, r=20, t=30, b=40),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="var(--nc-text)"),
+        font=dict(color="var(--nc-text)", size=13),
         xaxis=dict(title="나이 (세)", gridcolor="rgba(100,116,139,0.2)"),
         yaxis=dict(title="순자산 (만 원)", gridcolor="rgba(100,116,139,0.2)")
     )
     st.plotly_chart(fig_asset, use_container_width=True, config={"displayModeBar": False})
-    st.caption("※ 은퇴 전 월 저축액 누적 및 은퇴 후 [연금 - 노후생활비] 현금흐름을 단순 연산한 개념도입니다.")
 
     _, next_col = st.columns([5, 1])
     with next_col:
