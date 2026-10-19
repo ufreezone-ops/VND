@@ -1817,4 +1817,33 @@ else:
 ----------------------------------------"""
 
         st.markdown("### 💬 카카오톡 전송용 리포트")
-        st.caption("※ 우측 상단의 복사 버튼을 눌러 카카오톡 대화방에 바로 붙여넣기(Ctrl+V)하세요. 전달받은 분은 하단의 복원코드로 사이드바에서 0.1초 만에 동일하게 열어볼 수 있습니
+        st.caption("※ 우측 상단의 복사 버튼을 눌러 카카오톡 대화방에 바로 붙여넣기(Ctrl+V)하세요. 전달받은 분은 하단의 복원코드로 사이드바에서 0.1초 만에 동일하게 열어볼 수 있습니다.")
+        
+        # 군더더기 없는 표준 단일 코드 블록 (우측 상단 원클릭 복사 버튼 내장)
+        st.code(kakao_report_text, language="markdown")
+
+    else:
+        st.info("‘내 가계부 AI 성찰 리포트 생성’ 버튼을 누르면 Gemini 초고속 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
+
+    # --------------------------------------------------------------------------
+    # 📋 외부 AI (ChatGPT 등) 활용용 순수 재무제표 요약 리포트
+    # --------------------------------------------------------------------------
+    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+    with st.expander("📋 외부 AI(ChatGPT 등) 질의용 순수 재무 요약 데이터"):
+        st.markdown("<div style='font-size: 13.5px; color: #94A3B8; margin-bottom: 8px;'>프롬프트 지시문 없이, 내가 입력한 재무제표와 가족 생애 통계만 정리된 텍스트입니다. ChatGPT 등에 복사해서 자유롭게 추가 상담을 진행할 수 있습니다.</div>", unsafe_allow_html=True)
+        raw_summary_report = f"""### 나침반 재무제표 및 생애주기 요약 데이터
+- 성명(별칭): {person_name} (만 {person_age}세)
+- 가구 소득 형태: 나({st.session_state.get('job_form','직장인')}) + 배우자({st.session_state.get('job_spouse_form','해당 없음')})
+- 월 정기 수입: {summary['regular_income']:,.0f}만 원
+- 연간 비정기 상여금: {summary['annual_bonus']:,.0f}만 원
+- 연간 총소득: {summary['annual_total_income']:,.0f}만 원
+- 월평균 생활비 및 지출: {summary['expenses']:,.0f}만 원
+- 연간 실질 순저축: {summary['annual_net_surplus']:,.0f}만 원 (월환산 {summary['monthly_effective_surplus']:,.0f}만 원)
+- 자산 합계: {summary['assets']:,.0f}만 원
+- 부채 잔액: {summary['debts']:,.0f}만 원
+- 현재 순자산: {summary['net_worth']/10000:,.2f}억 원
+- 은퇴 예정 나이: {retire_age}세 (은퇴 후 맞이할 겨울 약 {winter_years}년)
+- 은퇴 후 예상 월연금: {getv('income_pension', 0):,.0f}만 원
+- 은퇴 후 월 희망 생활비: {getv('retirement_monthly_expenses', 200):,.0f}만 원
+- 가족 구성: {', '.join([f'{k}: {v}' for k, v in family_desc.items()]) if family_desc else '미등록'}"""
+        st.code(raw_summary_report, language="markdown")
