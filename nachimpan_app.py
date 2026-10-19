@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (형제자매 버튼 고대비 보강)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (코드블록 자동 줄바꿈 보강)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -227,9 +227,7 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     padding: 0 10px !important;
 }
 
-/* ==========================================================================
-   [신규] 형제자매 6버튼 및 삭제 버튼 전용 고대비 스타일 (올화이트 박멸)
-   ========================================================================== */
+/* 형제자매 6버튼 고대비 스타일 */
 .stApp button:not([kind="primary"]) {
     background-color: #1E293B !important;
     color: #F8FAFC !important;
@@ -243,11 +241,18 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     color: #FFFFFF !important;
 }
 
-/* 삭제 버튼 전용 다크 레드 스타일 */
-.stApp div:has(> button:contains("삭제")) button {
-    background-color: rgba(185, 28, 28, 0.25) !important;
-    border: 1.5px solid #991B1B !important;
-    color: #FCA5A5 !important;
+/* ==========================================================================
+   [신규] st.code 코드블록 자동 줄바꿈 강제 (가로 늘어짐 원천 박멸)
+   ========================================================================== */
+[data-testid="stCodeBlock"] pre,
+[data-testid="stCodeBlock"] code,
+.stCode pre,
+.stCode code {
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    overflow-x: hidden !important;
+    line-height: 1.65 !important;
+    font-size: 14.5px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1654,7 +1659,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (호칭 중복 박멸·소득개선 우선배치·클린 리포트)
+# 6.04.00 | Tab 4 — AI 시선 (카톡 리포트 자동 줄바꿈 및 모바일 호흡 정제)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1716,7 +1721,6 @@ else:
         }
     }
 
-    # 호칭 반복 금지 지침이 명확히 반영된 프롬프트
     full_prompt_text = f"""[절대 엄수 규칙]
 1. 자기소개, 프롤로그, 인사말("안녕하세요", "전문가로서 살펴보겠습니다" 등)을 일체 작성하지 마세요.
 2. 마크다운 가로 구분선(---)을 절대 사용하지 마세요.
@@ -1777,32 +1781,41 @@ else:
         income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
         retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
 
-        # 잡음 멘트 제거
+        # 잡음 문장 제거
         noise_pattern = r"(?i)^.*?살펴보겠습니다[\.\!\?\s\n]*"
         income_comment = re.sub(noise_pattern, "", income_comment).strip()
         retirement_comment = re.sub(noise_pattern, "", retirement_comment).strip()
 
-        # [핵심] 은퇴 안정성 관점의 중복 호칭 강제 도려내기 (2중 필터)
-        # 만약 AI가 '댄님,' 또는 'OO님,'으로 시작하면 무조건 삭제하여 곧바로 본론 시작
+        # 은퇴 안정성 관점의 중복 호칭 강제 도려내기
         retirement_comment = re.sub(r"^(?:.*?님[\,\s]*)+", "", retirement_comment).strip()
 
-        # 줄바꿈 압축
-        income_comment = re.sub(r'\n{2,}', '\n\n', income_comment).strip()
-        retirement_comment = re.sub(r'\n{2,}', '\n\n', retirement_comment).strip()
+        # 긴 벽돌글 방지를 위한 문장 호흡 개행 정제 (2문장 단위 자연스러운 단락화)
+        def format_readable_paragraph(txt):
+            sentences = re.split(r'(?<=[.!?])\s+', txt.strip())
+            if len(sentences) <= 2:
+                return txt.strip()
+            # 2문장씩 묶어 단락 줄바꿈(\n\n) 적용
+            grouped = []
+            for i in range(0, len(sentences), 2):
+                grouped.append(" ".join(sentences[i:i+2]))
+            return "\n\n".join(grouped)
+
+        formatted_income = format_readable_paragraph(income_comment)
+        formatted_retire = format_readable_paragraph(retirement_comment)
 
         # 1. 소득 개선 관점 (파이프라인) 선행
         st.markdown("#### 소득 개선 관점 (파이프라인)")
         st.markdown(f"""
 <div class='soft-card' style='white-space: pre-wrap; line-height: 1.7; word-break: keep-all;'>
-{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}
+{formatted_income or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}
 </div>
 """, unsafe_allow_html=True)
 
-        # 2. 은퇴 안정성 관점 후속 (호칭 없이 본론 직행)
+        # 2. 은퇴 안정성 관점 후속
         st.markdown("#### 은퇴 안정성 관점")
         st.markdown(f"""
 <div class='soft-card' style='white-space: pre-wrap; line-height: 1.7; word-break: keep-all;'>
-{retirement_comment}
+{formatted_retire}
 </div>
 """, unsafe_allow_html=True)
 
@@ -1811,7 +1824,7 @@ else:
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
         # ----------------------------------------------------------------------
-        # 💬 카카오톡 전송용 통합 리포트
+        # 💬 카카오톡 전송용 통합 리포트 (코드블록 pre-wrap 자동 줄바꿈)
         # ----------------------------------------------------------------------
         sync_code = export_diagnosis_code()
         
@@ -1826,10 +1839,10 @@ else:
   - 희망 은퇴나이: {retire_age}세 (맞이할 겨울: 약 {winter_years}년)
 
 [소득 개선 & 파이프라인]
-{income_comment}
+{formatted_income}
 
 [은퇴 안정성 성찰]
-{retirement_comment}
+{formatted_retire}
 
 ----------------------------------------
 📌 나침반 동기화 복원코드 (아래 한 줄):
