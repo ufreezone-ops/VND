@@ -1656,7 +1656,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (Gemini 단독 분석 & 카카오톡 전송·동기화 리포트)
+# 6.04.00 | Tab 4 — AI 시선 (Gemini 리포트 & 카카오톡 전송·인터뷰어 동기화)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1683,4 +1683,148 @@ else:
         "순자산": f"{summary['net_worth']/10000:,.2f}억 원 (자산 {summary['assets']:,.0f}만 원 - 부채 {summary['debts']:,.0f}만 원)",
         "은퇴 후 예상 월연금": f"{getv('income_pension', 0):,.0f}만 원",
         "은퇴 후 월 생활비": f"{getv('retirement_monthly_expenses', 200):,.0f}만 원",
-        "희망 은퇴 나이": f"{retire_age}세 (
+        "희망 은퇴 나이": f"{retire_age}세 (은퇴 후 겨울 {winter_years}년)",
+        "가족 나이": {
+            "배우자": f"{getv('spouse_age', 0)}세",
+            "첫째 자녀": f"{getv('child_age', 0)}세",
+            "둘째 자녀": f"{getv('child_age2', 0)}세",
+            "셋째 자녀": f"{getv('child_age3', 0)}세",
+            "아버지": f"{getv('father_age', 0)}세",
+            "어머니": f"{getv('mother_age', 0)}세",
+            "형제자매": sib_names if sib_names else "없음"
+        },
+        "가족 계획": {
+            "결혼": st.session_state.get("marriage_plan", "미정"),
+            "출산/자녀": st.session_state.get("child_plan", "미정"),
+            "주거": st.session_state.get("housing_plan", "미정")
+        }
+    }
+
+    full_prompt_text = f"""[역할 정의]
+당신은 대한민국 가계 재무와 은퇴 준비를 함께 검토하는 품격 있고 따뜻한 현실점검 파트너입니다.
+위협이나 공포 마케팅(파산, 절벽 등)을 절대 배제하고, "산 입에 거미줄 치랴"의 온기 있는 위로와 객관적 성찰 거울의 태도를 유지하세요.
+소득의 크기가 아니라 '소득의 성격(물통 vs 파이프라인)'에 주목하여 조언하세요.
+
+[참고 공식 통계 (국가데이터처 2024 국민이전계정)]
+- 한국인 평균 흑자 진입: 28세
+- 최대 흑자 정점: 45세 (연 1,932만 원 흑자)
+- 적자 재전환: 61세 (은퇴와 함께 소비가 소득을 초과)
+
+[인터뷰이 재무 및 생애 데이터]
+{json.dumps(details, ensure_ascii=False, indent=2)}
+
+[요청 사항]
+반드시 아래 2개 문단 제목 형식([은퇴 안정성], [소득 개선 방향])을 정확히 지켜서, 각 문단당 250~350자 내외의 품격 있고 다정한 대화체로 완결된 문장으로 작성해 주세요. 문장이 중간에 끊기지 않게 완벽한 마침표로 끝내세요.
+
+[은퇴 안정성]
+(첫 문장은 '은퇴 안정성 측면에서는 유리한 편 / 세심한 준비가 필요한 시점 / 재정비가 유익한 시점' 등으로 시작하고, 은퇴 후 맞이할 겨울의 시간과 연금·자산 현금흐름을 성찰할 점을 조언)
+
+[소득 개선 방향]
+(현재 노동 소득(물통)에만 의존할 때의 한계와, 현업을 성실히 지키면서 복리의 지혜를 갖춘 파이프라인(자산/시스템 수입)을 차근차근 준비해야 하는 이유를 조언)"""
+
+    # AI 분석 실행 버튼
+    if st.button("⚡ 내 가계부 AI 성찰 리포트 생성 (Gemini 엔진)", type="primary", use_container_width=True):
+        st.session_state.ai_summary = summary
+        st.session_state.ai_comment = None
+        
+        with st.spinner("AI가 가계부와 생애주기 지표를 정밀 분석 중입니다 (약 3~5초 소요)..."):
+            comment, error = call_gemini_text(full_prompt_text)
+            st.session_state.ai_comment = comment if comment else error
+
+    # 분석 결과 렌더링
+    if st.session_state.get("ai_summary") and st.session_state.get("ai_comment"):
+        s = st.session_state.ai_summary
+        st.markdown("### 재무제표 요약")
+        cols = st.columns(4)
+        cols[0].metric("월 정기수입", money(s["regular_income"]))
+        cols[1].metric("월 현금지출", money(s["expenses"]))
+        cols[2].metric("연간 순저축", money(s["annual_net_surplus"]), f"월환산 {money(s['monthly_effective_surplus'])}")
+        cols[3].metric("순자산", fmt_eok(s["net_worth"]))
+
+        st.markdown("### AI 성찰 리포트")
+        comment_text = str(st.session_state.get("ai_comment", ""))
+        
+        normalized = comment_text.replace("\r\n", "\n").replace("\r", "\n")
+        match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
+        if match:
+            retirement_comment = normalized[:match.start()]
+            income_comment = normalized[match.end():]
+        else:
+            retirement_comment, income_comment = normalized, ""
+
+        retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
+        income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
+
+        st.markdown("#### 은퇴 안정성 관점")
+        st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
+        st.markdown("#### 소득 개선 관점 (파이프라인)")
+        st.markdown(f"<div class='soft-card'>{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}</div>", unsafe_allow_html=True)
+        st.caption("※ AI의 코멘트는 참고용 거울이며, 삶의 가장 중요한 결정은 온전히 당신의 것입니다.")
+
+        st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+
+        # ----------------------------------------------------------------------
+        # 💬 카카오톡 전송 리포트 (인터뷰어 즉시 동기화 코드 포함)
+        # ----------------------------------------------------------------------
+        sync_code = export_diagnosis_code()
+        
+        kakao_report_text = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
+• 진단자: {person_name} ({person_age}세)
+• 소득 형태: {st.session_state.get('job_form','직장인')} (배우자: {st.session_state.get('job_spouse_form','해당없음')})
+• 재무 요약:
+  - 월 정기수입: {money(s['regular_income'])}
+  - 월 현금지출: {money(s['expenses'])}
+  - 연간 순저축: {money(s['annual_net_surplus'])} (월평균 {money(s['monthly_effective_surplus'])})
+  - 순자산: {fmt_eok(s['net_worth'])}
+  - 희망 은퇴나이: {retire_age}세 (맞이할 겨울: 약 {winter_years}년)
+
+[은퇴 안정성 성찰]
+{retirement_comment}
+
+[소득 개선 & 파이프라인]
+{income_comment}
+
+----------------------------------------
+📌 인터뷰어 나침반 동기화 복원코드 (아래 한 줄 복사):
+{sync_code}
+----------------------------------------"""
+
+        st.markdown("""
+<div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid #F59E0B; border-radius: 14px; padding: 20px 22px; margin-top: 15px;">
+<div style="font-size: 18px; font-weight: 850; color: #FDE68A; margin-bottom: 8px;">💬 카카오톡으로 리포트 전송하기</div>
+<div style="font-size: 14px; color: #CBD5E1; line-height: 1.6;">
+아래 리포트 전문을 복사하여 인터뷰이 자신의 카카오톡 또는 인터뷰어에게 전송할 수 있습니다.<br>
+<b>인터뷰어가 이 리포트(또는 하단의 NC- 복원코드)를 받아 첫 화면에서 붙여넣으면, 인터뷰이가 작성한 모든 데이터가 0.1초 만에 인터뷰어의 나침반으로 동기화됩니다.</b>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.code(kakao_report_text, language="markdown")
+
+    else:
+        st.info("‘내 가계부 AI 성찰 리포트 생성’ 버튼을 누르면 Gemini 초고속 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
+
+    # --------------------------------------------------------------------------
+    # 📋 외부 AI (ChatGPT, Claude 등) 활용용 순수 재무제표 요약 리포트
+    # --------------------------------------------------------------------------
+    st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
+    with st.expander("📋 외부 AI(ChatGPT 등) 질의용 순수 재무 요약 데이터"):
+        st.markdown("<div style='font-size: 13.5px; color: #94A3B8; margin-bottom: 8px;'>프롬프트 지시문 없이, 내가 입력한 재무제표와 가족 생애 통계만 정리된 텍스트입니다. ChatGPT 등에 복사해서 자유롭게 추가 상담을 진행할 수 있습니다.</div>", unsafe_allow_html=True)
+        raw_summary_report = f"""### 나침반 재무제표 및 생애주기 요약 데이터
+- 성명(별칭): {person_name} (만 {person_age}세)
+- 가구 소득 형태: 나({st.session_state.get('job_form','직장인')}) + 배우자({st.session_state.get('job_spouse_form','해당없음')})
+- 월 정기 수입: {summary['regular_income']:,.0f}만 원
+- 연간 비정기 상여금: {summary['annual_bonus']:,.0f}만 원
+- 연간 총소득: {summary['annual_total_income']:,.0f}만 원
+- 월평균 생활비 및 지출: {summary['expenses']:,.0f}만 원
+- 연간 실질 순저축: {summary['annual_net_surplus']:,.0f}만 원 (월환산 {summary['monthly_effective_surplus']:,.0f}만 원)
+- 자산 합계: {summary['assets']:,.0f}만 원
+- 부채 잔액: {summary['debts']:,.0f}만 원
+- 현재 순자산: {summary['net_worth']/10000:,.2f}억 원
+- 은퇴 예정 나이: {retire_age}세 (은퇴 후 맞이할 겨울 약 {winter_years}년)
+- 은퇴 후 예상 월연금: {getv('income_pension', 0):,.0f}만 원
+- 은퇴 후 월 희망 생활비: {getv('retirement_monthly_expenses', 200):,.0f}만 원
+- 가족 나이: 배우자({getv('spouse_age', 0)}세), 첫째({getv('child_age', 0)}세), 둘째({getv('child_age2', 0)}세), 부모님(부 {getv('father_age', 0)}세, 모 {getv('mother_age', 0)}세)
+- 형제자매: {', '.join(sib_names) if sib_names else '없음'}"""
+        st.code(raw_summary_report, language="markdown")
