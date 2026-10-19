@@ -551,7 +551,50 @@ def call_claude_text(prompt_text):
 # ==============================================================================
 
 # ==============================================================================
-# 4.01.00 | 첫 진입 표지 및 인라인 시작 바 (클린 미니멀 툴바 복원)
+# 4.01.00 | 사이드바 프로필 요약 및 카톡 리포트 동기화
+# ==============================================================================
+with st.sidebar:
+    # 1. 익명 고유번호 배지
+    st.markdown(f"""
+<div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; text-align: center; margin-bottom: 20px;">
+<div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: 0.04em;">익명 진단 고유번호</div>
+<div style="font-size: 20px; font-weight: 750; color: #cbd5e1; letter-spacing: 1px; margin-top: 3px;">{st.session_state.anonymous_id}</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # 2. 나의 프로필 정보 (진단 시작 후 활성화)
+    if st.session_state.started:
+        st.markdown("#### 나의 기본 정보")
+        st.markdown(f"**나의 이름/별칭:** {st.session_state.get('person_name','')}")
+        st.markdown(f"**나의 나이:** {st.session_state.get('person_age','')}세")
+
+        q_self = active_quadrant(st.session_state.get("job_form", ""))
+        q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
+        types_desc = []
+        if q_self: types_desc.append(f"나({q_self})")
+        if q_spouse: types_desc.append(f"배우자({q_spouse})")
+        dual_income_str = " + ".join(types_desc) if types_desc else "아직 미선택"
+        st.markdown(f"**우리집 소득 형태:** {dual_income_str}")
+
+    # 3. 사이드바: 카톡 리포트 불러오기
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+    with st.expander("📥 카톡 리포트 불러오기"):
+        st.markdown("<div style='font-size: 13px; color: #CBD5E1; margin-bottom: 6px;'>전달받은 <b>리포트 전문</b> 또는 <b>NC-코드</b>를 붙여넣으세요.</div>", unsafe_allow_html=True)
+        pasted_code_sb = st.text_area("카톡 내용 붙여넣기", placeholder="NC-코드를 붙여넣으세요", height=90, key="sb_pasted_code", label_visibility="collapsed")
+        if st.button("🔄 데이터 동기화", type="primary", use_container_width=True, key="sb_btn_sync"):
+            ok, msg = import_diagnosis_code(pasted_code_sb)
+            if ok:
+                st.success(msg)
+                st.rerun()
+            else:
+                st.error(msg)
+
+    st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+    st.caption("※ 나침반은 외부 서버에 저장되지 않는 일회성 안전 세션입니다.")
+
+
+# ==============================================================================
+# 4.02.00 | 첫 진입 표지 및 인라인 시작 바 (카톡 리포트 열기 슬림 연동)
 # ==============================================================================
 cover_file_path = None
 possible_covers = [
@@ -582,7 +625,7 @@ if not st.session_state.started:
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
         
-        # 표지 바로 아래 슬림 툴바 (군더더기 없이 깔끔하게 복원)
+        # 표지 바로 아래 슬림 툴바
         with st.form("start_inline_form", clear_on_submit=False):
             in_col1, in_col2, in_col3 = st.columns([2.0, 1.1, 1.1])
             
@@ -613,51 +656,21 @@ if not st.session_state.started:
                     st.session_state.person_age = int(age)
                     st.session_state.started = True
                     st.rerun()
+
+        # 첫 화면 슬림 진입점: 카톡 리포트 열기 (은은하고 심플한 스타일)
+        st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+        with st.expander("📥 카톡 리포트 열기"):
+            st.markdown("<div style='font-size: 13.5px; color: #CBD5E1; margin-bottom: 6px;'>전달받은 <b>리포트 전문</b> 또는 <b>NC-코드</b>를 아래에 붙여넣으세요.</div>", unsafe_allow_html=True)
+            pasted_code_cover = st.text_area("카톡 내용 붙여넣기", placeholder="카카오톡 메시지나 NC-코드를 그대로 붙여넣으세요", height=85, key="cover_pasted_code", label_visibility="collapsed")
+            if st.button("🔄 리포트 열기", type="primary", use_container_width=True, key="cover_btn_sync"):
+                ok, msg = import_diagnosis_code(pasted_code_cover)
+                if ok:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
             
     st.stop()
-    
-# ==============================================================================
-# 4.02.00 | 사이드바 프로필 요약 및 카톡 리포트 동기화
-# ==============================================================================
-with st.sidebar:
-    # 1. 익명 고유번호 배지
-    st.markdown(f"""
-<div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; text-align: center; margin-bottom: 20px;">
-<div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: 0.04em;">익명 진단 고유번호</div>
-<div style="font-size: 20px; font-weight: 750; color: #cbd5e1; letter-spacing: 1px; margin-top: 3px;">{st.session_state.anonymous_id}</div>
-</div>
-""", unsafe_allow_html=True)
-
-    # 2. 나의 프로필 정보 (진단 시작 후 활성화)
-    if st.session_state.started:
-        st.markdown("#### 나의 기본 정보")
-        st.markdown(f"**나의 이름/별칭:** {st.session_state.get('person_name','')}")
-        st.markdown(f"**나의 나이:** {st.session_state.get('person_age','')}세")
-
-        q_self = active_quadrant(st.session_state.get("job_form", ""))
-        q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
-        types_desc = []
-        if q_self: types_desc.append(f"나({q_self})")
-        if q_spouse: types_desc.append(f"배우자({q_spouse})")
-        dual_income_str = " + ".join(types_desc) if types_desc else "아직 미선택"
-        st.markdown(f"**우리집 소득 형태:** {dual_income_str}")
-
-    # 3. [인터뷰어 전용] 카톡 리포트 불러오기 (사이드바 안착)
-    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-    with st.expander("📥 카톡 리포트 불러오기"):
-        st.markdown("<div style='font-size: 13px; color: #CBD5E1; margin-bottom: 6px;'>카톡으로 전달받은 <b>리포트 전문</b> 또는 <b>NC-코드</b>를 붙여넣으세요.</div>", unsafe_allow_html=True)
-        pasted_code = st.text_area("카톡 내용 붙여넣기", placeholder="NC-코드를 붙여넣으세요", height=90, key="sb_pasted_code", label_visibility="collapsed")
-        if st.button("🔄 데이터 동기화", type="primary", use_container_width=True, key="sb_btn_sync"):
-            ok, msg = import_diagnosis_code(pasted_code)
-            if ok:
-                st.success(msg)
-                st.rerun()
-            else:
-                st.error(msg)
-
-    st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
-    st.caption("※ 나침반은 외부 서버에 저장되지 않는 일회성 안전 세션입니다.")
-
 
 # ==============================================================================
 # 5.00.00 | 메인 네비게이션 헤더 (Main Navigation Segment)
@@ -1654,7 +1667,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (Web Share API 카톡 원터치 공유 & 다크 리포트)
+# 6.04.00 | Tab 4 — AI 시선 (자녀수 정밀 필터링 & Web Share 카톡 전송)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1667,12 +1680,39 @@ else:
     person_age = st.session_state.get("person_age", 35)
     retire_age = st.session_state.get("retirement_age", 60)
     winter_years = max(0, 88 - int(retire_age))
-    
+    child_count_str = st.session_state.get("child_count", "입력 안 함")
+
+    # 0세 및 미선택 가족 데이터 완벽 정제 (AI 오해 원천 차단)
+    family_desc = {}
+    if getv("spouse_age", 0) > 0:
+        family_desc["배우자"] = f"{int(getv('spouse_age'))}세"
+
+    # 실제 입력된 자녀만 선별
+    children_list = []
+    if child_count_str in ["1명", "2명", "3명 이상"] and getv("child_age", 0) > 0:
+        children_list.append(f"첫째 {int(getv('child_age'))}세")
+    if child_count_str in ["2명", "3명 이상"] and getv("child_age2", 0) > 0:
+        children_list.append(f"둘째 {int(getv('child_age2'))}세")
+    if child_count_str == "3명 이상" and getv("child_age3", 0) > 0:
+        children_list.append(f"셋째 {int(getv('child_age3'))}세")
+
+    if children_list:
+        family_desc["자녀"] = f"총 {len(children_list)}명 ({', '.join(children_list)})"
+    elif child_count_str == "없음":
+        family_desc["자녀"] = "자녀 없음"
+
+    if getv("father_age", 0) > 0:
+        family_desc["아버지"] = f"{int(getv('father_age'))}세"
+    if getv("mother_age", 0) > 0:
+        family_desc["어머니"] = f"{int(getv('mother_age'))}세"
+    if sib_names:
+        family_desc["형제자매"] = ", ".join(sib_names)
+
     details = {
         "이름/별칭": person_name,
         "나이": person_age,
         "소득 형태": st.session_state.get("job_form", "직장인"),
-        "배우자 소득 형태": st.session_state.get("job_spouse_form", "없음"),
+        "배우자 소득 형태": st.session_state.get("job_spouse_form", "해당 없음"),
         "월수입(정기)": f"{summary['regular_income']:,.0f}만 원",
         "연간 상여금(비정기)": f"{summary['annual_bonus']:,.0f}만 원",
         "연간 총소득": f"{summary['annual_total_income']:,.0f}만 원",
@@ -1682,15 +1722,7 @@ else:
         "은퇴 후 예상 월연금": f"{getv('income_pension', 0):,.0f}만 원",
         "은퇴 후 월 생활비": f"{getv('retirement_monthly_expenses', 200):,.0f}만 원",
         "희망 은퇴 나이": f"{retire_age}세 (은퇴 후 겨울 {winter_years}년)",
-        "가족 나이": {
-            "배우자": f"{getv('spouse_age', 0)}세",
-            "첫째 자녀": f"{getv('child_age', 0)}세",
-            "둘째 자녀": f"{getv('child_age2', 0)}세",
-            "셋째 자녀": f"{getv('child_age3', 0)}세",
-            "아버지": f"{getv('father_age', 0)}세",
-            "어머니": f"{getv('mother_age', 0)}세",
-            "형제자매": sib_names if sib_names else "없음"
-        },
+        "가족 구성": family_desc if family_desc else "기본 정보만 등록됨",
         "가족 계획": {
             "결혼": st.session_state.get("marriage_plan", "미정"),
             "출산/자녀": st.session_state.get("child_plan", "미정"),
@@ -1783,19 +1815,18 @@ else:
 {income_comment}
 
 ----------------------------------------
-📌 인터뷰어 나침반 동기화 복원코드:
+📌 나침반 동기화 복원코드:
 {sync_code}
 ----------------------------------------"""
 
-        # 자바스크립트 전달용 Base64 안전 인코딩
         raw_b64 = base64.b64encode(kakao_report_text.encode('utf-8')).decode('utf-8')
 
         st.markdown("""
 <div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid #F59E0B; border-radius: 14px; padding: 20px 22px; margin-top: 15px;">
 <div style="font-size: 18px; font-weight: 850; color: #FDE68A; margin-bottom: 8px;">💬 카카오톡으로 리포트 전송하기</div>
 <div style="font-size: 14px; color: #CBD5E1; line-height: 1.6;">
-아래 <b>[💬 카카오톡 공유하기]</b>를 누르면 스마트폰 공유창이 열려 나와의 채팅 또는 인터뷰어에게 바로 보낼 수 있습니다.<br>
-<span style="color:#94A3B8;">(인터뷰어는 리포트 속 NC-코드를 복사하여 사이드바의 <b>[📥 카톡 리포트 불러오기]</b>에 넣으면 0.1초 만에 화면이 동기화됩니다.)</span>
+아래 <b>[💬 카카오톡 공유하기]</b>를 누르면 스마트폰 공유창이 열려 나와의 채팅이나 상대방에게 바로 보낼 수 있습니다.<br>
+<span style="color:#94A3B8;">(리포트 속 NC-코드를 복사하여 첫 화면이나 사이드바의 <b>[📥 카톡 리포트 열기]</b>에 넣으면 0.1초 만에 화면이 동기화됩니다.)</span>
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1804,7 +1835,6 @@ else:
         
         btn_c1, btn_c2 = st.columns(2)
         with btn_c1:
-            # 모바일 표준 Web Share API ➜ 카카오톡 원터치 공유 버튼
             st.markdown(f"""
 <button onclick="
 try {{
@@ -1827,7 +1857,6 @@ try {{
 """, unsafe_allow_html=True)
 
         with btn_c2:
-            # PC 및 클립보드 전문 복사용 버튼
             st.markdown(f"""
 <button onclick="
 try {{
@@ -1844,7 +1873,6 @@ try {{
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
 
-        # 다크 네이비 테마에 완벽히 밀착된 고대비 래핑 박스
         st.markdown(f"""
 <div style="background: #0d1527; border: 1.5px solid #334155; border-radius: 10px; padding: 18px 20px; color: #F1F5F9; font-size: 14.5px; line-height: 1.7; white-space: pre-wrap; word-break: keep-all; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
 {kakao_report_text}
@@ -1862,7 +1890,7 @@ try {{
         st.markdown("<div style='font-size: 13.5px; color: #94A3B8; margin-bottom: 8px;'>프롬프트 지시문 없이, 내가 입력한 재무제표와 가족 생애 통계만 정리된 텍스트입니다. ChatGPT 등에 복사해서 자유롭게 추가 상담을 진행할 수 있습니다.</div>", unsafe_allow_html=True)
         raw_summary_report = f"""### 나침반 재무제표 및 생애주기 요약 데이터
 - 성명(별칭): {person_name} (만 {person_age}세)
-- 가구 소득 형태: 나({st.session_state.get('job_form','직장인')}) + 배우자({st.session_state.get('job_spouse_form','해당없음')})
+- 가구 소득 형태: 나({st.session_state.get('job_form','직장인')}) + 배우자({st.session_state.get('job_spouse_form','해당 없음')})
 - 월 정기 수입: {summary['regular_income']:,.0f}만 원
 - 연간 비정기 상여금: {summary['annual_bonus']:,.0f}만 원
 - 연간 총소득: {summary['annual_total_income']:,.0f}만 원
@@ -1874,6 +1902,5 @@ try {{
 - 은퇴 예정 나이: {retire_age}세 (은퇴 후 맞이할 겨울 약 {winter_years}년)
 - 은퇴 후 예상 월연금: {getv('income_pension', 0):,.0f}만 원
 - 은퇴 후 월 희망 생활비: {getv('retirement_monthly_expenses', 200):,.0f}만 원
-- 가족 나이: 배우자({getv('spouse_age', 0)}세), 첫째({getv('child_age', 0)}세), 둘째({getv('child_age2', 0)}세), 부모님(부 {getv('father_age', 0)}세, 모 {getv('mother_age', 0)}세)
-- 형제자매: {', '.join(sib_names) if sib_names else '없음'}"""
+- 가족 구성: {', '.join([f'{k}: {v}' for k, v in family_desc.items()]) if family_desc else '미등록'}"""
         st.code(raw_summary_report, language="markdown")
