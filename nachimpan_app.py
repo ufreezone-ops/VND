@@ -348,32 +348,9 @@ def current_financial_summary():
 # 3.00.00 | 외부 AI 연동 서비스 (Gemini API Pipeline)
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 3.01.00 | Gemini 엔드포인트 캐싱 및 텍스트 요청 파이프라인
-# ------------------------------------------------------------------------------
-@st.cache_data(ttl=3600)
-def get_cached_gemini_models(api_key):
-    active_endpoints = []
-    for ver in ["v1beta", "v1"]:
-        try:
-            response = requests.get(
-                f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}",
-                timeout=3,
-            )
-            if response.status_code == 200:
-                for model_info in response.json().get("models", []):
-                    if "generateContent" in model_info.get("supportedGenerationMethods", []):
-                        clean_name = model_info.get("name", "").replace("models/", "")
-                        if "flash" in clean_name and "exp" not in clean_name and "preview" not in clean_name:
-                            active_endpoints.append((ver, clean_name))
-        except Exception:
-            pass
-    active_endpoints.sort(key=lambda item: (
-        0 if item == ("v1beta", "gemini-1.5-flash") else
-        1 if item == ("v1", "gemini-1.5-flash") else 2
-    ))
-    return active_endpoints or [("v1beta", "gemini-2.0-flash")]
-
+# ==============================================================================
+# 3.01.00 | Gemini 초고속 직타 및 텍스트 요청 파이프라인 (대기시간 단축)
+# ==============================================================================
 def call_gemini_text(prompt_text):
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_KEY")
     if not api_key:
@@ -383,18 +360,28 @@ def call_gemini_text(prompt_text):
             api_key = ""
     if not api_key:
         return "", "Streamlit Secrets에서 GEMINI_API_KEY를 찾지 못했습니다. 앱 대시보드의 Secrets 설정을 확인해 주세요."
+    
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
-        "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.45},
+        "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.4},
     }
+    
+    # 초고속 최신 플래시 모델 다이렉트 호출 리스트 (탐색 시간 0초)
+    fast_models = [
+        ("v1beta", "gemini-1.5-flash"),
+        ("v1beta", "gemini-2.0-flash"),
+        ("v1", "gemini-1.5-flash"),
+    ]
+    
     last_error = ""
-    for api_version, model_name in get_cached_gemini_models(api_key):
+    for api_ver, model_name in fast_models:
         try:
+            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_name}:generateContent?key={api_key}"
             response = requests.post(
-                f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={api_key}",
+                url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=25,
+                timeout=12,
             )
             if response.status_code == 200:
                 result = response.json()
@@ -403,9 +390,10 @@ def call_gemini_text(prompt_text):
                 if text_parts:
                     return "".join(text_parts).strip(), ""
             else:
-                last_error = f"[{model_name}] {response.status_code}: {response.text[:160]}"
+                last_error = f"[{model_name}] {response.status_code}: {response.text[:120]}"
         except Exception as exc:
-            last_error = f"[{model_name}] 요청 오류: {exc}"
+            last_error = f"[{model_name}] 통신 지연: {exc}"
+            
     return "", last_error or "Gemini 서버에서 응답을 받지 못했습니다."
 
 
@@ -1107,7 +1095,7 @@ elif selected_page == "삶과 생계수단":
             st.rerun()
 
 # ==============================================================================
-# 6.03.00 | Tab 3 — 인생의 사계절 (형제자매 다중입력 & 현재계절 스마트 하이라이트)
+# 6.03.00 | Tab 3 — 인생의 사계절 (형제자매 6버튼 누적생성 & 사계절 스마트 하이라이트)
 # ==============================================================================
 elif selected_page == "인생의 사계절":
     if st.session_state.pop("_scroll_to_top_once", False):
@@ -1126,7 +1114,7 @@ elif selected_page == "인생의 사계절":
     years_left = max(0, retire_age - cur_age)
 
     # --------------------------------------------------------------------------
-    # 1. 가족 구성원과 은퇴 시점의 나이 (2열 그리드 & 형제자매 다중 선택)
+    # 1. 가족 구성원과 은퇴 시점의 나이
     # --------------------------------------------------------------------------
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
     child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
@@ -1179,32 +1167,8 @@ elif selected_page == "인생의 사계절":
         with p_c3:
             housing_options = ["미정", "현재 주거 유지", "전세·월세 이동 고려", "주택 구입 고려", "주거 계획 확정"]
             housing_plan = st.selectbox("주거 계획", housing_options, index=housing_options.index(st.session_state.get("housing_plan", "미정")) if st.session_state.get("housing_plan", "미정") in housing_options else 0)
-        
-        # 형제자매 다중 인원 선택 옵션 (형 1, 형 2 등)
-        sibling_options = [
-            "형 1", "형 2", "누나 1", "누나 2",
-            "오빠 1", "오빠 2", "언니 1", "언니 2",
-            "남동생 1", "남동생 2", "여동생 1", "여동생 2"
-        ]
-        siblings = st.multiselect(
-            "형제자매 (해당 항목 모두 선택)",
-            sibling_options,
-            default=[x for x in st.session_state.get("siblings", []) if x in sibling_options],
-        )
 
-        # 형제자매 선택 시 나이 입력창 동적 생성 (2열)
-        sibling_age_inputs = {}
-        if siblings:
-            st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
-            st.markdown("<div style='font-size:15px; font-weight:700; color:#CBD5E1;'>형제자매 나이 입력 (선택, 모르면 0)</div>", unsafe_allow_html=True)
-            sib_cols = st.columns(2)
-            for idx, sib in enumerate(siblings):
-                c = sib_cols[idx % 2]
-                with c:
-                    prev_sib_age = int(st.session_state.get(f"sib_age_{sib}", 0))
-                    sibling_age_inputs[sib] = st.number_input(f"{sib} 나이", min_value=0, max_value=120, value=prev_sib_age, step=1, key=f"inp_sib_age_{sib}")
-
-        save_family = st.form_submit_button("가족 정보 반영하기", use_container_width=True, type="primary")
+        save_family = st.form_submit_button("가족 기본 정보 반영하기", use_container_width=True, type="primary")
 
     if save_family:
         st.session_state.spouse_age = spouse_age
@@ -1214,13 +1178,68 @@ elif selected_page == "인생의 사계절":
         st.session_state.child_age3 = child_age3
         st.session_state.father_age = father_age
         st.session_state.mother_age = mother_age
-        st.session_state.siblings = siblings
         st.session_state.marriage_plan = marriage_plan
         st.session_state.child_plan = child_plan
         st.session_state.housing_plan = housing_plan
-        for sib, age_val in sibling_age_inputs.items():
-            st.session_state[f"sib_age_{sib}"] = age_val
         st.rerun()
+
+    # --------------------------------------------------------------------------
+    # 1-1. 형제자매 6버튼 원터치 누적 추가 섹션
+    # --------------------------------------------------------------------------
+    if "sibling_items" not in st.session_state:
+        st.session_state.sibling_items = []
+
+    st.markdown("""
+<div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 12px; padding: 18px 20px; margin-top: 14px;">
+<div style="font-size: 16.5px; font-weight: 800; color: #F8FAFC; margin-bottom: 6px;">👥 형제자매 추가 (누를 때마다 1, 2, 3... 자동 추가)</div>
+<div style="font-size: 13.5px; color: #94A3B8; margin-bottom: 12px;">버튼을 누르면 해당 형제자매가 순서대로 생성됩니다.</div>
+""", unsafe_allow_html=True)
+
+    b_cols = st.columns(6)
+    role_types = ["형", "누나", "오빠", "언니", "남동생", "여동생"]
+    
+    for idx, role in enumerate(role_types):
+        with b_cols[idx]:
+            if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
+                count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
+                st.session_state.sibling_items.append({
+                    "id": f"{role}_{count+1}_{random.randint(100,999)}",
+                    "role": role,
+                    "label": f"{role} {count + 1}",
+                    "age": 0
+                })
+                st.rerun()
+
+    # 생성된 형제자매 목록 및 나이 입력
+    if st.session_state.sibling_items:
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        items_to_remove = []
+        sib_entry_cols = st.columns(2)
+        
+        for idx, s_item in enumerate(st.session_state.sibling_items):
+            c = sib_entry_cols[idx % 2]
+            with c:
+                ic1, ic2 = st.columns([3, 1])
+                with ic1:
+                    new_age = st.number_input(
+                        f"{s_item['label']} 나이",
+                        min_value=0, max_value=120,
+                        value=int(s_item.get("age", 0)),
+                        step=1, key=f"inp_age_{s_item['id']}"
+                    )
+                    s_item["age"] = new_age
+                with ic2:
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    if st.button("삭제", key=f"btn_del_{s_item['id']}", use_container_width=True):
+                        items_to_remove.append(s_item["id"])
+                        
+        if items_to_remove:
+            st.session_state.sibling_items = [
+                it for it in st.session_state.sibling_items if it["id"] not in items_to_remove
+            ]
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # 가족 미래 나이 리스트 구성
     people = [(st.session_state.get("person_name", "나"), cur_age)]
@@ -1230,14 +1249,13 @@ elif selected_page == "인생의 사계절":
     if getv("child_age3", 0) > 0: people.append(("셋째 자녀", int(getv("child_age3"))))
     if getv("father_age", 0) > 0: people.append(("아버지", int(getv("father_age"))))
     if getv("mother_age", 0) > 0: people.append(("어머니", int(getv("mother_age"))))
-    for sib in st.session_state.get("siblings", []):
-        sib_a = int(getv(f"sib_age_{sib}", 0))
-        if sib_a > 0:
-            people.append((sib, sib_a))
+    for s_it in st.session_state.get("sibling_items", []):
+        if int(s_it.get("age", 0)) > 0:
+            people.append((s_it["label"], int(s_it["age"])))
 
     # 반복 문구 박멸 & 깔끔한 2열 슬림 카드 헤더
     st.markdown(f"""
-<div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 18px; margin: 16px 0 10px 0; display:flex; justify-content:space-between; align-items:center;">
+<div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 18px; margin: 18px 0 10px 0; display:flex; justify-content:space-between; align-items:center;">
 <span style="font-size: 15.5px; font-weight: 800; color: #F8FAFC;">📌 내가 은퇴하는 시점(만 {retire_age}세, {years_left}년 후)의 우리 가족 나이</span>
 <span style="font-size: 13px; color: #94A3B8;">현재 나이 ➔ 은퇴 시 나이</span>
 </div>
@@ -1282,8 +1300,8 @@ elif selected_page == "인생의 사계절":
     st.caption("※ 통계청 공식 NTA 패턴을 인터뷰이 본인의 실제 소득·소비 및 은퇴 나이에 맞추어 번역한 개인 곡선입니다.")
     
     s = current_financial_summary()
-    cur_annual_income = s["annual_total_income"]      # 연간 총소득 (상여금 포함, 만원)
-    cur_annual_expense = s["annual_total_expenses"]   # 연간 총지출 (만원)
+    cur_annual_income = s["annual_total_income"]
+    cur_annual_expense = s["annual_total_expenses"]
     ret_annual_pension = float(getv("income_pension", 0) or 0) * 12.0
     ret_annual_expense = float(getv("retirement_monthly_expenses", 200) or 0) * 12.0
 
@@ -1317,7 +1335,6 @@ elif selected_page == "인생의 사계절":
         else:
             my_expense_curve.append(ret_annual_expense)
 
-    # Plotly 개인화 생애주기 차트
     fig_my_nta = go.Figure()
 
     fig_my_nta.add_trace(go.Scatter(
@@ -1395,7 +1412,6 @@ elif selected_page == "인생의 사계절":
     
     st.markdown("### 3. 인생의 사계절과 맞이할 겨울의 시간")
     
-    # 현재 나이가 속한 계절 판정
     if cur_age <= 27:
         cur_season = "spring"
     elif 28 <= cur_age <= 45:
@@ -1459,7 +1475,6 @@ elif selected_page == "인생의 사계절":
     col_m2.metric("최대 흑자 정점", "45세", "연 1,932만 원")
     col_m3.metric("평균 적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
 
-    # 화이트아웃 버그를 100% 원천 차단한 다크 네이비 고대비 링크 버튼
     st.markdown(f"""
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;">
 <a href="{OFFICIAL_PDF_URL}" target="_blank" style="background:#1E293B; border:1px solid #475569; border-radius:8px; padding:12px 14px; text-align:center; text-decoration:none; color:#38BDF8 !important; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
@@ -1471,7 +1486,6 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
-    # 다음 탭 이동
     _, next_col = st.columns([5, 1])
     with next_col:
         if st.button("다음 →", key="seasons_next", use_container_width=True, type="primary"):
@@ -1480,85 +1494,137 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (AI Perspective & Gemini Analysis)
+# 6.04.00 | Tab 4 — AI 시선 (초고속 Gemini & ChatGPT·Claude 원클릭 프롬프트 연동)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
-    st.markdown("AI는 평가자가 아닌, 내가 작성한 숫자를 객관적인 거울처럼 비춰주는 성찰 파트너입니다.")
+    st.markdown("AI는 평가자가 아닌, 내가 작성한 삶과 숫자를 객관적인 거울처럼 비춰주는 성찰 파트너입니다.")
     
     model = st.radio(
         "분석할 AI 모델 선택",
-        ["Gemini", "ChatGPT (준비 중)", "Claude (준비 중)"],
+        ["Gemini", "ChatGPT", "Claude"],
         index=0, key="ai_provider", horizontal=True,
     )
     
-    if model != "Gemini":
-        st.info(f"{model}은 연결 준비 중입니다. 현재는 Gemini 분석 엔진을 바로 사용하실 수 있습니다.")
-
-    if st.button("내 가계부 AI 분석 실행", type="primary", use_container_width=True, disabled=(model != "Gemini")):
-        summary = current_financial_summary()
-        details = {
-            "나이": st.session_state.get("person_age"),
-            "소득 형태": st.session_state.get("job_form", ""),
-            "월수입 항목": {k: getv(k, 0) for k in ["income_self", "income_spouse", "income_other", "income_pension"]},
-            "월지출 항목": {k: getv(k, 0) for k in ["expense_living", "expense_loan", "expense_other"]},
-            "자산 항목": {k: getv(k, 0) for k in ["asset_cash", "asset_financial", "asset_home", "asset_deposit", "asset_other"]},
-            "부채 항목": {k: getv(k, 0) for k in ["debt_home", "debt_other"]},
-            "삶과 시간 메모": st.session_state.get("life_choice_note", ""),
-            "은퇴 예정 나이": st.session_state.get("retirement_age"),
-            "가족 나이": {k: getv(k, 0) for k in ["spouse_age", "child_age", "child_age2", "child_age3", "father_age", "mother_age"]},
-            "형제자매": st.session_state.get("siblings", []),
-            "결혼 계획": st.session_state.get("marriage_plan", "미정"),
-            "출산·자녀 계획": st.session_state.get("child_plan", "미정"),
-            "주거 계획": st.session_state.get("housing_plan", "미정"),
+    # 공통 진단 데이터 딕셔너리 구축
+    summary = current_financial_summary()
+    sib_names = [f"{it['label']}({it.get('age',0)}세)" for it in st.session_state.get("sibling_items", []) if it.get("age", 0) > 0]
+    
+    details = {
+        "이름/별칭": st.session_state.get("person_name", "나"),
+        "나이": st.session_state.get("person_age"),
+        "소득 형태": st.session_state.get("job_form", ""),
+        "배우자 소득 형태": st.session_state.get("job_spouse_form", "없음"),
+        "월수입(정기)": f"{summary['regular_income']:,.0f}만 원",
+        "연간 상여금(비정기)": f"{summary['annual_bonus']:,.0f}만 원",
+        "연간 총소득": f"{summary['annual_total_income']:,.0f}만 원",
+        "월평균 지출": f"{summary['expenses']:,.0f}만 원",
+        "연간 순저축 여력": f"{summary['annual_net_surplus']:,.0f}만 원 (월환산 {summary['monthly_effective_surplus']:,.0f}만 원)",
+        "순자산": f"{summary['net_worth']/10000:,.2f}억 원 (자산 {summary['assets']:,.0f}만 원 - 부채 {summary['debts']:,.0f}만 원)",
+        "은퇴 후 예상 월연금": f"{getv('income_pension', 0):,.0f}만 원",
+        "은퇴 후 월 생활비": f"{getv('retirement_monthly_expenses', 200):,.0f}만 원",
+        "희망 은퇴 나이": f"{st.session_state.get('retirement_age', 60)}세",
+        "가족 나이": {
+            "배우자": f"{getv('spouse_age', 0)}세",
+            "첫째 자녀": f"{getv('child_age', 0)}세",
+            "둘째 자녀": f"{getv('child_age2', 0)}세",
+            "셋째 자녀": f"{getv('child_age3', 0)}세",
+            "아버지": f"{getv('father_age', 0)}세",
+            "어머니": f"{getv('mother_age', 0)}세",
+            "형제자매": sib_names if sib_names else "없음"
+        },
+        "가족 계획": {
+            "결혼": st.session_state.get("marriage_plan", "미정"),
+            "출산/자녀": st.session_state.get("child_plan", "미정"),
+            "주거": st.session_state.get("housing_plan", "미정")
         }
-        st.session_state.ai_summary = summary
-        st.session_state.ai_details = details
-        st.session_state.ai_comment = None
+    }
 
-        prompt = (
-            "역할: 한국의 가계 재무와 은퇴 준비를 함께 검토하는 현실적이고 친근한 성찰 파트너입니다. "
-            "투자상품을 권유하지 말고, 위협이나 공포 마케팅을 절대 배제하세요.\n\n"
-            "참고 공식통계: 국가데이터처 2024 국민이전계정 기준 한국인 평균 흑자진입 28세, 최대흑자 45세(연 1,932만 원), 적자전환 61세.\n"
-            "아래 두 코멘트만 작성하세요 (250~350자 내외, 쉬운 대화체).\n"
-            "[은퇴 안정성]\n"
-            "첫 문장은 '은퇴 안정성: 유리한 편 / 판단 보류 / 불리한 편' 중 하나로 시작.\n"
-            "[소득 개선 방향]\n"
-            "투잡 추가와 본업 유지 후 파이프라인(자산/사업) 준비 중 적합한 방향 조언.\n\n"
-            f"입력 데이터:\n{json.dumps(details, ensure_ascii=False)}"
-        )
-        with st.spinner("AI가 입력하신 삶과 재무의 지표를 성찰 중입니다..."):
-            comment, error = call_gemini_text(prompt)
-            st.session_state.ai_comment = comment if comment else error
+    # 표준 프롬프트 텍스트
+    full_prompt_text = f"""[역할 정의]
+당신은 대한민국 가계 재무와 은퇴 준비를 함께 검토하는 품격 있고 따뜻한 현실점검 파트너입니다.
+위협이나 공포 마케팅(파산, 절벽 등)을 절대 배제하고, "산 입에 거미줄 치랴"의 온기 있는 위로와 객관적 성찰 거울의 태도를 유지하세요.
+소득의 크기가 아니라 '소득의 성격(물통 vs 파이프라인)'에 주목하여 조언하세요.
 
-    if st.session_state.get("ai_summary"):
-        s = st.session_state.ai_summary
-        st.markdown("### 재무제표 요약")
-        cols = st.columns(4)
-        cols[0].metric("월수입 합계", money(s["income"]))
-        cols[1].metric("월지출 합계", money(s["expenses"]))
-        cols[2].metric("월 저축여력", money(s["surplus"]))
-        cols[3].metric("순자산", fmt_eok(s["net_worth"]))
+[참고 공식 통계 (국가데이터처 2024 국민이전계정)]
+- 한국인 평균 흑자 진입: 28세
+- 최대 흑자 정점: 45세 (연 1,932만 원 흑자)
+- 적자 재전환: 61세 (은퇴와 함께 소비가 소득을 초과)
 
-        st.markdown("### AI 성찰 리포트")
-        comment_text = str(st.session_state.get("ai_comment", ""))
-        
-        # 코멘트 파싱 (은퇴 안정성 vs 소득 개선 방향)
-        normalized = comment_text.replace("\r\n", "\n").replace("\r", "\n")
-        match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
-        if match:
-            retirement_comment = normalized[:match.start()]
-            income_comment = normalized[match.end():]
+[인터뷰이 재무 및 생애 데이터]
+{json.dumps(details, ensure_ascii=False, indent=2)}
+
+[요청 사항]
+다음 2가지 관점에서 각각 250~350자 내외의 품격 있고 다정한 대화체로 코멘트해 주세요.
+1. [은퇴 안정성]: 은퇴 안정성 수준(유리한 편 / 보통 / 불리한 편)을 첫 문장에 밝히고, 은퇴 후 맞이할 겨울의 길이와 연금/자산 현금흐름에 대해 성찰할 점.
+2. [소득 개선 방향]: 현재 노동 수입(물통)에만 의존할 때의 한계와, 현업을 성실히 지키면서 복리의 지혜를 갖춘 파이프라인(자산/시스템 수입)을 준비해야 하는 이유."""
+
+    # 1. Gemini 선택 시
+    if model == "Gemini":
+        if st.button("⚡ 내 가계부 AI 분석 실행 (Gemini 초고속 엔진)", type="primary", use_container_width=True):
+            st.session_state.ai_summary = summary
+            st.session_state.ai_comment = None
+
+            with st.spinner("AI가 가계부와 국민이전계정(NTA) 지표를 대조 분석 중입니다 (약 3~5초 소요)..."):
+                comment, error = call_gemini_text(full_prompt_text)
+                st.session_state.ai_comment = comment if comment else error
+
+        if st.session_state.get("ai_summary"):
+            s = st.session_state.ai_summary
+            st.markdown("### 재무제표 요약")
+            cols = st.columns(4)
+            cols[0].metric("월 정기수입", money(s["regular_income"]))
+            cols[1].metric("월 현금지출", money(s["expenses"]))
+            cols[2].metric("연간 순저축", money(s["annual_net_surplus"]), f"월환산 {money(s['monthly_effective_surplus'])}")
+            cols[3].metric("순자산", fmt_eok(s["net_worth"]))
+
+            st.markdown("### AI 성찰 리포트")
+            comment_text = str(st.session_state.get("ai_comment", ""))
+            
+            normalized = comment_text.replace("\r\n", "\n").replace("\r", "\n")
+            match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
+            if match:
+                retirement_comment = normalized[:match.start()]
+                income_comment = normalized[match.end():]
+            else:
+                retirement_comment, income_comment = normalized, ""
+
+            retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
+            income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
+
+            st.markdown("#### 은퇴 안정성 관점")
+            st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
+            st.markdown("#### 소득 개선 관점 (파이프라인)")
+            st.markdown(f"<div class='soft-card'>{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}</div>", unsafe_allow_html=True)
+            st.caption("※ AI의 코멘트는 참고용 거울이며, 삶의 가장 중요한 결정은 온전히 당신의 것입니다.")
         else:
-            retirement_comment, income_comment = normalized, ""
+            st.info("‘내 가계부 AI 분석 실행’ 버튼을 누르면 Gemini 초고속 엔진이 따뜻한 피드백을 생성합니다.")
 
-        retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
-        income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
-
-        st.markdown("#### 은퇴 안정성 관점")
-        st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
-        st.markdown("#### 소득 개선 관점 (파이프라인)")
-        st.markdown(f"<div class='soft-card'>{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}</div>", unsafe_allow_html=True)
-        st.caption("※ AI의 코멘트는 참고용 거울이며, 삶의 가장 중요한 결정은 온전히 당신의 것입니다.")
+    # 2. ChatGPT 또는 Claude 선택 시 (원클릭 프롬프트 복사 & 외부 연결)
     else:
-        st.info("‘내 가계부 AI 분석 실행’ 버튼을 누르면 입력하신 데이터를 바탕으로 AI의 따뜻한 피드백이 생성됩니다.")
+        ai_name = model
+        ai_color = "#10A37F" if ai_name == "ChatGPT" else "#D97706"
+        ai_url = "https://chatgpt.com" if ai_name == "ChatGPT" else "https://claude.ai"
+        
+        st.markdown(f"""
+<div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid {ai_color}; border-radius: 12px; padding: 20px 22px; margin-top: 10px;">
+<div style="font-size: 18px; font-weight: 850; color: #F8FAFC; margin-bottom: 8px;">🚀 {ai_name} 맞춤형 심층 분석 가이드</div>
+<div style="font-size: 14.5px; color: #CBD5E1; line-height: 1.6; word-break: keep-all;">
+나침반에 입력하신 <b>모든 가계부·자산·생애주기 데이터가 포함된 전문 프롬프트</b>가 완성되었습니다.<br>
+아래 <b>[1단계: 프롬프트 복사]</b> 후 <b>[2단계: {ai_name} 바로가기]</b>를 눌러 붙여넣기(Ctrl+V)하시면, 가장 최신 모델에서 심층 성찰 리포트를 바로 받아보실 수 있습니다.
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"#### 1단계: {ai_name} 전용 진단 프롬프트")
+        st.code(full_prompt_text, language="markdown")
+
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"#### 2단계: {ai_name} 접속하여 붙여넣기")
+        
+        st.markdown(f"""
+<a href="{ai_url}" target="_blank" style="background:{ai_color}; color:#FFFFFF !important; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:10px; padding:13px 20px; border-radius:8px; font-weight:800; font-size:16px; margin-top:8px;">
+<span>💬</span><span>{ai_name} 웹페이지 바로가기 ({ai_url.replace('https://','')})</span>
+</a>
+""", unsafe_allow_html=True)
