@@ -1107,7 +1107,7 @@ elif selected_page == "삶과 생계수단":
             st.rerun()
 
 # ==============================================================================
-# 6.03.00 | Tab 3 — 인생의 사계절 (가족 2열 정렬·형제자매 동적추가·버튼 화이트 박멸)
+# 6.03.00 | Tab 3 — 인생의 사계절 (형제자매 다중입력 & 현재계절 스마트 하이라이트)
 # ==============================================================================
 elif selected_page == "인생의 사계절":
     if st.session_state.pop("_scroll_to_top_once", False):
@@ -1126,7 +1126,7 @@ elif selected_page == "인생의 사계절":
     years_left = max(0, retire_age - cur_age)
 
     # --------------------------------------------------------------------------
-    # 1. 가족 구성원과 은퇴 시점의 나이 (2열 그리드 & 형제자매 동적 연동)
+    # 1. 가족 구성원과 은퇴 시점의 나이 (2열 그리드 & 형제자매 다중 선택)
     # --------------------------------------------------------------------------
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
     child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
@@ -1180,8 +1180,12 @@ elif selected_page == "인생의 사계절":
             housing_options = ["미정", "현재 주거 유지", "전세·월세 이동 고려", "주택 구입 고려", "주거 계획 확정"]
             housing_plan = st.selectbox("주거 계획", housing_options, index=housing_options.index(st.session_state.get("housing_plan", "미정")) if st.session_state.get("housing_plan", "미정") in housing_options else 0)
         
-        # 형제자매 선택
-        sibling_options = ["형", "남동생", "누나", "여동생", "오빠", "언니", "남자 형제", "여자 형제"]
+        # 형제자매 다중 인원 선택 옵션 (형 1, 형 2 등)
+        sibling_options = [
+            "형 1", "형 2", "누나 1", "누나 2",
+            "오빠 1", "오빠 2", "언니 1", "언니 2",
+            "남동생 1", "남동생 2", "여동생 1", "여동생 2"
+        ]
         siblings = st.multiselect(
             "형제자매 (해당 항목 모두 선택)",
             sibling_options,
@@ -1384,53 +1388,56 @@ elif selected_page == "인생의 사계절":
     )
 
     # --------------------------------------------------------------------------
-    # 3. 인생의 사계절과 맞이할 겨울의 길이 (메타포 카드)
+    # 3. 인생의 사계절 (사계절 동등화 & 현재 나의 계절 스마트 하이라이트)
     # --------------------------------------------------------------------------
     winter_years = max(0, 88 - retire_age)
     winter_months = winter_years * 12
     
     st.markdown("### 3. 인생의 사계절과 맞이할 겨울의 시간")
     
+    # 현재 나이가 속한 계절 판정
+    if cur_age <= 27:
+        cur_season = "spring"
+    elif 28 <= cur_age <= 45:
+        cur_season = "summer"
+    elif 46 <= cur_age < retire_age:
+        cur_season = "autumn"
+    else:
+        cur_season = "winter"
+
+    def get_season_card_ui(season_key, icon, title, age_range, desc):
+        is_current = (cur_season == season_key)
+        if is_current:
+            card_border = "border: 2px solid #EA580C; background: rgba(234, 88, 12, 0.14);"
+            badge_html = "<div style='min-height:22px; margin-bottom:4px;'><span style='background:#EA580C; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:2px 7px; border-radius:4px;'>📍 지금 나의 계절</span></div>"
+        else:
+            card_border = "border: 1px solid #334155; background: rgba(21, 30, 47, 0.7);"
+            badge_html = "<div style='min-height:22px; margin-bottom:4px;'></div>"
+
+        return f"""
+<div class='soft-card' style='text-align:center; min-height:205px; {card_border} padding:14px 10px; margin:0;'>
+{badge_html}
+<div style='font-size:28px;'>{icon}</div>
+<div style='font-size:16.5px; font-weight:800; color:#F8FAFC; margin:4px 0;'>{title}</div>
+<div style='font-size:13px; color:#94A3B8;'>{age_range}</div>
+<div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>{desc}</div>
+</div>
+"""
+
+    card_spring = get_season_card_ui("spring", "🌱", "봄 (준비기)", "0세 ~ 27세", "부모님의 부양으로 배우고 성장하는 적자 구간")
+    card_summer = get_season_card_ui("summer", "☀️", "여름 (성장기)", "28세 ~ 45세", "돌쇠처럼 성실하게 일하여 최대 흑자를 만드는 시기")
+    card_autumn = get_season_card_ui("autumn", "🍂", "가을 (결실기)", f"46세 ~ {retire_age}세", "자녀 교육비 최대 지출 & 똘똘이의 파이프라인을 놓을 골든타임")
+    card_winter = get_season_card_ui("winter", "❄️", "겨울 (음미기)", f"{retire_age}세 ~ 88세", f"근로소득 중단<br><b style='color:#38BDF8;'>약 {winter_years}년 ({winter_months}개월)</b>")
+
     s_col1, s_col2, s_col3, s_col4 = st.columns(4)
     with s_col1:
-        st.markdown("""
-<div class='soft-card' style='text-align:center; min-height:190px;'>
-<div style='font-size:28px;'>🌱</div>
-<div style='font-size:16px; font-weight:800; color:#4ADE80; margin:4px 0;'>봄 (준비기)</div>
-<div style='font-size:13px; color:#94A3B8;'>0세 ~ 27세</div>
-<div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>부모님의 부양으로 배우고 성장하는 적자 구간</div>
-</div>
-""", unsafe_allow_html=True)
-
+        st.markdown(card_spring, unsafe_allow_html=True)
     with s_col2:
-        st.markdown("""
-<div class='soft-card' style='text-align:center; min-height:190px;'>
-<div style='font-size:28px;'>☀️</div>
-<div style='font-size:16px; font-weight:800; color:#F59E0B; margin:4px 0;'>여름 (성장기)</div>
-<div style='font-size:13px; color:#94A3B8;'>28세 ~ 45세</div>
-<div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>돌쇠처럼 성실하게 일하여 최대 흑자를 만드는 시기</div>
-</div>
-""", unsafe_allow_html=True)
-
+        st.markdown(card_summer, unsafe_allow_html=True)
     with s_col3:
-        st.markdown("""
-<div class='soft-card' style='text-align:center; min-height:190px;'>
-<div style='font-size:28px;'>🍂</div>
-<div style='font-size:16px; font-weight:800; color:#FB923C; margin:4px 0;'>가을 (결실기)</div>
-<div style='font-size:13px; color:#94A3B8;'>46세 ~ 은퇴 시점</div>
-<div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>자녀 교육비 최대 지출 & 똘똘이의 파이프라인을 놓을 골든타임</div>
-</div>
-""", unsafe_allow_html=True)
-
+        st.markdown(card_autumn, unsafe_allow_html=True)
     with s_col4:
-        st.markdown(f"""
-<div class='soft-card' style='text-align:center; min-height:190px; border:1.5px solid #38BDF8;'>
-<div style='font-size:28px;'>❄️</div>
-<div style='font-size:16px; font-weight:800; color:#38BDF8; margin:4px 0;'>겨울 (음미기)</div>
-<div style='font-size:13px; color:#94A3B8;'>{retire_age}세 ~ 88세</div>
-<div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>근로소득 중단<br><b style='color:#38BDF8;'>약 {winter_years}년 ({winter_months}개월)</b></div>
-</div>
-""", unsafe_allow_html=True)
+        st.markdown(card_winter, unsafe_allow_html=True)
 
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid #334155; border-radius: 12px; padding: 18px 20px; margin: 16px 0 24px 0;">
