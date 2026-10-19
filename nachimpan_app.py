@@ -1656,7 +1656,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (Gemini 리포트 & 카카오톡 전송·인터뷰어 동기화)
+# 6.04.00 | Tab 4 — AI 시선 (카카오톡 원터치 전송·고대비 다크 래핑 박스 탑재)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1764,7 +1764,7 @@ else:
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
         # ----------------------------------------------------------------------
-        # 💬 카카오톡 전송 리포트 (인터뷰어 즉시 동기화 코드 포함)
+        # 💬 카카오톡 전송 리포트 (고대비 다크 래핑 박스 & 원터치 전송)
         # ----------------------------------------------------------------------
         sync_code = export_diagnosis_code()
         
@@ -1785,7 +1785,7 @@ else:
 {income_comment}
 
 ----------------------------------------
-📌 인터뷰어 나침반 동기화 복원코드 (아래 한 줄 복사):
+📌 인터뷰어 나침반 동기화 복원코드:
 {sync_code}
 ----------------------------------------"""
 
@@ -1793,20 +1793,49 @@ else:
 <div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid #F59E0B; border-radius: 14px; padding: 20px 22px; margin-top: 15px;">
 <div style="font-size: 18px; font-weight: 850; color: #FDE68A; margin-bottom: 8px;">💬 카카오톡으로 리포트 전송하기</div>
 <div style="font-size: 14px; color: #CBD5E1; line-height: 1.6;">
-아래 리포트 전문을 복사하여 인터뷰이 자신의 카카오톡 또는 인터뷰어에게 전송할 수 있습니다.<br>
-<b>인터뷰어가 이 리포트(또는 하단의 NC- 복원코드)를 받아 첫 화면에서 붙여넣으면, 인터뷰이가 작성한 모든 데이터가 0.1초 만에 인터뷰어의 나침반으로 동기화됩니다.</b>
+아래 <b>[💬 카카오톡으로 전송]</b> 버튼을 누르면 스마트폰 카카오톡이 열리며 나와의 채팅이나 인터뷰어에게 바로 전달할 수 있습니다.<br>
+<span style="color:#94A3B8;">(PC 브라우저에서는 [📋 전문 복사]를 눌러 카톡 창에 붙여넣으시면 됩니다.)</span>
 </div>
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        st.code(kakao_report_text, language="markdown")
+        # 모바일용 카톡 딥링크 (URL 인코딩)
+        import urllib.parse
+        encoded_msg = urllib.parse.quote(kakao_report_text)
+        kakao_send_url = f"https://sharer.kakao.com/talk/friends/picker/link?app_key=nachimpan&msg={encoded_msg}"
+
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        
+        btn_c1, btn_c2 = st.columns(2)
+        with btn_c1:
+            # 카카오톡 바로보내기 버튼 (스마트폰 환경 최적화)
+            st.markdown(f"""
+<a href="kakaolink://send?text={encoded_msg}" target="_blank" style="background:#FEE500; color:#191919 !important; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px 14px; border-radius:8px; font-weight:800; font-size:16px; border:none; box-shadow:0 2px 6px rgba(0,0,0,0.2);">
+<span style="font-size:18px;">💬</span><span>카카오톡으로 바로 전송</span>
+</a>
+""", unsafe_allow_html=True)
+        with btn_c2:
+            # PC 및 클립보드 복사용 안내
+            st.markdown(f"""
+<button onclick="navigator.clipboard.writeText(decodeURIComponent('{encoded_msg}')); alert('카카오톡 리포트 전문이 클립보드에 복사되었습니다! 카카오톡 창에 붙여넣기(Ctrl+V)하세요.');" style="background:#1E293B; border:1.5px solid #475569; color:#38BDF8 !important; width:100%; height:48px; border-radius:8px; font-weight:800; font-size:15.5px; cursor:pointer;">
+📋 리포트 전문 클립보드 복사
+</button>
+""", unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+
+        # 화이트아웃을 100% 박멸한 다크 차콜 & 자연스러운 줄바꿈 카드
+        st.markdown(f"""
+<div style="background: #0d1527; border: 1.5px solid #334155; border-radius: 10px; padding: 18px 20px; color: #F1F5F9; font-size: 14.5px; line-height: 1.7; white-space: pre-wrap; word-break: keep-all; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+{kakao_report_text}
+</div>
+""", unsafe_allow_html=True)
 
     else:
         st.info("‘내 가계부 AI 성찰 리포트 생성’ 버튼을 누르면 Gemini 초고속 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
 
     # --------------------------------------------------------------------------
-    # 📋 외부 AI (ChatGPT, Claude 등) 활용용 순수 재무제표 요약 리포트
+    # 📋 외부 AI (ChatGPT 등) 활용용 순수 재무제표 요약 리포트
     # --------------------------------------------------------------------------
     st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
     with st.expander("📋 외부 AI(ChatGPT 등) 질의용 순수 재무 요약 데이터"):
