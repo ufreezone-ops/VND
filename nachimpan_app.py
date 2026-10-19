@@ -1654,7 +1654,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (AI Gemini 리포트 & 네이티브 카카오톡 연동)
+# 6.04.00 | Tab 4 — AI 시선 (온기 있는 프롬프트 & 중복 요소 박멸 클린 리포트)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1669,7 +1669,7 @@ else:
     winter_years = max(0, 88 - int(retire_age))
     child_count_str = st.session_state.get("child_count", "입력 안 함")
 
-    # 0세 및 미선택 가족 데이터 완벽 정제 (AI 오해 원천 차단)
+    # 가족 데이터 정밀 필터링 (0세 및 미입력 가족 원천 배제)
     family_desc = {}
     if getv("spouse_age", 0) > 0:
         family_desc["배우자"] = f"{int(getv('spouse_age'))}세"
@@ -1716,10 +1716,12 @@ else:
         }
     }
 
+    # 공포 마케팅을 박멸하고 시간의 여유와 온기를 담은 정제된 프롬프트
     full_prompt_text = f"""[역할 정의]
 당신은 대한민국 가계 재무와 은퇴 준비를 함께 검토하는 품격 있고 따뜻한 현실점검 파트너입니다.
-위협이나 공포 마케팅(파산, 절벽 등)을 절대 배제하고, "산 입에 거미줄 치랴"의 온기 있는 위로와 객관적 성찰 거울의 태도를 유지하세요.
-소득의 크기가 아니라 '소득의 성격(물통 vs 파이프라인)'에 주목하여 조언하세요.
+위협이나 공포 마케팅(대학 학자금 공포, 노후 파산, 위기 등)을 엄격히 배제하세요.
+조상들의 지혜인 "산 입에 거미줄 치랴"의 넉넉한 여유와 위로를 담고, 열심히 살아온 인터뷰이의 노고를 먼저 인정하세요.
+특히 은퇴까지 남은 시간은 불안해할 대상이 아니라, 준비를 차근차근 해나갈 수 있는 가장 든든한 우군임을 일깨워 주세요.
 
 [참고 공식 통계 (국가데이터처 2024 국민이전계정)]
 - 한국인 평균 흑자 진입: 28세
@@ -1731,14 +1733,16 @@ else:
 
 [요청 사항]
 반드시 아래 2개 문단 제목 형식([은퇴 안정성], [소득 개선 방향])을 정확히 지켜서 작성하세요.
-불필요한 인사치레나 서두/말미의 과도한 빈 줄을 넣지 말고, 각 관점당 250~350자 내외의 품격 있고 다정한 대화체로 작성하세요.
+불필요한 인사치레나 서두/말미의 과도한 빈 줄을 넣지 말고, 각 관점당 250~350자 내외의 품격 있고 다정한 대화체로 완결된 문장으로 작성하세요.
 
 [은퇴 안정성]
-첫 문장은 '은퇴 안정성 측면에서는 유리한 편 / 세심한 준비가 필요한 시점 / 재정비가 유익한 시점' 등으로 시작하세요.
-반드시 위에 입력된 가족 구성(자녀들의 성장과 대학 학자금 지출 집중기, 부모님 연세 등)을 직접 언급하며, 은퇴 후 맞이할 약 {winter_years}년의 겨울과 연금·자산 현금흐름에 대해 성찰할 점을 구체적으로 조언하세요.
+첫 문장은 '은퇴 안정성 측면에서는 유리한 편 / 차분한 준비를 시작할 좋은 시점 / 재정비가 유익한 시점' 등으로 부드럽게 시작하세요.
+현재 어린 자녀들이 한창 사랑스럽게 자라나는 소중한 시기인 만큼, 은퇴까지 남은 풍성한 시간(약 {max(0, int(retire_age) - int(person_age))}년)을 내 편으로 삼을 수 있는 좋은 출발점에 서 있음을 짚어주세요.
+은퇴 후 맞이할 약 {winter_years}년의 겨울을 대비하여, 예상 연금과 생활비 사이의 간극을 메울 현금흐름을 지금부터 여유 있게 고민해보는 방향을 따뜻하게 조언하세요.
 
 [소득 개선 방향]
-현재 노동 소득(물통)에만 의존할 때의 한계(노동 중단 시 수입 중단)와, 현업(물통)을 성실히 지키면서 복리의 지혜를 갖춘 파이프라인(자산/시스템 수입)을 퇴근 후 시간으로 차근차근 준비해야 하는 이유를 조언하세요."""
+현재 현업의 노동 소득(물통)을 성실하게 지켜내고 있는 노고를 격려하세요.
+물통의 한계(노동 중단 시 수입 중단)를 스스로 자각하게 하되, 현업을 소중히 유지하면서 퇴근 후 남는 시간을 활용해 복리의 지혜를 담은 파이프라인(자산/시스템 수입)을 한 되, 두 되 차근차근 놓아가는 지혜로운 삶의 태도를 조언하세요."""
 
     # AI 분석 실행 버튼
     if st.button("⚡ 내 가계부 AI 성찰 리포트 생성 (Gemini 엔진)", type="primary", use_container_width=True):
@@ -1762,7 +1766,6 @@ else:
         st.markdown("### AI (Gemini) 리포트")
         comment_text = str(st.session_state.get("ai_comment", ""))
         
-        # 과도한 3줄 이상 공백/줄바꿈을 1개 단락 공백으로 깔끔하게 정제
         cleaned_text = re.sub(r'\n{3,}', '\n\n', comment_text.strip())
         normalized = cleaned_text.replace("\r\n", "\n").replace("\r", "\n")
         
@@ -1776,7 +1779,6 @@ else:
         retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
         income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
 
-        # 각 카드 내부의 앞뒤 공백 및 줄바꿈 한 번 더 정제
         retirement_comment = re.sub(r'\n{3,}', '\n\n', retirement_comment).strip()
         income_comment = re.sub(r'\n{3,}', '\n\n', income_comment).strip()
 
@@ -1789,11 +1791,10 @@ else:
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
         # ----------------------------------------------------------------------
-        # 💬 카카오톡 전송 리포트 (초소형 복원코드 & 네이티브 복사)
+        # 💬 카카오톡 전송용 통합 리포트 (중복 박스 완전 박멸 & 원클릭 복사)
         # ----------------------------------------------------------------------
         sync_code = export_diagnosis_code()
         
-        # 카톡용 줄글 텍스트 (자연스러운 래핑)
         kakao_report_text = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
 • 진단자: {person_name} ({person_age}세)
 • 소득 형태: {st.session_state.get('job_form','직장인')} (배우자: {st.session_state.get('job_spouse_form','해당 없음')})
@@ -1815,60 +1816,5 @@ else:
 {sync_code}
 ----------------------------------------"""
 
-        st.markdown("""
-<div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid #F59E0B; border-radius: 14px; padding: 20px 22px; margin-top: 15px;">
-<div style="font-size: 18px; font-weight: 850; color: #FDE68A; margin-bottom: 8px;">💬 카카오톡으로 리포트 전송하기</div>
-<div style="font-size: 14px; color: #CBD5E1; line-height: 1.6;">
-아래 <b>[📋 카카오톡 전송용 리포트 복사]</b>를 누르면 전체 내용이 한 번에 복사됩니다. 카톡 대화방에 바로 붙여넣기(Ctrl+V)하세요.<br>
-<span style="color:#94A3B8;">(인터뷰어가 메시지 속 복원코드를 복사하여 사이드바의 <b>[📥 카톡 리포트 불러오기]</b>에 넣으면 0.1초 만에 화면이 동기화됩니다.)</span>
-</div>
-</div>
-""", unsafe_allow_html=True)
-
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-
-        # Streamlit 샌드박스 보안을 100% 우회하는 완벽한 네이티브 복사 UI
-        st.text_area(
-            "카카오톡 전송용 리포트 전문 (Ctrl+A ➜ Ctrl+C로 복사 가능)",
-            value=kakao_report_text,
-            height=280,
-            help="이 창의 내용을 전체 선택하여 복사한 뒤 카카오톡 창에 붙여넣으세요."
-        )
-
-        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-
-        # 대문짝만하던 복원코드를 11.5px 초소형 은은한 다크 칩으로 축소
-        st.markdown(f"""
-<div style="background: rgba(15, 23, 42, 0.6); border: 1px dashed #334155; border-radius: 8px; padding: 10px 14px; margin-top: 6px;">
-<div style="font-size: 12px; font-weight: 700; color: #94A3B8; margin-bottom: 4px;">📌 동기화 복원 전용 코드 (시스템 암호 데이터)</div>
-<div style="font-family: monospace; font-size: 11.5px; color: #64748B; word-break: break-all; line-height: 1.4;">
-{sync_code}
-</div>
-</div>
-""", unsafe_allow_html=True)
-
-    else:
-        st.info("‘내 가계부 AI 성찰 리포트 생성’ 버튼을 누르면 Gemini 초고속 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
-
-    # --------------------------------------------------------------------------
-    # 📋 외부 AI (ChatGPT 등) 활용용 순수 재무제표 요약 리포트
-    # --------------------------------------------------------------------------
-    st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
-    with st.expander("📋 외부 AI(ChatGPT 등) 질의용 순수 재무 요약 데이터"):
-        st.markdown("<div style='font-size: 13.5px; color: #94A3B8; margin-bottom: 8px;'>프롬프트 지시문 없이, 내가 입력한 재무제표와 가족 생애 통계만 정리된 텍스트입니다. ChatGPT 등에 복사해서 자유롭게 추가 상담을 진행할 수 있습니다.</div>", unsafe_allow_html=True)
-        raw_summary_report = f"""### 나침반 재무제표 및 생애주기 요약 데이터
-- 성명(별칭): {person_name} (만 {person_age}세)
-- 가구 소득 형태: 나({st.session_state.get('job_form','직장인')}) + 배우자({st.session_state.get('job_spouse_form','해당 없음')})
-- 월 정기 수입: {summary['regular_income']:,.0f}만 원
-- 연간 비정기 상여금: {summary['annual_bonus']:,.0f}만 원
-- 연간 총소득: {summary['annual_total_income']:,.0f}만 원
-- 월평균 생활비 및 지출: {summary['expenses']:,.0f}만 원
-- 연간 실질 순저축: {summary['annual_net_surplus']:,.0f}만 원 (월환산 {summary['monthly_effective_surplus']:,.0f}만 원)
-- 자산 합계: {summary['assets']:,.0f}만 원
-- 부채 잔액: {summary['debts']:,.0f}만 원
-- 현재 순자산: {summary['net_worth']/10000:,.2f}억 원
-- 은퇴 예정 나이: {retire_age}세 (은퇴 후 맞이할 겨울 약 {winter_years}년)
-- 은퇴 후 예상 월연금: {getv('income_pension', 0):,.0f}만 원
-- 은퇴 후 월 희망 생활비: {getv('retirement_monthly_expenses', 200):,.0f}만 원
-- 가족 구성: {', '.join([f'{k}: {v}' for k, v in family_desc.items()]) if family_desc else '미등록'}"""
-        st.code(raw_summary_report, language="markdown")
+        st.markdown("### 💬 카카오톡 전송용 리포트")
+        st.caption("※ 우측 상단의 복사 버튼을 눌러 카카오톡 대화방에 바로 붙여넣기(Ctrl+V)하세요. 전달받은 분은 하단의 복원코드로 사이드바에서 0.1초 만에 동일하게 열어볼 수 있습니
