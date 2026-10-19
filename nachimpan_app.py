@@ -1654,7 +1654,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (힘빼고 정직하며 전문가다운 정중한 AI 리포트)
+# 6.04.00 | Tab 4 — AI 시선 (서두 인사말·빈줄 박멸 & 클린 리포트)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1716,40 +1716,34 @@ else:
         }
     }
 
-    # 대표님의 철학을 온전히 반영한 '힘빼고, 정직하며, 전문가답고 정중한' 프롬프트
-    full_prompt_text = f"""[역할 정의]
-당신은 대한민국 가계 재무와 은퇴 준비를 함께 검토하는 전문가이자 정중하고 따뜻한 현실점검 파트너입니다.
-힘을 빼고, 정직하되, 전문가답고, 정중한 태도를 견지하세요.
-근거 없는 낙관론이나 안일한 위로를 배제하고, 숫자를 있는 그대로 정직하게 짚으세요.
-
-[참고 공식 통계 (국가데이터처 2024 국민이전계정)]
-- 한국인 평균 흑자 진입: 28세
-- 최대 흑자 정점: 45세 (연 1,932만 원 흑자)
-- 적자 재전환: 61세 (은퇴와 함께 소비가 소득을 초과)
+    # 서두 인사말과 가로선 생성을 원천 차단한 다이렉트 프롬프트
+    full_prompt_text = f"""[절대 엄수 규칙]
+1. 자기소개, 프롤로그, 인사말("안녕하세요", "전문가로서 살펴보겠습니다" 등)을 일체 작성하지 마세요.
+2. 마크다운 가로 구분선(---)을 절대 사용하지 마세요.
+3. 각 관점의 첫 줄부터 곧바로 본론 문장으로 시작하세요.
+4. 힘을 빼고, 정직하되, 전문가답고, 정중한 태도를 견지하세요. 근거 없는 낙관론은 배제하고 숫자를 있는 그대로 짚으세요.
 
 [인터뷰이 재무 및 생애 데이터]
 {json.dumps(details, ensure_ascii=False, indent=2)}
 
 [요청 사항]
-반드시 아래 2개 문단 제목 형식([은퇴 안정성], [소득 개선 방향])을 정확히 지켜서, 각 문단당 250~350자 내외로 작성하세요.
+반드시 아래 2개 문단 제목 형식([은퇴 안정성], [소득 개선 방향])으로만 작성하고, 제목 바로 다음 줄부터 곧바로 본론을 서술하세요. (각 250~350자)
 
 [은퇴 안정성]
-첫 문장은 객관적인 평가('은퇴 안정성 측면에서는 재정비가 필수적인 시점입니다 / 냉정한 점검이 필요한 시점입니다' 등)로 명확히 시작하되, 정중하게 이야기하세요.
-근거 없는 낙관론이나 위로를 배제하고 숫자를 있는 그대로 짚으세요.
+{person_name}님, 은퇴 안정성 측면에서는 재정비가 필수적인 시점입니다(또는 냉정한 점검이 필요한 시점입니다)로 시작하여 곧바로 본론을 전개하세요.
 월 희망 생활비와 예상 연금 사이의 격차(월 OOO만 원 부족)가 은퇴 후 약 {winter_years}년간 지속될 때 발생하는 총 부족액 규모를 객관적으로 명시하되, 정중하고 따뜻하게 이야기하세요.
-은퇴까지 남은 시간이 기회가 되려면, 가만히 있어서는 안 되며 부족분을 채울 현금흐름 준비가 반드시 선행되어야 함을 분명히 직언하되, 정중하고 따뜻하게 이야기하세요.
+은퇴까지 남은 시간이 기회가 되려면, 부족분을 채울 현금흐름 준비가 반드시 선행되어야 함을 분명히 직언하세요.
 
 [소득 개선 방향]
-비굴한 칭찬이나 과도한 극존칭을 절대 쓰지 마세요. 문장 중간의 높임말(~시~, ~계신~)을 빼고 문장 끝에만 단정하게 '~합니다 / ~하십시오'로 종결하세요.
-현재 소득은 노동을 멈추면 수입이 끊기는 전형적인 '물통'임을 명확히 규정하되, 정중하고 따뜻하게 이야기하세요.
-생계를 위한 본업의 물통은 지키되, 저녁과 주말 시간을 활용해 노동력과 무관하게 시스템과 자산에서 흘러나오는 '파이프라인'의 필요성을 설득력 있고 정중하게 제안하세요."""
+{person_name}님, 현재 월수입과 연간 상여금으로 이루어진 소득은 노동을 멈추면 수입이 끊기는 전형적인 '물통' 구조입니다로 시작하여 곧바로 본론을 전개하세요.
+비굴한 칭찬이나 문장 중간의 높임말(~시~, ~계신~)을 빼고 문장 끝에만 단정하게 '~합니다 / ~하십시오'로 종결하세요.
+생계를 위한 본업의 물통은 굳건히 지키되, 저녁과 주말 시간을 활용해 시스템과 자산에서 흘러나오는 '파이프라인'을 지금부터 작게라도 구축해야 하는 이유를 당당하고 설득력 있게 제안하세요."""
 
     # 심플한 버튼명 적용
     if st.button("⚡ AI 리포트 생성", type="primary", use_container_width=True):
         st.session_state.ai_summary = summary
         st.session_state.ai_comment = None
         
-        # 신뢰도 높은 현실적인 대기 안내 (15~20초)
         with st.spinner("AI가 가계부와 가족 생애주기 지표를 정밀 분석 중입니다 (약 15~20초 소요)..."):
             comment, error = call_gemini_text(full_prompt_text)
             st.session_state.ai_comment = comment if comment else error
@@ -1767,7 +1761,9 @@ else:
         st.markdown("### AI (Gemini) 리포트")
         comment_text = str(st.session_state.get("ai_comment", ""))
         
-        cleaned_text = re.sub(r'\n{3,}', '\n\n', comment_text.strip())
+        # 가로선(---) 및 과도한 공백 정제
+        cleaned_text = re.sub(r'-{3,}', '', comment_text)
+        cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text.strip())
         normalized = cleaned_text.replace("\r\n", "\n").replace("\r", "\n")
         
         match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
@@ -1780,8 +1776,14 @@ else:
         retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
         income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
 
-        retirement_comment = re.sub(r'\n{3,}', '\n\n', retirement_comment).strip()
-        income_comment = re.sub(r'\n{3,}', '\n\n', income_comment).strip()
+        # 혹시 남아있을 수 있는 불필요한 자기소개 서두 문장 자동 커팅
+        noise_pattern = r"(?i)^.*?살펴보겠습니다[\.\!\?\s\n]*"
+        retirement_comment = re.sub(noise_pattern, "", retirement_comment).strip()
+        income_comment = re.sub(noise_pattern, "", income_comment).strip()
+
+        # 줄바꿈 최종 압축
+        retirement_comment = re.sub(r'\n{2,}', '\n\n', retirement_comment).strip()
+        income_comment = re.sub(r'\n{2,}', '\n\n', income_comment).strip()
 
         st.markdown("#### 은퇴 안정성 관점")
         st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
@@ -1847,3 +1849,5 @@ else:
 - 은퇴 후 월 희망 생활비: {getv('retirement_monthly_expenses', 200):,.0f}만 원
 - 가족 구성: {', '.join([f'{k}: {v}' for k, v in family_desc.items()]) if family_desc else '미등록'}"""
         st.code(raw_summary_report, language="markdown")
+
+    
