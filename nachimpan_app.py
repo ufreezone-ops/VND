@@ -1107,7 +1107,7 @@ elif selected_page == "삶과 생계수단":
             st.rerun()
 
 # ==============================================================================
-# 6.03.00 | Tab 3 — 인생의 사계절 (Life Seasons & Official Benchmark)
+# 6.03.00 | Tab 3 — 인생의 사계절 (개인 맞춤형 NTA 생애주기 융합 & 지출피크 매핑)
 # ==============================================================================
 elif selected_page == "인생의 사계절":
     if st.session_state.pop("_scroll_to_top_once", False):
@@ -1119,12 +1119,15 @@ elif selected_page == "인생의 사계절":
     st.markdown("## 인생의 사계절")
     st.markdown("자연에 사계절이 있듯 사람의 삶에도 준비(봄) · 성장(여름) · 결실(가을) · 음미(겨울)의 시간이 있습니다.")
     
-    age = int(st.session_state.person_age)
-    retirement_value = st.session_state.get("retirement_age")
-    retirement = int(retirement_value) if retirement_value is not None else 60
-    years_left = max(0, retirement - age)
+    cur_age = int(st.session_state.person_age)
+    retire_val = st.session_state.get("retirement_age")
+    retire_age = int(retire_val) if retire_val is not None else 60
+    retire_age = max(cur_age, min(retire_age, 90))
+    years_left = max(0, retire_age - cur_age)
 
-    # 가족 구성원 및 은퇴 시점 나이 연동
+    # --------------------------------------------------------------------------
+    # 1. 가족 구성원과 은퇴 시점의 나이
+    # --------------------------------------------------------------------------
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
     child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
     child_count = st.selectbox(
@@ -1186,7 +1189,7 @@ elif selected_page == "인생의 사계절":
         st.rerun()
 
     # 가족 미래 나이 카드 렌더링
-    people = [(st.session_state.get("person_name", "나"), age)]
+    people = [(st.session_state.get("person_name", "나"), cur_age)]
     if getv("spouse_age", 0) > 0: people.append(("배우자", int(getv("spouse_age"))))
     if getv("child_age", 0) > 0: people.append(("첫째 자녀", int(getv("child_age"))))
     if getv("child_age2", 0) > 0: people.append(("둘째 자녀", int(getv("child_age2"))))
@@ -1197,52 +1200,226 @@ elif selected_page == "인생의 사계절":
     for name, current in people:
         future = current + years_left
         st.markdown(f"""
-        <div class='soft-card' style='display:flex;align-items:center;gap:14px;flex-wrap:wrap;'>
-            <b style='min-width:75px;font-size:16px;'>{name}</b>
-            <span style='font-size:20px;font-weight:800;'>{current}세</span>
-            <span style='font-size:22px;color:var(--nc-primary);padding:0 8px;'>➔</span>
-            <span style='font-size:20px;font-weight:800;color:var(--nc-accent-gold);'>{future}세</span>
-            <span class='small-muted'>(내가 {retirement}세 은퇴하는 시점)</span>
-        </div>
-        """, unsafe_allow_html=True)
+<div class='soft-card' style='display:flex;align-items:center;gap:14px;flex-wrap:wrap;'>
+<b style='min-width:75px;font-size:16px;'>{name}</b>
+<span style='font-size:20px;font-weight:800;'>{current}세</span>
+<span style='font-size:22px;color:var(--nc-primary);padding:0 8px;'>➔</span>
+<span style='font-size:20px;font-weight:800;color:var(--nc-accent-gold);'>{future}세</span>
+<span class='small-muted'>(내가 {retire_age}세 은퇴하는 시점)</span>
+</div>
+""", unsafe_allow_html=True)
 
-    # 2. 공식 국민이전계정 곡선
-    st.markdown("### 2. 대한민국 통계청 국민이전계정 생애주기 곡선")
-    fig_nta = go.Figure()
-    fig_nta.add_trace(go.Scatter(
-        x=LIFECYCLE_BENCHMARK["age"], y=LIFECYCLE_BENCHMARK["labor_income"],
-        mode="lines+markers", name="노동소득", line=dict(color="#10b981", width=3)
+    # 자녀가 있을 때: [인생 최대 지출 피크기] 가족 연계 인사이트 카드
+    c_age1 = int(getv("child_age", 0))
+    if c_age1 > 0:
+        college_my_age = cur_age + max(0, (20 - c_age1))
+        st.markdown(f"""
+<div style="background: rgba(234, 88, 12, 0.12); border-left: 4px solid #EA580C; border-radius: 6px; padding: 14px 18px; margin: 12px 0 20px 0;">
+<div style="font-size: 15px; font-weight: 750; color: #F8FAFC; line-height: 1.6;">
+🎯 <b>생애 지출 피크 자각 포인트</b>: 첫째 자녀가 대학에 입학하는 만 20세가 되면, 나의 나이는 <b>만 {college_my_age}세</b>가 됩니다.<br>
+<span style="font-size: 13.5px; color: #CBD5E1;">
+통계청 국민이전계정 상 소득 정점(45세)은 지나가면서, 자녀 학자금과 독립 비용으로 <b>인생에서 가장 큰 지출이 집중되는 결정적 시기</b>입니다.
+</span>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 2. 나만의 맞춤형 생애주기 흑자·적자 곡선 (NTA 개인화 번역)
+    # --------------------------------------------------------------------------
+    st.markdown("### 2. 나만의 생애주기 소득·소비 곡선 (국민이전계정 개인화 번역)")
+    st.caption("※ 통계청 공식 NTA 패턴을 인터뷰이 본인의 실제 소득·소비 및 은퇴 나이에 맞추어 번역한 개인 곡선입니다.")
+    
+    s = current_financial_summary()
+    cur_annual_income = s["annual_total_income"]      # 연간 총소득 (상여금 포함, 만원)
+    cur_annual_expense = s["annual_total_expenses"]   # 연간 총지출 (만원)
+    ret_annual_pension = float(getv("income_pension", 0) or 0) * 12.0
+    ret_annual_expense = float(getv("retirement_monthly_expenses", 200) or 0) * 12.0
+
+    ages_sim = list(range(20, 86))
+    my_income_curve = []
+    my_expense_curve = []
+
+    for a in ages_sim:
+        # 1) 개인화 소득 곡선
+        if a < cur_age:
+            # 과거 소득 추정 (NTA 28세 흑자진입 slope 반영)
+            ratio = max(0.2, (a - 20) / max(1, (cur_age - 20)))
+            my_income_curve.append(cur_annual_income * ratio)
+        elif cur_age <= a < retire_age:
+            # 경력 발달 및 45세 소득 정점 반영
+            if a <= 45:
+                w_inc = 1.0 + (0.02 * (a - cur_age))
+            else:
+                w_inc = max(0.85, 1.0 + (0.02 * (45 - cur_age)) - (0.015 * (a - 45)))
+            my_income_curve.append(cur_annual_income * w_inc)
+        else:
+            # 은퇴 후: 근로소득 중단 및 연금 전환
+            my_income_curve.append(ret_annual_pension)
+
+        # 2) 개인화 소비 곡선
+        if a < cur_age:
+            my_expense_curve.append(cur_annual_expense * 0.75)
+        elif cur_age <= a < retire_age:
+            # 자녀 교육비 피크기 (46~53세) 소비 15% 상승 반영
+            if 46 <= a <= 53:
+                w_exp = 1.15
+            else:
+                w_exp = 1.0
+            my_expense_curve.append(cur_annual_expense * w_exp)
+        else:
+            # 은퇴 후: 노후 생활비
+            my_expense_curve.append(ret_annual_expense)
+
+    # Plotly 개인화 생애주기 차트
+    fig_my_nta = go.Figure()
+
+    # 1. 소득 곡선 (근로소득 + 은퇴 후 연금)
+    fig_my_nta.add_trace(go.Scatter(
+        x=ages_sim, y=my_income_curve,
+        mode="lines",
+        line=dict(color="#10B981", width=3.5),
+        name="나의 소득 흐름 (근로소득 ➔ 은퇴 후 연금)",
+        hovertemplate="나이: %{x}세<br>연 소득: <b>%{y:,.0f}만 원</b><extra></extra>"
     ))
-    fig_nta.add_trace(go.Scatter(
-        x=LIFECYCLE_BENCHMARK["age"], y=LIFECYCLE_BENCHMARK["consumption"],
-        mode="lines+markers", name="소비", line=dict(color="#f97316", width=3, dash="dash")
+
+    # 2. 소비 곡선
+    fig_my_nta.add_trace(go.Scatter(
+        x=ages_sim, y=my_expense_curve,
+        mode="lines",
+        line=dict(color="#F97316", width=3, dash="dash"),
+        name="나의 생애 소비 흐름 (자녀교육비 피크 반영)",
+        hovertemplate="나이: %{x}세<br>연 소비: <b>%{y:,.0f}만 원</b><extra></extra>"
     ))
-    fig_nta.add_vline(x=age, line_dash="solid", line_color="#38bdf8", line_width=2.5,
-                      annotation_text=f"현재 나 ({age}세)", annotation_position="top")
-    fig_nta.update_layout(
-        height=370, margin=dict(l=20, r=20, t=35, b=20),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="var(--nc-text)"),
-        xaxis=dict(title="연령 (세)", gridcolor="rgba(100,116,139,0.2)"),
-        yaxis=dict(title="상대 규모 (지수)", gridcolor="rgba(100,116,139,0.2)"),
-        legend=dict(orientation="h", y=1.12, x=1, xanchor="right")
+
+    # 현재 나이 기준선
+    fig_my_nta.add_vline(x=cur_age, line_dash="solid", line_color="#38BDF8", line_width=2)
+    fig_my_nta.add_annotation(
+        x=cur_age, y=max(my_income_curve) * 0.95,
+        text=f"현재 나이 ({cur_age}세)",
+        showarrow=True, arrowhead=2, arrowcolor="#38BDF8",
+        font=dict(size=12, color="#BAE6FD"),
+        ay=-30, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#38BDF8"
     )
-    st.plotly_chart(fig_nta, use_container_width=True, config={"displayModeBar": False})
 
-    # 국가데이터처 팩트 통계 지표
-    st.markdown("### 국가데이터처 공식 생애 통계 지표")
+    # 은퇴 시점 및 적자 전환 깃발
+    fig_my_nta.add_vline(x=retire_age, line_dash="dash", line_color="#EF4444", line_width=2)
+    fig_my_nta.add_annotation(
+        x=retire_age, y=my_income_curve[ages_sim.index(retire_age)],
+        text=f"나의 은퇴 시점 ({retire_age}세 적자 전환)",
+        showarrow=True, arrowhead=2, arrowcolor="#EF4444",
+        font=dict(size=12, color="#FCA5A5"),
+        ay=35, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#EF4444"
+    )
+
+    fig_my_nta.update_layout(
+        height=380,
+        margin=dict(l=20, r=20, t=30, b=35),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#E2E8F0", size=13),
+        xaxis=dict(
+            title=dict(text="연령 (세)", font=dict(size=14, color="#94A3B8")),
+            tickfont=dict(size=13, color="#94A3B8"),
+            gridcolor="rgba(100, 116, 139, 0.2)",
+            tickmode="linear", tick0=20, dtick=5,
+            fixedrange=True
+        ),
+        yaxis=dict(
+            title=dict(text="연간 금액 (만 원)", font=dict(size=14, color="#94A3B8")),
+            tickfont=dict(size=13, color="#94A3B8"),
+            tickformat=",.0f",
+            gridcolor="rgba(100, 116, 139, 0.2)",
+            fixedrange=True
+        ),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(size=12, color="#F1F5F9")
+        ),
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(
+        fig_my_nta,
+        use_container_width=True,
+        config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
+    )
+
+    # --------------------------------------------------------------------------
+    # 3. 인생의 사계절과 맞이할 겨울의 길이 (메타포 카드)
+    # --------------------------------------------------------------------------
+    winter_years = max(0, 88 - retire_age)
+    winter_months = winter_years * 12
+    
+    st.markdown("### 3. 인생의 사계절과 맞이할 겨울의 시간")
+    
+    s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+    with s_col1:
+        st.markdown("""
+<div class='soft-card' style='text-align:center; min-height:190px;'>
+<div style='font-size:28px;'>🌱</div>
+<div style='font-size:16px; font-weight:800; color:#4ADE80; margin:4px 0;'>봄 (준비기)</div>
+<div style='font-size:13px; color:#94A3B8;'>0세 ~ 27세</div>
+<div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>부모님의 부양으로 배우고 성장하는 적자 구간</div>
+</div>
+""", unsafe_allow_html=True)
+
+    with s_col2:
+        st.markdown("""
+<div class='soft-card' style='text-align:center; min-height:190px;'>
+<div style='font-size:28px;'>☀️</div>
+<div style='font-size:16px; font-weight:800; color:#F59E0B; margin:4px 0;'>여름 (성장기)</div>
+<div style='font-size:13px; color:#94A3B8;'>28세 ~ 45세</div>
+<div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>돌쇠처럼 성실하게 일하여 최대 흑자를 만드는 시기</div>
+</div>
+""", unsafe_allow_html=True)
+
+    with s_col3:
+        st.markdown("""
+<div class='soft-card' style='text-align:center; min-height:190px;'>
+<div style='font-size:28px;'>🍂</div>
+<div style='font-size:16px; font-weight:800; color:#FB923C; margin:4px 0;'>가을 (결실기)</div>
+<div style='font-size:13px; color:#94A3B8;'>46세 ~ 은퇴 시점</div>
+<div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>자녀 교육비 최대 지출 & 똘똘이의 파이프라인을 놓을 골든타임</div>
+</div>
+""", unsafe_allow_html=True)
+
+    with s_col4:
+        st.markdown(f"""
+<div class='soft-card' style='text-align:center; min-height:190px; border:1.5px solid #38BDF8;'>
+<div style='font-size:28px;'>❄️</div>
+<div style='font-size:16px; font-weight:800; color:#38BDF8; margin:4px 0;'>겨울 (음미기)</div>
+<div style='font-size:13px; color:#94A3B8;'>{retire_age}세 ~ 88세</div>
+<div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>근로소득 중단<br><b style='color:#38BDF8;'>약 {winter_years}년 ({winter_months}개월)</b></div>
+</div>
+""", unsafe_allow_html=True)
+
+    # 성찰 유도 카드
+    st.markdown(f"""
+<div style="background: rgba(30, 41, 59, 0.6); border: 1px solid #334155; border-radius: 12px; padding: 18px 20px; margin: 16px 0 24px 0;">
+<div style="font-size: 15px; color: #F8FAFC; line-height: 1.6; word-break: keep-all;">
+💡 <b>산책로의 질문</b>: 은퇴 후 우리가 맞이할 겨울의 시간은 <b>약 {winter_years}년 ({winter_months:,}개월)</b>입니다.<br>
+<span style="color: #94A3B8;">
+이 긴 겨울 동안 매달 무거운 물통을 지고 눈길을 걸을 것인가, 방 안에서 따뜻하게 흘러나오는 파이프라인을 맞이할 것인가는 <b>지금 '가을'의 준비</b>에 달려 있습니다.
+</span>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 4. 국가데이터처 공식 벤치마크 지표 & 보도자료 (공신력 확보)
+    # --------------------------------------------------------------------------
+    st.markdown("### 국가데이터처 공식 생애 통계 지표 (대한민국 평균 기준)")
     col_m1, col_m2, col_m3 = st.columns(3)
-    col_m1.metric("흑자 진입", "28세", help="노동소득이 소비를 추월하는 연령")
+    col_m1.metric("한국인 평균 흑자 진입", "28세", help="노동소득이 소비를 추월하는 연령")
     col_m2.metric("최대 흑자 정점", "45세", "연 1,932만 원")
-    col_m3.metric("적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
+    col_m3.metric("평균 적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
 
     col_btn1, col_btn2 = st.columns(2)
     col_btn1.link_button("📄 2024년 국가데이터처 통계 보도자료", OFFICIAL_PDF_URL, use_container_width=True)
     col_btn2.link_button("🌐 국가데이터처 공식 발표 페이지", OFFICIAL_RELEASE_URL, use_container_width=True)
 
-    winter_len = max(0, 88 - retirement)
-    st.caption(f"은퇴 예정 나이 {retirement}세 이후 맞이할 겨울: 약 {winter_len}년 ({winter_len * 12}개월, 건강 기대수명 88세 가정)")
-
+    # 다음 탭 이동
     _, next_col = st.columns([5, 1])
     with next_col:
         if st.button("다음 →", key="seasons_next", use_container_width=True, type="primary"):
