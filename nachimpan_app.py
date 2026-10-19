@@ -594,7 +594,7 @@ with st.sidebar:
 
 
 # ==============================================================================
-# 4.02.00 | 첫 진입 표지 및 인라인 시작 바 (카톡 리포트 열기 슬림 연동)
+# 4.02.00 | 첫 진입 표지 및 인라인 시작 바 (클린 미니멀 툴바 복원)
 # ==============================================================================
 cover_file_path = None
 possible_covers = [
@@ -625,7 +625,7 @@ if not st.session_state.started:
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
         
-        # 표지 바로 아래 슬림 툴바
+        # 표지 바로 아래 2줄 3칸 슬림 툴바 (이름/나이/시작)
         with st.form("start_inline_form", clear_on_submit=False):
             in_col1, in_col2, in_col3 = st.columns([2.0, 1.1, 1.1])
             
@@ -656,19 +656,6 @@ if not st.session_state.started:
                     st.session_state.person_age = int(age)
                     st.session_state.started = True
                     st.rerun()
-
-        # 첫 화면 슬림 진입점: 카톡 리포트 열기 (은은하고 심플한 스타일)
-        st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
-        with st.expander("📥 카톡 리포트 열기"):
-            st.markdown("<div style='font-size: 13.5px; color: #CBD5E1; margin-bottom: 6px;'>전달받은 <b>리포트 전문</b> 또는 <b>NC-코드</b>를 아래에 붙여넣으세요.</div>", unsafe_allow_html=True)
-            pasted_code_cover = st.text_area("카톡 내용 붙여넣기", placeholder="카카오톡 메시지나 NC-코드를 그대로 붙여넣으세요", height=85, key="cover_pasted_code", label_visibility="collapsed")
-            if st.button("🔄 리포트 열기", type="primary", use_container_width=True, key="cover_btn_sync"):
-                ok, msg = import_diagnosis_code(pasted_code_cover)
-                if ok:
-                    st.success(msg)
-                    st.rerun()
-                else:
-                    st.error(msg)
             
     st.stop()
 
@@ -1667,7 +1654,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (자녀수 정밀 필터링 & Web Share 카톡 전송)
+# 6.04.00 | Tab 4 — AI 시선 (AI Gemini 리포트 & 네이티브 카카오톡 연동)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1687,7 +1674,6 @@ else:
     if getv("spouse_age", 0) > 0:
         family_desc["배우자"] = f"{int(getv('spouse_age'))}세"
 
-    # 실제 입력된 자녀만 선별
     children_list = []
     if child_count_str in ["1명", "2명", "3명 이상"] and getv("child_age", 0) > 0:
         children_list.append(f"첫째 {int(getv('child_age'))}세")
@@ -1744,20 +1730,22 @@ else:
 {json.dumps(details, ensure_ascii=False, indent=2)}
 
 [요청 사항]
-반드시 아래 2개 문단 제목 형식([은퇴 안정성], [소득 개선 방향])을 정확히 지켜서, 각 문단당 250~350자 내외의 품격 있고 다정한 대화체로 완결된 문장으로 작성해 주세요. 문장이 중간에 끊기지 않게 완벽한 마침표로 끝내세요.
+반드시 아래 2개 문단 제목 형식([은퇴 안정성], [소득 개선 방향])을 정확히 지켜서 작성하세요.
+불필요한 인사치레나 서두/말미의 과도한 빈 줄을 넣지 말고, 각 관점당 250~350자 내외의 품격 있고 다정한 대화체로 작성하세요.
 
 [은퇴 안정성]
-(첫 문장은 '은퇴 안정성 측면에서는 유리한 편 / 세심한 준비가 필요한 시점 / 재정비가 유익한 시점' 등으로 시작하고, 은퇴 후 맞이할 겨울의 시간과 연금·자산 현금흐름을 성찰할 점을 조언)
+첫 문장은 '은퇴 안정성 측면에서는 유리한 편 / 세심한 준비가 필요한 시점 / 재정비가 유익한 시점' 등으로 시작하세요.
+반드시 위에 입력된 가족 구성(자녀들의 성장과 대학 학자금 지출 집중기, 부모님 연세 등)을 직접 언급하며, 은퇴 후 맞이할 약 {winter_years}년의 겨울과 연금·자산 현금흐름에 대해 성찰할 점을 구체적으로 조언하세요.
 
 [소득 개선 방향]
-(현재 노동 소득(물통)에만 의존할 때의 한계와, 현업을 성실히 지키면서 복리의 지혜를 갖춘 파이프라인(자산/시스템 수입)을 차근차근 준비해야 하는 이유를 조언)"""
+현재 노동 소득(물통)에만 의존할 때의 한계(노동 중단 시 수입 중단)와, 현업(물통)을 성실히 지키면서 복리의 지혜를 갖춘 파이프라인(자산/시스템 수입)을 퇴근 후 시간으로 차근차근 준비해야 하는 이유를 조언하세요."""
 
     # AI 분석 실행 버튼
     if st.button("⚡ 내 가계부 AI 성찰 리포트 생성 (Gemini 엔진)", type="primary", use_container_width=True):
         st.session_state.ai_summary = summary
         st.session_state.ai_comment = None
         
-        with st.spinner("AI가 가계부와 생애주기 지표를 정밀 분석 중입니다 (약 3~5초 소요)..."):
+        with st.spinner("AI가 가계부와 가족 생애주기 지표를 정밀 분석 중입니다 (약 3~5초 소요)..."):
             comment, error = call_gemini_text(full_prompt_text)
             st.session_state.ai_comment = comment if comment else error
 
@@ -1771,10 +1759,13 @@ else:
         cols[2].metric("연간 순저축", money(s["annual_net_surplus"]), f"월환산 {money(s['monthly_effective_surplus'])}")
         cols[3].metric("순자산", fmt_eok(s["net_worth"]))
 
-        st.markdown("### AI 성찰 리포트")
+        st.markdown("### AI (Gemini) 리포트")
         comment_text = str(st.session_state.get("ai_comment", ""))
         
-        normalized = comment_text.replace("\r\n", "\n").replace("\r", "\n")
+        # 과도한 3줄 이상 공백/줄바꿈을 1개 단락 공백으로 깔끔하게 정제
+        cleaned_text = re.sub(r'\n{3,}', '\n\n', comment_text.strip())
+        normalized = cleaned_text.replace("\r\n", "\n").replace("\r", "\n")
+        
         match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
         if match:
             retirement_comment = normalized[:match.start()]
@@ -1785,6 +1776,10 @@ else:
         retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
         income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
 
+        # 각 카드 내부의 앞뒤 공백 및 줄바꿈 한 번 더 정제
+        retirement_comment = re.sub(r'\n{3,}', '\n\n', retirement_comment).strip()
+        income_comment = re.sub(r'\n{3,}', '\n\n', income_comment).strip()
+
         st.markdown("#### 은퇴 안정성 관점")
         st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
         st.markdown("#### 소득 개선 관점 (파이프라인)")
@@ -1794,13 +1789,14 @@ else:
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
         # ----------------------------------------------------------------------
-        # 💬 카카오톡 전송 리포트 (Web Share API 및 클립보드 복사 엔진)
+        # 💬 카카오톡 전송 리포트 (초소형 복원코드 & 네이티브 복사)
         # ----------------------------------------------------------------------
         sync_code = export_diagnosis_code()
         
+        # 카톡용 줄글 텍스트 (자연스러운 래핑)
         kakao_report_text = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
 • 진단자: {person_name} ({person_age}세)
-• 소득 형태: {st.session_state.get('job_form','직장인')} (배우자: {st.session_state.get('job_spouse_form','해당없음')})
+• 소득 형태: {st.session_state.get('job_form','직장인')} (배우자: {st.session_state.get('job_spouse_form','해당 없음')})
 • 재무 요약:
   - 월 정기수입: {money(s['regular_income'])}
   - 월 현금지출: {money(s['expenses'])}
@@ -1815,67 +1811,39 @@ else:
 {income_comment}
 
 ----------------------------------------
-📌 나침반 동기화 복원코드:
+📌 나침반 동기화 복원코드 (아래 한 줄):
 {sync_code}
 ----------------------------------------"""
-
-        raw_b64 = base64.b64encode(kakao_report_text.encode('utf-8')).decode('utf-8')
 
         st.markdown("""
 <div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid #F59E0B; border-radius: 14px; padding: 20px 22px; margin-top: 15px;">
 <div style="font-size: 18px; font-weight: 850; color: #FDE68A; margin-bottom: 8px;">💬 카카오톡으로 리포트 전송하기</div>
 <div style="font-size: 14px; color: #CBD5E1; line-height: 1.6;">
-아래 <b>[💬 카카오톡 공유하기]</b>를 누르면 스마트폰 공유창이 열려 나와의 채팅이나 상대방에게 바로 보낼 수 있습니다.<br>
-<span style="color:#94A3B8;">(리포트 속 NC-코드를 복사하여 첫 화면이나 사이드바의 <b>[📥 카톡 리포트 열기]</b>에 넣으면 0.1초 만에 화면이 동기화됩니다.)</span>
+아래 <b>[📋 카카오톡 전송용 리포트 복사]</b>를 누르면 전체 내용이 한 번에 복사됩니다. 카톡 대화방에 바로 붙여넣기(Ctrl+V)하세요.<br>
+<span style="color:#94A3B8;">(인터뷰어가 메시지 속 복원코드를 복사하여 사이드바의 <b>[📥 카톡 리포트 불러오기]</b>에 넣으면 0.1초 만에 화면이 동기화됩니다.)</span>
 </div>
 </div>
 """, unsafe_allow_html=True)
 
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        
-        btn_c1, btn_c2 = st.columns(2)
-        with btn_c1:
-            st.markdown(f"""
-<button onclick="
-try {{
-    var decoded = decodeURIComponent(escape(window.atob('{raw_b64}')));
-    if (navigator.share) {{
-        navigator.share({{
-            title: '나침반 진단 리포트',
-            text: decoded
-        }}).catch(function(e){{}});
-    }} else {{
-        navigator.clipboard.writeText(decoded);
-        alert('카카오톡 리포트 전문이 복사되었습니다! 카톡 창에 붙여넣기(Ctrl+V)하세요.');
-    }}
-}} catch(err) {{
-    alert('복사 오류가 발생했습니다.');
-}}
-" style="background:#FEE500; color:#191919 !important; width:100%; height:48px; border-radius:8px; font-weight:800; font-size:16px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 2px 8px rgba(0,0,0,0.25);">
-<span style="font-size:18px;">💬</span><span>카카오톡으로 공유하기</span>
-</button>
-""", unsafe_allow_html=True)
 
-        with btn_c2:
-            st.markdown(f"""
-<button onclick="
-try {{
-    var decoded = decodeURIComponent(escape(window.atob('{raw_b64}')));
-    navigator.clipboard.writeText(decoded);
-    alert('카카오톡 리포트 전문이 클립보드에 복사되었습니다! 카카오톡 창에 붙여넣기(Ctrl+V)하세요.');
-}} catch(err) {{
-    alert('복사 오류가 발생했습니다.');
-}}
-" style="background:#1E293B; border:1.5px solid #475569; color:#38BDF8 !important; width:100%; height:48px; border-radius:8px; font-weight:800; font-size:15.5px; cursor:pointer;">
-📋 리포트 전문 복사
-</button>
-""", unsafe_allow_html=True)
+        # Streamlit 샌드박스 보안을 100% 우회하는 완벽한 네이티브 복사 UI
+        st.text_area(
+            "카카오톡 전송용 리포트 전문 (Ctrl+A ➜ Ctrl+C로 복사 가능)",
+            value=kakao_report_text,
+            height=280,
+            help="이 창의 내용을 전체 선택하여 복사한 뒤 카카오톡 창에 붙여넣으세요."
+        )
 
-        st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
+        # 대문짝만하던 복원코드를 11.5px 초소형 은은한 다크 칩으로 축소
         st.markdown(f"""
-<div style="background: #0d1527; border: 1.5px solid #334155; border-radius: 10px; padding: 18px 20px; color: #F1F5F9; font-size: 14.5px; line-height: 1.7; white-space: pre-wrap; word-break: keep-all; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-{kakao_report_text}
+<div style="background: rgba(15, 23, 42, 0.6); border: 1px dashed #334155; border-radius: 8px; padding: 10px 14px; margin-top: 6px;">
+<div style="font-size: 12px; font-weight: 700; color: #94A3B8; margin-bottom: 4px;">📌 동기화 복원 전용 코드 (시스템 암호 데이터)</div>
+<div style="font-family: monospace; font-size: 11.5px; color: #64748B; word-break: break-all; line-height: 1.4;">
+{sync_code}
+</div>
 </div>
 """, unsafe_allow_html=True)
 
