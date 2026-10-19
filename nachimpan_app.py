@@ -1654,7 +1654,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (서두 인사말·빈줄 박멸 & 클린 리포트)
+# 6.04.00 | Tab 4 — AI 시선 (소득개선 우선배치·자연스러운 줄바꿈·심플 UI)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1716,7 +1716,7 @@ else:
         }
     }
 
-    # 서두 인사말과 가로선 생성을 원천 차단한 다이렉트 프롬프트
+    # 소득 개선(파이프라인) 관점이 먼저 나오도록 프롬프트 순서 조정
     full_prompt_text = f"""[절대 엄수 규칙]
 1. 자기소개, 프롤로그, 인사말("안녕하세요", "전문가로서 살펴보겠습니다" 등)을 일체 작성하지 마세요.
 2. 마크다운 가로 구분선(---)을 절대 사용하지 마세요.
@@ -1727,19 +1727,19 @@ else:
 {json.dumps(details, ensure_ascii=False, indent=2)}
 
 [요청 사항]
-반드시 아래 2개 문단 제목 형식([은퇴 안정성], [소득 개선 방향])으로만 작성하고, 제목 바로 다음 줄부터 곧바로 본론을 서술하세요. (각 250~350자)
-
-[은퇴 안정성]
-{person_name}님, 은퇴 안정성 측면에서는 재정비가 필수적인 시점입니다(또는 냉정한 점검이 필요한 시점입니다)로 시작하여 곧바로 본론을 전개하세요.
-월 희망 생활비와 예상 연금 사이의 격차(월 OOO만 원 부족)가 은퇴 후 약 {winter_years}년간 지속될 때 발생하는 총 부족액 규모를 객관적으로 명시하되, 정중하고 따뜻하게 이야기하세요.
-은퇴까지 남은 시간이 기회가 되려면, 부족분을 채울 현금흐름 준비가 반드시 선행되어야 함을 분명히 직언하세요.
+반드시 아래 순서대로 2개 문단 제목 형식([소득 개선 방향], [은퇴 안정성])을 정확히 지켜 작성하고, 제목 바로 다음 줄부터 곧바로 본론을 서술하세요. (각 250~350자)
 
 [소득 개선 방향]
 {person_name}님, 현재 월수입과 연간 상여금으로 이루어진 소득은 노동을 멈추면 수입이 끊기는 전형적인 '물통' 구조입니다로 시작하여 곧바로 본론을 전개하세요.
 비굴한 칭찬이나 문장 중간의 높임말(~시~, ~계신~)을 빼고 문장 끝에만 단정하게 '~합니다 / ~하십시오'로 종결하세요.
-생계를 위한 본업의 물통은 굳건히 지키되, 저녁과 주말 시간을 활용해 시스템과 자산에서 흘러나오는 '파이프라인'을 지금부터 작게라도 구축해야 하는 이유를 당당하고 설득력 있게 제안하세요."""
+생계를 위한 본업의 물통은 굳건히 지키되, 저녁과 주말 시간을 활용해 시스템과 자산에서 흘러나오는 '파이프라인'을 지금부터 작게라도 구축해야 하는 이유를 당당하고 설득력 있게 제안하세요.
 
-    # 심플한 버튼명 적용
+[은퇴 안정성]
+{person_name}님, 은퇴 안정성 측면에서는 재정비가 필수적인 시점입니다(또는 냉정한 점검이 필요한 시점입니다)로 시작하여 곧바로 본론을 전개하세요.
+월 희망 생활비와 예상 연금 사이의 격차(월 OOO만 원 부족)가 은퇴 후 약 {winter_years}년간 지속될 때 발생하는 총 부족액 규모를 객관적으로 명시하되, 정중하고 따뜻하게 이야기하세요.
+은퇴까지 남은 시간이 기회가 되려면, 가만히 있어서는 안 되며 부족분을 채울 현금흐름 준비가 반드시 선행되어야 함을 분명히 직언하세요."""
+
+    # AI 리포트 생성 버튼
     if st.button("⚡ AI 리포트 생성", type="primary", use_container_width=True):
         st.session_state.ai_summary = summary
         st.session_state.ai_comment = None
@@ -1766,29 +1766,42 @@ else:
         cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text.strip())
         normalized = cleaned_text.replace("\r\n", "\n").replace("\r", "\n")
         
-        match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
-        if match:
-            retirement_comment = normalized[:match.start()]
-            income_comment = normalized[match.end():]
+        # [소득 개선 방향]이 먼저 오고 [은퇴 안정성]이 뒤에 오도록 파싱
+        match_retire = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?은퇴\s*안정성\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
+        if match_retire:
+            income_comment = normalized[:match_retire.start()]
+            retirement_comment = normalized[match_retire.end():]
         else:
-            retirement_comment, income_comment = normalized, ""
+            income_comment, retirement_comment = normalized, ""
 
-        retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
         income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
+        retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
 
-        # 혹시 남아있을 수 있는 불필요한 자기소개 서두 문장 자동 커팅
+        # 잡음 멘트 제거
         noise_pattern = r"(?i)^.*?살펴보겠습니다[\.\!\?\s\n]*"
-        retirement_comment = re.sub(noise_pattern, "", retirement_comment).strip()
         income_comment = re.sub(noise_pattern, "", income_comment).strip()
+        retirement_comment = re.sub(noise_pattern, "", retirement_comment).strip()
 
-        # 줄바꿈 최종 압축
-        retirement_comment = re.sub(r'\n{2,}', '\n\n', retirement_comment).strip()
+        # 줄바꿈 압축
         income_comment = re.sub(r'\n{2,}', '\n\n', income_comment).strip()
+        retirement_comment = re.sub(r'\n{2,}', '\n\n', retirement_comment).strip()
 
-        st.markdown("#### 은퇴 안정성 관점")
-        st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
+        # 1. 소득 개선 관점 (파이프라인) 우선 렌더링 + 자연스러운 모바일 줄바꿈
         st.markdown("#### 소득 개선 관점 (파이프라인)")
-        st.markdown(f"<div class='soft-card'>{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+<div class='soft-card' style='white-space: pre-wrap; line-height: 1.7; word-break: keep-all;'>
+{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}
+</div>
+""", unsafe_allow_html=True)
+
+        # 2. 은퇴 안정성 관점 후속 렌더링 + 자연스러운 모바일 줄바꿈
+        st.markdown("#### 은퇴 안정성 관점")
+        st.markdown(f"""
+<div class='soft-card' style='white-space: pre-wrap; line-height: 1.7; word-break: keep-all;'>
+{retirement_comment}
+</div>
+""", unsafe_allow_html=True)
+
         st.caption("※ AI의 코멘트는 참고용 거울이며, 삶의 가장 중요한 결정은 온전히 당신의 것입니다.")
 
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
@@ -1808,11 +1821,11 @@ else:
   - 순자산: {fmt_eok(s['net_worth'])}
   - 희망 은퇴나이: {retire_age}세 (맞이할 겨울: 약 {winter_years}년)
 
-[은퇴 안정성 성찰]
-{retirement_comment}
-
 [소득 개선 & 파이프라인]
 {income_comment}
+
+[은퇴 안정성 성찰]
+{retirement_comment}
 
 ----------------------------------------
 📌 나침반 동기화 복원코드 (아래 한 줄):
@@ -1820,7 +1833,7 @@ else:
 ----------------------------------------"""
 
         st.markdown("### 💬 카카오톡 전송용 리포트")
-        st.caption("※ 우측 상단의 복사 버튼을 눌러 카카오톡 대화방에 바로 붙여넣기(Ctrl+V)하세요. 전달받은 분은 하단의 복원코드로 사이드바에서 0.1초 만에 동일하게 열어볼 수 있습니다.")
+        st.caption("※ 카카오톡 대화방에 바로 붙여넣기(Ctrl+V)하세요. 전달받은 분은 하단의 복원코드로 사이드바에서 0.1초 만에 동일하게 열어볼 수 있습니다.")
         
         st.code(kakao_report_text, language="markdown")
 
@@ -1828,10 +1841,10 @@ else:
         st.info("‘AI 리포트 생성’ 버튼을 누르면 Gemini 초고속 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
 
     # --------------------------------------------------------------------------
-    # 📋 외부 AI (ChatGPT 등) 활용용 순수 재무제표 요약 리포트
+    # 📋 AI 질의용 재무제표 (심플 명칭으로 교체)
     # --------------------------------------------------------------------------
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-    with st.expander("📋 외부 AI(ChatGPT 등) 질의용 순수 재무 요약 데이터"):
+    with st.expander("📋 AI 질의용 재무제표"):
         st.markdown("<div style='font-size: 13.5px; color: #94A3B8; margin-bottom: 8px;'>프롬프트 지시문 없이, 내가 입력한 재무제표와 가족 생애 통계만 정리된 텍스트입니다. ChatGPT 등에 복사해서 자유롭게 추가 상담을 진행할 수 있습니다.</div>", unsafe_allow_html=True)
         raw_summary_report = f"""### 나침반 재무제표 및 생애주기 요약 데이터
 - 성명(별칭): {person_name} (만 {person_age}세)
