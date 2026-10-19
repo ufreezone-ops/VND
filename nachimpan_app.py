@@ -281,9 +281,9 @@ def getv(key, default=0):
     val = st.session_state.get(key, default)
     return default if val is None else val
 
-# ------------------------------------------------------------------------------
+# ==============================================================================
 # 2.02.00 | 재무 포맷팅 및 집계 로직
-# ------------------------------------------------------------------------------
+# ==============================================================================
 def money(value):
     return f"{value:,.0f}만 원"
 
@@ -305,13 +305,42 @@ def active_quadrant(job):
     return ""
 
 def current_financial_summary():
-    income = sum(float(getv(k, 0)) for k in ["income_self", "income_spouse", "income_other"])
+    # 1. 정기 소득 vs 비정기(연간 성과급/상여금)
+    regular_income = sum(float(getv(k, 0)) for k in ["income_self", "income_spouse", "income_other"])
+    annual_bonus = float(getv("income_bonus", 0))  # 연간 비정기 소득 (연, 만원)
+    
+    annual_total_income = (regular_income * 12.0) + annual_bonus
+    monthly_effective_income = annual_total_income / 12.0
+    
+    # 2. 월 지출 합계 (생활비 + 원리금 + 기타지출)
     expenses = sum(float(getv(k, 0)) for k in ["expense_living", "expense_loan", "expense_other"])
+    annual_total_expenses = expenses * 12.0
+    
+    # 3. 잉여금 듀얼 집계
+    monthly_regular_surplus = regular_income - expenses          # 매달 일상 유동성 흐름
+    annual_net_surplus = annual_total_income - annual_total_expenses  # 1년 종합 진짜 순저축 여력
+    monthly_effective_surplus = annual_net_surplus / 12.0       # 연간 순저축의 월 환산액
+    
+    # 4. 자산 및 부채
     assets = sum(float(getv(k, 0)) for k in ["asset_cash", "asset_financial", "asset_home", "asset_deposit", "asset_other"])
     debts = sum(float(getv(k, 0)) for k in ["debt_home", "debt_other"])
+    net_worth = assets - debts
+    
     return {
-        "income": income, "expenses": expenses, "surplus": income - expenses,
-        "assets": assets, "debts": debts, "net_worth": assets - debts
+        "regular_income": regular_income,
+        "annual_bonus": annual_bonus,
+        "annual_total_income": annual_total_income,
+        "monthly_effective_income": monthly_effective_income,
+        "income": regular_income,  # 기존 호환용
+        "expenses": expenses,
+        "annual_total_expenses": annual_total_expenses,
+        "surplus": monthly_regular_surplus,  # 기존 호환용
+        "monthly_regular_surplus": monthly_regular_surplus,
+        "annual_net_surplus": annual_net_surplus,
+        "monthly_effective_surplus": monthly_effective_surplus,
+        "assets": assets,
+        "debts": debts,
+        "net_worth": net_worth
     }
 
 
@@ -564,7 +593,7 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (통계 기반 미래 순자산·연금 궤적 전면 개편)
+# 6.01.00 | Tab 1 — 우리집 가계부 (연간 비정기 소득 및 NTA 생애주기 궤적 통합)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
@@ -615,16 +644,17 @@ if selected_page == "우리집 가계부":
         income_col, expense_col = st.columns(2)
         with income_col:
             with st.container(border=True, key="income-panel"):
-                st.markdown("### ① 들어오는 돈 (월, 만원)")
-                income_self = st.number_input("나의 월 실수령액", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="금액")
-                income_spouse = st.number_input("배우자 월 실수령액", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="금액")
-                income_other = st.number_input("기타·자산 소득", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="금액")
+                st.markdown("### ① 들어오는 돈 (만원)")
+                income_self = st.number_input("나의 월 실수령액 (월급·기본소득)", min_value=0, value=st.session_state.get("income_self"), step=10, placeholder="월 금액")
+                income_spouse = st.number_input("배우자 월 실수령액", min_value=0, value=st.session_state.get("income_spouse"), step=10, placeholder="월 금액")
+                income_other = st.number_input("그 밖의 월 정기소득 (임대·부업 등)", min_value=0, value=st.session_state.get("income_other"), step=10, placeholder="월 금액")
+                income_bonus = st.number_input("연간 비정기 소득 (상여금·성과급·연말수입)", min_value=0, value=st.session_state.get("income_bonus"), step=100, placeholder="1년 합계 금액 (없으면 빈칸)")
         with expense_col:
             with st.container(border=True, key="expense-panel"):
                 st.markdown("### ② 나가는 돈 (월, 만원)")
-                expense_living = st.number_input("기본 생활비", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 금액")
-                expense_loan = st.number_input("대출 원리금 상환액", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="금액")
-                expense_other = st.number_input("그 밖의 월평균 지출", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="금액")
+                expense_living = st.number_input("기본 생활비 (식비·관리비·통신비·가족생활)", min_value=0, value=st.session_state.get("expense_living"), step=10, placeholder="월 생활 유지비")
+                expense_loan = st.number_input("대출 원리금 상환액 (원금+이자 합계)", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="은행 납입 합계")
+                expense_other = st.number_input("그 밖의 월평균 지출 (연간 여행·경조사·세금÷12)", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="비정기 지출 월평균")
 
         # ----------------------------------------------------------------------
         # ③ 가지고 있는 것 vs ④ 갚아야 할 돈
@@ -637,12 +667,12 @@ if selected_page == "우리집 가계부":
                 asset_financial = st.number_input("주식·채권 등 금융자산", min_value=0, value=st.session_state.get("asset_financial"), step=100, placeholder="금액")
                 asset_home = st.number_input("부동산 시세", min_value=0, value=st.session_state.get("asset_home"), step=100, placeholder="금액")
                 asset_deposit = st.number_input("전세보증금", min_value=0, value=st.session_state.get("asset_deposit"), step=100, placeholder="금액")
-                asset_other = st.number_input("기타 자산·사업 가치", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액")
+                asset_other = st.number_input("그 밖의 자산 (현금화 가능한 사업체·지분 등)", min_value=0, value=st.session_state.get("asset_other"), step=100, placeholder="금액")
         with debt_col:
             with st.container(border=True, key="debt-panel"):
                 st.markdown("### ④ 갚아야 할 돈 (원금, 만원)")
                 debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액")
-                debt_other = st.number_input("그 밖의 부채 잔액", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
+                debt_other = st.number_input("그 밖의 부채 잔액 (신용·마이너스통장)", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
 
         # ----------------------------------------------------------------------
         # 은퇴 후 가정
@@ -673,7 +703,8 @@ if selected_page == "우리집 가계부":
             "job_form": final_job,
             "job_spouse_form": final_spouse_job,
             "income_self": income_self, "income_spouse": income_spouse,
-            "income_other": income_other, "income_pension": income_pension,
+            "income_other": income_other, "income_bonus": income_bonus,
+            "income_pension": income_pension,
             "expense_living": expense_living, "expense_loan": expense_loan,
             "expense_other": expense_other, "retirement_monthly_expenses": retirement_monthly_expenses,
             "asset_cash": asset_cash, "asset_financial": asset_financial, "asset_home": asset_home,
@@ -745,18 +776,26 @@ if selected_page == "우리집 가계부":
     st.markdown(esbi_html, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 현재 재무 요약
+    # 현재 재무 요약 (월 일상 유동성 & 연간 진짜 순저축 듀얼 표기)
     # --------------------------------------------------------------------------
     s = current_financial_summary()
     st.markdown("### 현재 재무 요약")
     cols = st.columns(4)
-    cols[0].metric("월수입 합계", money(s["income"]))
-    cols[1].metric("월지출 합계", money(s["expenses"]))
-    cols[2].metric("월 저축여력", money(s["surplus"]))
+    cols[0].metric("월 정기수입", money(s["regular_income"]), help="나 + 배우자 + 기타 월 정기소득")
+    cols[1].metric("월 현금지출", money(s["expenses"]), help="기본생활비 + 대출원리금 + 기타지출")
+    
+    # 상여금 반영 여부에 따른 친절한 보조 설명
+    bonus_help = f"연간 상여금 {money(s['annual_bonus'])} 반영" if s['annual_bonus'] > 0 else "월 정기수지 기준"
+    cols[2].metric(
+        "연간 순저축 여력",
+        money(s["annual_net_surplus"]),
+        delta=f"월평균 {money(s['monthly_effective_surplus'])}",
+        help=f"1년 총수입({money(s['annual_total_income'])}) - 1년 총지출({money(s['annual_total_expenses'])}) | {bonus_help}"
+    )
     cols[3].metric("순자산", fmt_eok(s["net_worth"]))
 
     # --------------------------------------------------------------------------
-    # 미래 순자산·연금 궤적 (통계청 임금/물가상승률 모델링 & 억 원 단위 시각화)
+    # 미래 순자산·연금 궤적 (NTA 생애주기 소득·지출 피크 모델링 & 억 원 단위 시각화)
     # --------------------------------------------------------------------------
     st.markdown("### 미래 순자산·연금 궤적")
     
@@ -767,20 +806,30 @@ if selected_page == "우리집 가계부":
     
     # 1. 초기 순자산 (억 원 단위)
     start_asset_eok = s["net_worth"] / 10000.0
-    monthly_surplus = s["surplus"]
+    base_annual_surplus_eok = s["annual_net_surplus"] / 10000.0  # 연간 총 저축여력 (억)
     
-    # 2. 통계청 실질 임금상승률 반영 (연평균 명목임금 3.0% - 물가 2.0% = 실질 저축성장률 약 1.5%)
-    real_growth_rate = 0.015
-    
-    # [구간 1] 은퇴 전: 자산 축적기 연산
+    # 2. 국민이전계정(NTA) 라이프사이클 현실 모델링
+    # - 45세까지: 경력 발달 및 승진에 따른 소득 성장 (연 2.0% 실질 성장)
+    # - 46~53세: 소득 피크 정점이나 자녀 교육비·가족비 지출 급증 (저축 여력 약 15% 둔화 압력)
+    # - 54세~은퇴: 임금피크제 또는 은퇴 준비로 완만한 정체
     ages_accum = list(range(cur_age, retire_age + 1))
     vals_accum = []
     current_asset = start_asset_eok
     
-    for idx, a in enumerate(ages_accum):
+    for a in ages_accum:
         vals_accum.append(current_asset)
-        # 매년 실질 임금상승분을 감안한 저축액 누적
-        annual_save = (monthly_surplus * 12 * ((1 + real_growth_rate) ** idx)) / 10000.0
+        
+        # NTA 연령별 생애주기 저축 가중치 계산
+        if a < 45:
+            lifecycle_weight = 1.0 + (0.02 * (a - cur_age))
+        elif 45 <= a <= 53:
+            # 교육비 지출 피크 압력 반영
+            lifecycle_weight = 1.0 + (0.02 * (45 - cur_age)) - 0.15
+        else:
+            # 54세 이후 임금피크 감속 반영
+            lifecycle_weight = max(0.65, 1.0 + (0.02 * (45 - cur_age)) - 0.25)
+            
+        annual_save = base_annual_surplus_eok * max(0.1, lifecycle_weight)
         current_asset += annual_save
 
     peak_asset_eok = vals_accum[-1]
@@ -815,7 +864,7 @@ if selected_page == "우리집 가계부":
         marker=dict(size=6),
         fill='tozeroy',
         fillcolor='rgba(245, 158, 11, 0.12)',
-        name="🌱 자산 축적기 (근로저축 + 실질임금상승)",
+        name="🌱 자산 축적기 (연간 총저축 + NTA 생애주기)",
         hovertemplate="나이: %{x}세<br>추정 순자산: <b>%{y:.2f}억 원</b><extra></extra>"
     ))
 
@@ -879,15 +928,16 @@ if selected_page == "우리집 가계부":
 
     st.plotly_chart(fig_asset, use_container_width=True, config={"displayModeBar": False})
 
-    # 그래프 팩트 기반 성찰 안내 카드
+    # 그래프 팩트 기반 성찰 안내 카드 (HTML 들여쓰기 0칸 준수)
+    bonus_note = f" (연간 상여금 {money(s['annual_bonus'])} 포함)" if s['annual_bonus'] > 0 else ""
     st.markdown(f"""
-    <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 10px; padding: 14px 16px; margin-top: 10px;">
-        <div style="font-size: 13.5px; color: #CBD5E1; line-height: 1.6;">
-            • <b>🌱 은퇴 전 (만 {cur_age}세 ~ {retire_age}세)</b>: 통계청 평균 임금상승률(3.0%) 및 물가상승률(2.0%)을 반영한 실질 저축액 누적 추이입니다.<br>
-            • <b>🍂 은퇴 후 ({retire_age}세 ~ 90세)</b>: 예상 월 연금({ret_pension:,.0f}만 원)에서 노후 월 생활비({ret_expenses:,.0f}만 원)를 뺀 순현금흐름({annual_ret_cashflow_eok*10000:,.0f}만 원/년)에 따른 순자산 변화입니다.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+<div style="background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 10px; padding: 14px 16px; margin-top: 10px;">
+<div style="font-size: 13.5px; color: #CBD5E1; line-height: 1.6;">
+• <b>🌱 은퇴 전 (만 {cur_age}세 ~ {retire_age}세)</b>: 1년 총 저축여력({money(s['annual_net_surplus'])}{bonus_note})을 바탕으로, 국가데이터처 국민이전계정(NTA)의 생애주기 소득 피크(45세) 및 40~50대 가족 지출 집중기를 반영한 실질 자산 궤적입니다.<br>
+• <b>🍂 은퇴 후 ({retire_age}세 ~ 90세)</b>: 예상 월 연금({ret_pension:,.0f}만 원)에서 노후 월 생활비({ret_expenses:,.0f}만 원)를 뺀 순현금흐름({annual_ret_cashflow_eok*10000:,.0f}만 원/년)에 따른 순자산 변화입니다.
+</div>
+</div>
+""", unsafe_allow_html=True)
 
     _, next_col = st.columns([5, 1])
     with next_col:
