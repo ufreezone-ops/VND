@@ -1107,7 +1107,7 @@ elif selected_page == "삶과 생계수단":
             st.rerun()
 
 # ==============================================================================
-# 6.03.00 | Tab 3 — 인생의 사계절 (개인 맞춤형 NTA 생애주기 융합 & 지출피크 매핑)
+# 6.03.00 | Tab 3 — 인생의 사계절 (가족 2열 정렬·형제자매 동적추가·버튼 화이트 박멸)
 # ==============================================================================
 elif selected_page == "인생의 사계절":
     if st.session_state.pop("_scroll_to_top_once", False):
@@ -1126,7 +1126,7 @@ elif selected_page == "인생의 사계절":
     years_left = max(0, retire_age - cur_age)
 
     # --------------------------------------------------------------------------
-    # 1. 가족 구성원과 은퇴 시점의 나이
+    # 1. 가족 구성원과 은퇴 시점의 나이 (2열 그리드 & 형제자매 동적 연동)
     # --------------------------------------------------------------------------
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
     child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
@@ -1138,40 +1138,68 @@ elif selected_page == "인생의 사계절":
     )
 
     with st.form("family_form"):
-        spouse_age = st.number_input("배우자 나이 (없거나 입력하지 않으려면 0)", min_value=0, max_value=120, value=int(st.session_state.get("spouse_age", 0)), step=1)
-        child_age = int(st.session_state.get("child_age", 0)) if child_count in ["1명", "2명", "3명 이상"] else 0
+        # 배우자 & 첫째 자녀 (2열)
+        r1_c1, r1_c2 = st.columns(2)
+        with r1_c1:
+            spouse_age = st.number_input("배우자 나이 (없거나 미입력 시 0)", min_value=0, max_value=120, value=int(st.session_state.get("spouse_age", 0)), step=1)
+        with r1_c2:
+            child_age = int(st.session_state.get("child_age", 0)) if child_count in ["1명", "2명", "3명 이상"] else 0
+            if child_count in ["1명", "2명", "3명 이상"]:
+                child_age = st.number_input("첫째 자녀 나이", min_value=0, max_value=100, value=child_age, step=1)
+            else:
+                st.write("")
+
+        # 둘째 자녀 & 셋째 자녀 (2열)
         child_age2 = int(st.session_state.get("child_age2", 0)) if child_count in ["2명", "3명 이상"] else 0
         child_age3 = int(st.session_state.get("child_age3", 0)) if child_count == "3명 이상" else 0
-        
-        if child_count in ["1명", "2명", "3명 이상"]:
-            child_age = st.number_input("첫째 자녀 나이", min_value=0, max_value=100, value=child_age, step=1)
         if child_count in ["2명", "3명 이상"]:
-            child_age2 = st.number_input("둘째 자녀 나이", min_value=0, max_value=100, value=child_age2, step=1)
-        if child_count == "3명 이상":
-            child_age3 = st.number_input("셋째 자녀 나이", min_value=0, max_value=100, value=child_age3, step=1)
-            
+            r2_c1, r2_c2 = st.columns(2)
+            with r2_c1:
+                child_age2 = st.number_input("둘째 자녀 나이", min_value=0, max_value=100, value=child_age2, step=1)
+            with r2_c2:
+                if child_count == "3명 이상":
+                    child_age3 = st.number_input("셋째 자녀 나이", min_value=0, max_value=100, value=child_age3, step=1)
+
+        # 아버지 & 어머니 (2열)
         col_f, col_m = st.columns(2)
         with col_f:
             father_age = st.number_input("아버지 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("father_age", 0)), step=1)
         with col_m:
             mother_age = st.number_input("어머니 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("mother_age", 0)), step=1)
             
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         st.markdown("#### 앞으로의 가족 계획 (선택)")
-        marriage_options = ["미정", "계획 없음", "1~3년 내 결혼 생각 있음", "3년 이후 결혼 생각 있음", "결혼 예정/준비 중"]
-        marriage_plan = st.selectbox("결혼 계획", marriage_options, index=marriage_options.index(st.session_state.get("marriage_plan", "미정")) if st.session_state.get("marriage_plan", "미정") in marriage_options else 0)
+        p_c1, p_c2, p_c3 = st.columns(3)
+        with p_c1:
+            marriage_options = ["미정", "계획 없음", "1~3년 내 결혼 생각 있음", "3년 이후 결혼 생각 있음", "결혼 예정/준비 중"]
+            marriage_plan = st.selectbox("결혼 계획", marriage_options, index=marriage_options.index(st.session_state.get("marriage_plan", "미정")) if st.session_state.get("marriage_plan", "미정") in marriage_options else 0)
+        with p_c2:
+            child_plan_options = ["미정", "계획 없음", "자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"]
+            child_plan = st.selectbox("출산·자녀 계획", child_plan_options, index=child_plan_options.index(st.session_state.get("child_plan", "미정")) if st.session_state.get("child_plan", "미정") in child_plan_options else 0)
+        with p_c3:
+            housing_options = ["미정", "현재 주거 유지", "전세·월세 이동 고려", "주택 구입 고려", "주거 계획 확정"]
+            housing_plan = st.selectbox("주거 계획", housing_options, index=housing_options.index(st.session_state.get("housing_plan", "미정")) if st.session_state.get("housing_plan", "미정") in housing_options else 0)
         
-        child_plan_options = ["미정", "계획 없음", "자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"]
-        child_plan = st.selectbox("출산·자녀 계획", child_plan_options, index=child_plan_options.index(st.session_state.get("child_plan", "미정")) if st.session_state.get("child_plan", "미정") in child_plan_options else 0)
-        
-        housing_options = ["미정", "현재 주거 유지", "전세·월세 이동 고려", "주택 구입 고려", "주거 계획 확정"]
-        housing_plan = st.selectbox("주거 계획", housing_options, index=housing_options.index(st.session_state.get("housing_plan", "미정")) if st.session_state.get("housing_plan", "미정") in housing_options else 0)
-        
-        sibling_options = ["형", "남동생", "누나", "여동생", "오빠", "언니", "남자 형제(관계 미지정)", "여자 형제(관계 미지정)"]
+        # 형제자매 선택
+        sibling_options = ["형", "남동생", "누나", "여동생", "오빠", "언니", "남자 형제", "여자 형제"]
         siblings = st.multiselect(
             "형제자매 (해당 항목 모두 선택)",
             sibling_options,
             default=[x for x in st.session_state.get("siblings", []) if x in sibling_options],
         )
+
+        # 형제자매 선택 시 나이 입력창 동적 생성 (2열)
+        sibling_age_inputs = {}
+        if siblings:
+            st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:15px; font-weight:700; color:#CBD5E1;'>형제자매 나이 입력 (선택, 모르면 0)</div>", unsafe_allow_html=True)
+            sib_cols = st.columns(2)
+            for idx, sib in enumerate(siblings):
+                c = sib_cols[idx % 2]
+                with c:
+                    prev_sib_age = int(st.session_state.get(f"sib_age_{sib}", 0))
+                    sibling_age_inputs[sib] = st.number_input(f"{sib} 나이", min_value=0, max_value=120, value=prev_sib_age, step=1, key=f"inp_sib_age_{sib}")
+
         save_family = st.form_submit_button("가족 정보 반영하기", use_container_width=True, type="primary")
 
     if save_family:
@@ -1186,9 +1214,11 @@ elif selected_page == "인생의 사계절":
         st.session_state.marriage_plan = marriage_plan
         st.session_state.child_plan = child_plan
         st.session_state.housing_plan = housing_plan
+        for sib, age_val in sibling_age_inputs.items():
+            st.session_state[f"sib_age_{sib}"] = age_val
         st.rerun()
 
-    # 가족 미래 나이 카드 렌더링
+    # 가족 미래 나이 리스트 구성
     people = [(st.session_state.get("person_name", "나"), cur_age)]
     if getv("spouse_age", 0) > 0: people.append(("배우자", int(getv("spouse_age"))))
     if getv("child_age", 0) > 0: people.append(("첫째 자녀", int(getv("child_age"))))
@@ -1196,16 +1226,33 @@ elif selected_page == "인생의 사계절":
     if getv("child_age3", 0) > 0: people.append(("셋째 자녀", int(getv("child_age3"))))
     if getv("father_age", 0) > 0: people.append(("아버지", int(getv("father_age"))))
     if getv("mother_age", 0) > 0: people.append(("어머니", int(getv("mother_age"))))
+    for sib in st.session_state.get("siblings", []):
+        sib_a = int(getv(f"sib_age_{sib}", 0))
+        if sib_a > 0:
+            people.append((sib, sib_a))
 
-    for name, current in people:
+    # 반복 문구 박멸 & 깔끔한 2열 슬림 카드 헤더
+    st.markdown(f"""
+<div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 18px; margin: 16px 0 10px 0; display:flex; justify-content:space-between; align-items:center;">
+<span style="font-size: 15.5px; font-weight: 800; color: #F8FAFC;">📌 내가 은퇴하는 시점(만 {retire_age}세, {years_left}년 후)의 우리 가족 나이</span>
+<span style="font-size: 13px; color: #94A3B8;">현재 나이 ➔ 은퇴 시 나이</span>
+</div>
+""", unsafe_allow_html=True)
+
+    # 슬림하고 컴팩트한 2열 카드 그리드
+    f_cols = st.columns(2)
+    for idx, (name, current) in enumerate(people):
+        c = f_cols[idx % 2]
         future = current + years_left
-        st.markdown(f"""
-<div class='soft-card' style='display:flex;align-items:center;gap:14px;flex-wrap:wrap;'>
-<b style='min-width:75px;font-size:16px;'>{name}</b>
-<span style='font-size:20px;font-weight:800;'>{current}세</span>
-<span style='font-size:22px;color:var(--nc-primary);padding:0 8px;'>➔</span>
-<span style='font-size:20px;font-weight:800;color:var(--nc-accent-gold);'>{future}세</span>
-<span class='small-muted'>(내가 {retire_age}세 은퇴하는 시점)</span>
+        with c:
+            st.markdown(f"""
+<div class='soft-card' style='display:flex; align-items:center; justify-content:space-between; padding:12px 18px; margin:5px 0;'>
+<b style='font-size:16px; color:#F8FAFC;'>{name}</b>
+<div style='display:flex; align-items:center; gap:12px;'>
+<span style='font-size:17px; color:#94A3B8;'>{current}세</span>
+<span style='font-size:16px; color:#EA580C;'>➔</span>
+<span style='font-size:19px; font-weight:800; color:#F59E0B;'>{future}세</span>
+</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1241,40 +1288,34 @@ elif selected_page == "인생의 사계절":
     my_expense_curve = []
 
     for a in ages_sim:
-        # 1) 개인화 소득 곡선
+        # 소득 곡선
         if a < cur_age:
-            # 과거 소득 추정 (NTA 28세 흑자진입 slope 반영)
             ratio = max(0.2, (a - 20) / max(1, (cur_age - 20)))
             my_income_curve.append(cur_annual_income * ratio)
         elif cur_age <= a < retire_age:
-            # 경력 발달 및 45세 소득 정점 반영
             if a <= 45:
                 w_inc = 1.0 + (0.02 * (a - cur_age))
             else:
                 w_inc = max(0.85, 1.0 + (0.02 * (45 - cur_age)) - (0.015 * (a - 45)))
             my_income_curve.append(cur_annual_income * w_inc)
         else:
-            # 은퇴 후: 근로소득 중단 및 연금 전환
             my_income_curve.append(ret_annual_pension)
 
-        # 2) 개인화 소비 곡선
+        # 소비 곡선
         if a < cur_age:
             my_expense_curve.append(cur_annual_expense * 0.75)
         elif cur_age <= a < retire_age:
-            # 자녀 교육비 피크기 (46~53세) 소비 15% 상승 반영
             if 46 <= a <= 53:
                 w_exp = 1.15
             else:
                 w_exp = 1.0
             my_expense_curve.append(cur_annual_expense * w_exp)
         else:
-            # 은퇴 후: 노후 생활비
             my_expense_curve.append(ret_annual_expense)
 
     # Plotly 개인화 생애주기 차트
     fig_my_nta = go.Figure()
 
-    # 1. 소득 곡선 (근로소득 + 은퇴 후 연금)
     fig_my_nta.add_trace(go.Scatter(
         x=ages_sim, y=my_income_curve,
         mode="lines",
@@ -1283,7 +1324,6 @@ elif selected_page == "인생의 사계절":
         hovertemplate="나이: %{x}세<br>연 소득: <b>%{y:,.0f}만 원</b><extra></extra>"
     ))
 
-    # 2. 소비 곡선
     fig_my_nta.add_trace(go.Scatter(
         x=ages_sim, y=my_expense_curve,
         mode="lines",
@@ -1292,7 +1332,6 @@ elif selected_page == "인생의 사계절":
         hovertemplate="나이: %{x}세<br>연 소비: <b>%{y:,.0f}만 원</b><extra></extra>"
     ))
 
-    # 현재 나이 기준선
     fig_my_nta.add_vline(x=cur_age, line_dash="solid", line_color="#38BDF8", line_width=2)
     fig_my_nta.add_annotation(
         x=cur_age, y=max(my_income_curve) * 0.95,
@@ -1302,7 +1341,6 @@ elif selected_page == "인생의 사계절":
         ay=-30, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#38BDF8"
     )
 
-    # 은퇴 시점 및 적자 전환 깃발
     fig_my_nta.add_vline(x=retire_age, line_dash="dash", line_color="#EF4444", line_width=2)
     fig_my_nta.add_annotation(
         x=retire_age, y=my_income_curve[ages_sim.index(retire_age)],
@@ -1394,7 +1432,6 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
-    # 성찰 유도 카드
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid #334155; border-radius: 12px; padding: 18px 20px; margin: 16px 0 24px 0;">
 <div style="font-size: 15px; color: #F8FAFC; line-height: 1.6; word-break: keep-all;">
@@ -1407,7 +1444,7 @@ elif selected_page == "인생의 사계절":
 """, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 4. 국가데이터처 공식 벤치마크 지표 & 보도자료 (공신력 확보)
+    # 4. 국가데이터처 공식 벤치마크 지표 & 고대비 HTML 링크 버튼 (화이트 박멸)
     # --------------------------------------------------------------------------
     st.markdown("### 국가데이터처 공식 생애 통계 지표 (대한민국 평균 기준)")
     col_m1, col_m2, col_m3 = st.columns(3)
@@ -1415,9 +1452,17 @@ elif selected_page == "인생의 사계절":
     col_m2.metric("최대 흑자 정점", "45세", "연 1,932만 원")
     col_m3.metric("평균 적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
 
-    col_btn1, col_btn2 = st.columns(2)
-    col_btn1.link_button("📄 2024년 국가데이터처 통계 보도자료", OFFICIAL_PDF_URL, use_container_width=True)
-    col_btn2.link_button("🌐 국가데이터처 공식 발표 페이지", OFFICIAL_RELEASE_URL, use_container_width=True)
+    # 화이트아웃 버그를 100% 원천 차단한 다크 네이비 고대비 링크 버튼
+    st.markdown(f"""
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;">
+<a href="{OFFICIAL_PDF_URL}" target="_blank" style="background:#1E293B; border:1px solid #475569; border-radius:8px; padding:12px 14px; text-align:center; text-decoration:none; color:#38BDF8 !important; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+<span style="font-size:18px;">📄</span><span style="color:#38BDF8 !important;">2024년 국가데이터처 통계 보도자료</span>
+</a>
+<a href="{OFFICIAL_RELEASE_URL}" target="_blank" style="background:#1E293B; border:1px solid #475569; border-radius:8px; padding:12px 14px; text-align:center; text-decoration:none; color:#38BDF8 !important; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+<span style="font-size:18px;">🌐</span><span style="color:#38BDF8 !important;">국가데이터처 공식 발표 페이지</span>
+</a>
+</div>
+""", unsafe_allow_html=True)
 
     # 다음 탭 이동
     _, next_col = st.columns([5, 1])
