@@ -593,7 +593,7 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (연간 비정기 소득 및 NTA 생애주기 궤적 통합)
+# 6.01.00 | Tab 1 — 우리집 가계부 (차트 터치 잠금 & 세로축 동적 정수 단위)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
@@ -776,7 +776,7 @@ if selected_page == "우리집 가계부":
     st.markdown(esbi_html, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 현재 재무 요약 (월 일상 유동성 & 연간 진짜 순저축 듀얼 표기)
+    # 현재 재무 요약
     # --------------------------------------------------------------------------
     s = current_financial_summary()
     st.markdown("### 현재 재무 요약")
@@ -784,7 +784,6 @@ if selected_page == "우리집 가계부":
     cols[0].metric("월 정기수입", money(s["regular_income"]), help="나 + 배우자 + 기타 월 정기소득")
     cols[1].metric("월 현금지출", money(s["expenses"]), help="기본생활비 + 대출원리금 + 기타지출")
     
-    # 상여금 반영 여부에 따른 친절한 보조 설명
     bonus_help = f"연간 상여금 {money(s['annual_bonus'])} 반영" if s['annual_bonus'] > 0 else "월 정기수지 기준"
     cols[2].metric(
         "연간 순저축 여력",
@@ -795,7 +794,7 @@ if selected_page == "우리집 가계부":
     cols[3].metric("순자산", fmt_eok(s["net_worth"]))
 
     # --------------------------------------------------------------------------
-    # 미래 순자산·연금 궤적 (NTA 생애주기 소득·지출 피크 모델링 & 억 원 단위 시각화)
+    # 미래 순자산·연금 궤적 (터치 락 & 정수 단위 표시)
     # --------------------------------------------------------------------------
     st.markdown("### 미래 순자산·연금 궤적")
     
@@ -806,91 +805,103 @@ if selected_page == "우리집 가계부":
     
     # 1. 초기 순자산 (억 원 단위)
     start_asset_eok = s["net_worth"] / 10000.0
-    base_annual_surplus_eok = s["annual_net_surplus"] / 10000.0  # 연간 총 저축여력 (억)
+    base_annual_surplus_eok = s["annual_net_surplus"] / 10000.0
     
-    # 2. 국민이전계정(NTA) 라이프사이클 현실 모델링
-    # - 45세까지: 경력 발달 및 승진에 따른 소득 성장 (연 2.0% 실질 성장)
-    # - 46~53세: 소득 피크 정점이나 자녀 교육비·가족비 지출 급증 (저축 여력 약 15% 둔화 압력)
-    # - 54세~은퇴: 임금피크제 또는 은퇴 준비로 완만한 정체
+    # [구간 1] 은퇴 전: 자산 축적기
     ages_accum = list(range(cur_age, retire_age + 1))
-    vals_accum = []
+    vals_accum_eok = []
     current_asset = start_asset_eok
     
     for a in ages_accum:
-        vals_accum.append(current_asset)
-        
-        # NTA 연령별 생애주기 저축 가중치 계산
+        vals_accum_eok.append(current_asset)
         if a < 45:
             lifecycle_weight = 1.0 + (0.02 * (a - cur_age))
         elif 45 <= a <= 53:
-            # 교육비 지출 피크 압력 반영
             lifecycle_weight = 1.0 + (0.02 * (45 - cur_age)) - 0.15
         else:
-            # 54세 이후 임금피크 감속 반영
             lifecycle_weight = max(0.65, 1.0 + (0.02 * (45 - cur_age)) - 0.25)
             
         annual_save = base_annual_surplus_eok * max(0.1, lifecycle_weight)
         current_asset += annual_save
 
-    peak_asset_eok = vals_accum[-1]
+    peak_asset_eok = vals_accum_eok[-1]
 
-    # [구간 2] 은퇴 후: 자산 인출·연금기 연산 (은퇴나이 ~ 90세)
+    # [구간 2] 은퇴 후: 자산 인출·연금기
     ret_pension = float(getv("income_pension", 0) or 0)
     ret_expenses = float(getv("retirement_monthly_expenses", 200) or 0)
-    annual_ret_cashflow_eok = ((ret_pension - ret_expenses) * 12) / 10000.0  # 억 원 단위
+    annual_ret_cashflow_eok = ((ret_pension - ret_expenses) * 12) / 10000.0
 
     ages_retire = list(range(retire_age, 91))
-    vals_retire = []
+    vals_retire_eok = []
     ret_asset = peak_asset_eok
     depletion_age = None
 
     for idx, a in enumerate(ages_retire):
-        vals_retire.append(ret_asset)
+        vals_retire_eok.append(ret_asset)
         if idx > 0 and ret_asset <= 0 and depletion_age is None:
             depletion_age = a
         ret_asset += annual_ret_cashflow_eok
 
+    # 최대치에 따른 동적 단위 판단 (1억 이상이면 '억', 1억 미만이면 '천만')
+    max_val_eok = max(max(vals_accum_eok), max(vals_retire_eok) if vals_retire_eok else 0)
+    use_cheonman = (max_val_eok < 1.0 and max_val_eok > 0)
+    
+    if use_cheonman:
+        mult = 10.0
+        unit_str = "천만"
+        y_accum = [v * mult for v in vals_accum_eok]
+        y_retire = [v * mult for v in vals_retire_eok]
+        peak_disp = f"{peak_asset_eok * mult:.0f}천만 원"
+        hover_tmpl = "나이: %{x}세<br>추정 순자산: <b>%{y:.0f}천만 원</b><extra></extra>"
+    else:
+        mult = 1.0
+        unit_str = "억"
+        y_accum = vals_accum_eok
+        y_retire = vals_retire_eok
+        peak_disp = f"{peak_asset_eok:.0f}억 원" if abs(peak_asset_eok) >= 10 else f"{peak_asset_eok:.1f}억 원"
+        hover_tmpl = "나이: %{x}세<br>추정 순자산: <b>%{y:.1f}억 원</b><extra></extra>"
+
     # Plotly 차트 구성
     fig_asset = go.Figure()
 
-    # 기준선 (0억 원)
+    # 기준선 (0)
     fig_asset.add_hline(y=0, line_dash="solid", line_color="#334155", line_width=1.5)
 
-    # 1. 은퇴 전 [자산 축적기] 곡선 (골드 실선 & 은은한 음영)
+    # 1. 은퇴 전 축적기
     fig_asset.add_trace(go.Scatter(
-        x=ages_accum, y=vals_accum,
+        x=ages_accum, y=y_accum,
         mode="lines+markers",
         line=dict(color="#F59E0B", width=3.5),
         marker=dict(size=6),
         fill='tozeroy',
         fillcolor='rgba(245, 158, 11, 0.12)',
         name="🌱 자산 축적기 (연간 총저축 + NTA 생애주기)",
-        hovertemplate="나이: %{x}세<br>추정 순자산: <b>%{y:.2f}억 원</b><extra></extra>"
+        hovertemplate=hover_tmpl
     ))
 
-    # 2. 은퇴 후 [자산 인출기] 곡선 (스카이블루 실선 & 소프트 음영)
+    # 2. 은퇴 후 인출기
     fig_asset.add_trace(go.Scatter(
-        x=ages_retire, y=vals_retire,
+        x=ages_retire, y=y_retire,
         mode="lines+markers",
         line=dict(color="#38BDF8", width=3.5),
         marker=dict(size=6),
         fill='tozeroy',
         fillcolor='rgba(56, 189, 248, 0.08)',
         name="🍂 자산 인출기 (연금 - 노후생활비)",
-        hovertemplate="나이: %{x}세<br>추정 순자산: <b>%{y:.2f}억 원</b><extra></extra>"
+        hovertemplate=hover_tmpl
     ))
 
-    # 은퇴 시점 기준선 & 피크 자산 깃발
+    # 피크 깃발
     fig_asset.add_vline(x=retire_age, line_dash="dash", line_color="#F8FAFC", line_width=2)
     fig_asset.add_annotation(
-        x=retire_age, y=peak_asset_eok,
-        text=f"은퇴 정점 {retire_age}세 ({peak_asset_eok:.1f}억 원)",
+        x=retire_age, y=peak_asset_eok * mult,
+        text=f"은퇴 정점 {retire_age}세 ({peak_disp})",
         showarrow=True, arrowhead=2, arrowcolor="#F59E0B",
         font=dict(size=13, color="#FDE68A", family="sans-serif"),
         ay=-38, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#F59E0B", borderpad=4
     )
 
-    # 자산 소진 시점 표시 (소진되는 경우에만)
+    # 소진 깃발
     if depletion_age and depletion_age <= 90:
         fig_asset.add_annotation(
             x=depletion_age, y=0,
@@ -910,14 +921,16 @@ if selected_page == "우리집 가계부":
             title=dict(text="나이 (세)", font=dict(size=14, color="#94A3B8")),
             tickfont=dict(size=13, color="#94A3B8"),
             gridcolor="rgba(100, 116, 139, 0.2)",
-            tickmode="linear", tick0=20, dtick=5
+            tickmode="linear", tick0=20, dtick=5,
+            fixedrange=True  # 터치/드래그 확대·이동 잠금
         ),
         yaxis=dict(
-            title=dict(text="추정 순자산 (억 원)", font=dict(size=14, color="#94A3B8")),
+            title=dict(text="추정 순자산", font=dict(size=14, color="#94A3B8")),
             tickfont=dict(size=13, color="#94A3B8"),
-            ticksuffix="억",
-            tickformat=",.1f",
-            gridcolor="rgba(100, 116, 139, 0.2)"
+            ticksuffix=unit_str,
+            tickformat=",.0f",  # 소수점 완전 제거
+            gridcolor="rgba(100, 116, 139, 0.2)",
+            fixedrange=True  # 터치/드래그 확대·이동 잠금
         ),
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
@@ -926,9 +939,14 @@ if selected_page == "우리집 가계부":
         hovermode="x unified"
     )
 
-    st.plotly_chart(fig_asset, use_container_width=True, config={"displayModeBar": False})
+    # 터치 확대 및 모드바 완전 차단 고정
+    st.plotly_chart(
+        fig_asset,
+        use_container_width=True,
+        config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
+    )
 
-    # 그래프 팩트 기반 성찰 안내 카드 (HTML 들여쓰기 0칸 준수)
+    # 그래프 팩트 안내 카드
     bonus_note = f" (연간 상여금 {money(s['annual_bonus'])} 포함)" if s['annual_bonus'] > 0 else ""
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 10px; padding: 14px 16px; margin-top: 10px;">
@@ -946,25 +964,110 @@ if selected_page == "우리집 가계부":
             st.rerun()
 
 # ==============================================================================
-# 6.02.00 | Tab 2 — 삶과 생계수단 (Livelihood & Buckets vs Pipeline)
+# 6.02.00 | Tab 2 — 삶과 생계수단 (물통/파이프라인 매핑 & 돌쇠와 똘똘이 우화)
 # ==============================================================================
 elif selected_page == "삶과 생계수단":
     st.markdown("## 삶과 생계수단")
-    st.markdown("""
-    <div class='soft-card'>
-        <div class='eyebrow'>잠시 생각해보는 거울</div>
-        <div class='question'>내가 지금까지 생계를 유지해 온 방식은 온전한 나의 선택이었을까요? 주어진 상황에서 최선을 다해 받아들인 결과였을까요?</div>
-    </div>
-    """, unsafe_allow_html=True)
     
-    st.text_area("떠오르는 생각이 있다면 편하게 적어두세요 (선택)", key="life_choice_note", height=90, placeholder="답을 정할 필요 없이 마음 가는 대로 적으셔도 좋습니다.")
-    
+    # --------------------------------------------------------------------------
+    # 1. 소득이 만들어지는 세 가지 모습 (아이콘 시각화 & 부부 매핑 뱃지)
+    # --------------------------------------------------------------------------
     st.markdown("### 소득이 만들어지는 세 가지 모습")
-    cols = st.columns(3)
-    cols[0].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🪣</div><b>작은 물통</b><p class='small-muted'>직접 일한 시간과 소득이 1:1로 맞바꿔지는 모습</p></div>", unsafe_allow_html=True)
-    cols[1].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🛢️</div><b>큰 물통</b><p class='small-muted'>전문성과 몸값을 높여 한 번에 담는 양을 키운 모습</p></div>", unsafe_allow_html=True)
-    cols[2].markdown("<div class='soft-card income-card'><div style='font-size:38px'>🚰</div><b>파이프라인</b><p class='small-muted'>내가 멈추어도 시스템과 자산에서 흐름이 이어지는 모습</p></div>", unsafe_allow_html=True)
+    
+    # 부부 직업 사분면 판별 (E, S, B, I)
+    q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
+    q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
+    
+    def get_livelihood_badge(target_quads):
+        badges = []
+        if q_self in target_quads:
+            badges.append("<span style='background:#EA580C; color:#FFFFFF; font-size:12px; font-weight:800; padding:3px 9px; border-radius:4px;'>나</span>")
+        if q_spouse in target_quads:
+            badges.append("<span style='background:#0284C7; color:#FFFFFF; font-size:12px; font-weight:800; padding:3px 9px; border-radius:4px;'>배우자</span>")
+        return f"<div style='min-height:26px; margin-bottom:8px; display:flex; justify-content:center; gap:6px;'>{' '.join(badges)}</div>" if badges else "<div style='min-height:26px; margin-bottom:8px;'></div>"
 
+    badge_small = get_livelihood_badge(["E"])
+    badge_big = get_livelihood_badge(["S"])
+    badge_pipe = get_livelihood_badge(["B", "I"])
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""
+<div class='soft-card' style='text-align:center; min-height:230px;'>
+{badge_small}
+<div style='font-size:32px; letter-spacing:4px; margin-bottom:6px;'>🪣🪣🪣</div>
+<div style='font-size:19px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>작은 물통</div>
+<div style='font-size:14px; color:#CBD5E1; line-height:1.5; word-break:keep-all;'>
+직접 일한 시간과 돈을 1:1로 맞바꾸는 모습<br><span style='color:#F59E0B; font-weight:600;'>(시간이 멈추면 물통도 멈춤)</span>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+<div class='soft-card' style='text-align:center; min-height:230px;'>
+{badge_big}
+<div style='font-size:40px; margin-bottom:6px;'>🛢️</div>
+<div style='font-size:19px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>큰 물통</div>
+<div style='font-size:14px; color:#CBD5E1; line-height:1.5; word-break:keep-all;'>
+전문성과 몸값을 높여 한 번에 담는 양을 키운 모습<br><span style='color:#F59E0B; font-weight:600;'>(큰 물통이지만 여전히 지고 다님)</span>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+<div class='soft-card' style='text-align:center; min-height:230px;'>
+{badge_pipe}
+<div style='font-size:32px; letter-spacing:2px; margin-bottom:6px;'>🚰➰⚙️</div>
+<div style='font-size:19px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>파이프라인</div>
+<div style='font-size:14px; color:#CBD5E1; line-height:1.5; word-break:keep-all;'>
+내가 잠시 멈추어도 시스템과 자산에서 흐르는 모습<br><span style='color:#38BDF8; font-weight:600;'>(시간으로부터 자유로운 소득)</span>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 2. 산책로의 우화: '돌쇠와 똘똘이' (플랜 B의 지혜)
+    # --------------------------------------------------------------------------
+    st.markdown("### 🌾 지혜로운 산책: 돌쇠와 똘똘이 이야기")
+    
+    st.markdown("""
+<div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid #334155; border-radius: 14px; padding: 22px 24px; margin-bottom: 24px;">
+<div style="font-size: 15px; color: #94A3B8; font-weight: 700; margin-bottom: 12px;">옛날 어느 마을, 머슴을 구하는 대감댁에 두 젊은이가 찾아왔습니다.</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+<div style="background: rgba(15, 23, 42, 0.7); border: 1px solid #475569; border-radius: 10px; padding: 14px 16px;">
+<div style="font-size: 17px; font-weight: 800; color: #F59E0B; margin-bottom: 6px;">💪 돌쇠의 선택 (물통의 삶)</div>
+<div style="font-size: 14px; color: #CBD5E1; line-height: 1.6; word-break: keep-all;">
+"대감마님, 저는 첫 달부터 매달 <b>쌀 한 가마(80kg)</b>씩을 주십시오."<br>
+돌쇠는 첫 달부터 쌀 한 가마를 받아 가족을 부양했습니다. 하지만 늙어 힘이 빠질 때까지 지게를 내려놓지 못했습니다.
+</div>
+</div>
+
+<div style="background: rgba(15, 23, 42, 0.7); border: 1px solid #475569; border-radius: 10px; padding: 14px 16px;">
+<div style="font-size: 17px; font-weight: 800; color: #38BDF8; margin-bottom: 6px;">🧠 똘똘이의 선택 (파이프라인의 삶)</div>
+<div style="font-size: 14px; color: #CBD5E1; line-height: 1.6; word-break: keep-all;">
+"저는 첫 달에 <b>쌀 한 되(1kg)</b>만 주시고, 매달 곱절(2되, 4되, 8되...)로 주십시오."<br>
+똘똘이는 훗날 창고가 넘치는 거부가 되었습니다. <b>하지만 당장 첫 달에 쌀 한 되만 받았다면 굶어 죽었을 것입니다.</b>
+</div>
+</div>
+</div>
+
+<div style="background: rgba(234, 88, 12, 0.12); border-left: 4px solid #EA580C; border-radius: 4px; padding: 12px 16px;">
+<div style="font-size: 15.5px; font-weight: 750; color: #F8FAFC; line-height: 1.6; word-break: keep-all;">
+💡 <b>나침반의 성찰</b>: 돌쇠의 삶(현업)을 버리라는 것이 아닙니다.<br>
+낮에는 돌쇠처럼 성실하게 가족의 생계(쌀 한 가마)를 책임지면서, 저녁과 주말의 시간에 똘똘이의 지혜(파이프라인)를 한 되, 두 되 차근차근 놓아가는 <b>'현명한 플랜 B'</b>가 필요한 이유입니다.
+</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 3. 내가 생각하는 은퇴 예상 나이
+    # --------------------------------------------------------------------------
     st.markdown("### 내가 생각하는 은퇴 예상 나이")
     with st.form("retirement_form"):
         retirement_input = st.number_input(
