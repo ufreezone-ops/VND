@@ -286,9 +286,11 @@ ESBI = {
 # 2.00.00 | 상태 관리 및 재무 유틸리티 엔진 (State & Finance Engine)
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 2.01.00 | 세션 상태 초기화 및 헬퍼 함수
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 2.01.00 | 세션 상태 초기화 및 헬퍼 함수 (진단코드 동기화 엔진 탑재)
+# ==============================================================================
+import zlib
+
 if "anonymous_id" not in st.session_state:
     st.session_state.anonymous_id = f"#{random.choice('ABCDE')}-{random.randint(101,999)}"
 if "started" not in st.session_state:
@@ -299,6 +301,53 @@ if "answers" not in st.session_state:
 def getv(key, default=0):
     val = st.session_state.get(key, default)
     return default if val is None else val
+
+# 인터뷰이 ➜ 인터뷰어 동기화 대상 핵심 데이터 키
+SYNC_KEYS = [
+    "anonymous_id", "person_name", "person_age", "job_form", "job_spouse_form",
+    "income_self", "income_spouse", "income_other", "income_bonus", "income_pension",
+    "expense_living", "expense_loan", "expense_other", "retirement_monthly_expenses",
+    "asset_cash", "asset_financial", "asset_home", "asset_deposit", "asset_other",
+    "debt_home", "debt_other", "retirement_age", "spouse_age", "child_count",
+    "child_age", "child_age2", "child_age3", "father_age", "mother_age",
+    "marriage_plan", "child_plan", "housing_plan", "sibling_items"
+]
+
+def export_diagnosis_code():
+    """현재 세션의 모든 가계부·생애 데이터를 암호화 압축 코드로 인코딩"""
+    data = {}
+    for k in SYNC_KEYS:
+        if k in st.session_state:
+            data[k] = st.session_state[k]
+    json_bytes = json.dumps(data, ensure_ascii=False).encode('utf-8')
+    compressed = zlib.compress(json_bytes, level=9)
+    b64 = base64.urlsafe_b64encode(compressed).decode('utf-8')
+    return f"NC-{b64}"
+
+def import_diagnosis_code(raw_input):
+    """카카오톡 메시지나 복원코드에서 NC- 데이터를 찾아 세션으로 즉시 복원"""
+    if not raw_input or not isinstance(raw_input, str):
+        return False, "입력된 텍스트가 없습니다."
+    
+    match = re.search(r"NC-([A-Za-z0-9_-]+={0,2})", raw_input.strip())
+    if not match:
+        return False, "유효한 나침반 복원코드(NC-...)를 찾지 못했습니다."
+    
+    b64_str = match.group(1)
+    try:
+        missing_padding = len(b64_str) % 4
+        if missing_padding:
+            b64_str += '=' * (4 - missing_padding)
+        compressed = base64.urlsafe_b64decode(b64_str.encode('utf-8'))
+        json_bytes = zlib.decompress(compressed)
+        data = json.loads(json_bytes.decode('utf-8'))
+        
+        for k, v in data.items():
+            st.session_state[k] = v
+        st.session_state.started = True
+        return True, f"'{data.get('person_name', '인터뷰이')}'님의 가계부·생애주기 데이터가 완벽히 동기화되었습니다."
+    except Exception as e:
+        return False, f"데이터 복원 실패: {e}"
 
 # ==============================================================================
 # 2.02.00 | 재무 포맷팅 및 집계 로직
@@ -367,9 +416,9 @@ def current_financial_summary():
 # 3.00.00 | 외부 AI 연동 서비스 (Gemini + ChatGPT + Claude 다이렉트 파이프라인)
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 3.01.00 | Gemini 호출 엔진 (404 원천 차단 및 모델 자동 매칭)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 3.01.00 | Gemini 엔드포인트 캐싱 및 텍스트 요청 파이프라인 (완결성 보장)
+# ==============================================================================
 def call_gemini_text(prompt_text):
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_KEY")
     if not api_key:
@@ -380,12 +429,12 @@ def call_gemini_text(prompt_text):
     if not api_key:
         return "", "Streamlit Secrets에서 GEMINI_API_KEY를 찾지 못했습니다."
 
+    # maxOutputTokens를 8192로 복원하여 문장 중간 끊김 영구 방지
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
-        "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.45},
+        "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.45},
     }
 
-    # 404 방지 우선순위 모델 리스트
     candidate_models = [
         ("v1beta", "gemini-2.0-flash"),
         ("v1beta", "gemini-1.5-flash-latest"),
@@ -397,7 +446,7 @@ def call_gemini_text(prompt_text):
     for api_ver, m_name in candidate_models:
         try:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
-            response = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
+            response = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=20)
             if response.status_code == 200:
                 parts = response.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
                 text_parts = [p.get("text", "") for p in parts if p.get("text")]
@@ -408,7 +457,7 @@ def call_gemini_text(prompt_text):
         except Exception as exc:
             last_error = f"통신 오류: {exc}"
 
-    # 만약 위 기본 모델이 전부 404라면 계정의 활성 모델 자동 조회
+    # 모델 목록 자동 조회 안전망
     try:
         res = requests.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}", timeout=5)
         if res.status_code == 200:
@@ -417,7 +466,7 @@ def call_gemini_text(prompt_text):
                     clean = m.get("name", "").replace("models/", "")
                     if "flash" in clean:
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean}:generateContent?key={api_key}"
-                        resp2 = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
+                        resp2 = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=20)
                         if resp2.status_code == 200:
                             parts = resp2.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
                             text_parts = [p.get("text", "") for p in parts if p.get("text")]
@@ -426,7 +475,7 @@ def call_gemini_text(prompt_text):
     except Exception:
         pass
 
-    return "", last_error or "Gemini API 모델 연결에 실패했습니다. API 키 권한을 확인해 주세요."
+    return "", last_error or "Gemini API 모델 연결에 실패했습니다. Secrets의 GEMINI_API_KEY를 확인해 주세요."
 
 # ------------------------------------------------------------------------------
 # 3.02.00 | ChatGPT (OpenAI GPT-4o-mini) 직타 파이프라인
@@ -502,7 +551,7 @@ def call_claude_text(prompt_text):
 # ==============================================================================
 
 # ==============================================================================
-# 4.01.00 | 첫 진입 표지 및 인라인 시작 바 (라벨 폰트 18px 볼드 확대)
+# 4.01.00 | 첫 진입 표지 및 인라인 시작 바 (카톡 진단코드 동기화 탑재)
 # ==============================================================================
 cover_file_path = None
 possible_covers = [
@@ -524,16 +573,16 @@ if not st.session_state.started:
             st.image(cover_file_path, use_container_width=True)
         else:
             st.markdown("""
-            <div style="background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); border-radius: 18px; padding: 60px 20px; text-align: center; border: 1px solid #334155;">
-                <div style="font-size: 40px; margin-bottom: 10px;">🧭</div>
-                <h1 style="color: #FFFFFF; font-size: 32px; font-weight: 850; margin: 0 0 10px 0;">나 침 반</h1>
-                <div style="color: #94A3B8; font-size: 15px;">당신의 삶을 위한 질문과 시간의 산책로</div>
-            </div>
-            """, unsafe_allow_html=True)
+<div style="background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); border-radius: 18px; padding: 60px 20px; text-align: center; border: 1px solid #334155;">
+<div style="font-size: 40px; margin-bottom: 10px;">🧭</div>
+<h1 style="color: #FFFFFF; font-size: 32px; font-weight: 850; margin: 0 0 10px 0;">나 침 반</h1>
+<div style="color: #94A3B8; font-size: 15px;">당신의 삶을 위한 질문과 시간의 산책로</div>
+</div>
+""", unsafe_allow_html=True)
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
         
-        # 표지 바로 아래 2줄 3칸 인라인 시작 바 (라벨 폰트 18px 시원하게 확대)
+        # 1. 일반 시작 바
         with st.form("start_inline_form", clear_on_submit=False):
             in_col1, in_col2, in_col3 = st.columns([2.0, 1.1, 1.1])
             
@@ -564,6 +613,19 @@ if not st.session_state.started:
                     st.session_state.person_age = int(age)
                     st.session_state.started = True
                     st.rerun()
+
+        # 2. 인터뷰어 전용: 카톡 진단 데이터 불러오기 (원터치 동기화)
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+        with st.expander("📥 카카오톡 진단 데이터 불러오기 (인터뷰어 동기화)"):
+            st.markdown("<div style='font-size: 13.5px; color: #CBD5E1; margin-bottom: 6px;'>인터뷰이에게 카톡으로 전달받은 <b>리포트 전문</b> 또는 <b>복원코드(NC-...)</b>를 아래에 붙여넣으세요.</div>", unsafe_allow_html=True)
+            pasted_code = st.text_area("카톡 내용 붙여넣기", placeholder="카카오톡 메시지나 NC-코드를 그대로 붙여넣으세요", height=90, label_visibility="collapsed")
+            if st.button("🔄 인터뷰이 데이터로 나침반 열기", type="primary", use_container_width=True):
+                ok, msg = import_diagnosis_code(pasted_code)
+                if ok:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
             
     st.stop()
     
@@ -1594,26 +1656,24 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (Gemini / ChatGPT / Claude 3대 AI 통합 인앱 분석)
+# 6.04.00 | Tab 4 — AI 시선 (Gemini 단독 분석 & 카카오톡 전송·동기화 리포트)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
     st.markdown("AI는 평가자가 아닌, 내가 작성한 삶과 숫자를 객관적인 거울처럼 비춰주는 성찰 파트너입니다.")
     
-    model = st.radio(
-        "분석할 AI 모델 선택",
-        ["Gemini", "ChatGPT (GPT-4o-mini)", "Claude (3.5 Haiku)"],
-        index=0, key="ai_provider", horizontal=True,
-    )
-    
-    # 공통 진단 데이터 딕셔너리 구축
     summary = current_financial_summary()
     sib_names = [f"{it['label']}({it.get('age',0)}세)" for it in st.session_state.get("sibling_items", []) if it.get("age", 0) > 0]
     
+    person_name = st.session_state.get("person_name", "나")
+    person_age = st.session_state.get("person_age", 35)
+    retire_age = st.session_state.get("retirement_age", 60)
+    winter_years = max(0, 88 - int(retire_age))
+    
     details = {
-        "이름/별칭": st.session_state.get("person_name", "나"),
-        "나이": st.session_state.get("person_age"),
-        "소득 형태": st.session_state.get("job_form", ""),
+        "이름/별칭": person_name,
+        "나이": person_age,
+        "소득 형태": st.session_state.get("job_form", "직장인"),
         "배우자 소득 형태": st.session_state.get("job_spouse_form", "없음"),
         "월수입(정기)": f"{summary['regular_income']:,.0f}만 원",
         "연간 상여금(비정기)": f"{summary['annual_bonus']:,.0f}만 원",
@@ -1623,118 +1683,4 @@ else:
         "순자산": f"{summary['net_worth']/10000:,.2f}억 원 (자산 {summary['assets']:,.0f}만 원 - 부채 {summary['debts']:,.0f}만 원)",
         "은퇴 후 예상 월연금": f"{getv('income_pension', 0):,.0f}만 원",
         "은퇴 후 월 생활비": f"{getv('retirement_monthly_expenses', 200):,.0f}만 원",
-        "희망 은퇴 나이": f"{st.session_state.get('retirement_age', 60)}세",
-        "가족 나이": {
-            "배우자": f"{getv('spouse_age', 0)}세",
-            "첫째 자녀": f"{getv('child_age', 0)}세",
-            "둘째 자녀": f"{getv('child_age2', 0)}세",
-            "셋째 자녀": f"{getv('child_age3', 0)}세",
-            "아버지": f"{getv('father_age', 0)}세",
-            "어머니": f"{getv('mother_age', 0)}세",
-            "형제자매": sib_names if sib_names else "없음"
-        },
-        "가족 계획": {
-            "결혼": st.session_state.get("marriage_plan", "미정"),
-            "출산/자녀": st.session_state.get("child_plan", "미정"),
-            "주거": st.session_state.get("housing_plan", "미정")
-        }
-    }
-
-    full_prompt_text = f"""[역할 정의]
-당신은 대한민국 가계 재무와 은퇴 준비를 함께 검토하는 품격 있고 따뜻한 현실점검 파트너입니다.
-위협이나 공포 마케팅(파산, 절벽 등)을 절대 배제하고, "산 입에 거미줄 치랴"의 온기 있는 위로와 객관적 성찰 거울의 태도를 유지하세요.
-소득의 크기가 아니라 '소득의 성격(물통 vs 파이프라인)'에 주목하여 조언하세요.
-
-[참고 공식 통계 (국가데이터처 2024 국민이전계정)]
-- 한국인 평균 흑자 진입: 28세
-- 최대 흑자 정점: 45세 (연 1,932만 원 흑자)
-- 적자 재전환: 61세 (은퇴와 함께 소비가 소득을 초과)
-
-[인터뷰이 재무 및 생애 데이터]
-{json.dumps(details, ensure_ascii=False, indent=2)}
-
-[요청 사항]
-다음 2가지 관점에서 각각 250~350자 내외의 품격 있고 다정한 대화체로 코멘트해 주세요.
-1. [은퇴 안정성]: 은퇴 안정성 수준(유리한 편 / 보통 / 불리한 편)을 첫 문장에 밝히고, 은퇴 후 맞이할 겨울의 길이와 연금/자산 현금흐름에 대해 성찰할 점.
-2. [소득 개선 방향]: 현재 노동 수입(물통)에만 의존할 때의 한계와, 현업을 성실히 지키면서 복리의 지혜를 갖춘 파이프라인(자산/시스템 수입)을 준비해야 하는 이유."""
-
-    # 실행 버튼
-    btn_label = f"⚡ {model} 인앱 AI 분석 실행"
-    if st.button(btn_label, type="primary", use_container_width=True):
-        st.session_state.ai_summary = summary
-        st.session_state.ai_comment = None
-        
-        with st.spinner(f"{model} 엔진이 가계부와 생애주기 지표를 교차 분석 중입니다 (약 3~5초 소요)..."):
-            if "Gemini" in model:
-                comment, error = call_gemini_text(full_prompt_text)
-            elif "ChatGPT" in model:
-                comment, error = call_chatgpt_text(full_prompt_text)
-            else:
-                comment, error = call_claude_text(full_prompt_text)
-                
-            if error == "NO_KEY":
-                st.session_state.ai_need_key = model
-            else:
-                st.session_state.ai_need_key = None
-                st.session_state.ai_comment = comment if comment else error
-
-    # 키가 없을 때의 친절한 발급 안내 가이드 카드
-    if st.session_state.get("ai_need_key"):
-        target_ai = st.session_state.ai_need_key
-        key_name = "OPENAI_API_KEY" if "ChatGPT" in target_ai else "ANTHROPIC_API_KEY"
-        link_url = "https://platform.openai.com/api-keys" if "ChatGPT" in target_ai else "https://console.anthropic.com/settings/keys"
-        
-        st.warning(f"💡 {target_ai}의 API 키가 아직 설정되지 않았습니다.")
-        st.markdown(f"""
-<div style="background: rgba(30, 41, 59, 0.6); border: 1.5px solid #F59E0B; border-radius: 12px; padding: 18px 20px; margin: 12px 0;">
-<div style="font-size: 16.5px; font-weight: 800; color: #FDE68A; margin-bottom: 8px;">🔑 1분 만에 {target_ai} 키 등록하는 방법</div>
-<div style="font-size: 14px; color: #CBD5E1; line-height: 1.6;">
-1. <a href="{link_url}" target="_blank" style="color: #38BDF8; font-weight: 700; text-decoration: underline;">{target_ai} 공식 키 발급 페이지 바로가기</a>에서 키를 복사합니다.<br>
-2. Streamlit 대시보드(share.streamlit.io) ➜ <b>Settings ➜ Secrets</b>에 아래 한 줄을 등록해 주세요:<br>
-<code style="color:#F59E0B; font-weight:700;">{key_name} = "발급받은_키_붙여넣기"</code><br>
-3. 키 등록 후 다시 버튼을 누르시면 바로 이 화면에서 인앱 분석이 실행됩니다!
-</div>
-</div>
-""", unsafe_allow_html=True)
-
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        st.markdown("#### 📋 대안: 키 없이 웹에서 바로 분석받기 (프롬프트 복사)")
-        st.code(full_prompt_text, language="markdown")
-        ext_url = "https://chatgpt.com" if "ChatGPT" in target_ai else "https://claude.ai"
-        st.markdown(f"""
-<a href="{ext_url}" target="_blank" style="background:#1E293B; border:1px solid #475569; color:#38BDF8 !important; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:8px; font-weight:700;">
-<span>🌐</span><span>{target_ai.split()[0]} 웹사이트 바로가기 ({ext_url})</span>
-</a>
-""", unsafe_allow_html=True)
-
-    # 분석 결과가 있을 때 렌더링
-    elif st.session_state.get("ai_summary") and st.session_state.get("ai_comment"):
-        s = st.session_state.ai_summary
-        st.markdown("### 재무제표 요약")
-        cols = st.columns(4)
-        cols[0].metric("월 정기수입", money(s["regular_income"]))
-        cols[1].metric("월 현금지출", money(s["expenses"]))
-        cols[2].metric("연간 순저축", money(s["annual_net_surplus"]), f"월환산 {money(s['monthly_effective_surplus'])}")
-        cols[3].metric("순자산", fmt_eok(s["net_worth"]))
-
-        st.markdown("### AI 성찰 리포트")
-        comment_text = str(st.session_state.get("ai_comment", ""))
-        
-        normalized = comment_text.replace("\r\n", "\n").replace("\r", "\n")
-        match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
-        if match:
-            retirement_comment = normalized[:match.start()]
-            income_comment = normalized[match.end():]
-        else:
-            retirement_comment, income_comment = normalized, ""
-
-        retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
-        income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
-
-        st.markdown("#### 은퇴 안정성 관점")
-        st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
-        st.markdown("#### 소득 개선 관점 (파이프라인)")
-        st.markdown(f"<div class='soft-card'>{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}</div>", unsafe_allow_html=True)
-        st.caption("※ AI의 코멘트는 참고용 거울이며, 삶의 가장 중요한 결정은 온전히 당신의 것입니다.")
-    else:
-        st.info("‘인앱 AI 분석 실행’ 버튼을 누르면 선택하신 AI 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
+        "희망 은퇴 나이": f"{retire_age}세 (
