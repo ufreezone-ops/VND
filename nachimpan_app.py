@@ -964,17 +964,19 @@ if selected_page == "우리집 가계부":
             st.rerun()
 
 # ==============================================================================
-# 6.02.00 | Tab 2 — 삶과 생계수단 (물통/파이프라인 매핑 & 돌쇠와 똘똘이 우화)
+# 6.02.00 | Tab 2 — 삶과 생계수단 (3색 테마 분할 & 인라인 은퇴설정)
 # ==============================================================================
 elif selected_page == "삶과 생계수단":
     st.markdown("## 삶과 생계수단")
     
     # --------------------------------------------------------------------------
-    # 1. 소득이 만들어지는 세 가지 모습 (아이콘 시각화 & 부부 매핑 뱃지)
+    # 파트 1. 소득이 만들어지는 세 가지 모습 (딥 슬레이트 네이비 배경)
     # --------------------------------------------------------------------------
-    st.markdown("### 소득이 만들어지는 세 가지 모습")
+    st.markdown("""
+<div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
+<div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 14px;">소득이 만들어지는 세 가지 모습</div>
+""", unsafe_allow_html=True)
     
-    # 부부 직업 사분면 판별 (E, S, B, I)
     q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
     
@@ -993,22 +995,22 @@ elif selected_page == "삶과 생계수단":
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"""
-<div class='soft-card' style='text-align:center; min-height:230px;'>
+<div class='soft-card' style='text-align:center; min-height:215px; margin:0;'>
 {badge_small}
 <div style='font-size:32px; letter-spacing:4px; margin-bottom:6px;'>🪣🪣🪣</div>
-<div style='font-size:19px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>작은 물통</div>
+<div style='font-size:18.5px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>작은 물통</div>
 <div style='font-size:14px; color:#CBD5E1; line-height:1.5; word-break:keep-all;'>
-직접 일한 시간과 돈을 1:1로 맞바꾸는 모습<br><span style='color:#F59E0B; font-weight:600;'>(시간이 멈추면 물통도 멈춤)</span>
+직접 일한 시간과 돈을 1:1로 맞바꾸는 모습<br><span style='color:#F59E0B; font-weight:600;'>(노동을 멈추면 수입도 멈춤)</span>
 </div>
 </div>
 """, unsafe_allow_html=True)
 
     with col2:
         st.markdown(f"""
-<div class='soft-card' style='text-align:center; min-height:230px;'>
+<div class='soft-card' style='text-align:center; min-height:215px; margin:0;'>
 {badge_big}
 <div style='font-size:40px; margin-bottom:6px;'>🛢️</div>
-<div style='font-size:19px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>큰 물통</div>
+<div style='font-size:18.5px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>큰 물통</div>
 <div style='font-size:14px; color:#CBD5E1; line-height:1.5; word-break:keep-all;'>
 전문성과 몸값을 높여 한 번에 담는 양을 키운 모습<br><span style='color:#F59E0B; font-weight:600;'>(큰 물통이지만 여전히 지고 다님)</span>
 </div>
@@ -1017,29 +1019,28 @@ elif selected_page == "삶과 생계수단":
 
     with col3:
         st.markdown(f"""
-<div class='soft-card' style='text-align:center; min-height:230px;'>
+<div class='soft-card' style='text-align:center; min-height:215px; margin:0;'>
 {badge_pipe}
 <div style='font-size:32px; letter-spacing:2px; margin-bottom:6px;'>🚰➰⚙️</div>
-<div style='font-size:19px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>파이프라인</div>
+<div style='font-size:18.5px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>파이프라인</div>
 <div style='font-size:14px; color:#CBD5E1; line-height:1.5; word-break:keep-all;'>
-내가 잠시 멈추어도 시스템과 자산에서 흐르는 모습<br><span style='color:#38BDF8; font-weight:600;'>(시간으로부터 자유로운 소득)</span>
+시스템과 자산이 나 대신 일하는 모습<br><span style='color:#38BDF8; font-weight:600;'>(시간으로부터 자유로운 소득)</span>
 </div>
 </div>
 """, unsafe_allow_html=True)
 
-    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 2. 산책로의 우화: '돌쇠와 똘똘이' (복리의 지혜와 플랜 B)
+    # 파트 2. 산책로의 우화: 돌쇠와 똘똘이 (다크 앰버/골드 톤 배경)
     # --------------------------------------------------------------------------
-    st.markdown("### 🌾 지혜로운 산책: 돌쇠와 똘똘이 이야기")
-    
     st.markdown("""
-<div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid #334155; border-radius: 14px; padding: 22px 24px; margin-bottom: 24px;">
-<div style="font-size: 15px; color: #94A3B8; font-weight: 700; margin-bottom: 12px;">옛날 어느 마을, 머슴을 구하는 대감댁에 두 젊은이가 찾아왔습니다.</div>
+<div style="background: rgba(45, 35, 20, 0.55); border: 1.5px solid #6d4a1a; border-radius: 14px; padding: 22px 24px; margin-bottom: 22px;">
+<div style="font-size: 20px; font-weight: 850; color: #FDE68A; margin-bottom: 12px;">🌾 지혜로운 산책: 돌쇠와 똘똘이</div>
+<div style="font-size: 14.5px; color: #E2E8F0; margin-bottom: 16px;">옛날 어느 마을, 머슴을 구하는 대감댁에 두 젊은이가 찾아왔습니다.</div>
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-<div style="background: rgba(15, 23, 42, 0.7); border: 1px solid #475569; border-radius: 10px; padding: 14px 16px;">
+<div style="background: rgba(15, 23, 42, 0.75); border: 1px solid #78350f; border-radius: 10px; padding: 14px 16px;">
 <div style="font-size: 17px; font-weight: 800; color: #F59E0B; margin-bottom: 6px;">💪 돌쇠의 선택 (물통의 삶)</div>
 <div style="font-size: 14px; color: #CBD5E1; line-height: 1.6; word-break: keep-all;">
 "대감마님, 저는 첫 달부터 매달 <b>쌀 한 가마(80kg)</b>씩을 주십시오."<br>
@@ -1047,7 +1048,7 @@ elif selected_page == "삶과 생계수단":
 </div>
 </div>
 
-<div style="background: rgba(15, 23, 42, 0.7); border: 1px solid #475569; border-radius: 10px; padding: 14px 16px;">
+<div style="background: rgba(15, 23, 42, 0.75); border: 1px solid #0369a1; border-radius: 10px; padding: 14px 16px;">
 <div style="font-size: 17px; font-weight: 800; color: #38BDF8; margin-bottom: 6px;">🧠 똘똘이의 선택 (파이프라인의 삶)</div>
 <div style="font-size: 14px; color: #CBD5E1; line-height: 1.6; word-break: keep-all;">
 "저는 첫 달에 <b>쌀 한 되(1kg)</b>만 주시고, 매달 곱절(2되, 4되, 8되...)로 주십시오."<br>
@@ -1056,8 +1057,8 @@ elif selected_page == "삶과 생계수단":
 </div>
 </div>
 
-<div style="background: rgba(234, 88, 12, 0.12); border-left: 4px solid #EA580C; border-radius: 4px; padding: 12px 16px;">
-<div style="font-size: 15.5px; font-weight: 750; color: #F8FAFC; line-height: 1.6; word-break: keep-all;">
+<div style="background: rgba(234, 88, 12, 0.14); border-left: 4px solid #EA580C; border-radius: 4px; padding: 12px 16px;">
+<div style="font-size: 15px; font-weight: 750; color: #F8FAFC; line-height: 1.6; word-break: keep-all;">
 💡 <b>나침반의 성찰</b>: 돌쇠의 삶(현업)을 버리라는 것이 아닙니다.<br>
 낮에는 돌쇠처럼 성실하게 가족의 생계(쌀 한 가마)를 책임지면서, 저녁과 주말의 시간에 똘똘이의 지혜(파이프라인)를 한 되, 두 되 차근차근 놓아가는 <b>'현명한 플랜 B'</b>가 필요한 이유입니다.
 </div>
@@ -1066,30 +1067,44 @@ elif selected_page == "삶과 생계수단":
 """, unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 3. 내가 생각하는 은퇴 예상 나이
+    # 파트 3. 내가 생각하는 은퇴 예상 나이 (차콜 인디고 배경 & 인라인 배치)
     # --------------------------------------------------------------------------
-    st.markdown("### 내가 생각하는 은퇴 예상 나이")
-    with st.form("retirement_form"):
-        retirement_input = st.number_input(
-            "지금 하는 현업을 졸업(은퇴)하고 싶은 나이",
-            min_value=int(st.session_state.person_age), max_value=100,
-            value=int(st.session_state["retirement_age"]) if st.session_state.get("retirement_age") is not None else 60,
-            step=1, key="retirement_age_input",
-        )
-        retirement_saved = st.form_submit_button("은퇴 나이 확인", use_container_width=True, type="primary")
-    
+    st.markdown("""
+<div style="background: rgba(24, 32, 47, 0.65); border: 1.5px solid #3b4b66; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
+<div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 12px;">내가 생각하는 은퇴 예상 나이</div>
+""", unsafe_allow_html=True)
+
+    cur_user_age = int(st.session_state.person_age)
+    default_retire = int(st.session_state.get("retirement_age") or 60)
+    if default_retire < cur_user_age:
+        default_retire = cur_user_age
+
+    with st.form("retirement_inline_form"):
+        r_col1, r_col2 = st.columns([3.2, 1.0])
+        with r_col1:
+            retirement_input = st.number_input(
+                "지금 하는 현업을 졸업(은퇴)하고 싶은 나이",
+                min_value=cur_user_age, max_value=100,
+                value=default_retire, step=1,
+                label_visibility="collapsed"
+            )
+        with r_col2:
+            retirement_saved = st.form_submit_button("은퇴 나이 확인", use_container_width=True, type="primary")
+
     if retirement_saved:
         st.session_state["retirement_age"] = int(retirement_input)
         st.success(f"은퇴 예상 나이({retirement_input}세)가 반영되었습니다.")
 
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # 하단 네비게이션 다음 버튼
     _, next_col = st.columns([5, 1])
     with next_col:
         if st.button("다음 →", key="livelihood_next", use_container_width=True, type="primary"):
-            st.session_state["retirement_age"] = int(st.session_state.get("retirement_age_input", retirement_input))
+            st.session_state["retirement_age"] = int(retirement_input)
             st.session_state["_pending_nav"] = "인생의 사계절"
             st.session_state["_scroll_to_top_once"] = True
             st.rerun()
-
 
 # ==============================================================================
 # 6.03.00 | Tab 3 — 인생의 사계절 (Life Seasons & Official Benchmark)
