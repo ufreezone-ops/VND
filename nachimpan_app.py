@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (다이얼로그 삭제 & 인라인 툴바 스타일)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (형제자매 버튼 고대비 보강)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -202,17 +202,13 @@ div[data-testid="stPills"] button[aria-selected="true"] {
 div[data-testid="stNumberInput"] button { display: none !important; }
 div[data-testid="stNumberInput"] input { padding-right: 12px !important; }
 
-/* ==========================================================================
-   표지 아래 인라인 3칸 시작 툴바 전용 스타일 (수평 높이 일치)
-   ========================================================================== */
-/* 시작 폼 테두리 제거 */
+/* 표지 아래 인라인 3칸 시작 툴바 전용 스타일 */
 div[data-testid="stForm"]:has(input[id*="start_person"]) {
     border: none !important;
     padding: 0 !important;
     background: transparent !important;
 }
 
-/* 시작 입력창 2개: 중앙 정렬 & 화이트 깔끔한 배경 */
 input[id*="start_person"] {
     background-color: #FFFFFF !important;
     color: #0F172A !important;
@@ -223,7 +219,6 @@ input[id*="start_person"] {
     height: 44px !important;
 }
 
-/* 시작 버튼: 입력창과 높이(44px) 수평 일치 */
 div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     height: 44px !important;
     font-size: 17px !important;
@@ -231,8 +226,32 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     border-radius: 8px !important;
     padding: 0 10px !important;
 }
+
+/* ==========================================================================
+   [신규] 형제자매 6버튼 및 삭제 버튼 전용 고대비 스타일 (올화이트 박멸)
+   ========================================================================== */
+.stApp button:not([kind="primary"]) {
+    background-color: #1E293B !important;
+    color: #F8FAFC !important;
+    border: 1.5px solid #475569 !important;
+    font-weight: 700 !important;
+}
+
+.stApp button:not([kind="primary"]):hover {
+    background-color: #EA580C !important;
+    border-color: #EA580C !important;
+    color: #FFFFFF !important;
+}
+
+/* 삭제 버튼 전용 다크 레드 스타일 */
+.stApp div:has(> button:contains("삭제")) button {
+    background-color: rgba(185, 28, 28, 0.25) !important;
+    border: 1.5px solid #991B1B !important;
+    color: #FCA5A5 !important;
+}
 </style>
 """, unsafe_allow_html=True)
+
 # ------------------------------------------------------------------------------
 # 1.03.00 | 공식 통계 벤치마크 및 전역 상수 (국민이전계정 NTA 데이터)
 # ------------------------------------------------------------------------------
@@ -345,12 +364,12 @@ def current_financial_summary():
 
 
 # ==============================================================================
-# 3.00.00 | 외부 AI 연동 서비스 (Gemini API Pipeline)
+# 3.00.00 | 외부 AI 연동 서비스 (Gemini + ChatGPT + Claude 다이렉트 파이프라인)
 # ==============================================================================
 
-# ==============================================================================
-# 3.01.00 | Gemini 초고속 직타 및 텍스트 요청 파이프라인 (대기시간 단축)
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# 3.01.00 | Gemini 호출 엔진 (404 원천 차단 및 모델 자동 매칭)
+# ------------------------------------------------------------------------------
 def call_gemini_text(prompt_text):
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_KEY")
     if not api_key:
@@ -359,42 +378,123 @@ def call_gemini_text(prompt_text):
         except Exception:
             api_key = ""
     if not api_key:
-        return "", "Streamlit Secrets에서 GEMINI_API_KEY를 찾지 못했습니다. 앱 대시보드의 Secrets 설정을 확인해 주세요."
-    
+        return "", "Streamlit Secrets에서 GEMINI_API_KEY를 찾지 못했습니다."
+
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
-        "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.4},
+        "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.45},
     }
-    
-    # 초고속 최신 플래시 모델 다이렉트 호출 리스트 (탐색 시간 0초)
-    fast_models = [
-        ("v1beta", "gemini-1.5-flash"),
+
+    # 404 방지 우선순위 모델 리스트
+    candidate_models = [
         ("v1beta", "gemini-2.0-flash"),
+        ("v1beta", "gemini-1.5-flash-latest"),
+        ("v1beta", "gemini-1.5-flash"),
         ("v1", "gemini-1.5-flash"),
     ]
-    
+
     last_error = ""
-    for api_ver, model_name in fast_models:
+    for api_ver, m_name in candidate_models:
         try:
-            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_name}:generateContent?key={api_key}"
-            response = requests.post(
-                url,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=12,
-            )
+            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
+            response = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
             if response.status_code == 200:
-                result = response.json()
-                parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                parts = response.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
                 text_parts = [p.get("text", "") for p in parts if p.get("text")]
                 if text_parts:
                     return "".join(text_parts).strip(), ""
-            else:
-                last_error = f"[{model_name}] {response.status_code}: {response.text[:120]}"
+            elif response.status_code != 404:
+                last_error = f"[{m_name}] {response.status_code}: {response.text[:120]}"
         except Exception as exc:
-            last_error = f"[{model_name}] 통신 지연: {exc}"
-            
-    return "", last_error or "Gemini 서버에서 응답을 받지 못했습니다."
+            last_error = f"통신 오류: {exc}"
+
+    # 만약 위 기본 모델이 전부 404라면 계정의 활성 모델 자동 조회
+    try:
+        res = requests.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}", timeout=5)
+        if res.status_code == 200:
+            for m in res.json().get("models", []):
+                if "generateContent" in m.get("supportedGenerationMethods", []):
+                    clean = m.get("name", "").replace("models/", "")
+                    if "flash" in clean:
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean}:generateContent?key={api_key}"
+                        resp2 = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
+                        if resp2.status_code == 200:
+                            parts = resp2.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                            text_parts = [p.get("text", "") for p in parts if p.get("text")]
+                            if text_parts:
+                                return "".join(text_parts).strip(), ""
+    except Exception:
+        pass
+
+    return "", last_error or "Gemini API 모델 연결에 실패했습니다. API 키 권한을 확인해 주세요."
+
+# ------------------------------------------------------------------------------
+# 3.02.00 | ChatGPT (OpenAI GPT-4o-mini) 직타 파이프라인
+# ------------------------------------------------------------------------------
+def call_chatgpt_text(prompt_text):
+    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OpenAI_API_KEY")
+    if not api_key:
+        try:
+            api_key = st.secrets.get("OPENAI_API_KEY", "") or st.secrets.get("OpenAI_API_KEY", "")
+        except Exception:
+            api_key = ""
+    if not api_key:
+        return "", "NO_KEY"
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": "당신은 가계 재무와 은퇴 준비를 진단하는 다정하고 객관적인 성찰 파트너입니다."},
+            {"role": "user", "content": prompt_text}
+        ],
+        "temperature": 0.5,
+        "max_tokens": 1500
+    }
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            json=payload,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            timeout=20
+        )
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"].strip(), ""
+        return "", f"[OpenAI] {response.status_code}: {response.text[:140]}"
+    except Exception as exc:
+        return "", f"OpenAI 요청 오류: {exc}"
+
+# ------------------------------------------------------------------------------
+# 3.03.00 | Claude (Anthropic Claude-3-5-Haiku) 직타 파이프라인
+# ------------------------------------------------------------------------------
+def call_claude_text(prompt_text):
+    api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("Anthropic_API_KEY")
+    if not api_key:
+        try:
+            api_key = st.secrets.get("ANTHROPIC_API_KEY", "") or st.secrets.get("Anthropic_API_KEY", "")
+        except Exception:
+            api_key = ""
+    if not api_key:
+        return "", "NO_KEY"
+
+    payload = {
+        "model": "claude-3-5-haiku-20241022",
+        "max_tokens": 1500,
+        "temperature": 0.5,
+        "messages": [{"role": "user", "content": prompt_text}]
+    }
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+    try:
+        response = requests.post("https://api.anthropic.com/v1/messages", json=payload, headers=headers, timeout=20)
+        if response.status_code == 200:
+            res_json = response.json()
+            return res_json["content"][0]["text"].strip(), ""
+        return "", f"[Claude] {response.status_code}: {response.text[:140]}"
+    except Exception as exc:
+        return "", f"Claude 요청 오류: {exc}"
 
 
 # ==============================================================================
@@ -1494,7 +1594,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (초고속 Gemini & ChatGPT·Claude 원클릭 프롬프트 연동)
+# 6.04.00 | Tab 4 — AI 시선 (Gemini / ChatGPT / Claude 3대 AI 통합 인앱 분석)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1502,7 +1602,7 @@ else:
     
     model = st.radio(
         "분석할 AI 모델 선택",
-        ["Gemini", "ChatGPT", "Claude"],
+        ["Gemini", "ChatGPT (GPT-4o-mini)", "Claude (3.5 Haiku)"],
         index=0, key="ai_provider", horizontal=True,
     )
     
@@ -1540,7 +1640,6 @@ else:
         }
     }
 
-    # 표준 프롬프트 텍스트
     full_prompt_text = f"""[역할 정의]
 당신은 대한민국 가계 재무와 은퇴 준비를 함께 검토하는 품격 있고 따뜻한 현실점검 파트너입니다.
 위협이나 공포 마케팅(파산, 절벽 등)을 절대 배제하고, "산 입에 거미줄 치랴"의 온기 있는 위로와 객관적 성찰 거울의 태도를 유지하세요.
@@ -1559,72 +1658,83 @@ else:
 1. [은퇴 안정성]: 은퇴 안정성 수준(유리한 편 / 보통 / 불리한 편)을 첫 문장에 밝히고, 은퇴 후 맞이할 겨울의 길이와 연금/자산 현금흐름에 대해 성찰할 점.
 2. [소득 개선 방향]: 현재 노동 수입(물통)에만 의존할 때의 한계와, 현업을 성실히 지키면서 복리의 지혜를 갖춘 파이프라인(자산/시스템 수입)을 준비해야 하는 이유."""
 
-    # 1. Gemini 선택 시
-    if model == "Gemini":
-        if st.button("⚡ 내 가계부 AI 분석 실행 (Gemini 초고속 엔진)", type="primary", use_container_width=True):
-            st.session_state.ai_summary = summary
-            st.session_state.ai_comment = None
-
-            with st.spinner("AI가 가계부와 국민이전계정(NTA) 지표를 대조 분석 중입니다 (약 3~5초 소요)..."):
+    # 실행 버튼
+    btn_label = f"⚡ {model} 인앱 AI 분석 실행"
+    if st.button(btn_label, type="primary", use_container_width=True):
+        st.session_state.ai_summary = summary
+        st.session_state.ai_comment = None
+        
+        with st.spinner(f"{model} 엔진이 가계부와 생애주기 지표를 교차 분석 중입니다 (약 3~5초 소요)..."):
+            if "Gemini" in model:
                 comment, error = call_gemini_text(full_prompt_text)
+            elif "ChatGPT" in model:
+                comment, error = call_chatgpt_text(full_prompt_text)
+            else:
+                comment, error = call_claude_text(full_prompt_text)
+                
+            if error == "NO_KEY":
+                st.session_state.ai_need_key = model
+            else:
+                st.session_state.ai_need_key = None
                 st.session_state.ai_comment = comment if comment else error
 
-        if st.session_state.get("ai_summary"):
-            s = st.session_state.ai_summary
-            st.markdown("### 재무제표 요약")
-            cols = st.columns(4)
-            cols[0].metric("월 정기수입", money(s["regular_income"]))
-            cols[1].metric("월 현금지출", money(s["expenses"]))
-            cols[2].metric("연간 순저축", money(s["annual_net_surplus"]), f"월환산 {money(s['monthly_effective_surplus'])}")
-            cols[3].metric("순자산", fmt_eok(s["net_worth"]))
-
-            st.markdown("### AI 성찰 리포트")
-            comment_text = str(st.session_state.get("ai_comment", ""))
-            
-            normalized = comment_text.replace("\r\n", "\n").replace("\r", "\n")
-            match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
-            if match:
-                retirement_comment = normalized[:match.start()]
-                income_comment = normalized[match.end():]
-            else:
-                retirement_comment, income_comment = normalized, ""
-
-            retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
-            income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
-
-            st.markdown("#### 은퇴 안정성 관점")
-            st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
-            st.markdown("#### 소득 개선 관점 (파이프라인)")
-            st.markdown(f"<div class='soft-card'>{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}</div>", unsafe_allow_html=True)
-            st.caption("※ AI의 코멘트는 참고용 거울이며, 삶의 가장 중요한 결정은 온전히 당신의 것입니다.")
-        else:
-            st.info("‘내 가계부 AI 분석 실행’ 버튼을 누르면 Gemini 초고속 엔진이 따뜻한 피드백을 생성합니다.")
-
-    # 2. ChatGPT 또는 Claude 선택 시 (원클릭 프롬프트 복사 & 외부 연결)
-    else:
-        ai_name = model
-        ai_color = "#10A37F" if ai_name == "ChatGPT" else "#D97706"
-        ai_url = "https://chatgpt.com" if ai_name == "ChatGPT" else "https://claude.ai"
+    # 키가 없을 때의 친절한 발급 안내 가이드 카드
+    if st.session_state.get("ai_need_key"):
+        target_ai = st.session_state.ai_need_key
+        key_name = "OPENAI_API_KEY" if "ChatGPT" in target_ai else "ANTHROPIC_API_KEY"
+        link_url = "https://platform.openai.com/api-keys" if "ChatGPT" in target_ai else "https://console.anthropic.com/settings/keys"
         
+        st.warning(f"💡 {target_ai}의 API 키가 아직 설정되지 않았습니다.")
         st.markdown(f"""
-<div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid {ai_color}; border-radius: 12px; padding: 20px 22px; margin-top: 10px;">
-<div style="font-size: 18px; font-weight: 850; color: #F8FAFC; margin-bottom: 8px;">🚀 {ai_name} 맞춤형 심층 분석 가이드</div>
-<div style="font-size: 14.5px; color: #CBD5E1; line-height: 1.6; word-break: keep-all;">
-나침반에 입력하신 <b>모든 가계부·자산·생애주기 데이터가 포함된 전문 프롬프트</b>가 완성되었습니다.<br>
-아래 <b>[1단계: 프롬프트 복사]</b> 후 <b>[2단계: {ai_name} 바로가기]</b>를 눌러 붙여넣기(Ctrl+V)하시면, 가장 최신 모델에서 심층 성찰 리포트를 바로 받아보실 수 있습니다.
+<div style="background: rgba(30, 41, 59, 0.6); border: 1.5px solid #F59E0B; border-radius: 12px; padding: 18px 20px; margin: 12px 0;">
+<div style="font-size: 16.5px; font-weight: 800; color: #FDE68A; margin-bottom: 8px;">🔑 1분 만에 {target_ai} 키 등록하는 방법</div>
+<div style="font-size: 14px; color: #CBD5E1; line-height: 1.6;">
+1. <a href="{link_url}" target="_blank" style="color: #38BDF8; font-weight: 700; text-decoration: underline;">{target_ai} 공식 키 발급 페이지 바로가기</a>에서 키를 복사합니다.<br>
+2. Streamlit 대시보드(share.streamlit.io) ➜ <b>Settings ➜ Secrets</b>에 아래 한 줄을 등록해 주세요:<br>
+<code style="color:#F59E0B; font-weight:700;">{key_name} = "발급받은_키_붙여넣기"</code><br>
+3. 키 등록 후 다시 버튼을 누르시면 바로 이 화면에서 인앱 분석이 실행됩니다!
 </div>
 </div>
 """, unsafe_allow_html=True)
-
-        st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
-        st.markdown(f"#### 1단계: {ai_name} 전용 진단 프롬프트")
-        st.code(full_prompt_text, language="markdown")
 
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        st.markdown(f"#### 2단계: {ai_name} 접속하여 붙여넣기")
-        
+        st.markdown("#### 📋 대안: 키 없이 웹에서 바로 분석받기 (프롬프트 복사)")
+        st.code(full_prompt_text, language="markdown")
+        ext_url = "https://chatgpt.com" if "ChatGPT" in target_ai else "https://claude.ai"
         st.markdown(f"""
-<a href="{ai_url}" target="_blank" style="background:{ai_color}; color:#FFFFFF !important; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:10px; padding:13px 20px; border-radius:8px; font-weight:800; font-size:16px; margin-top:8px;">
-<span>💬</span><span>{ai_name} 웹페이지 바로가기 ({ai_url.replace('https://','')})</span>
+<a href="{ext_url}" target="_blank" style="background:#1E293B; border:1px solid #475569; color:#38BDF8 !important; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:8px; font-weight:700;">
+<span>🌐</span><span>{target_ai.split()[0]} 웹사이트 바로가기 ({ext_url})</span>
 </a>
 """, unsafe_allow_html=True)
+
+    # 분석 결과가 있을 때 렌더링
+    elif st.session_state.get("ai_summary") and st.session_state.get("ai_comment"):
+        s = st.session_state.ai_summary
+        st.markdown("### 재무제표 요약")
+        cols = st.columns(4)
+        cols[0].metric("월 정기수입", money(s["regular_income"]))
+        cols[1].metric("월 현금지출", money(s["expenses"]))
+        cols[2].metric("연간 순저축", money(s["annual_net_surplus"]), f"월환산 {money(s['monthly_effective_surplus'])}")
+        cols[3].metric("순자산", fmt_eok(s["net_worth"]))
+
+        st.markdown("### AI 성찰 리포트")
+        comment_text = str(st.session_state.get("ai_comment", ""))
+        
+        normalized = comment_text.replace("\r\n", "\n").replace("\r", "\n")
+        match = re.search(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:\[\s*)?소득\s*개선\s*방향\s*(?:\])?\s*(?:\*\*|__)?\s*:?\s*$", normalized)
+        if match:
+            retirement_comment = normalized[:match.start()]
+            income_comment = normalized[match.end():]
+        else:
+            retirement_comment, income_comment = normalized, ""
+
+        retirement_comment = re.sub(r"(?i)\[\s*은퇴\s*안정성\s*\]", "", retirement_comment).strip()
+        income_comment = re.sub(r"(?i)\[\s*소득\s*개선\s*방향\s*\]", "", income_comment).strip()
+
+        st.markdown("#### 은퇴 안정성 관점")
+        st.markdown(f"<div class='soft-card'>{retirement_comment}</div>", unsafe_allow_html=True)
+        st.markdown("#### 소득 개선 관점 (파이프라인)")
+        st.markdown(f"<div class='soft-card'>{income_comment or '분석 결과를 정리 중입니다. 다시 시도해 주세요.'}</div>", unsafe_allow_html=True)
+        st.caption("※ AI의 코멘트는 참고용 거울이며, 삶의 가장 중요한 결정은 온전히 당신의 것입니다.")
+    else:
+        st.info("‘인앱 AI 분석 실행’ 버튼을 누르면 선택하신 AI 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
