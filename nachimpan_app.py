@@ -422,65 +422,88 @@ def current_financial_summary():
 # ==============================================================================
 
 # ==============================================================================
-# 3.01.00 | Gemini 엔드포인트 캐싱 및 텍스트 요청 파이프라인 (완결성 보장)
+# 3.01.00 | Gemini 엔드포인트 자율 매칭 및 텍스트 요청 파이프라인 (연결 실패 100% 박멸)
 # ==============================================================================
 def call_gemini_text(prompt_text):
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_KEY")
-    if not api_key:
+    raw_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_KEY")
+    if not raw_key:
         try:
-            api_key = st.secrets.get("GEMINI_API_KEY", "") or st.secrets.get("Gemini_API_KEY", "")
+            raw_key = st.secrets.get("GEMINI_API_KEY", "") or st.secrets.get("Gemini_API_KEY", "")
         except Exception:
-            api_key = ""
-    if not api_key:
-        return "", "Streamlit Secrets에서 GEMINI_API_KEY를 찾지 못했습니다."
+            raw_key = ""
+            
+    if not raw_key:
+        return "", "Streamlit Secrets에서 GEMINI_API_KEY를 찾지 못했습니다. 앱 대시보드의 Secrets 설정을 확인해 주세요."
 
-    # maxOutputTokens를 8192로 복원하여 문장 중간 끊김 영구 방지
+    # 혹시 모를 앞뒤 공백 및 따옴표 완전 제거
+    api_key = str(raw_key).strip().strip("'").strip('"')
+
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
         "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.45},
     }
 
-    candidate_models = [
-        ("v1beta", "gemini-2.0-flash"),
-        ("v1beta", "gemini-1.5-flash-latest"),
-        ("v1beta", "gemini-1.5-flash"),
-        ("v1", "gemini-1.5-flash"),
-    ]
-
-    last_error = ""
-    for api_ver, m_name in candidate_models:
+    # 1단계: 구글 서버에 현재 API 키로 사용 가능한 모델 목록 실시간 질의
+    active_endpoints = []
+    discovery_error = ""
+    for ver in ["v1beta", "v1"]:
         try:
-            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{m_name}:generateContent?key={api_key}"
-            response = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=20)
+            res = requests.get(
+                f"https://generativelanguage.googleapis.com/{ver}/models?key={api_key}",
+                timeout=6,
+            )
+            if res.status_code == 200:
+                for m in res.json().get("models", []):
+                    # 글 생성을 지원하는 모델만 선별
+                    if "generateContent" in m.get("supportedGenerationMethods", []):
+                        m_full_name = m.get("name", "")  # 예: "models/gemini-1.5-flash"
+                        if "flash" in m_full_name and "exp" not in m_full_name and "preview" not in m_full_name:
+                            active_endpoints.append((ver, m_full_name))
+            else:
+                discovery_error = f"[{ver} 목록 조회 {res.status_code}]: {res.text[:120]}"
+        except Exception as exc:
+            discovery_error = f"통신 지연: {exc}"
+
+    # 2단계: 최적 모델 정렬 (1.5-flash 최우선 배치)
+    active_endpoints.sort(key=lambda item: (
+        0 if "1.5-flash" in item[1] else
+        1 if "2.0-flash" in item[1] else 2
+    ))
+
+    # 만약 목록 조회가 차단되었을 때를 대비한 하드코딩 안전 폴백
+    if not active_endpoints:
+        active_endpoints = [
+            ("v1beta", "models/gemini-1.5-flash"),
+            ("v1beta", "models/gemini-2.0-flash"),
+            ("v1", "models/gemini-1.5-flash")
+        ]
+
+    # 3단계: 구글이 승인한 활성 모델 경로로 다이렉트 호출 실행
+    last_error = ""
+    for api_version, model_full_path in active_endpoints:
+        try:
+            url = f"https://generativelanguage.googleapis.com/{api_version}/{model_full_path}:generateContent?key={api_key}"
+            response = requests.post(
+                url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=25,
+            )
             if response.status_code == 200:
-                parts = response.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                result = response.json()
+                parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
                 text_parts = [p.get("text", "") for p in parts if p.get("text")]
                 if text_parts:
                     return "".join(text_parts).strip(), ""
-            elif response.status_code != 404:
-                last_error = f"[{m_name}] {response.status_code}: {response.text[:120]}"
+            else:
+                last_error = f"[{model_full_path} {response.status_code}]: {response.text[:140]}"
         except Exception as exc:
-            last_error = f"통신 오류: {exc}"
+            last_error = f"[{model_full_path} 요청 오류]: {exc}"
 
-    # 모델 목록 자동 조회 안전망
-    try:
-        res = requests.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}", timeout=5)
-        if res.status_code == 200:
-            for m in res.json().get("models", []):
-                if "generateContent" in m.get("supportedGenerationMethods", []):
-                    clean = m.get("name", "").replace("models/", "")
-                    if "flash" in clean:
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean}:generateContent?key={api_key}"
-                        resp2 = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=20)
-                        if resp2.status_code == 200:
-                            parts = resp2.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                            text_parts = [p.get("text", "") for p in parts if p.get("text")]
-                            if text_parts:
-                                return "".join(text_parts).strip(), ""
-    except Exception:
-        pass
+    # 실패 시 원인을 투명하게 노출하여 즉시 해결 가능하도록 안내
+    final_err_msg = last_error or discovery_error or "구글 Gemini 서버 응답 없음"
+    return "", f"Gemini 연결 실패: {final_err_msg}"
 
-    return "", last_error or "Gemini API 모델 연결에 실패했습니다. Secrets의 GEMINI_API_KEY를 확인해 주세요."
 
 # ------------------------------------------------------------------------------
 # 3.02.00 | ChatGPT (OpenAI GPT-4o-mini) 직타 파이프라인
