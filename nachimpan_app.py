@@ -551,7 +551,7 @@ def call_claude_text(prompt_text):
 # ==============================================================================
 
 # ==============================================================================
-# 4.01.00 | 첫 진입 표지 및 인라인 시작 바 (카톡 진단코드 동기화 탑재)
+# 4.01.00 | 첫 진입 표지 및 인라인 시작 바 (클린 미니멀 툴바 복원)
 # ==============================================================================
 cover_file_path = None
 possible_covers = [
@@ -582,7 +582,7 @@ if not st.session_state.started:
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
         
-        # 1. 일반 시작 바
+        # 표지 바로 아래 슬림 툴바 (군더더기 없이 깔끔하게 복원)
         with st.form("start_inline_form", clear_on_submit=False):
             in_col1, in_col2, in_col3 = st.columns([2.0, 1.1, 1.1])
             
@@ -613,51 +613,49 @@ if not st.session_state.started:
                     st.session_state.person_age = int(age)
                     st.session_state.started = True
                     st.rerun()
-
-        # 2. 인터뷰어 전용: 카톡 진단 데이터 불러오기 (원터치 동기화)
-        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-        with st.expander("📥 카카오톡 진단 데이터 불러오기 (인터뷰어 동기화)"):
-            st.markdown("<div style='font-size: 13.5px; color: #CBD5E1; margin-bottom: 6px;'>인터뷰이에게 카톡으로 전달받은 <b>리포트 전문</b> 또는 <b>복원코드(NC-...)</b>를 아래에 붙여넣으세요.</div>", unsafe_allow_html=True)
-            pasted_code = st.text_area("카톡 내용 붙여넣기", placeholder="카카오톡 메시지나 NC-코드를 그대로 붙여넣으세요", height=90, label_visibility="collapsed")
-            if st.button("🔄 인터뷰이 데이터로 나침반 열기", type="primary", use_container_width=True):
-                ok, msg = import_diagnosis_code(pasted_code)
-                if ok:
-                    st.success(msg)
-                    st.rerun()
-                else:
-                    st.error(msg)
             
     st.stop()
     
 # ==============================================================================
-# 4.02.00 | 사이드바 프로필 요약 카드 (은은한 그레이톤 익명 배지)
+# 4.02.00 | 사이드바 프로필 요약 및 카톡 리포트 동기화
 # ==============================================================================
 with st.sidebar:
-    # 1. 익명 고유번호: 튀지 않는 차분한 회색톤으로 은은하게 톤다운
+    # 1. 익명 고유번호 배지
     st.markdown(f"""
-    <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; text-align: center; margin-bottom: 20px;">
-        <div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: 0.04em;">익명 진단 고유번호</div>
-        <div style="font-size: 20px; font-weight: 750; color: #cbd5e1; letter-spacing: 1px; margin-top: 3px;">{st.session_state.anonymous_id}</div>
-    </div>
-    """, unsafe_allow_html=True)
+<div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; text-align: center; margin-bottom: 20px;">
+<div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: 0.04em;">익명 진단 고유번호</div>
+<div style="font-size: 20px; font-weight: 750; color: #cbd5e1; letter-spacing: 1px; margin-top: 3px;">{st.session_state.anonymous_id}</div>
+</div>
+""", unsafe_allow_html=True)
 
-    # 2. 나의 프로필 정보 (셀프 거울 호칭 적용)
-    st.markdown("#### 나의 기본 정보")
-    st.markdown(f"**나의 이름/별칭:** {st.session_state.get('person_name','')}")
-    st.markdown(f"**나의 나이:** {st.session_state.get('person_age','')}세")
+    # 2. 나의 프로필 정보 (진단 시작 후 활성화)
+    if st.session_state.started:
+        st.markdown("#### 나의 기본 정보")
+        st.markdown(f"**나의 이름/별칭:** {st.session_state.get('person_name','')}")
+        st.markdown(f"**나의 나이:** {st.session_state.get('person_age','')}세")
 
-    # 3. 우리집 듀얼 소득 형태 연동
-    q_self = active_quadrant(st.session_state.get("job_form", ""))
-    q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
+        q_self = active_quadrant(st.session_state.get("job_form", ""))
+        q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
+        types_desc = []
+        if q_self: types_desc.append(f"나({q_self})")
+        if q_spouse: types_desc.append(f"배우자({q_spouse})")
+        dual_income_str = " + ".join(types_desc) if types_desc else "아직 미선택"
+        st.markdown(f"**우리집 소득 형태:** {dual_income_str}")
 
-    types_desc = []
-    if q_self:
-        types_desc.append(f"나({q_self})")
-    if q_spouse:
-        types_desc.append(f"배우자({q_spouse})")
+    # 3. [인터뷰어 전용] 카톡 리포트 불러오기 (사이드바 안착)
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+    with st.expander("📥 카톡 리포트 불러오기"):
+        st.markdown("<div style='font-size: 13px; color: #CBD5E1; margin-bottom: 6px;'>카톡으로 전달받은 <b>리포트 전문</b> 또는 <b>NC-코드</b>를 붙여넣으세요.</div>", unsafe_allow_html=True)
+        pasted_code = st.text_area("카톡 내용 붙여넣기", placeholder="NC-코드를 붙여넣으세요", height=90, key="sb_pasted_code", label_visibility="collapsed")
+        if st.button("🔄 데이터 동기화", type="primary", use_container_width=True, key="sb_btn_sync"):
+            ok, msg = import_diagnosis_code(pasted_code)
+            if ok:
+                st.success(msg)
+                st.rerun()
+            else:
+                st.error(msg)
 
-    dual_income_str = " + ".join(types_desc) if types_desc else "아직 미선택"
-    st.markdown(f"**우리집 소득 형태:** {dual_income_str}")
+    st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
     st.caption("※ 나침반은 외부 서버에 저장되지 않는 일회성 안전 세션입니다.")
 
 
@@ -1656,7 +1654,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (카카오톡 원터치 전송·고대비 다크 래핑 박스 탑재)
+# 6.04.00 | Tab 4 — AI 시선 (Web Share API 카톡 원터치 공유 & 다크 리포트)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1764,7 +1762,7 @@ else:
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
         # ----------------------------------------------------------------------
-        # 💬 카카오톡 전송 리포트 (고대비 다크 래핑 박스 & 원터치 전송)
+        # 💬 카카오톡 전송 리포트 (Web Share API 및 클립보드 복사 엔진)
         # ----------------------------------------------------------------------
         sync_code = export_diagnosis_code()
         
@@ -1789,42 +1787,64 @@ else:
 {sync_code}
 ----------------------------------------"""
 
+        # 자바스크립트 전달용 Base64 안전 인코딩
+        raw_b64 = base64.b64encode(kakao_report_text.encode('utf-8')).decode('utf-8')
+
         st.markdown("""
 <div style="background: rgba(30, 41, 59, 0.55); border: 1.5px solid #F59E0B; border-radius: 14px; padding: 20px 22px; margin-top: 15px;">
 <div style="font-size: 18px; font-weight: 850; color: #FDE68A; margin-bottom: 8px;">💬 카카오톡으로 리포트 전송하기</div>
 <div style="font-size: 14px; color: #CBD5E1; line-height: 1.6;">
-아래 <b>[💬 카카오톡으로 전송]</b> 버튼을 누르면 스마트폰 카카오톡이 열리며 나와의 채팅이나 인터뷰어에게 바로 전달할 수 있습니다.<br>
-<span style="color:#94A3B8;">(PC 브라우저에서는 [📋 전문 복사]를 눌러 카톡 창에 붙여넣으시면 됩니다.)</span>
+아래 <b>[💬 카카오톡 공유하기]</b>를 누르면 스마트폰 공유창이 열려 나와의 채팅 또는 인터뷰어에게 바로 보낼 수 있습니다.<br>
+<span style="color:#94A3B8;">(인터뷰어는 리포트 속 NC-코드를 복사하여 사이드바의 <b>[📥 카톡 리포트 불러오기]</b>에 넣으면 0.1초 만에 화면이 동기화됩니다.)</span>
 </div>
 </div>
 """, unsafe_allow_html=True)
-
-        # 모바일용 카톡 딥링크 (URL 인코딩)
-        import urllib.parse
-        encoded_msg = urllib.parse.quote(kakao_report_text)
-        kakao_send_url = f"https://sharer.kakao.com/talk/friends/picker/link?app_key=nachimpan&msg={encoded_msg}"
 
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         
         btn_c1, btn_c2 = st.columns(2)
         with btn_c1:
-            # 카카오톡 바로보내기 버튼 (스마트폰 환경 최적화)
+            # 모바일 표준 Web Share API ➜ 카카오톡 원터치 공유 버튼
             st.markdown(f"""
-<a href="kakaolink://send?text={encoded_msg}" target="_blank" style="background:#FEE500; color:#191919 !important; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px 14px; border-radius:8px; font-weight:800; font-size:16px; border:none; box-shadow:0 2px 6px rgba(0,0,0,0.2);">
-<span style="font-size:18px;">💬</span><span>카카오톡으로 바로 전송</span>
-</a>
+<button onclick="
+try {{
+    var decoded = decodeURIComponent(escape(window.atob('{raw_b64}')));
+    if (navigator.share) {{
+        navigator.share({{
+            title: '나침반 진단 리포트',
+            text: decoded
+        }}).catch(function(e){{}});
+    }} else {{
+        navigator.clipboard.writeText(decoded);
+        alert('카카오톡 리포트 전문이 복사되었습니다! 카톡 창에 붙여넣기(Ctrl+V)하세요.');
+    }}
+}} catch(err) {{
+    alert('복사 오류가 발생했습니다.');
+}}
+" style="background:#FEE500; color:#191919 !important; width:100%; height:48px; border-radius:8px; font-weight:800; font-size:16px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 2px 8px rgba(0,0,0,0.25);">
+<span style="font-size:18px;">💬</span><span>카카오톡으로 공유하기</span>
+</button>
 """, unsafe_allow_html=True)
+
         with btn_c2:
-            # PC 및 클립보드 복사용 안내
+            # PC 및 클립보드 전문 복사용 버튼
             st.markdown(f"""
-<button onclick="navigator.clipboard.writeText(decodeURIComponent('{encoded_msg}')); alert('카카오톡 리포트 전문이 클립보드에 복사되었습니다! 카카오톡 창에 붙여넣기(Ctrl+V)하세요.');" style="background:#1E293B; border:1.5px solid #475569; color:#38BDF8 !important; width:100%; height:48px; border-radius:8px; font-weight:800; font-size:15.5px; cursor:pointer;">
-📋 리포트 전문 클립보드 복사
+<button onclick="
+try {{
+    var decoded = decodeURIComponent(escape(window.atob('{raw_b64}')));
+    navigator.clipboard.writeText(decoded);
+    alert('카카오톡 리포트 전문이 클립보드에 복사되었습니다! 카카오톡 창에 붙여넣기(Ctrl+V)하세요.');
+}} catch(err) {{
+    alert('복사 오류가 발생했습니다.');
+}}
+" style="background:#1E293B; border:1.5px solid #475569; color:#38BDF8 !important; width:100%; height:48px; border-radius:8px; font-weight:800; font-size:15.5px; cursor:pointer;">
+📋 리포트 전문 복사
 </button>
 """, unsafe_allow_html=True)
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
 
-        # 화이트아웃을 100% 박멸한 다크 차콜 & 자연스러운 줄바꿈 카드
+        # 다크 네이비 테마에 완벽히 밀착된 고대비 래핑 박스
         st.markdown(f"""
 <div style="background: #0d1527; border: 1.5px solid #334155; border-radius: 10px; padding: 18px 20px; color: #F1F5F9; font-size: 14.5px; line-height: 1.7; white-space: pre-wrap; word-break: keep-all; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
 {kakao_report_text}
