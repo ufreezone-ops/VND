@@ -1694,7 +1694,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (훈계 배제 & 투명한 객관적 거울 원칙 고수)
+# 6.04.00 | Tab 4 — AI 시선 (맛 조절·원칙 선택·추가 프롬프트 탑재)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1772,18 +1772,79 @@ else:
 입력된 소득 유형과 재무 데이터를 바탕으로 근로소득 또는 자영업소득에 대한 의존 정도를 살펴보세요. 소득이 노동과 시간에 얼마나 연결되어 있는지는 확인 가능한 데이터의 범위에서만 설명하세요.
 현재 본업의 지속성, 소득 성장 가능성, 저축 여력과 부채 등 실제 상황에서 의미 있는 요소를 중심으로 서술하세요. 시스템이나 자산에서 발생하는 소득은 모든 사람에게 필요한 정답처럼 제시하지 말고, 여건에 따라 장기적으로 검토할 수 있는 선택지로 정중하게 다루세요."""
 
-    # 훈계나 결론 강요를 배제한 '객관적 거울' 프롬프트
+    # --------------------------------------------------------------------------
+    # ⚙️ AI 프롬프트 (맛 조절 · 원칙 선택 · 추가 입력 펼치기)
+    # --------------------------------------------------------------------------
+    with st.expander("⚙️ AI 프롬프트 (맛 조절 · 원칙 선택 · 추가 입력)"):
+        st.markdown("<div style='font-size:16px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>1. 분석 강도(맛) 선택</div>", unsafe_allow_html=True)
+        taste_mode = st.pills(
+            "분석 강도 선택",
+            ["☕ 순한맛 (위로/은유)", "🧭 보통맛 (정직한 거울)", "🌶️ 매운맛 (뼈아픈 직언)"],
+            default="🧭 보통맛 (정직한 거울)",
+            key="pills_ai_taste",
+            label_visibility="collapsed"
+        )
+
+        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:16px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>2. AI 핵심 원칙 (선택 및 제외)</div>", unsafe_allow_html=True)
+        
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            chk_1 = st.checkbox("평가/가르침 배제, '객관적 거울' 유지", value=True, key="chk_r1")
+            chk_2 = st.checkbox("훈계, 잔소리, 공포 유발, 결론 강요 금지", value=True, key="chk_r2")
+            chk_3 = st.checkbox("데이터에 없는 사실(결혼/주거 등) 임의 추정 금지", value=True, key="chk_r3")
+        with col_r2:
+            chk_4 = st.checkbox("계산된 예상값과 실현된 사실 엄격 구분", value=True, key="chk_r4")
+            chk_5 = st.checkbox("순자산 0원이나 초년생 단계를 실패로 규정 금지", value=True, key="chk_r5")
+            chk_6 = st.checkbox("사분면/경력만으로 소득 성격이나 안정성 단정 금지", value=True, key="chk_r6")
+
+        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:16px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>3. ✍️ 내가 직접 추가할 요청 사항 (선택)</div>", unsafe_allow_html=True)
+        user_custom_instruction = st.text_area(
+            "추가 요청사항",
+            placeholder="예: 30대 초반 주거 독립과 차량 유지비 관점도 함께 짚어줘 (비워두셔도 좋습니다)",
+            height=70,
+            key="inp_user_custom_prompt",
+            label_visibility="collapsed"
+        )
+
+    # 선택된 맛(강도)에 따른 프롬프트 지침
+    if "순한맛" in taste_mode:
+        taste_directive = """[분석 톤앤매너: ☕ 순한맛]
+- 직접적이거나 뼈아픈 표현을 지양하고, 은유적이고 다정하며 온기 있는 어조를 유지하세요.
+- 조상의 지혜인 "산 입에 거미줄 치랴"의 넉넉한 여유를 담고, 불안감을 자극하지 마세요.
+- 지금까지 성실하게 삶을 꾸려온 노고에 대한 깊은 인정과 위로를 중심으로 부드럽게 서술하세요."""
+    elif "매운맛" in taste_mode:
+        taste_directive = """[분석 톤앤매너: 🌶️ 매운맛]
+- 겉치레 립서비스와 안일한 위로를 일체 배제하고, 냉정하고 서늘할 정도로 팩트를 직설적으로 서술하세요.
+- 숫자가 가리키는 결손과 한계를 에둘러 말하지 말고 명확히 짚어, 환상을 깨고 현실을 직시할 수 있도록 뼈아프게 직언하세요."""
+    else:
+        taste_directive = """[분석 톤앤매너: 🧭 보통맛]
+- 힘을 빼고, 정직하되, 전문가답고, 정중한 태도를 견지하세요.
+- 과도한 낙관론과 과장된 위협을 모두 배제하고, 숫자를 있는 그대로 차분히 비춰주는 객관적 거울의 태도를 유지하세요."""
+
+    # 체크된 원칙들만 동적으로 조합
+    active_principles = []
+    if chk_1: active_principles.append("당신은 인터뷰이를 평가하거나 가르치지 않는 '정직하고 따뜻한 객관적 거울'입니다.")
+    if chk_2: active_principles.append("훈계, 잔소리, 공포를 유발하는 표현, 특정 행동이나 결론의 강요를 금지합니다.")
+    active_principles.append("자기소개, 인사말, 마크다운 가로선(---)을 쓰지 마세요.")
+    active_principles.append(f"[호칭 규칙]: [소득 개선 방향] 첫머리에서만 '{person_name}님,'을 사용할 수 있습니다. [은퇴 안정성]에서는 이름을 다시 부르지 마세요.")
+    active_principles.append(f"경력 단계({career_st}), 순자산 및 가족 생애 정보는 입력 데이터가 실제로 뒷받침하는 범위에서만 활용하세요.")
+    if chk_4: active_principles.append("입력된 사실, 수치로 계산할 수 있는 결과, 아직 확인되지 않은 가능성을 구분하세요. 계산된 예상값을 실제로 실현된 사실처럼 표현하지 마세요.")
+    if chk_3: active_principles.append("데이터에 없거나 '미정', '미등록', 공란으로 표시된 정보는 임의로 추정하지 마세요. 결혼, 출산, 주택 구입, 부모 지원 등의 계획을 예정된 사실처럼 서술하지 마세요.")
+    if chk_6: active_principles.append("사분면이나 경력 단계만으로 실제 소득의 성격, 파이프라인 보유 여부 또는 재무적 안정성을 단정하지 마세요.")
+    if chk_5: active_principles.append("순자산이 적거나 0에 가깝더라도 이를 실패로 규정하지 마세요. 소득, 지출, 저축 여력 등 다른 지표와 함께 해석하세요.")
+    active_principles.append("입력된 자료만으로 판단할 수 없는 사항은 단정하지 말고, 필요한 경우 확인이 필요하다고 짧게 밝혀주세요.")
+
+    principles_text = "\n".join([f"{i+1}. {p}" for i, p in enumerate(active_principles)])
+
+    # 사용자 직접 추가 지침 결합
+    custom_section = f"\n[사용자 맞춤 추가 요청사항]\n{user_custom_instruction.strip()}" if user_custom_instruction.strip() else ""
+
     full_prompt_text = f"""[절대 엄수 원칙]
-1. 당신은 인터뷰이를 평가하거나 가르치지 않는 '정직하고 따뜻한 객관적 거울'입니다.
-2. 훈계, 잔소리, 공포를 유발하는 표현, 특정 행동이나 결론의 강요를 금지합니다.
-3. 자기소개, 인사말, 마크다운 가로선(---)을 쓰지 마세요.
-4. [호칭 규칙]: [소득 개선 방향] 첫머리에서만 '{person_name}님,'을 사용할 수 있습니다. [은퇴 안정성]에서는 이름을 다시 부르지 마세요.
-5. 경력 단계({career_st}), 순자산 및 가족 생애 정보는 입력 데이터가 실제로 뒷받침하는 범위에서만 활용하세요.
-6. 입력된 사실, 수치로 계산할 수 있는 결과, 아직 확인되지 않은 가능성을 구분하세요. 계산된 예상값을 실제로 실현된 사실처럼 표현하지 마세요.
-7. 데이터에 없거나 '미정', '미등록', 공란으로 표시된 정보는 임의로 추정하지 마세요. 결혼, 출산, 주택 구입, 부모 지원 등의 계획을 예정된 사실처럼 서술하지 마세요.
-8. 사분면이나 경력 단계만으로 실제 소득의 성격, 파이프라인 보유 여부 또는 재무적 안정성을 단정하지 마세요.
-9. 순자산이 적거나 0에 가깝더라도 이를 실패로 규정하지 마세요. 소득, 지출, 저축 여력 등 다른 지표와 함께 해석하세요.
-10. 입력된 자료만으로 판단할 수 없는 사항은 단정하지 말고, 필요한 경우 확인이 필요하다고 짧게 밝혀주세요.
+{principles_text}
+{taste_directive}
+{custom_section}
 
 [인터뷰이 재무 및 생애 데이터]
 {json.dumps(details, ensure_ascii=False, indent=2)}
@@ -1801,11 +1862,12 @@ else:
 은퇴 후 월 희망 생활비와 예상 월연금의 차이를 설명하되, 입력된 값의 성격과 산출 근거가 불분명하면 안정성이 확보되었다고 단정하지 마세요. 두 금액의 단순 차액과 실제 은퇴 안정성은 구분하세요.
 은퇴 후 약 {winter_years}년은 계산상 가정으로 취급하세요. 현재 경력 단계와 순자산을 연결해 설명하되, 실제 현금 보유액이나 유동성 자료가 없다면 유동성 준비 상태를 평가하지 마세요. 결혼, 자녀, 주거 계획 등 확인되지 않은 미래 사건을 전제로 삼지 말고, 정중하고 담백하게 서술하세요."""
 
+    # AI 리포트 생성 버튼
     if st.button("⚡ AI 리포트 생성", type="primary", use_container_width=True):
         st.session_state.ai_summary = summary
         st.session_state.ai_comment = None
         
-        with st.spinner("AI가 가계부와 가족 생애주기 지표를 정밀 분석 중입니다 (약 15~20초 소요)..."):
+        with st.spinner(f"AI가 {taste_mode.split()[0]} 모드로 지표를 분석 중입니다 (약 15~20초 소요)..."):
             comment, error = call_gemini_text(full_prompt_text)
             st.session_state.ai_comment = comment if comment else error
 
@@ -1871,12 +1933,12 @@ else:
 
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
-        # 카카오톡 전송용 통합 리포트
         sync_code = export_diagnosis_code()
         
         kakao_report_text = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
 • 진단자: {person_name} ({person_age}세, {career_st})
 • 소득 형태: {st.session_state.get('job_form','직장인')} (배우자: {st.session_state.get('job_spouse_form','해당 없음')})
+• 분석 모드: {taste_mode}
 • 재무 요약:
   - 월 정기수입: {money(s['regular_income'])}
   - 월 현금지출: {money(s['expenses'])}
