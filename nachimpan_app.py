@@ -292,7 +292,7 @@ ESBI = {
 # ==============================================================================
 
 # ==============================================================================
-# 2.01.00 | 세션 상태 초기화 및 헬퍼 함수 (진단코드 동기화 엔진 탑재)
+# 2.01.00 | 세션 상태 초기화 및 헬퍼 함수 (경력 연차 동기화 키 포함)
 # ==============================================================================
 import zlib
 
@@ -307,9 +307,9 @@ def getv(key, default=0):
     val = st.session_state.get(key, default)
     return default if val is None else val
 
-# 인터뷰이 ➜ 인터뷰어 동기화 대상 핵심 데이터 키
+# 인터뷰이 ➜ 인터뷰어 동기화 대상 핵심 데이터 키 (경력 연차 career_stage 추가)
 SYNC_KEYS = [
-    "anonymous_id", "person_name", "person_age", "job_form", "job_spouse_form",
+    "anonymous_id", "person_name", "person_age", "job_form", "job_spouse_form", "career_stage",
     "income_self", "income_spouse", "income_other", "income_bonus", "income_pension",
     "expense_living", "expense_loan", "expense_other", "retirement_monthly_expenses",
     "asset_cash", "asset_financial", "asset_home", "asset_deposit", "asset_other",
@@ -769,20 +769,21 @@ selected_page = {
 # ==============================================================================
 
 # ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (차트 터치 잠금 & 세로축 동적 정수 단위)
+# 6.01.00 | Tab 1 — 우리집 가계부 (현업 연차 원터치 pills & 생애주기 궤적 연동)
 # ==============================================================================
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     
     with st.form("finance_form"):
         # ----------------------------------------------------------------------
-        # ⓪ 우리집 소득 성격
+        # ⓪ 우리집 소득 성격 (직업 및 현업 연차)
         # ----------------------------------------------------------------------
         with st.container(border=True, key="job-panel"):
             st.markdown("### ⓪ 우리집 소득 성격")
             
             job_options = ["직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
             job_spouse_options = ["해당 없음", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
+            career_options = ["🌱 3년 이하 (초년생)", "🌿 4~9년 (성장기)", "🌳 10년 이상 (베테랑)"]
             
             prev_job = st.session_state.get("job_form", "직장인")
             if prev_job not in job_options:
@@ -791,6 +792,10 @@ if selected_page == "우리집 가계부":
             prev_spouse_job = st.session_state.get("job_spouse_form", "해당 없음")
             if prev_spouse_job not in job_spouse_options:
                 prev_spouse_job = "해당 없음"
+
+            prev_career = st.session_state.get("career_stage", "🌱 3년 이하 (초년생)")
+            if prev_career not in career_options:
+                prev_career = "🌱 3년 이하 (초년생)"
             
             st.markdown("<div style='font-size: 17px; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;'>나의 직업은?</div>", unsafe_allow_html=True)
             job_selected = st.pills(
@@ -801,7 +806,18 @@ if selected_page == "우리집 가계부":
                 label_visibility="collapsed"
             )
             
-            st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            
+            st.markdown("<div style='font-size: 17px; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;'>나의 현업 경력(연차)은?</div>", unsafe_allow_html=True)
+            career_selected = st.pills(
+                "나의 현업 경력(연차)은?",
+                career_options,
+                default=prev_career,
+                key="pills_career_stage",
+                label_visibility="collapsed"
+            )
+
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
             
             st.markdown("<div style='font-size: 17px; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;'>배우자의 직업은? (선택)</div>", unsafe_allow_html=True)
             job_spouse_selected = st.pills(
@@ -873,10 +889,12 @@ if selected_page == "우리집 가계부":
 
     if save_finance:
         final_job = job_selected if job_selected else "직장인"
+        final_career = career_selected if career_selected else "🌱 3년 이하 (초년생)"
         final_spouse_job = "" if (not job_spouse_selected or job_spouse_selected == "해당 없음") else job_spouse_selected
         
         submitted_values = {
             "job_form": final_job,
+            "career_stage": final_career,
             "job_spouse_form": final_spouse_job,
             "income_self": income_self, "income_spouse": income_spouse,
             "income_other": income_other, "income_bonus": income_bonus,
@@ -892,7 +910,7 @@ if selected_page == "우리집 가계부":
         st.session_state["finance_saved_notice"] = True
 
     # --------------------------------------------------------------------------
-    # 우리집 재무 현황 (2x2 동일 규격 카드 & 세로 굵은 점선 분할)
+    # 우리집 재무 현황 (2x2 동일 규격 카드)
     # --------------------------------------------------------------------------
     q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
@@ -970,7 +988,7 @@ if selected_page == "우리집 가계부":
     cols[3].metric("순자산", fmt_eok(s["net_worth"]))
 
     # --------------------------------------------------------------------------
-    # 미래 순자산·연금 궤적 (터치 락 & 정수 단위 표시)
+    # 미래 순자산·연금 궤적 (경력 연차 및 생애주기 가족 이벤트 팩트 연동)
     # --------------------------------------------------------------------------
     st.markdown("### 미래 순자산·연금 궤적")
     
@@ -979,30 +997,45 @@ if selected_page == "우리집 가계부":
     retire_age = int(retire_val) if retire_val is not None else 65
     retire_age = max(cur_age, min(retire_age, 90))
     
-    # 1. 초기 순자산 (억 원 단위)
     start_asset_eok = s["net_worth"] / 10000.0
     base_annual_surplus_eok = s["annual_net_surplus"] / 10000.0
     
-    # [구간 1] 은퇴 전: 자산 축적기
+    career_st = st.session_state.get("career_stage", "🌱 3년 이하 (초년생)")
+    m_plan = st.session_state.get("marriage_plan", "미정")
+    c_plan = st.session_state.get("child_plan", "미정")
+    is_single_young = (int(getv("spouse_age", 0)) == 0 and cur_age < 40)
+
     ages_accum = list(range(cur_age, retire_age + 1))
     vals_accum_eok = []
     current_asset = start_asset_eok
     
     for a in ages_accum:
         vals_accum_eok.append(current_asset)
+        
+        # 기본 생애주기 소득 가중치
         if a < 45:
-            lifecycle_weight = 1.0 + (0.02 * (a - cur_age))
+            growth_step = 0.025 if "초년생" in career_st else 0.018
+            lifecycle_weight = 1.0 + (growth_step * (a - cur_age))
         elif 45 <= a <= 53:
             lifecycle_weight = 1.0 + (0.02 * (45 - cur_age)) - 0.15
         else:
             lifecycle_weight = max(0.65, 1.0 + (0.02 * (45 - cur_age)) - 0.25)
             
-        annual_save = base_annual_surplus_eok * max(0.1, lifecycle_weight)
+        # 미혼 청년의 결혼·출산 계획에 따른 객관적 생애 이벤트 팩트 반영
+        if is_single_young:
+            # 1~3년 내 결혼/주거 마련 계획 시 자산 지출 구간
+            if m_plan in ["1~3년 내 결혼 생각 있음", "결혼 예정/준비 중"] and (cur_age + 1 <= a <= cur_age + 3):
+                lifecycle_weight *= 0.75
+            # 출산 계획 시 30대 초중반 육아기 소득·지출 변동 구간
+            if c_plan in ["자녀 계획 있음", "출산 예정/준비 중"] and (33 <= a <= 36):
+                lifecycle_weight *= 0.65
+
+        annual_save = base_annual_surplus_eok * max(0.05, lifecycle_weight)
         current_asset += annual_save
 
     peak_asset_eok = vals_accum_eok[-1]
 
-    # [구간 2] 은퇴 후: 자산 인출·연금기
+    # 은퇴 후: 자산 인출·연금기
     ret_pension = float(getv("income_pension", 0) or 0)
     ret_expenses = float(getv("retirement_monthly_expenses", 200) or 0)
     annual_ret_cashflow_eok = ((ret_pension - ret_expenses) * 12) / 10000.0
@@ -1018,7 +1051,6 @@ if selected_page == "우리집 가계부":
             depletion_age = a
         ret_asset += annual_ret_cashflow_eok
 
-    # 최대치에 따른 동적 단위 판단 (1억 이상이면 '억', 1억 미만이면 '천만')
     max_val_eok = max(max(vals_accum_eok), max(vals_retire_eok) if vals_retire_eok else 0)
     use_cheonman = (max_val_eok < 1.0 and max_val_eok > 0)
     
@@ -1037,13 +1069,9 @@ if selected_page == "우리집 가계부":
         peak_disp = f"{peak_asset_eok:.0f}억 원" if abs(peak_asset_eok) >= 10 else f"{peak_asset_eok:.1f}억 원"
         hover_tmpl = "나이: %{x}세<br>추정 순자산: <b>%{y:.1f}억 원</b><extra></extra>"
 
-    # Plotly 차트 구성
     fig_asset = go.Figure()
-
-    # 기준선 (0)
     fig_asset.add_hline(y=0, line_dash="solid", line_color="#334155", line_width=1.5)
 
-    # 1. 은퇴 전 축적기
     fig_asset.add_trace(go.Scatter(
         x=ages_accum, y=y_accum,
         mode="lines+markers",
@@ -1055,7 +1083,6 @@ if selected_page == "우리집 가계부":
         hovertemplate=hover_tmpl
     ))
 
-    # 2. 은퇴 후 인출기
     fig_asset.add_trace(go.Scatter(
         x=ages_retire, y=y_retire,
         mode="lines+markers",
@@ -1067,7 +1094,6 @@ if selected_page == "우리집 가계부":
         hovertemplate=hover_tmpl
     ))
 
-    # 피크 깃발
     fig_asset.add_vline(x=retire_age, line_dash="dash", line_color="#F8FAFC", line_width=2)
     fig_asset.add_annotation(
         x=retire_age, y=peak_asset_eok * mult,
@@ -1077,7 +1103,6 @@ if selected_page == "우리집 가계부":
         ay=-38, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#F59E0B", borderpad=4
     )
 
-    # 소진 깃발
     if depletion_age and depletion_age <= 90:
         fig_asset.add_annotation(
             x=depletion_age, y=0,
@@ -1098,15 +1123,15 @@ if selected_page == "우리집 가계부":
             tickfont=dict(size=13, color="#94A3B8"),
             gridcolor="rgba(100, 116, 139, 0.2)",
             tickmode="linear", tick0=20, dtick=5,
-            fixedrange=True  # 터치/드래그 확대·이동 잠금
+            fixedrange=True
         ),
         yaxis=dict(
             title=dict(text="추정 순자산", font=dict(size=14, color="#94A3B8")),
             tickfont=dict(size=13, color="#94A3B8"),
             ticksuffix=unit_str,
-            tickformat=",.0f",  # 소수점 완전 제거
+            tickformat=",.0f",
             gridcolor="rgba(100, 116, 139, 0.2)",
-            fixedrange=True  # 터치/드래그 확대·이동 잠금
+            fixedrange=True
         ),
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
@@ -1115,19 +1140,17 @@ if selected_page == "우리집 가계부":
         hovermode="x unified"
     )
 
-    # 터치 확대 및 모드바 완전 차단 고정
     st.plotly_chart(
         fig_asset,
         use_container_width=True,
         config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
     )
 
-    # 그래프 팩트 안내 카드
     bonus_note = f" (연간 상여금 {money(s['annual_bonus'])} 포함)" if s['annual_bonus'] > 0 else ""
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 10px; padding: 14px 16px; margin-top: 10px;">
 <div style="font-size: 13.5px; color: #CBD5E1; line-height: 1.6;">
-• <b>🌱 은퇴 전 (만 {cur_age}세 ~ {retire_age}세)</b>: 1년 총 저축여력({money(s['annual_net_surplus'])}{bonus_note})을 바탕으로, 국가데이터처 국민이전계정(NTA)의 생애주기 소득 피크(45세) 및 40~50대 가족 지출 집중기를 반영한 실질 자산 궤적입니다.<br>
+• <b>🌱 은퇴 전 (만 {cur_age}세 ~ {retire_age}세)</b>: 1년 총 저축여력({money(s['annual_net_surplus'])}{bonus_note})과 현업 경력({career_st}), 국가데이터처 국민이전계정(NTA)의 생애주기 소득 피크(45세) 및 가족 지출기를 결합한 실질 자산 궤적입니다.<br>
 • <b>🍂 은퇴 후 ({retire_age}세 ~ 90세)</b>: 예상 월 연금({ret_pension:,.0f}만 원)에서 노후 월 생활비({ret_expenses:,.0f}만 원)를 뺀 순현금흐름({annual_ret_cashflow_eok*10000:,.0f}만 원/년)에 따른 순자산 변화입니다.
 </div>
 </div>
@@ -1139,15 +1162,13 @@ if selected_page == "우리집 가계부":
             st.session_state["_pending_nav"] = "삶과 생계수단"
             st.rerun()
 
+
 # ==============================================================================
-# 6.02.00 | Tab 2 — 삶과 생계수단 (3색 테마 분할 & 인라인 은퇴설정)
+# 6.02.00 | Tab 2 — 삶과 생계수단 (물통/파이프라인 매핑 & 돌쇠와 똘똘이 우화)
 # ==============================================================================
 elif selected_page == "삶과 생계수단":
     st.markdown("## 삶과 생계수단")
     
-    # --------------------------------------------------------------------------
-    # 파트 1. 소득이 만들어지는 세 가지 모습 (딥 슬레이트 네이비 배경)
-    # --------------------------------------------------------------------------
     st.markdown("""
 <div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
 <div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 14px;">소득이 만들어지는 세 가지 모습</div>
@@ -1207,9 +1228,6 @@ elif selected_page == "삶과 생계수단":
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # --------------------------------------------------------------------------
-    # 파트 2. 산책로의 우화: 돌쇠와 똘똘이 (다크 앰버/골드 톤 배경)
-    # --------------------------------------------------------------------------
     st.markdown("""
 <div style="background: rgba(45, 35, 20, 0.55); border: 1.5px solid #6d4a1a; border-radius: 14px; padding: 22px 24px; margin-bottom: 22px;">
 <div style="font-size: 20px; font-weight: 850; color: #FDE68A; margin-bottom: 12px;">🌾 지혜로운 산책: 돌쇠와 똘똘이</div>
@@ -1242,9 +1260,6 @@ elif selected_page == "삶과 생계수단":
 </div>
 """, unsafe_allow_html=True)
 
-    # --------------------------------------------------------------------------
-    # 파트 3. 내가 생각하는 은퇴 예상 나이 (차콜 인디고 배경 & 인라인 배치)
-    # --------------------------------------------------------------------------
     st.markdown("""
 <div style="background: rgba(24, 32, 47, 0.65); border: 1.5px solid #3b4b66; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
 <div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 12px;">내가 생각하는 은퇴 예상 나이</div>
@@ -1273,17 +1288,17 @@ elif selected_page == "삶과 생계수단":
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # 하단 네비게이션 다음 버튼
     _, next_col = st.columns([5, 1])
     with next_col:
         if st.button("다음 →", key="livelihood_next", use_container_width=True, type="primary"):
-            st.session_state["retirement_age"] = int(retirement_input)
+            st.session_state["retirement_age"] = int(st.session_state.get("retirement_age_input", retirement_input))
             st.session_state["_pending_nav"] = "인생의 사계절"
             st.session_state["_scroll_to_top_once"] = True
             st.rerun()
 
+
 # ==============================================================================
-# 6.03.00 | Tab 3 — 인생의 사계절 (자녀 성년기 버그 수정 & 2열 나이 연동)
+# 6.03.00 | Tab 3 — 인생의 사계절 (생애주기 곡선에 가족계획 팩트 반영)
 # ==============================================================================
 elif selected_page == "인생의 사계절":
     if st.session_state.pop("_scroll_to_top_once", False):
@@ -1301,9 +1316,7 @@ elif selected_page == "인생의 사계절":
     retire_age = max(cur_age, min(retire_age, 90))
     years_left = max(0, retire_age - cur_age)
 
-    # --------------------------------------------------------------------------
     # 1. 가족 구성원과 은퇴 시점의 나이
-    # --------------------------------------------------------------------------
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
     child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
     child_count = st.selectbox(
@@ -1314,7 +1327,6 @@ elif selected_page == "인생의 사계절":
     )
 
     with st.form("family_form"):
-        # 배우자 & 첫째 자녀 (2열)
         r1_c1, r1_c2 = st.columns(2)
         with r1_c1:
             spouse_age = st.number_input("배우자 나이 (없거나 미입력 시 0)", min_value=0, max_value=120, value=int(st.session_state.get("spouse_age", 0)), step=1)
@@ -1325,7 +1337,6 @@ elif selected_page == "인생의 사계절":
             else:
                 st.write("")
 
-        # 둘째 자녀 & 셋째 자녀 (2열)
         child_age2 = int(st.session_state.get("child_age2", 0)) if child_count in ["2명", "3명 이상"] else 0
         child_age3 = int(st.session_state.get("child_age3", 0)) if child_count == "3명 이상" else 0
         if child_count in ["2명", "3명 이상"]:
@@ -1336,7 +1347,6 @@ elif selected_page == "인생의 사계절":
                 if child_count == "3명 이상":
                     child_age3 = st.number_input("셋째 자녀 나이", min_value=0, max_value=100, value=child_age3, step=1)
 
-        # 아버지 & 어머니 (2열)
         col_f, col_m = st.columns(2)
         with col_f:
             father_age = st.number_input("아버지 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("father_age", 0)), step=1)
@@ -1371,7 +1381,6 @@ elif selected_page == "인생의 사계절":
         st.session_state.housing_plan = housing_plan
         st.rerun()
 
-    # 형제자매 6버튼 원터치 추가 섹션
     if "sibling_items" not in st.session_state:
         st.session_state.sibling_items = []
 
@@ -1423,7 +1432,6 @@ elif selected_page == "인생의 사계절":
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # 가족 미래 나이 리스트 구성
     people = [(st.session_state.get("person_name", "나"), cur_age)]
     if getv("spouse_age", 0) > 0: people.append(("배우자", int(getv("spouse_age"))))
     if getv("child_age", 0) > 0: people.append(("첫째 자녀", int(getv("child_age"))))
@@ -1435,7 +1443,6 @@ elif selected_page == "인생의 사계절":
         if int(s_it.get("age", 0)) > 0:
             people.append((s_it["label"], int(s_it["age"])))
 
-    # 2열 슬림 카드 헤더
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 18px; margin: 18px 0 10px 0; display:flex; justify-content:space-between; align-items:center;">
 <span style="font-size: 15.5px; font-weight: 800; color: #F8FAFC;">📌 내가 은퇴하는 시점(만 {retire_age}세, {years_left}년 후)의 우리 가족 나이</span>
@@ -1459,7 +1466,6 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
-    # [수정] 자녀 연령에 따른 지출 피크 알림 정밀화 (성인 자녀 역전 버그 박멸)
     c_age1 = int(getv("child_age", 0))
     if 0 < c_age1 < 20:
         college_my_age = cur_age + (20 - c_age1)
@@ -1494,6 +1500,11 @@ elif selected_page == "인생의 사계절":
     ret_annual_pension = float(getv("income_pension", 0) or 0) * 12.0
     ret_annual_expense = float(getv("retirement_monthly_expenses", 200) or 0) * 12.0
 
+    career_st = st.session_state.get("career_stage", "🌱 3년 이하 (초년생)")
+    m_plan = st.session_state.get("marriage_plan", "미정")
+    c_plan = st.session_state.get("child_plan", "미정")
+    is_single_young = (int(getv("spouse_age", 0)) == 0 and cur_age < 40)
+
     ages_sim = list(range(20, 86))
     my_income_curve = []
     my_expense_curve = []
@@ -1503,10 +1514,16 @@ elif selected_page == "인생의 사계절":
             ratio = max(0.2, (a - 20) / max(1, (cur_age - 20)))
             my_income_curve.append(cur_annual_income * ratio)
         elif cur_age <= a < retire_age:
+            growth_step = 0.025 if "초년생" in career_st else 0.018
             if a <= 45:
-                w_inc = 1.0 + (0.02 * (a - cur_age))
+                w_inc = 1.0 + (growth_step * (a - cur_age))
             else:
                 w_inc = max(0.85, 1.0 + (0.02 * (45 - cur_age)) - (0.015 * (a - 45)))
+            
+            # 미혼 청년의 출산/육아기 소득 변동 팩트 반영
+            if is_single_young and c_plan in ["자녀 계획 있음", "출산 예정/준비 중"] and (33 <= a <= 35):
+                w_inc *= 0.82
+                
             my_income_curve.append(cur_annual_income * w_inc)
         else:
             my_income_curve.append(ret_annual_pension)
@@ -1514,10 +1531,15 @@ elif selected_page == "인생의 사계절":
         if a < cur_age:
             my_expense_curve.append(cur_annual_expense * 0.75)
         elif cur_age <= a < retire_age:
+            w_exp = 1.0
             if 46 <= a <= 53 and c_age1 < 20:
                 w_exp = 1.15
-            else:
-                w_exp = 1.0
+            # 미혼 청년의 결혼/주거 및 영유아 양육 지출 집중 팩트 반영
+            if is_single_young:
+                if m_plan in ["1~3년 내 결혼 생각 있음", "결혼 예정/준비 중"] and (cur_age + 1 <= a <= cur_age + 3):
+                    w_exp = max(w_exp, 1.12)
+                if c_plan in ["자녀 계획 있음", "출산 예정/준비 중"] and (33 <= a <= 37):
+                    w_exp = max(w_exp, 1.15)
             my_expense_curve.append(cur_annual_expense * w_exp)
         else:
             my_expense_curve.append(ret_annual_expense)
@@ -1591,9 +1613,7 @@ elif selected_page == "인생의 사계절":
         config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
     )
 
-    # --------------------------------------------------------------------------
     # 3. 인생의 사계절
-    # --------------------------------------------------------------------------
     winter_years = max(0, 88 - retire_age)
     winter_months = winter_years * 12
     
@@ -1628,7 +1648,7 @@ elif selected_page == "인생의 사계절":
 """
 
     card_spring = get_season_card_ui("spring", "🌱", "봄 (준비기)", "0세 ~ 27세", "부모님의 부양으로 배우고 성장하는 적자 구간")
-    card_summer = get_season_card_ui("summer", "☀️", "여름 (성장기)", "28세 ~ 45세", "돌쇠처럼 성실하게 일하여 최대 흑자를 만드는 시기")
+    card_summer = get_season_card_ui("summer", "☀️", "여름 (성장기)", "28세 ~ 45세", "성실하게 일하여 가정을 일구고 최대 흑자를 만드는 시기")
     card_autumn = get_season_card_ui("autumn", "🍂", "가을 (결실기)", f"46세 ~ {retire_age}세", "자녀 독립 & 똘똘이의 파이프라인을 다질 골든타임")
     card_winter = get_season_card_ui("winter", "❄️", "겨울 (음미기)", f"{retire_age}세 ~ 88세", f"근로소득 중단<br><b style='color:#38BDF8;'>약 {winter_years}년 ({winter_months}개월)</b>")
 
@@ -1649,7 +1669,6 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
-    # 4. 국가데이터처 공식 벤치마크 지표 & 고대비 링크 버튼
     st.markdown("### 국가데이터처 공식 생애 통계 지표 (대한민국 평균 기준)")
     col_m1, col_m2, col_m3 = st.columns(3)
     col_m1.metric("한국인 평균 흑자 진입", "28세", help="노동소득이 소비를 추월하는 연령")
@@ -1675,7 +1694,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (ESBI 맞춤형 지능형 리포트 & 파이프라인 인정)
+# 6.04.00 | Tab 4 — AI 시선 (훈계 배제 & 투명한 객관적 거울 원칙 고수)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1690,9 +1709,9 @@ else:
     winter_years = max(0, 88 - int(retire_age))
     child_count_str = st.session_state.get("child_count", "입력 안 함")
 
-    # 1. ESBI 사분면 분석 (인터뷰이의 진짜 소득 성격 판별)
     q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
+    career_st = st.session_state.get("career_stage", "🌱 3년 이하 (초년생)")
     has_pipeline = (q_self in ["B", "I"]) or (q_spouse in ["B", "I"])
 
     family_desc = {}
@@ -1723,6 +1742,7 @@ else:
         "이름/별칭": person_name,
         "나이": person_age,
         "나의 소득 형태": f"{st.session_state.get('job_form','직장인')}({q_self})",
+        "현업 경력 연차": career_st,
         "배우자 소득 형태": f"{st.session_state.get('job_spouse_form','해당 없음')}({q_spouse})",
         "파이프라인 보유 여부": "보유함 (사업가 B 또는 투자자 I 포함)" if has_pipeline else "미보유 (순수 근로/자영업 E·S)",
         "월수입(정기)": f"{summary['regular_income']:,.0f}만 원",
@@ -1742,42 +1762,45 @@ else:
         }
     }
 
-    # ESBI 사분면에 맞춘 동적 맞춤 지시문 생성
-    if q_self in ["B", "I"]:
-        income_instruction = f"""[소득 개선 방향 - B/I 파이프라인 보유형 인터뷰이 지침]
-절대 기계적으로 '노동에만 의존하는 물통 구조입니다'라고 억지 주장을 하지 마세요!
-인터뷰이는 현재 사분면상 '{q_self}'(사업가/투자자)로서 이미 시스템과 자산에서 발생하는 파이프라인(인세·사업·자산 소득)과 상당한 순자산({summary['net_worth']/10000:,.1f}억 원)을 확보하고 계십니다.
-이미 구축하신 훌륭한 파이프라인의 성취와 자산 기반을 정중히 인정하세요.
-다만 가계 수입 중 배우자의 노동소득(E/S)이 결합되어 있다면, 배우자의 노동 수입까지 점진적으로 자산/시스템 소득으로 결합하여 완전한 시간적 자유를 이루는 방향, 그리고 현재 사업 시스템과 자산 파이프라인의 영속성(경기 변동 방어 및 지속적인 현금흐름 유지)을 다지는 심도 있는 조언을 정중하게 제시하세요."""
+    if has_pipeline:
+        income_instruction = f"""[소득 개선 방향 - 가구 소득 구조 및 파이프라인 관점]
+본인 또는 배우자의 소득 유형 중 사업가/투자자(B/I)가 포함되어 있습니다. 다만 유형만으로 실제 사업 시스템, 투자소득, 파이프라인 또는 상당한 자산을 확보했다고 단정하지 마세요.
+입력된 소득과 자산 데이터가 뒷받침하는 범위에서 노동소득과 비노동소득의 관계를 살펴보세요. 실제 파이프라인이 확인되면 그 역할과 지속 가능성을 존중하고, 확인되지 않으면 보유 여부를 추정하지 마세요.
+배우자 소득이 확인되면 가구 전체의 소득 구성도 함께 고려하세요. 소득 다변화는 의무적인 처방이 아니라 현재 상황에 맞춰 검토할 수 있는 선택지로 다루세요."""
     else:
-        income_instruction = f"""[소득 개선 방향 - E/S 노동 물통형 인터뷰이 지침]
-현재 부부의 소득은 노동을 멈추면 수입이 끊기는 전형적인 물통(E/S) 구조임을 정중하게 짚으세요.
-생계를 위한 본업의 물통은 굳건히 지키되, 저녁과 주말 시간을 활용해 노동력과 무관하게 시스템과 자산에서 흘러나오는 '파이프라인'을 지금부터 작게라도 구축해야 하는 이유를 당당하고 설득력 있게 제안하세요."""
+        income_instruction = f"""[소득 개선 방향 - 근로·자영업 및 소득 개선 관점]
+입력된 소득 유형과 재무 데이터를 바탕으로 근로소득 또는 자영업소득에 대한 의존 정도를 살펴보세요. 소득이 노동과 시간에 얼마나 연결되어 있는지는 확인 가능한 데이터의 범위에서만 설명하세요.
+현재 본업의 지속성, 소득 성장 가능성, 저축 여력과 부채 등 실제 상황에서 의미 있는 요소를 중심으로 서술하세요. 시스템이나 자산에서 발생하는 소득은 모든 사람에게 필요한 정답처럼 제시하지 말고, 여건에 따라 장기적으로 검토할 수 있는 선택지로 정중하게 다루세요."""
 
-    # 프롬프트 조립
-    full_prompt_text = f"""[절대 엄수 규칙]
-1. 자기소개, 프롤로그, 인사말("안녕하세요", "전문가로서 살펴보겠습니다" 등)을 일체 작성하지 마세요.
-2. 마크다운 가로 구분선(---)을 절대 사용하지 마세요.
-3. [호칭 규칙]: 첫 번째 문단인 [소득 개선 방향] 첫머리에만 '{person_name}님,'을 쓰거나 생략할 수 있습니다. 두 번째 문단인 [은퇴 안정성]에는 절대로 이름을 다시 부르지 마세요(호칭 생략).
-4. 힘을 빼고, 정직하되, 전문가답고, 정중한 태도를 견지하세요. 근거 없는 낙관론은 배제하고 숫자를 있는 그대로 짚으세요.
-5. 인터뷰이의 직업({details['나의 소득 형태']})과 자산 규모를 철저히 존중하여 사실에 입각해 조언하세요.
+    # 훈계나 결론 강요를 배제한 '객관적 거울' 프롬프트
+    full_prompt_text = f"""[절대 엄수 원칙]
+1. 당신은 인터뷰이를 평가하거나 가르치지 않는 '정직하고 따뜻한 객관적 거울'입니다.
+2. 훈계, 잔소리, 공포를 유발하는 표현, 특정 행동이나 결론의 강요를 금지합니다.
+3. 자기소개, 인사말, 마크다운 가로선(---)을 쓰지 마세요.
+4. [호칭 규칙]: [소득 개선 방향] 첫머리에서만 '{person_name}님,'을 사용할 수 있습니다. [은퇴 안정성]에서는 이름을 다시 부르지 마세요.
+5. 경력 단계({career_st}), 순자산 및 가족 생애 정보는 입력 데이터가 실제로 뒷받침하는 범위에서만 활용하세요.
+6. 입력된 사실, 수치로 계산할 수 있는 결과, 아직 확인되지 않은 가능성을 구분하세요. 계산된 예상값을 실제로 실현된 사실처럼 표현하지 마세요.
+7. 데이터에 없거나 '미정', '미등록', 공란으로 표시된 정보는 임의로 추정하지 마세요. 결혼, 출산, 주택 구입, 부모 지원 등의 계획을 예정된 사실처럼 서술하지 마세요.
+8. 사분면이나 경력 단계만으로 실제 소득의 성격, 파이프라인 보유 여부 또는 재무적 안정성을 단정하지 마세요.
+9. 순자산이 적거나 0에 가깝더라도 이를 실패로 규정하지 마세요. 소득, 지출, 저축 여력 등 다른 지표와 함께 해석하세요.
+10. 입력된 자료만으로 판단할 수 없는 사항은 단정하지 말고, 필요한 경우 확인이 필요하다고 짧게 밝혀주세요.
 
 [인터뷰이 재무 및 생애 데이터]
 {json.dumps(details, ensure_ascii=False, indent=2)}
 
 [요청 사항]
-반드시 아래 순서대로 2개 문단 제목 형식([소득 개선 방향], [은퇴 안정성])을 정확히 지켜 작성하고, 제목 바로 다음 줄부터 곧바로 본론을 서술하세요. (각 250~350자)
+아래 두 제목을 지정된 순서와 표기 그대로 사용하세요.
+각 제목 다음 줄부터 본문을 작성하세요. 각 본문은 250~350자 내외로 하되, 분량을 채우기 위해 근거 없는 설명을 추가하지 마세요.
 
 [소득 개선 방향]
 {income_instruction}
-문장 중간의 비굴한 높임말(~시~, ~계신~)을 빼고 문장 끝에만 단정하게 '~합니다 / ~하십시오'로 종결하세요.
+현재 소득 구조와 재무 데이터에서 실제로 의미 있는 특징을 중심으로 서술하세요. 경력 단계, 저축 여력, 소득 성장 가능성, 가구의 소득 구성 중 근거가 있는 항목을 선택하세요. 파이프라인이나 자산소득은 필요성과 여건이 확인되는 경우에만 선택지로 제시하세요. 정중하고 담백한 존댓말을 사용하세요.
 
 [은퇴 안정성]
-절대 이름을 다시 부르지 마세요(호칭 생략). 곧바로 '은퇴 안정성 측면에서는...'으로 시작하세요.
-월 생활비와 예상 연금 사이의 현금흐름 밸런스, 그리고 은퇴 후 약 {winter_years}년간 지속될 유동성 준비 상태를 순자산 규모와 연계하여 객관적으로 명시하되, 정중하고 따뜻하게 이야기하세요.
-가만히 있어서는 안 되며, 자산을 마르지 않는 현금흐름 중심으로 재편하는 준비가 필요함을 분명히 직언하세요."""
+반드시 '은퇴 안정성 측면에서는'으로 시작하고 이름을 부르지 마세요.
+은퇴 후 월 희망 생활비와 예상 월연금의 차이를 설명하되, 입력된 값의 성격과 산출 근거가 불분명하면 안정성이 확보되었다고 단정하지 마세요. 두 금액의 단순 차액과 실제 은퇴 안정성은 구분하세요.
+은퇴 후 약 {winter_years}년은 계산상 가정으로 취급하세요. 현재 경력 단계와 순자산을 연결해 설명하되, 실제 현금 보유액이나 유동성 자료가 없다면 유동성 준비 상태를 평가하지 마세요. 결혼, 자녀, 주거 계획 등 확인되지 않은 미래 사건을 전제로 삼지 말고, 정중하고 담백하게 서술하세요."""
 
-    # AI 리포트 생성 버튼
     if st.button("⚡ AI 리포트 생성", type="primary", use_container_width=True):
         st.session_state.ai_summary = summary
         st.session_state.ai_comment = None
@@ -1786,7 +1809,6 @@ else:
             comment, error = call_gemini_text(full_prompt_text)
             st.session_state.ai_comment = comment if comment else error
 
-    # 분석 결과 렌더링
     if st.session_state.get("ai_summary") and st.session_state.get("ai_comment"):
         s = st.session_state.ai_summary
         st.markdown("### 재무제표 요약")
@@ -1799,7 +1821,6 @@ else:
         st.markdown("### AI (Gemini) 리포트")
         comment_text = str(st.session_state.get("ai_comment", ""))
         
-        # 가로선(---) 및 과도한 공백 정제
         cleaned_text = re.sub(r'-{3,}', '', comment_text)
         cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text.strip())
         normalized = cleaned_text.replace("\r\n", "\n").replace("\r", "\n")
@@ -1820,7 +1841,6 @@ else:
 
         retirement_comment = re.sub(r"^(?:.*?님[\,\s]*)+", "", retirement_comment).strip()
 
-        # 2문장 단위 모바일 호흡 줄바꿈 함수
         def format_readable_paragraph(txt):
             sentences = re.split(r'(?<=[.!?])\s+', txt.strip())
             if len(sentences) <= 2:
@@ -1833,7 +1853,6 @@ else:
         formatted_income = format_readable_paragraph(income_comment)
         formatted_retire = format_readable_paragraph(retirement_comment)
 
-        # 1. 소득 개선 관점
         st.markdown("#### 소득 개선 관점 (파이프라인)")
         st.markdown(f"""
 <div class='soft-card' style='white-space: pre-wrap; line-height: 1.7; word-break: keep-all;'>
@@ -1841,7 +1860,6 @@ else:
 </div>
 """, unsafe_allow_html=True)
 
-        # 2. 은퇴 안정성 관점
         st.markdown("#### 은퇴 안정성 관점")
         st.markdown(f"""
 <div class='soft-card' style='white-space: pre-wrap; line-height: 1.7; word-break: keep-all;'>
@@ -1853,13 +1871,11 @@ else:
 
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
-        # ----------------------------------------------------------------------
-        # 💬 카카오톡 전송용 통합 리포트
-        # ----------------------------------------------------------------------
+        # 카카오톡 전송용 통합 리포트
         sync_code = export_diagnosis_code()
         
         kakao_report_text = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
-• 진단자: {person_name} ({person_age}세)
+• 진단자: {person_name} ({person_age}세, {career_st})
 • 소득 형태: {st.session_state.get('job_form','직장인')} (배우자: {st.session_state.get('job_spouse_form','해당 없음')})
 • 재무 요약:
   - 월 정기수입: {money(s['regular_income'])}
@@ -1887,14 +1903,11 @@ else:
     else:
         st.info("‘AI 리포트 생성’ 버튼을 누르면 Gemini 초고속 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
 
-    # --------------------------------------------------------------------------
-    # 📋 AI 질의용 재무제표
-    # --------------------------------------------------------------------------
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
     with st.expander("📋 AI 질의용 재무제표"):
         st.markdown("<div style='font-size: 13.5px; color: #94A3B8; margin-bottom: 8px;'>프롬프트 지시문 없이, 내가 입력한 재무제표와 가족 생애 통계만 정리된 텍스트입니다. ChatGPT 등에 복사해서 자유롭게 추가 상담을 진행할 수 있습니다.</div>", unsafe_allow_html=True)
         raw_summary_report = f"""### 나침반 재무제표 및 생애주기 요약 데이터
-- 성명(별칭): {person_name} (만 {person_age}세)
+- 성명(별칭): {person_name} (만 {person_age}세, {career_st})
 - 가구 소득 형태: 나({st.session_state.get('job_form','직장인')}) + 배우자({st.session_state.get('job_spouse_form','해당 없음')})
 - 월 정기 수입: {summary['regular_income']:,.0f}만 원
 - 연간 비정기 상여금: {summary['annual_bonus']:,.0f}만 원
