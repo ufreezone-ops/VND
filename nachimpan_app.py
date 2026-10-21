@@ -256,7 +256,7 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
 </style>
 """, unsafe_allow_html=True)
 
-# 1.02.04 | 특수 컴포넌트(카카오 옐로우 코드블록, expander 다크, 모바일 버튼 3x2 고정)
+# 1.02.04 | 특수 컴포넌트(카카오 옐로우 코드블록 & expander 다크 고대비)
 st.markdown("""
 <style>
 /* st.code 코드블록: 카카오톡 전용 톤다운 웜 옐로우 배색 */
@@ -1437,100 +1437,108 @@ elif selected_page == "인생의 사계절":
         st.session_state.housing_plan = housing_plan
         st.rerun()
 
-    # 6.03.02 | 👥 형제자매 3x2 중립 믹스 버튼 & 나이 관리 UI (모바일 3칸 강제 고정)
-    st.markdown("""
+    # 6.03.02 | 👥 형제자매 3x2 중립 믹스 버튼 & 나이 관리 UI (아이폰 100% 핏 그리드)
+st.markdown("""
 <style>
-.st-key-sib-btn-box [data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
+/* 버튼 6개에만 엄격히 격리 적용되는 3등분 그리드 (절대 화면 밖으로 터지지 않음) */
+.st-key-sib-btn-grid [data-testid="stHorizontalBlock"] {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr 1fr !important;
     gap: 6px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
 }
-.st-key-sib-btn-box [data-testid="column"] {
-    width: 32% !important;
-    min-width: 30% !important;
-    max-width: 33.3% !important;
-    flex: 1 1 32% !important;
+
+.st-key-sib-btn-grid [data-testid="column"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
 }
-.st-key-sib-btn-box button {
+
+.st-key-sib-btn-grid button {
     height: 38px !important;
-    padding: 0 4px !important;
-    font-size: 14.5px !important;
-    font-weight: 750 !important;
+    padding: 0 2px !important;
+    font-size: 13.5px !important;
+    font-weight: 700 !important;
+    width: 100% !important;
     white-space: nowrap !important;
+    box-sizing: border-box !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-    if "sibling_items" not in st.session_state:
-        st.session_state.sibling_items = []
+if "sibling_items" not in st.session_state:
+    st.session_state.sibling_items = []
 
-    with st.container(key="sib-btn-box"):
-        st.markdown("""
+st.markdown("""
 <div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 12px; padding: 14px 16px; margin-top: 14px;">
 <div style="font-size: 16px; font-weight: 800; color: #F8FAFC; margin-bottom: 4px;">👥 형제자매 추가 (누를 때마다 1, 2, 3... 자동 추가)</div>
 <div style="font-size: 13px; color: #94A3B8; margin-bottom: 10px;">해당하는 버튼을 누르면 순서대로 생성됩니다.</div>
+</div>
 """, unsafe_allow_html=True)
 
-        # 1줄: 언니, 형, 여동생
-        r1_cols = st.columns(3)
-        r1_roles = ["언니", "형", "여동생"]
-        for idx, role in enumerate(r1_roles):
-            with r1_cols[idx]:
-                if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
-                    count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
-                    st.session_state.sibling_items.append({
-                        "id": f"{role}_{count+1}_{random.randint(100,999)}",
-                        "role": role,
-                        "label": f"{role} {count + 1}",
-                        "age": 0
-                    })
-                    st.rerun()
-
-        st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
-
-        # 2줄: 누나, 남동생, 오빠
-        r2_cols = st.columns(3)
-        r2_roles = ["누나", "남동생", "오빠"]
-        for idx, role in enumerate(r2_roles):
-            with r2_cols[idx]:
-                if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
-                    count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
-                    st.session_state.sibling_items.append({
-                        "id": f"{role}_{count+1}_{random.randint(100,999)}",
-                        "role": role,
-                        "label": f"{role} {count + 1}",
-                        "age": 0
-                    })
-                    st.rerun()
-
-        if st.session_state.sibling_items:
-            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-            items_to_remove = []
-            sib_entry_cols = st.columns(2)
-            for idx, s_item in enumerate(st.session_state.sibling_items):
-                c = sib_entry_cols[idx % 2]
-                with c:
-                    ic1, ic2 = st.columns([3, 1])
-                    with ic1:
-                        new_age = st.number_input(
-                            f"{s_item['label']} 나이",
-                            min_value=0, max_value=120,
-                            value=int(s_item.get("age", 0)),
-                            step=1, key=f"inp_age_{s_item['id']}"
-                        )
-                        s_item["age"] = new_age
-                    with ic2:
-                        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                        if st.button("삭제", key=f"btn_del_{s_item['id']}", use_container_width=True):
-                            items_to_remove.append(s_item["id"])
-            if items_to_remove:
-                st.session_state.sibling_items = [
-                    it for it in st.session_state.sibling_items if it["id"] not in items_to_remove
-                ]
+# 6개 버튼 전용 격리 컨테이너
+with st.container(key="sib-btn-grid"):
+    # 1줄: 언니, 형, 여동생
+    r1_cols = st.columns(3)
+    r1_roles = ["언니", "형", "여동생"]
+    for idx, role in enumerate(r1_roles):
+        with r1_cols[idx]:
+            if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
+                count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
+                st.session_state.sibling_items.append({
+                    "id": f"{role}_{count+1}_{random.randint(100,999)}",
+                    "role": role,
+                    "label": f"{role} {count + 1}",
+                    "age": 0
+                })
                 st.rerun()
 
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
+
+    # 2줄: 누나, 남동생, 오빠
+    r2_cols = st.columns(3)
+    r2_roles = ["누나", "남동생", "오빠"]
+    for idx, role in enumerate(r2_roles):
+        with r2_cols[idx]:
+            if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
+                count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
+                st.session_state.sibling_items.append({
+                    "id": f"{role}_{count+1}_{random.randint(100,999)}",
+                    "role": role,
+                    "label": f"{role} {count + 1}",
+                    "age": 0
+                })
+                st.rerun()
+
+# 생성된 형제자매 나이 입력 목록 (격리 컨테이너 바깥이므로 정상 너비 유지)
+if st.session_state.sibling_items:
+    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+    items_to_remove = []
+    sib_entry_cols = st.columns(2)
+    for idx, s_item in enumerate(st.session_state.sibling_items):
+        c = sib_entry_cols[idx % 2]
+        with c:
+            ic1, ic2 = st.columns([3, 1])
+            with ic1:
+                new_age = st.number_input(
+                    f"{s_item['label']} 나이",
+                    min_value=0, max_value=120,
+                    value=int(s_item.get("age", 0)),
+                    step=1, key=f"inp_age_{s_item['id']}"
+                )
+                s_item["age"] = new_age
+            with ic2:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                if st.button("삭제", key=f"btn_del_{s_item['id']}", use_container_width=True):
+                    items_to_remove.append(s_item["id"])
+    if items_to_remove:
+        st.session_state.sibling_items = [
+            it for it in st.session_state.sibling_items if it["id"] not in items_to_remove
+        ]
+        st.rerun()
 
     # 6.03.03 | 은퇴 시점 가족 미래 나이 2열 슬림 카드
     people = [(st.session_state.get("person_name", "나"), cur_age)]
