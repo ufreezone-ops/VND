@@ -1,21 +1,19 @@
-# ==============================================================================
-# 나침반 (Compass) | 인터뷰이를 위한 삶과 재무의 산책로
-# 통합 리팩토링 버전: [x.yy.zz] 계층 아키텍처 & 전역 테마 통합 엔진 적용
-# ==============================================================================
-
-# ==============================================================================
-# 1.00.00 | 시스템 환경 및 전역 테마 엔진 (System & Theming Engine)
-# ==============================================================================
+# ================================================================================
+# [Module 1.00.00] 시스템 환경 및 전역 테마 엔진 (System & Theming Engine)
+# ================================================================================
 
 # ------------------------------------------------------------------------------
 # 1.01.00 | 라이브러리 로드 및 기본 페이지 설정
 # ------------------------------------------------------------------------------
+
+# 1.01.01 | 필수 및 서드파티 라이브러리 임포트
 import os
 import random
 import json
 import base64
 import requests
 import re
+import zlib
 from datetime import date
 import streamlit as st
 import pandas as pd
@@ -23,6 +21,7 @@ import numpy as np
 import plotly.graph_objects as go
 from streamlit_option_menu import option_menu
 
+# 1.01.02 | Streamlit 기본 페이지 및 레이아웃 설정
 st.set_page_config(
     page_title="나침반 — 나의 삶을 바라보는 산책로",
     page_icon="🧭",
@@ -30,14 +29,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (형제자매 3x2 모바일 가로고정 보강)
-# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS
+# ------------------------------------------------------------------------------
+
+# 1.02.01 | 전역 스크롤 안정화 및 상단 시스템 헤더 다크 일체화
 st.markdown("""
 <style>
-/* ==========================================================================
-   0. Streamlit 실제 스크롤 컨테이너에 스크롤바 상시 고정 (1,2,3,4탭 흔들림 박멸)
-   ========================================================================== */
+/* Streamlit 실제 스크롤 컨테이너에 스크롤바 상시 고정 (탭 전환 시 덜컹거림 박멸) */
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"],
 .stMain {
@@ -45,9 +45,7 @@ st.markdown("""
     scrollbar-gutter: stable;
 }
 
-/* ==========================================================================
-   최상단 Streamlit 헤더 바 딥 네이비 일체화 (빛샘·강한 대비 100% 박멸)
-   ========================================================================== */
+/* 최상단 Streamlit 헤더 바 딥 네이비 일체화 (빛샘·강한 대비 100% 박멸) */
 header[data-testid="stHeader"] {
     background-color: #0b1120 !important;
     background: #0b1120 !important;
@@ -61,10 +59,12 @@ header[data-testid="stHeader"] * {
 header[data-testid="stHeader"] button:hover {
     color: #f8fafc !important;
 }
+</style>
+""", unsafe_allow_html=True)
 
-/* ==========================================================================
-   CSS Design Tokens (전역 색상 규칙)
-   ========================================================================== */
+# 1.02.02 | 전역 색상 디자인 토큰 및 17px 가독성 폰트 설정
+st.markdown("""
+<style>
 :root {
     color-scheme: light dark;
     --nc-bg: #0b1120;
@@ -91,13 +91,11 @@ header[data-testid="stHeader"] button:hover {
     --nc-panel-retire-border: #8761b3;
 }
 
-/* 기본 폰트 17px로 대형화하여 전 연령 가독성 확보 */
 .stApp {
     background-color: var(--nc-bg) !important;
     color: var(--nc-text) !important;
 }
 
-/* 4개 탭 윗머리가 고정 헤더에 잘리지 않도록 상단 패딩 2.8rem 유지 */
 .block-container {
     padding-top: 2.8rem !important;
     padding-bottom: 2rem;
@@ -107,8 +105,12 @@ header[data-testid="stHeader"] button:hover {
     font-size: 17px !important;
     color: var(--nc-text);
 }
+</style>
+""", unsafe_allow_html=True)
 
-/* 카드 및 박스 */
+# 1.02.03 | 패널 및 위젯 (pills, 입력창, 버튼, 사이드바) 스타일링
+st.markdown("""
+<style>
 .soft-card {
     background: var(--nc-card-bg);
     border: 1px solid var(--nc-border);
@@ -119,7 +121,6 @@ header[data-testid="stHeader"] button:hover {
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
-/* 재무 컬러 패널 */
 .st-key-job-panel { 
     background: rgba(30, 41, 59, 0.45) !important; 
     border: 1.5px solid #475569 !important; 
@@ -139,7 +140,6 @@ header[data-testid="stHeader"] button:hover {
     color: var(--nc-text) !important;
 }
 
-/* Metric, Button, Sidebar */
 [data-testid="stMetricLabel"] *, [data-testid="stMetricLabel"] { color: var(--nc-subtext) !important; font-size: 15px !important; font-weight: 600 !important; }
 [data-testid="stMetricValue"] *, [data-testid="stMetricValue"] { color: var(--nc-text) !important; font-weight: 800 !important; font-size: 26px !important; }
 
@@ -156,7 +156,6 @@ button[kind="primary"], .stApp [data-testid="stFormSubmitButton"] button[kind="p
 [data-testid="stSidebar"] { background-color: var(--nc-sidebar-bg) !important; border-right: 1px solid var(--nc-border) !important; }
 [data-testid="stSidebar"] * { color: var(--nc-text) !important; }
 
-/* 일반 입력 필드 */
 .stApp input, .stApp textarea {
     background-color: var(--nc-card-bg) !important;
     color: var(--nc-text) !important;
@@ -165,7 +164,6 @@ button[kind="primary"], .stApp [data-testid="stFormSubmitButton"] button[kind="p
     padding: 10px 12px !important;
 }
 
-/* Placeholder 고대비 강제 고정 */
 input::placeholder, textarea::placeholder,
 .stApp input::placeholder, .stApp textarea::placeholder {
     color: #94a3b8 !important;
@@ -174,7 +172,6 @@ input::placeholder, textarea::placeholder,
     font-size: 15px !important;
 }
 
-/* st.pills 버튼 스타일 */
 div[data-testid="stButtonGroup"],
 div[data-testid="stPills"],
 div[data-testid="stSegmentedControl"] {
@@ -217,11 +214,9 @@ div[data-testid="stPills"] button[aria-selected="true"] {
     box-shadow: 0 2px 8px rgba(234, 88, 12, 0.35) !important;
 }
 
-/* 숫자 입력창 +/- 버튼 숨김 */
 div[data-testid="stNumberInput"] button { display: none !important; }
 div[data-testid="stNumberInput"] input { padding-right: 12px !important; }
 
-/* 표지 아래 인라인 3칸 시작 툴바 전용 스타일 */
 div[data-testid="stForm"]:has(input[id*="start_person"]) {
     border: none !important;
     padding: 0 !important;
@@ -246,7 +241,6 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     padding: 0 10px !important;
 }
 
-/* 형제자매 6버튼 고대비 스타일 */
 .stApp button:not([kind="primary"]) {
     background-color: #1E293B !important;
     color: #F8FAFC !important;
@@ -259,30 +253,12 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     border-color: #EA580C !important;
     color: #FFFFFF !important;
 }
+</style>
+""", unsafe_allow_html=True)
 
-/* ==========================================================================
-   [신규] 모바일에서 형제자매 버튼 세로 붕괴 방지: 3개씩 2줄 가로 고정 & 38px 슬림화
-   ========================================================================== */
-div[data-testid="stHorizontalBlock"]:has(button[key*="btn_add_sib_"]) {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    gap: 6px !important;
-}
-
-div[data-testid="stHorizontalBlock"]:has(button[key*="btn_add_sib_"]) > div {
-    min-width: 0 !important;
-    flex: 1 1 0 !important;
-}
-
-div[data-testid="stHorizontalBlock"]:has(button[key*="btn_add_sib_"]) button {
-    height: 38px !important;
-    padding: 0 4px !important;
-    font-size: 14px !important;
-    font-weight: 700 !important;
-    white-space: nowrap !important;
-}
-
+# 1.02.04 | 특수 컴포넌트(카카오 옐로우 코드블록, expander 다크, 모바일 버튼 3x2 고정)
+st.markdown("""
+<style>
 /* st.code 코드블록: 카카오톡 전용 톤다운 웜 옐로우 배색 */
 [data-testid="stCodeBlock"] {
     background-color: #e9d362 !important;
@@ -321,7 +297,7 @@ div[data-testid="stHorizontalBlock"]:has(button[key*="btn_add_sib_"]) button {
     fill: #1a1a1a !important;
 }
 
-/* st.expander 헤더 다크 고대비 스타일 */
+/* st.expander 헤더 다크 고대비 스타일 (화이트/화이트 박멸) */
 [data-testid="stExpander"] {
     background-color: transparent !important;
     border: 1px solid #334155 !important;
@@ -359,19 +335,22 @@ div[data-testid="stHorizontalBlock"]:has(button[key*="btn_add_sib_"]) button {
 </style>
 """, unsafe_allow_html=True)
 
+
 # ------------------------------------------------------------------------------
-# 1.03.00 | 공식 통계 벤치마크 및 전역 상수 (국민이전계정 NTA 데이터)
+# 1.03.00 | 공식 통계 벤치마크 및 전역 상수 (NTA 데이터셋)
 # ------------------------------------------------------------------------------
+
+# 1.03.01 | 국민이전계정(NTA) 생애주기 벤치마크 데이터 및 공식 URL
 LIFECYCLE_BENCHMARK = pd.DataFrame([
     {"age": 20, "labor_income": 45,  "consumption": 130}, 
     {"age": 25, "labor_income": 180, "consumption": 150},
-    {"age": 28, "labor_income": 260, "consumption": 170}, # 흑자 진입 (약 27~28세)
+    {"age": 28, "labor_income": 260, "consumption": 170},
     {"age": 35, "labor_income": 360, "consumption": 220},
-    {"age": 43, "labor_income": 435, "consumption": 265}, # 소득 피크 정점 (43~45세)
+    {"age": 43, "labor_income": 435, "consumption": 265},
     {"age": 50, "labor_income": 410, "consumption": 280},
     {"age": 55, "labor_income": 330, "consumption": 280},
     {"age": 60, "labor_income": 220, "consumption": 250},
-    {"age": 61, "labor_income": 190, "consumption": 240}, # 적자 재전환 (약 60~61세)
+    {"age": 61, "labor_income": 190, "consumption": 240},
     {"age": 65, "labor_income": 120, "consumption": 230}, 
     {"age": 70, "labor_income": 60,  "consumption": 210},
     {"age": 75, "labor_income": 25,  "consumption": 195},
@@ -381,23 +360,17 @@ LIFECYCLE_BENCHMARK = pd.DataFrame([
 OFFICIAL_PDF_URL = "https://mods.go.kr/boardDownload.es?bid=11898&list_no=447028&seq=3#page=7"
 OFFICIAL_RELEASE_URL = "https://mods.go.kr/board.es?act=view&bid=11898&list_no=447028&mid=a10301130100"
 
-ESBI = {
-    "E": ("직장인", "고용된 일과 시간을 바꾸어 소득을 얻는 형태"),
-    "S": ("자영업·전문직", "자신의 전문성·노동·브랜드에 크게 기대는 형태"),
-    "B": ("사업가", "사람과 시스템이 함께 가치를 만드는 형태"),
-    "I": ("투자자·임대소득자", "자본·자산에서 소득이 발생하는 형태"),
-}
 
 
-# ==============================================================================
-# 2.00.00 | 상태 관리 및 재무 유틸리티 엔진 (State & Finance Engine)
-# ==============================================================================
+# ================================================================================
+# [Module 2.00.00] 상태 관리 및 재무 유틸리티 엔진 (State & Finance Engine)
+# ================================================================================
 
-# ==============================================================================
-# 2.01.00 | 세션 상태 초기화 및 헬퍼 함수 (복원코드 인식률 대폭 강화)
-# ==============================================================================
-import zlib
+# ------------------------------------------------------------------------------
+# 2.01.00 | 세션 상태 및 진단 동기화(NC-코드) 엔진
+# ------------------------------------------------------------------------------
 
+# 2.01.01 | 세션 키 초기화 및 안전 조회 헬퍼 (getv)
 if "anonymous_id" not in st.session_state:
     st.session_state.anonymous_id = f"#{random.choice('ABCDE')}-{random.randint(101,999)}"
 if "started" not in st.session_state:
@@ -409,7 +382,7 @@ def getv(key, default=0):
     val = st.session_state.get(key, default)
     return default if val is None else val
 
-# 인터뷰이 ➜ 인터뷰어 동기화 대상 핵심 데이터 키
+# 2.01.02 | 동기화 키 목록 및 압축 인코더 (export_diagnosis_code)
 SYNC_KEYS = [
     "anonymous_id", "person_name", "person_age", "gender", "job_form", "job_spouse_form", "career_stage",
     "income_self", "income_spouse", "income_other", "income_bonus", "income_pension",
@@ -421,7 +394,6 @@ SYNC_KEYS = [
 ]
 
 def export_diagnosis_code():
-    """현재 세션의 모든 가계부·생애 데이터를 암호화 압축 코드로 인코딩"""
     data = {}
     for k in SYNC_KEYS:
         if k in st.session_state:
@@ -431,12 +403,11 @@ def export_diagnosis_code():
     b64 = base64.urlsafe_b64encode(compressed).decode('utf-8')
     return f"NC-{b64}"
 
+# 2.01.03 | NC-코드 정규식 디코더 및 세션 복원기 (import_diagnosis_code)
 def import_diagnosis_code(raw_input):
-    """카카오톡 메시지나 복원코드에서 NC- 데이터를 찾아 세션으로 즉시 복원"""
     if not raw_input or not isinstance(raw_input, str):
         return False, "입력된 텍스트가 없습니다."
     
-    # 공백이나 개행이 섞여 있어도 NC-로 시작하는 코드를 유연하게 포착
     clean_text = raw_input.strip()
     match = re.search(r"NC-([A-Za-z0-9_\-=]+)", clean_text)
     if not match:
@@ -458,9 +429,12 @@ def import_diagnosis_code(raw_input):
     except Exception as e:
         return False, f"데이터 복원 실패: {e}"
 
-# ==============================================================================
+
+# ------------------------------------------------------------------------------
 # 2.02.00 | 재무 포맷팅 및 집계 로직
-# ==============================================================================
+# ------------------------------------------------------------------------------
+
+# 2.02.01 | 금액 및 억 단위 표시 포맷터
 def money(value):
     return f"{value:,.0f}만 원"
 
@@ -469,6 +443,7 @@ def fmt_eok(value):
         return f"{value / 10000:,.2f}억 원"
     return money(value)
 
+# 2.02.02 | 직업-ESBI 사분면 매핑 함수
 def active_quadrant(job):
     mapping = {
         "직장인": "E", "공무원": "E", "근로소득자": "E",
@@ -481,24 +456,21 @@ def active_quadrant(job):
             return code
     return ""
 
+# 2.02.03 | 가계 종합 재무 집계 엔진
 def current_financial_summary():
-    # 1. 정기 소득 vs 비정기(연간 성과급/상여금)
     regular_income = sum(float(getv(k, 0)) for k in ["income_self", "income_spouse", "income_other"])
-    annual_bonus = float(getv("income_bonus", 0))  # 연간 비정기 소득 (연, 만원)
+    annual_bonus = float(getv("income_bonus", 0))
     
     annual_total_income = (regular_income * 12.0) + annual_bonus
     monthly_effective_income = annual_total_income / 12.0
     
-    # 2. 월 지출 합계 (생활비 + 원리금 + 기타지출)
     expenses = sum(float(getv(k, 0)) for k in ["expense_living", "expense_loan", "expense_other"])
     annual_total_expenses = expenses * 12.0
     
-    # 3. 잉여금 듀얼 집계
-    monthly_regular_surplus = regular_income - expenses          # 매달 일상 유동성 흐름
-    annual_net_surplus = annual_total_income - annual_total_expenses  # 1년 종합 진짜 순저축 여력
-    monthly_effective_surplus = annual_net_surplus / 12.0       # 연간 순저축의 월 환산액
+    monthly_regular_surplus = regular_income - expenses
+    annual_net_surplus = annual_total_income - annual_total_expenses
+    monthly_effective_surplus = annual_net_surplus / 12.0
     
-    # 4. 자산 및 부채
     assets = sum(float(getv(k, 0)) for k in ["asset_cash", "asset_financial", "asset_home", "asset_deposit", "asset_other"])
     debts = sum(float(getv(k, 0)) for k in ["debt_home", "debt_other"])
     net_worth = assets - debts
@@ -508,10 +480,10 @@ def current_financial_summary():
         "annual_bonus": annual_bonus,
         "annual_total_income": annual_total_income,
         "monthly_effective_income": monthly_effective_income,
-        "income": regular_income,  # 기존 호환용
+        "income": regular_income,
         "expenses": expenses,
         "annual_total_expenses": annual_total_expenses,
-        "surplus": monthly_regular_surplus,  # 기존 호환용
+        "surplus": monthly_regular_surplus,
         "monthly_regular_surplus": monthly_regular_surplus,
         "annual_net_surplus": annual_net_surplus,
         "monthly_effective_surplus": monthly_effective_surplus,
@@ -521,13 +493,16 @@ def current_financial_summary():
     }
 
 
-# ==============================================================================
-# 3.00.00 | 외부 AI 연동 서비스 (Gemini + ChatGPT + Claude 다이렉트 파이프라인)
-# ==============================================================================
 
-# ==============================================================================
-# 3.01.00 | Gemini 엔드포인트 자율 매칭 및 텍스트 요청 파이프라인 (연결 실패 100% 박멸)
-# ==============================================================================
+# ================================================================================
+# [Module 3.00.00] 외부 AI 연동 서비스 (Gemini API Pipeline)
+# ================================================================================
+
+# ------------------------------------------------------------------------------
+# 3.01.00 | Gemini 초고속 자율 매칭 엔진
+# ------------------------------------------------------------------------------
+
+# 3.01.01 | API 키 정제 및 텍스트 생성 파이프라인 (call_gemini_text)
 def call_gemini_text(prompt_text):
     raw_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_KEY")
     if not raw_key:
@@ -539,7 +514,6 @@ def call_gemini_text(prompt_text):
     if not raw_key:
         return "", "Streamlit Secrets에서 GEMINI_API_KEY를 찾지 못했습니다. 앱 대시보드의 Secrets 설정을 확인해 주세요."
 
-    # 혹시 모를 앞뒤 공백 및 따옴표 완전 제거
     api_key = str(raw_key).strip().strip("'").strip('"')
 
     payload = {
@@ -547,7 +521,6 @@ def call_gemini_text(prompt_text):
         "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.45},
     }
 
-    # 1단계: 구글 서버에 현재 API 키로 사용 가능한 모델 목록 실시간 질의
     active_endpoints = []
     discovery_error = ""
     for ver in ["v1beta", "v1"]:
@@ -558,9 +531,8 @@ def call_gemini_text(prompt_text):
             )
             if res.status_code == 200:
                 for m in res.json().get("models", []):
-                    # 글 생성을 지원하는 모델만 선별
                     if "generateContent" in m.get("supportedGenerationMethods", []):
-                        m_full_name = m.get("name", "")  # 예: "models/gemini-1.5-flash"
+                        m_full_name = m.get("name", "")
                         if "flash" in m_full_name and "exp" not in m_full_name and "preview" not in m_full_name:
                             active_endpoints.append((ver, m_full_name))
             else:
@@ -568,13 +540,11 @@ def call_gemini_text(prompt_text):
         except Exception as exc:
             discovery_error = f"통신 지연: {exc}"
 
-    # 2단계: 최적 모델 정렬 (1.5-flash 최우선 배치)
     active_endpoints.sort(key=lambda item: (
         0 if "1.5-flash" in item[1] else
         1 if "2.0-flash" in item[1] else 2
     ))
 
-    # 만약 목록 조회가 차단되었을 때를 대비한 하드코딩 안전 폴백
     if not active_endpoints:
         active_endpoints = [
             ("v1beta", "models/gemini-1.5-flash"),
@@ -582,7 +552,6 @@ def call_gemini_text(prompt_text):
             ("v1", "models/gemini-1.5-flash")
         ]
 
-    # 3단계: 구글이 승인한 활성 모델 경로로 다이렉트 호출 실행
     last_error = ""
     for api_version, model_full_path in active_endpoints:
         try:
@@ -604,89 +573,21 @@ def call_gemini_text(prompt_text):
         except Exception as exc:
             last_error = f"[{model_full_path} 요청 오류]: {exc}"
 
-    # 실패 시 원인을 투명하게 노출하여 즉시 해결 가능하도록 안내
     final_err_msg = last_error or discovery_error or "구글 Gemini 서버 응답 없음"
     return "", f"Gemini 연결 실패: {final_err_msg}"
 
 
-# ------------------------------------------------------------------------------
-# 3.02.00 | ChatGPT (OpenAI GPT-4o-mini) 직타 파이프라인
-# ------------------------------------------------------------------------------
-def call_chatgpt_text(prompt_text):
-    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OpenAI_API_KEY")
-    if not api_key:
-        try:
-            api_key = st.secrets.get("OPENAI_API_KEY", "") or st.secrets.get("OpenAI_API_KEY", "")
-        except Exception:
-            api_key = ""
-    if not api_key:
-        return "", "NO_KEY"
 
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {"role": "system", "content": "당신은 가계 재무와 은퇴 준비를 진단하는 다정하고 객관적인 성찰 파트너입니다."},
-            {"role": "user", "content": prompt_text}
-        ],
-        "temperature": 0.5,
-        "max_tokens": 1500
-    }
-    try:
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            json=payload,
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
-            timeout=20
-        )
-        if response.status_code == 200:
-            return response.json()["choices"][0]["message"]["content"].strip(), ""
-        return "", f"[OpenAI] {response.status_code}: {response.text[:140]}"
-    except Exception as exc:
-        return "", f"OpenAI 요청 오류: {exc}"
+# ================================================================================
+# [Module 4.00.00] 사이드바 및 진입 표지 (Sidebar & Cover Entry)
+# ================================================================================
 
 # ------------------------------------------------------------------------------
-# 3.03.00 | Claude (Anthropic Claude-3-5-Haiku) 직타 파이프라인
+# 4.01.00 | 사이드바 프로필 요약 및 복원
 # ------------------------------------------------------------------------------
-def call_claude_text(prompt_text):
-    api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("Anthropic_API_KEY")
-    if not api_key:
-        try:
-            api_key = st.secrets.get("ANTHROPIC_API_KEY", "") or st.secrets.get("Anthropic_API_KEY", "")
-        except Exception:
-            api_key = ""
-    if not api_key:
-        return "", "NO_KEY"
 
-    payload = {
-        "model": "claude-3-5-haiku-20241022",
-        "max_tokens": 1500,
-        "temperature": 0.5,
-        "messages": [{"role": "user", "content": prompt_text}]
-    }
-    headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-    }
-    try:
-        response = requests.post("https://api.anthropic.com/v1/messages", json=payload, headers=headers, timeout=20)
-        if response.status_code == 200:
-            res_json = response.json()
-            return res_json["content"][0]["text"].strip(), ""
-        return "", f"[Claude] {response.status_code}: {response.text[:140]}"
-    except Exception as exc:
-        return "", f"Claude 요청 오류: {exc}"
-
-
-# ==============================================================================
-# 4.00.00 | 진입 커버 및 사이드바 프로필 (Cover & Sidebar Profile)
-# ==============================================================================
-
-# ==============================================================================
-# 4.01.00 | 사이드바 프로필 요약 및 카톡 리포트 동기화
-# ==============================================================================
+# 4.01.01 | 사이드바 컴포넌트 렌더링 (익명 배지, 기본 정보, 복원 expander)
 with st.sidebar:
-    # 1. 익명 고유번호 배지
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; text-align: center; margin-bottom: 20px;">
 <div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: 0.04em;">익명 진단 고유번호</div>
@@ -694,7 +595,6 @@ with st.sidebar:
 </div>
 """, unsafe_allow_html=True)
 
-    # 2. 나의 프로필 정보 (진단 시작 후 활성화)
     if st.session_state.started:
         st.markdown("#### 나의 기본 정보")
         st.markdown(f"**나의 이름/별칭:** {st.session_state.get('person_name','')}")
@@ -708,7 +608,6 @@ with st.sidebar:
         dual_income_str = " + ".join(types_desc) if types_desc else "아직 미선택"
         st.markdown(f"**우리집 소득 형태:** {dual_income_str}")
 
-    # 3. 사이드바: 카톡 리포트 불러오기
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
     with st.expander("📥 카톡 리포트 불러오기"):
         st.markdown("<div style='font-size: 13px; color: #CBD5E1; margin-bottom: 6px;'>전달받은 <b>리포트 전문</b> 또는 <b>NC-코드</b>를 붙여넣으세요.</div>", unsafe_allow_html=True)
@@ -725,9 +624,11 @@ with st.sidebar:
     st.caption("※ 나침반은 외부 서버에 저장되지 않는 일회성 안전 세션입니다.")
 
 
-# ==============================================================================
-# 4.02.00 | 첫 진입 표지 및 인라인 시작 바 (클린 미니멀 툴바 복원)
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# 4.02.00 | 첫 진입 표지 및 인라인 시작 바
+# ------------------------------------------------------------------------------
+
+# 4.02.01 | 커버 이미지 렌더링 및 2줄 3칸 슬림 폼 제어
 cover_file_path = None
 possible_covers = [
     "cover.png", "cover.jpg", "cover.jpeg",
@@ -757,7 +658,6 @@ if not st.session_state.started:
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
         
-        # 표지 바로 아래 2줄 3칸 슬림 툴바 (이름/나이/시작)
         with st.form("start_inline_form", clear_on_submit=False):
             in_col1, in_col2, in_col3 = st.columns([2.0, 1.1, 1.1])
             
@@ -791,13 +691,17 @@ if not st.session_state.started:
             
     st.stop()
 
-# ==============================================================================
-# 5.00.00 | 메인 네비게이션 헤더 (Main Navigation Segment)
-# ==============================================================================
 
-# ==============================================================================
-# 5.01.00 | 가로 4대 메뉴 네비게이터 (바깥 라운딩 완전 제거)
-# ==============================================================================
+
+# ================================================================================
+# [Module 5.00.00] 메인 네비게이션 헤더 (Main Navigation)
+# ================================================================================
+
+# ------------------------------------------------------------------------------
+# 5.01.00 | 상단 4대 탭 네비게이터
+# ------------------------------------------------------------------------------
+
+# 5.01.01 | 네비게이션 옵션 및 streamlit_option_menu 렌더링
 _pending_nav = st.session_state.pop("_pending_nav", None)
 nav_options = ["우리집\n가계부", "삶과\n생계수단", "인생의\n사계절", "AI\n시선"]
 _nav_targets = {
@@ -826,10 +730,7 @@ selected = option_menu(
     key=_nav_widget_key,
     styles={
         "container": {
-            # 👇 [핵심 조절 레버] padding: (위 오른쪽 아래 왼쪽)
-            # 윗쪽을 14px로 늘려 버튼 머리 위로 확실한 여백을 줍니다!
             "padding": "16px 6px 8px 6px",
-            
             "background-color": "#0F172A",
             "border": "none",
             "border-radius": "0px",
@@ -848,8 +749,6 @@ selected = option_menu(
             "--hover-color": "#1E293B",
             "border-radius": "8px",
             "min-height": "48px",
-            
-            # 👇 [추가] 4개 탭이 항상 25%씩 자리를 꽉 잡아서 글자가 굵어져도 옆 탭을 밀지 않음
             "flex": "1"
         },
         "nav-link-selected": {
@@ -868,24 +767,23 @@ selected_page = {
     "AI\n시선": "AI 시선"
 }.get(selected, selected)
 
-# ==============================================================================
-# 6.00.00 | 메인 뷰 페이지 (Main View Tabs)
-# ==============================================================================
 
-# ==============================================================================
-# 6.01.00 | Tab 1 — 우리집 가계부 (성별 원터치 pills & 미래 궤적 연동)
-# ==============================================================================
+
+# ================================================================================
+# [Module 6.00.00] 메인 뷰 페이지 (Main View Tabs)
+# ================================================================================
+
+# ------------------------------------------------------------------------------
+# 6.01.00 | Tab 1 — 우리집 가계부
+# ------------------------------------------------------------------------------
 if selected_page == "우리집 가계부":
     st.markdown("## 우리집 가계부")
     
+    # 6.01.01 | ⓪ 우리집 소득 성격 및 재무 입력 폼
     with st.form("finance_form"):
-        # ----------------------------------------------------------------------
-        # ⓪ 우리집 소득 성격 (성별 · 직업 · 현업 연차)
-        # ----------------------------------------------------------------------
         with st.container(border=True, key="job-panel"):
             st.markdown("### ⓪ 우리집 소득 성격")
             
-            # 1. 성별 원터치 pills
             gender_options = ["🙋‍♂️ 남성", "🙋‍♀️ 여성"]
             prev_gender = st.session_state.get("gender", "🙋‍♂️ 남성")
             if prev_gender not in gender_options:
@@ -902,7 +800,6 @@ if selected_page == "우리집 가계부":
             
             st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
-            # 2. 직업 선택
             job_options = ["직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
             job_spouse_options = ["해당 없음", "직장인", "자영업", "전문직", "사업가", "투자자", "임대소득자", "전업주부", "그외"]
             career_options = ["🌱 3년 이하 (초년생)", "🌿 4~9년 (성장기)", "🌳 10년 이상 (베테랑)"]
@@ -952,9 +849,7 @@ if selected_page == "우리집 가계부":
 
         st.write("")
 
-        # ----------------------------------------------------------------------
-        # ① 들어오는 돈 vs ② 나가는 돈
-        # ----------------------------------------------------------------------
+        # 6.01.02 | ① 들어오는 돈 vs ② 나가는 돈 입력 패널
         income_col, expense_col = st.columns(2)
         with income_col:
             with st.container(border=True, key="income-panel"):
@@ -970,9 +865,7 @@ if selected_page == "우리집 가계부":
                 expense_loan = st.number_input("대출 원리금 상환액 (원금+이자 합계)", min_value=0, value=st.session_state.get("expense_loan"), step=10, placeholder="은행 납입 합계")
                 expense_other = st.number_input("그 밖의 월평균 지출 (연간 여행·경조사·세금÷12)", min_value=0, value=st.session_state.get("expense_other"), step=10, placeholder="비정기 지출 월평균")
 
-        # ----------------------------------------------------------------------
-        # ③ 가지고 있는 것 vs ④ 갚아야 할 돈
-        # ----------------------------------------------------------------------
+        # 6.01.03 | ③ 가지고 있는 것 vs ④ 갚아야 할 돈 입력 패널
         asset_col, debt_col = st.columns(2)
         with asset_col:
             with st.container(border=True, key="asset-panel"):
@@ -988,9 +881,7 @@ if selected_page == "우리집 가계부":
                 debt_home = st.number_input("주택담보·전세대출 잔액", min_value=0, value=st.session_state.get("debt_home"), step=100, placeholder="금액")
                 debt_other = st.number_input("그 밖의 부채 잔액 (신용·마이너스통장)", min_value=0, value=st.session_state.get("debt_other"), step=100, placeholder="금액")
 
-        # ----------------------------------------------------------------------
-        # 은퇴 후 가정
-        # ----------------------------------------------------------------------
+        # 6.01.04 | 은퇴 후 가정 입력 및 세션 상태 저장
         with st.container(border=True, key="retirement-panel"):
             st.markdown("### 은퇴 후에는? (월, 만원)")
             pension_col, retirement_expense_col = st.columns(2)
@@ -1033,9 +924,7 @@ if selected_page == "우리집 가계부":
             st.session_state[k] = v
         st.session_state["finance_saved_notice"] = True
 
-    # --------------------------------------------------------------------------
-    # 우리집 재무 현황 (2x2 동일 규격 카드)
-    # --------------------------------------------------------------------------
+    # 6.01.05 | 우리집 재무 현황 2x2 ESBI 매트릭스 카드 UI
     q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
 
@@ -1090,12 +979,9 @@ if selected_page == "우리집 가계부":
 </span>
 </div>
 </div>"""
-
     st.markdown(esbi_html, unsafe_allow_html=True)
 
-    # --------------------------------------------------------------------------
-    # 현재 재무 요약
-    # --------------------------------------------------------------------------
+    # 6.01.06 | 현재 재무 요약 메트릭
     s = current_financial_summary()
     st.markdown("### 현재 재무 요약")
     cols = st.columns(4)
@@ -1111,9 +997,7 @@ if selected_page == "우리집 가계부":
     )
     cols[3].metric("순자산", fmt_eok(s["net_worth"]))
 
-    # --------------------------------------------------------------------------
-    # 미래 순자산·연금 궤적 (성별 및 생애주기 가족 이벤트 팩트 연동)
-    # --------------------------------------------------------------------------
+    # 6.01.07 | 미래 순자산·연금 궤적 Plotly 차트
     st.markdown("### 미래 순자산·연금 궤적")
     
     cur_age = int(st.session_state.person_age)
@@ -1130,8 +1014,6 @@ if selected_page == "우리집 가계부":
     m_plan = st.session_state.get("marriage_plan", "미정")
     c_plan = st.session_state.get("child_plan", "미정")
     is_single_young = (int(getv("spouse_age", 0)) == 0 and cur_age < 40)
-
-    # 성별 기대수명 연동 (통계청: 여성 87세, 남성 81세)
     life_expectancy = 87 if is_female else 81
 
     ages_accum = list(range(cur_age, retire_age + 1))
@@ -1141,7 +1023,6 @@ if selected_page == "우리집 가계부":
     for a in ages_accum:
         vals_accum_eok.append(current_asset)
         
-        # 경력별 성장률 가중치
         if a < 45:
             growth_step = 0.025 if "초년생" in career_st else 0.018
             lifecycle_weight = 1.0 + (growth_step * (a - cur_age))
@@ -1150,7 +1031,6 @@ if selected_page == "우리집 가계부":
         else:
             lifecycle_weight = max(0.65, 1.0 + (0.02 * (45 - cur_age)) - 0.25)
             
-        # 미혼 청년의 결혼/출산 생애 이벤트 팩트 반영
         if is_single_young:
             if m_plan in ["1~3년 내 결혼 생각 있음", "결혼 예정/준비 중"] and (cur_age + 1 <= a <= cur_age + 3):
                 lifecycle_weight *= 0.75
@@ -1162,7 +1042,6 @@ if selected_page == "우리집 가계부":
 
     peak_asset_eok = vals_accum_eok[-1]
 
-    # 은퇴 후: 자산 인출·연금기 (성별 기대수명 연계)
     ret_pension = float(getv("income_pension", 0) or 0)
     ret_expenses = float(getv("retirement_monthly_expenses", 200) or 0)
     annual_ret_cashflow_eok = ((ret_pension - ret_expenses) * 12) / 10000.0
@@ -1291,15 +1170,13 @@ if selected_page == "우리집 가계부":
             st.rerun()
 
 
-# ==============================================================================
-# 6.02.00 | Tab 2 — 삶과 생계수단 (모바일 수평 동기화 2x2 십자 좌표계 완성)
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# 6.02.00 | Tab 2 — 삶과 생계수단
+# ------------------------------------------------------------------------------
 elif selected_page == "삶과 생계수단":
     st.markdown("## 삶과 생계수단")
     
-    # --------------------------------------------------------------------------
-    # 1. 소득이 만들어지는 모습 (True 2x2 Grid 대칭 십자 좌표계)
-    # --------------------------------------------------------------------------
+    # 6.02.01 | 소득의 모습 2x2 사분면 (물통 vs 구축B/접속I)
     st.markdown("""
 <div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
 <div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">소득이 만들어지는 모습 (물통 vs 파이프라인)</div>
@@ -1350,7 +1227,6 @@ elif selected_page == "삶과 생계수단":
     card_b = render_livelihood_quad("B", "⚙️", "구축 (B)", "파이프라인 구축", "스스로 굴러가는 시스템 소유<br><span style='color:#38BDF8; font-weight:600;'>(내가 멈추어도 시스템이 일함)</span>", is_right=True)
     card_i = render_livelihood_quad("I", "🚰➰", "접속 (I)", "파이프라인 접속", "이미 구축된 플랫폼·자본에 접속<br><span style='color:#38BDF8; font-weight:600;'>(자산과 네트워크가 소득을 만듦)</span>", is_right=True)
 
-    # 행 높이가 100% 동기화되는 True 2x2 CSS Grid 좌표계
     livelihood_2x2_html = f"""
 <div style="margin: 10px 0 16px 0;">
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 0px; align-items: stretch;">
@@ -1369,9 +1245,7 @@ elif selected_page == "삶과 생계수단":
     st.markdown(livelihood_2x2_html, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # --------------------------------------------------------------------------
-    # 2. 산책로의 우화: 돌쇠와 똘똘이
-    # --------------------------------------------------------------------------
+    # 6.02.02 | 지혜로운 산책: 돌쇠와 똘똘이 우화 카드
     st.markdown("""
 <div style="background: rgba(45, 35, 20, 0.55); border: 1.5px solid #6d4a1a; border-radius: 14px; padding: 22px 24px; margin-bottom: 22px;">
 <div style="font-size: 20px; font-weight: 850; color: #FDE68A; margin-bottom: 12px;">🌾 지혜로운 산책: 돌쇠와 똘똘이</div>
@@ -1404,9 +1278,7 @@ elif selected_page == "삶과 생계수단":
 </div>
 """, unsafe_allow_html=True)
 
-    # --------------------------------------------------------------------------
-    # 3. 더 생각해보기 (은퇴를 바라보는 네 가지 질문)
-    # --------------------------------------------------------------------------
+    # 6.02.03 | 더 생각해보기 4가지 질문 리스트 (가로 1줄 대형화)
     st.markdown("""
 <div style="margin: 28px 0 26px 0; padding: 4px 2px;">
 <div style="font-size: 21px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">더 생각해보기</div>
@@ -1436,9 +1308,7 @@ elif selected_page == "삶과 생계수단":
 </div>
 """, unsafe_allow_html=True)
 
-    # --------------------------------------------------------------------------
-    # 4. 내가 생각하는 은퇴 예상 나이
-    # --------------------------------------------------------------------------
+    # 6.02.04 | 내가 생각하는 은퇴 예상 나이 인라인 폼
     st.markdown("""
 <div style="background: rgba(24, 32, 47, 0.65); border: 1.5px solid #3b4b66; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
 <div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">내가 생각하는 은퇴 예상 나이</div>
@@ -1477,9 +1347,9 @@ elif selected_page == "삶과 생계수단":
             st.rerun()
 
 
-# ==============================================================================
-# 6.03.00 | Tab 3 — 인생의 사계절 (형제자매 3x2 중립 믹스 배치 & 2줄 가로 유지)
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# 6.03.00 | Tab 3 — 인생의 사계절
+# ------------------------------------------------------------------------------
 elif selected_page == "인생의 사계절":
     if st.session_state.pop("_scroll_to_top_once", False):
         st.components.v1.html(
@@ -1496,14 +1366,13 @@ elif selected_page == "인생의 사계절":
     retire_age = max(cur_age, min(retire_age, 90))
     years_left = max(0, retire_age - cur_age)
 
-    # 성별 기대수명 (통계청: 여성 87세, 남성 81세)
     user_gender = st.session_state.get("gender", "🙋‍♂️ 남성")
     is_female = ("여성" in user_gender)
     life_expectancy = 87 if is_female else 81
     winter_years = max(0, life_expectancy - retire_age)
     winter_months = winter_years * 12
 
-    # 1. 가족 구성원과 은퇴 시점의 나이
+    # 6.03.01 | 가족 구성원 나이 입력 폼 (2열 배치)
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
     child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
     child_count = st.selectbox(
@@ -1568,79 +1437,102 @@ elif selected_page == "인생의 사계절":
         st.session_state.housing_plan = housing_plan
         st.rerun()
 
-    # --------------------------------------------------------------------------
-    # 형제자매 3x2 중립 믹스 배치 (대표님 지정 순서: 언니/형/여동생 ➔ 누나/남동생/오빠)
-    # --------------------------------------------------------------------------
+    # 6.03.02 | 👥 형제자매 3x2 중립 믹스 버튼 & 나이 관리 UI (모바일 3칸 강제 고정)
+    st.markdown("""
+<style>
+.st-key-sib-btn-box [data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+}
+.st-key-sib-btn-box [data-testid="column"] {
+    width: 32% !important;
+    min-width: 30% !important;
+    max-width: 33.3% !important;
+    flex: 1 1 32% !important;
+}
+.st-key-sib-btn-box button {
+    height: 38px !important;
+    padding: 0 4px !important;
+    font-size: 14.5px !important;
+    font-weight: 750 !important;
+    white-space: nowrap !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
     if "sibling_items" not in st.session_state:
         st.session_state.sibling_items = []
 
-    st.markdown("""
-<div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 12px; padding: 16px 18px; margin-top: 14px;">
+    with st.container(key="sib-btn-box"):
+        st.markdown("""
+<div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 12px; padding: 14px 16px; margin-top: 14px;">
 <div style="font-size: 16px; font-weight: 800; color: #F8FAFC; margin-bottom: 4px;">👥 형제자매 추가 (누를 때마다 1, 2, 3... 자동 추가)</div>
-<div style="font-size: 13px; color: #94A3B8; margin-bottom: 12px;">해당하는 버튼을 누르면 순서대로 생성됩니다.</div>
+<div style="font-size: 13px; color: #94A3B8; margin-bottom: 10px;">해당하는 버튼을 누르면 순서대로 생성됩니다.</div>
 """, unsafe_allow_html=True)
 
-    # 1줄: 언니, 형, 여동생
-    r1_cols = st.columns(3)
-    r1_roles = ["언니", "형", "여동생"]
-    for idx, role in enumerate(r1_roles):
-        with r1_cols[idx]:
-            if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
-                count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
-                st.session_state.sibling_items.append({
-                    "id": f"{role}_{count+1}_{random.randint(100,999)}",
-                    "role": role,
-                    "label": f"{role} {count + 1}",
-                    "age": 0
-                })
+        # 1줄: 언니, 형, 여동생
+        r1_cols = st.columns(3)
+        r1_roles = ["언니", "형", "여동생"]
+        for idx, role in enumerate(r1_roles):
+            with r1_cols[idx]:
+                if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
+                    count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
+                    st.session_state.sibling_items.append({
+                        "id": f"{role}_{count+1}_{random.randint(100,999)}",
+                        "role": role,
+                        "label": f"{role} {count + 1}",
+                        "age": 0
+                    })
+                    st.rerun()
+
+        st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+
+        # 2줄: 누나, 남동생, 오빠
+        r2_cols = st.columns(3)
+        r2_roles = ["누나", "남동생", "오빠"]
+        for idx, role in enumerate(r2_roles):
+            with r2_cols[idx]:
+                if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
+                    count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
+                    st.session_state.sibling_items.append({
+                        "id": f"{role}_{count+1}_{random.randint(100,999)}",
+                        "role": role,
+                        "label": f"{role} {count + 1}",
+                        "age": 0
+                    })
+                    st.rerun()
+
+        if st.session_state.sibling_items:
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            items_to_remove = []
+            sib_entry_cols = st.columns(2)
+            for idx, s_item in enumerate(st.session_state.sibling_items):
+                c = sib_entry_cols[idx % 2]
+                with c:
+                    ic1, ic2 = st.columns([3, 1])
+                    with ic1:
+                        new_age = st.number_input(
+                            f"{s_item['label']} 나이",
+                            min_value=0, max_value=120,
+                            value=int(s_item.get("age", 0)),
+                            step=1, key=f"inp_age_{s_item['id']}"
+                        )
+                        s_item["age"] = new_age
+                    with ic2:
+                        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                        if st.button("삭제", key=f"btn_del_{s_item['id']}", use_container_width=True):
+                            items_to_remove.append(s_item["id"])
+            if items_to_remove:
+                st.session_state.sibling_items = [
+                    it for it in st.session_state.sibling_items if it["id"] not in items_to_remove
+                ]
                 st.rerun()
 
-    st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # 2줄: 누나, 남동생, 오빠
-    r2_cols = st.columns(3)
-    r2_roles = ["누나", "남동생", "오빠"]
-    for idx, role in enumerate(r2_roles):
-        with r2_cols[idx]:
-            if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
-                count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
-                st.session_state.sibling_items.append({
-                    "id": f"{role}_{count+1}_{random.randint(100,999)}",
-                    "role": role,
-                    "label": f"{role} {count + 1}",
-                    "age": 0
-                })
-                st.rerun()
-
-    # 생성된 형제자매 나이 입력 목록
-    if st.session_state.sibling_items:
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        items_to_remove = []
-        sib_entry_cols = st.columns(2)
-        for idx, s_item in enumerate(st.session_state.sibling_items):
-            c = sib_entry_cols[idx % 2]
-            with c:
-                ic1, ic2 = st.columns([3, 1])
-                with ic1:
-                    new_age = st.number_input(
-                        f"{s_item['label']} 나이",
-                        min_value=0, max_value=120,
-                        value=int(s_item.get("age", 0)),
-                        step=1, key=f"inp_age_{s_item['id']}"
-                    )
-                    s_item["age"] = new_age
-                with ic2:
-                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    if st.button("삭제", key=f"btn_del_{s_item['id']}", use_container_width=True):
-                        items_to_remove.append(s_item["id"])
-        if items_to_remove:
-            st.session_state.sibling_items = [
-                it for it in st.session_state.sibling_items if it["id"] not in items_to_remove
-            ]
-            st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
+    # 6.03.03 | 은퇴 시점 가족 미래 나이 2열 슬림 카드
     people = [(st.session_state.get("person_name", "나"), cur_age)]
     if getv("spouse_age", 0) > 0: people.append(("배우자", int(getv("spouse_age"))))
     if getv("child_age", 0) > 0: people.append(("첫째 자녀", int(getv("child_age"))))
@@ -1675,6 +1567,7 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
+    # 6.03.04 | 가족 생애 지출 피크(성인/미성년 자녀) 안내 카드
     c_age1 = int(getv("child_age", 0))
     if 0 < c_age1 < 20:
         college_my_age = cur_age + (20 - c_age1)
@@ -1697,9 +1590,7 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
-    # --------------------------------------------------------------------------
-    # 2. 나만의 맞춤형 생애주기 흑자·적자 곡선 (U자형 스무딩 & 깃발 표기)
-    # --------------------------------------------------------------------------
+    # 6.03.05 | 나만의 생애주기 소득·소비 곡선 (U자 스무딩, M자 깃발)
     st.markdown("### 2. 나만의 생애주기 소득·소비 곡선 (국민이전계정 개인화 번역)")
     st.caption("※ 통계청 공식 NTA 패턴을 인터뷰이 본인의 실제 소득·소비 및 은퇴 나이에 맞추어 번역한 개인 곡선입니다.")
     
@@ -1823,7 +1714,7 @@ elif selected_page == "인생의 사계절":
         ),
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-            font=dict(size=12, color="#F1F5F9")
+            font=dict(size=12.5, color="#F1F5F9")
         ),
         hovermode="x unified"
     )
@@ -1834,7 +1725,7 @@ elif selected_page == "인생의 사계절":
         config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
     )
 
-    # 3. 인생의 사계절
+    # 6.03.06 | 인생의 사계절 메타포 카드 & 성별 기대수명 겨울의 시간
     st.markdown("### 3. 인생의 사계절과 맞이할 겨울의 시간")
     
     if cur_age <= 27:
@@ -1859,7 +1750,7 @@ elif selected_page == "인생의 사계절":
 <div class='soft-card' style='text-align:center; min-height:205px; {card_border} padding:14px 10px; margin:0;'>
 {badge_html}
 <div style='font-size:28px;'>{icon}</div>
-<div style='font-size:16.5px; font-weight:800; color:#F8FAFC; margin:4px 0;'>{title}</div>
+<div style='font-size:16.5px; font-weight:800; color:#F8FAFC; margin-4px 0;'>{title}</div>
 <div style='font-size:13px; color:#94A3B8;'>{age_range}</div>
 <div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>{desc}</div>
 </div>
@@ -1887,6 +1778,7 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
+    # 6.03.07 | 국가데이터처 공식 생애 통계 지표 및 보도자료 링크
     st.markdown("### 국가데이터처 공식 생애 통계 지표 (대한민국 평균 기준)")
     col_m1, col_m2, col_m3 = st.columns(3)
     col_m1.metric("한국인 평균 흑자 진입", "28세", help="노동소득이 소비를 추월하는 연령")
@@ -1911,13 +1803,14 @@ elif selected_page == "인생의 사계절":
             st.rerun()
 
 
-# ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (독립 iframe 100% 클립보드 복사 엔진 탑재)
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# 6.04.00 | Tab 4 — AI 시선
+# ------------------------------------------------------------------------------
 else:
     st.markdown("## AI 시선")
     st.markdown("AI는 평가자가 아닌, 내가 작성한 삶과 숫자를 객관적인 거울처럼 비춰주는 성찰 파트너입니다.")
     
+    # 6.04.01 | 재무/가족 팩트 데이터 정제 (0세 필터링 및 ESBI 판별)
     summary = current_financial_summary()
     sib_names = [f"{it['label']}({it.get('age',0)}세)" for it in st.session_state.get("sibling_items", []) if it.get("age", 0) > 0]
     
@@ -1984,7 +1877,7 @@ else:
         }
     }
 
-    if has_pipeline:
+    if q_self in ["B", "I"]:
         income_instruction = f"""[소득 개선 방향 - B/I 파이프라인 보유형 지침]
 인터뷰이는 현재 사분면상 '{q_self}'(사업가/투자자)로서 이미 시스템과 자산에서 발생하는 파이프라인과 상당한 자산 기반({summary['net_worth']/10000:,.1f}억 원)을 확보하고 계십니다.
 절대 억지로 노동 의존형 물통이라고 규정하지 마시고, 구축하신 파이프라인과 자산의 성취를 있는 그대로 존중하세요.
@@ -1994,7 +1887,7 @@ else:
 현재 부부의 소득은 일손을 멈추면 수입이 중단되는 노동 의존형(E/S) 성격임을 정중하게 짚으세요.
 본업을 충실히 유지하면서, 시간과 노동력에만 매이지 않고 시스템과 자산에서 흘러나오는 '파이프라인'을 장기적으로 준비해야 하는 이유를 객관적인 관점에서 정중히 제안하세요."""
 
-    # ⚙️ AI 프롬프트 (맛 조절 · 원칙 선택 · 추가 입력)
+    # 6.04.02 | ⚙️ AI 프롬프트 접이식 설정 (맛 3단계, 6대 원칙, 추가 요청)
     current_taste_val = st.session_state.get("pills_ai_taste", "☕ 순한맛 (위로/은유)")
     short_taste_tag = "☕ 순한맛" if "순한맛" in current_taste_val else ("🌶️ 매운맛" if "매운맛" in current_taste_val else "🧭 보통맛")
     
@@ -2063,6 +1956,7 @@ else:
     principles_text = "\n".join([f"{i+1}. {p}" for i, p in enumerate(active_principles)])
     custom_section = f"\n[사용자 맞춤 추가 요청사항]\n{user_custom_instruction.strip()}" if user_custom_instruction.strip() else ""
 
+    # 6.04.03 | 프롬프트 조립 및 Gemini API 호출 실행부
     full_prompt_text = f"""[절대 엄수 원칙]
 {principles_text}
 {taste_directive}
@@ -2084,7 +1978,6 @@ else:
 은퇴 후 월 희망 생활비와 예상 월연금의 차이를 설명하되, 입력된 값의 성격과 산출 근거가 불분명하면 안정성이 확보되었다고 단정하지 마세요. 두 금액의 단순 차액과 실제 은퇴 안정성은 구분하세요.
 은퇴 후 약 {winter_years}년은 통계청 {user_gender.split()[1]} 기대수명({life_expectancy}세)에 기초한 계산상 가정으로 취급하세요. 현재 경력 단계와 순자산을 연결해 설명하되, 실제 현금 보유액이나 유동성 자료가 없다면 유동성 준비 상태를 평가하지 마세요. 결혼, 자녀, 주거 계획 등 확인되지 않은 미래 사건을 전제로 삼지 말고, 정중하고 담백하게 서술하세요."""
 
-    # AI 리포트 생성 버튼
     if st.button("⚡ AI 리포트 생성", type="primary", use_container_width=True):
         st.session_state.ai_summary = summary
         st.session_state.ai_comment = None
@@ -2094,7 +1987,7 @@ else:
             st.session_state.ai_comment = comment if comment else error
         st.rerun()
 
-    # 분석 결과 렌더링
+    # 6.04.04 | AI 성찰 리포트 렌더링 (소득 개선 선행, 은퇴 안정성 후속)
     if st.session_state.get("ai_summary") and st.session_state.get("ai_comment"):
         s = st.session_state.ai_summary
         st.markdown("### 재무제표 요약")
@@ -2157,9 +2050,7 @@ else:
 
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
-        # ----------------------------------------------------------------------
-        # 💬 카카오톡 전송용 순수 리포트
-        # ----------------------------------------------------------------------
+        # 6.04.05 | 💬 카카오톡 전송용 순수 텍스트 리포트 (옐로우 코드블록)
         kakao_clean_report = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
 • 진단자: {person_name} ({person_age}세, {career_st})
 • 소득 형태: {st.session_state.get('job_form','직장인')} (배우자: {st.session_state.get('job_spouse_form','해당 없음')})
@@ -2181,9 +2072,7 @@ else:
         st.caption("※ 아래 리포트를 복사하여 카카오톡 대화방에 바로 붙여넣기(Ctrl+V)하세요.")
         st.code(kakao_clean_report, language="markdown")
 
-        # ----------------------------------------------------------------------
-        # 🔑 나침반 동기화 복원코드 단독 버튼 (독립 iframe 100% 클립보드 복사 엔진)
-        # ----------------------------------------------------------------------
+        # 6.04.06 | 🔑 동기화 복원코드 독립 iframe 100% 클립보드 복사 버튼
         sync_code = export_diagnosis_code()
 
         st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
@@ -2264,6 +2153,7 @@ document.getElementById('copyBtn').addEventListener('click', function() {{
     else:
         st.info("‘AI 리포트 생성’ 버튼을 누르면 Gemini 초고속 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
 
+    # 6.04.07 | 📋 AI 질의용 재무제표 expander
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
     with st.expander("📋 AI 질의용 재무제표"):
         st.markdown("<div style='font-size: 13.5px; color: #94A3B8; margin-bottom: 8px;'>프롬프트 지시문 없이, 내가 입력한 재무제표와 가족 생애 통계만 정리된 텍스트입니다. ChatGPT 등에 복사해서 자유롭게 추가 상담을 진행할 수 있습니다.</div>", unsafe_allow_html=True)
@@ -2283,4 +2173,3 @@ document.getElementById('copyBtn').addEventListener('click', function() {{
 - 은퇴 후 월 희망 생활비: {getv('retirement_monthly_expenses', 200):,.0f}만 원
 - 가족 구성: {', '.join([f'{k}: {v}' for k, v in family_desc.items()]) if family_desc else '미등록'}"""
         st.code(raw_summary_report, language="markdown")
-    
