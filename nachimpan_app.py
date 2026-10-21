@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (코드블록 자동 줄바꿈 보강)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (상단 헤더 다크 일체화 보강)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -43,6 +43,24 @@ st.markdown("""
 .stMain {
     overflow-y: scroll !important;
     scrollbar-gutter: stable;
+}
+
+/* ==========================================================================
+   [신규] 최상단 Streamlit 헤더 바 딥 네이비 일체화 (빛샘·강한 대비 100% 박멸)
+   ========================================================================== */
+header[data-testid="stHeader"] {
+    background-color: #0b1120 !important;
+    background: #0b1120 !important;
+    height: 2.8rem !important;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.4) !important;
+}
+
+/* 헤더 우측 메뉴 버튼(Share, Star, 점 3개 등) 은은한 다크 톤다운 */
+header[data-testid="stHeader"] * {
+    color: #94a3b8 !important;
+}
+header[data-testid="stHeader"] button:hover {
+    color: #f8fafc !important;
 }
 
 /* ==========================================================================
@@ -80,7 +98,7 @@ st.markdown("""
     color: var(--nc-text) !important;
 }
 .block-container {
-    padding-top: 2rem;
+    padding-top: 1.2rem !important; /* 상단 여백 슬림화 */
     padding-bottom: 2rem;
     max-width: 1180px;
 }
@@ -241,9 +259,7 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     color: #FFFFFF !important;
 }
 
-/* ==========================================================================
-   [신규] st.code 코드블록 자동 줄바꿈 강제 (가로 늘어짐 원천 박멸)
-   ========================================================================== */
+/* st.code 코드블록 자동 줄바꿈 강제 (가로 늘어짐 원천 박멸) */
 [data-testid="stCodeBlock"] pre,
 [data-testid="stCodeBlock"] code,
 .stCode pre,
@@ -1694,7 +1710,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (맛 조절·원칙 선택·추가 프롬프트 탑재)
+# 6.04.00 | Tab 4 — AI 시선 (암호 분리·클린 카톡 리포트 & 원클릭 복원코드 버튼)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1772,9 +1788,7 @@ else:
 입력된 소득 유형과 재무 데이터를 바탕으로 근로소득 또는 자영업소득에 대한 의존 정도를 살펴보세요. 소득이 노동과 시간에 얼마나 연결되어 있는지는 확인 가능한 데이터의 범위에서만 설명하세요.
 현재 본업의 지속성, 소득 성장 가능성, 저축 여력과 부채 등 실제 상황에서 의미 있는 요소를 중심으로 서술하세요. 시스템이나 자산에서 발생하는 소득은 모든 사람에게 필요한 정답처럼 제시하지 말고, 여건에 따라 장기적으로 검토할 수 있는 선택지로 정중하게 다루세요."""
 
-    # --------------------------------------------------------------------------
-    # ⚙️ AI 프롬프트 (맛 조절 · 원칙 선택 · 추가 입력 펼치기)
-    # --------------------------------------------------------------------------
+    # ⚙️ AI 프롬프트 (맛 조절 · 원칙 선택 · 추가 입력)
     with st.expander("⚙️ AI 프롬프트 (맛 조절 · 원칙 선택 · 추가 입력)"):
         st.markdown("<div style='font-size:16px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>1. 분석 강도(맛) 선택</div>", unsafe_allow_html=True)
         taste_mode = st.pills(
@@ -1808,7 +1822,6 @@ else:
             label_visibility="collapsed"
         )
 
-    # 선택된 맛(강도)에 따른 프롬프트 지침
     if "순한맛" in taste_mode:
         taste_directive = """[분석 톤앤매너: ☕ 순한맛]
 - 직접적이거나 뼈아픈 표현을 지양하고, 은유적이고 다정하며 온기 있는 어조를 유지하세요.
@@ -1823,7 +1836,6 @@ else:
 - 힘을 빼고, 정직하되, 전문가답고, 정중한 태도를 견지하세요.
 - 과도한 낙관론과 과장된 위협을 모두 배제하고, 숫자를 있는 그대로 차분히 비춰주는 객관적 거울의 태도를 유지하세요."""
 
-    # 체크된 원칙들만 동적으로 조합
     active_principles = []
     if chk_1: active_principles.append("당신은 인터뷰이를 평가하거나 가르치지 않는 '정직하고 따뜻한 객관적 거울'입니다.")
     if chk_2: active_principles.append("훈계, 잔소리, 공포를 유발하는 표현, 특정 행동이나 결론의 강요를 금지합니다.")
@@ -1837,8 +1849,6 @@ else:
     active_principles.append("입력된 자료만으로 판단할 수 없는 사항은 단정하지 말고, 필요한 경우 확인이 필요하다고 짧게 밝혀주세요.")
 
     principles_text = "\n".join([f"{i+1}. {p}" for i, p in enumerate(active_principles)])
-
-    # 사용자 직접 추가 지침 결합
     custom_section = f"\n[사용자 맞춤 추가 요청사항]\n{user_custom_instruction.strip()}" if user_custom_instruction.strip() else ""
 
     full_prompt_text = f"""[절대 엄수 원칙]
@@ -1862,7 +1872,6 @@ else:
 은퇴 후 월 희망 생활비와 예상 월연금의 차이를 설명하되, 입력된 값의 성격과 산출 근거가 불분명하면 안정성이 확보되었다고 단정하지 마세요. 두 금액의 단순 차액과 실제 은퇴 안정성은 구분하세요.
 은퇴 후 약 {winter_years}년은 계산상 가정으로 취급하세요. 현재 경력 단계와 순자산을 연결해 설명하되, 실제 현금 보유액이나 유동성 자료가 없다면 유동성 준비 상태를 평가하지 마세요. 결혼, 자녀, 주거 계획 등 확인되지 않은 미래 사건을 전제로 삼지 말고, 정중하고 담백하게 서술하세요."""
 
-    # AI 리포트 생성 버튼
     if st.button("⚡ AI 리포트 생성", type="primary", use_container_width=True):
         st.session_state.ai_summary = summary
         st.session_state.ai_comment = None
@@ -1933,9 +1942,10 @@ else:
 
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
-        sync_code = export_diagnosis_code()
-        
-        kakao_report_text = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
+        # ----------------------------------------------------------------------
+        # 💬 카카오톡 전송용 순수 리포트 (암호 코드 완전 분리)
+        # ----------------------------------------------------------------------
+        kakao_clean_report = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
 • 진단자: {person_name} ({person_age}세, {career_st})
 • 소득 형태: {st.session_state.get('job_form','직장인')} (배우자: {st.session_state.get('job_spouse_form','해당 없음')})
 • 분석 모드: {taste_mode}
@@ -1950,17 +1960,39 @@ else:
 {formatted_income}
 
 [은퇴 안정성 성찰]
-{formatted_retire}
-
-----------------------------------------
-📌 나침반 동기화 복원코드 (아래 한 줄):
-{sync_code}
-----------------------------------------"""
+{formatted_retire}"""
 
         st.markdown("### 💬 카카오톡 전송용 리포트")
-        st.caption("※ 카카오톡 대화방에 바로 붙여넣기(Ctrl+V)하세요. 전달받은 분은 하단의 복원코드로 사이드바에서 0.1초 만에 동일하게 열어볼 수 있습니다.")
-        
-        st.code(kakao_report_text, language="markdown")
+        st.caption("※ 아래 리포트를 복사하여 카카오톡 대화방에 바로 붙여넣기(Ctrl+V)하세요.")
+        st.code(kakao_clean_report, language="markdown")
+
+        # ----------------------------------------------------------------------
+        # 🔑 나침반 동기화 복원코드 단독 원클릭 복사 영역 (암호 비노출)
+        # ----------------------------------------------------------------------
+        sync_code = export_diagnosis_code()
+        sync_b64 = base64.b64encode(sync_code.encode('utf-8')).decode('utf-8')
+
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.markdown("""
+<div style="background: rgba(30, 41, 59, 0.45); border: 1px dashed #475569; border-radius: 12px; padding: 16px 18px;">
+<div style="font-size: 15px; font-weight: 800; color: #F8FAFC; margin-bottom: 4px;">🔑 인터뷰어 동기화 복원코드</div>
+<div style="font-size: 13.5px; color: #94A3B8; margin-bottom: 12px;">인터뷰어에게 전달할 세션 복원코드입니다. 아래 버튼을 누르면 코드를 보지 않고도 클립보드에 바로 복사됩니다.</div>
+""", unsafe_allow_html=True)
+
+        st.markdown(f"""
+<button onclick="
+try {{
+    var decoded = decodeURIComponent(escape(window.atob('{sync_b64}')));
+    navigator.clipboard.writeText(decoded);
+    alert('동기화 복원코드가 클립보드에 복사되었습니다!\\n인터뷰어에게 카톡으로 붙여넣기(Ctrl+V)해 주세요.');
+}} catch(err) {{
+    alert('복사 오류가 발생했습니다.');
+}}
+" style="background:#1E293B; border:1.5px solid #38BDF8; color:#38BDF8 !important; padding:10px 18px; border-radius:8px; font-weight:800; font-size:15px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+<span>🔑</span><span>동기화 복원코드 복사</span>
+</button>
+</div>
+""", unsafe_allow_html=True)
 
     else:
         st.info("‘AI 리포트 생성’ 버튼을 누르면 Gemini 초고속 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
