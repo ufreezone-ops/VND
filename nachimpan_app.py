@@ -1272,7 +1272,7 @@ if selected_page == "우리집 가계부":
 
 
 # ==============================================================================
-# 6.02.00 | Tab 2 — 삶과 생계수단 (물통/파이프라인 & 4가지 질문 성찰)
+# 6.02.00 | Tab 2 — 삶과 생계수단 (더 생각해보기 1줄 대형화 & 통일 디자인)
 # ==============================================================================
 elif selected_page == "삶과 생계수단":
     st.markdown("## 삶과 생계수단")
@@ -1368,35 +1368,37 @@ elif selected_page == "삶과 생계수단":
 </div>
 """, unsafe_allow_html=True)
 
-    # 더 생각해보기: 은퇴를 바라보는 네 가지 질문 (들여쓰기 및 마크다운 깨짐 방지)
+    # 더 생각해보기: 은퇴를 바라보는 네 가지 질문 (번호+질문 1줄 나란히 & 18.5px 대형화 & 통일 디자인)
     st.markdown("""
-<div style="margin: 26px 0 24px 0; padding: 4px 2px;">
-<div style="font-size: 19px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">더 생각해보기</div>
-<div style="font-size: 13.5px; color: #94A3B8; margin-bottom: 16px; line-height: 1.6;">우리가 당연하게 여겨온 것들을 잠시 멈추어 생각해 봅니다.</div>
+<div style="margin: 28px 0 26px 0; padding: 4px 2px;">
+<div style="font-size: 21px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">더 생각해보기</div>
+<div style="font-size: 14px; color: #94A3B8; margin-bottom: 18px; line-height: 1.6;">우리가 당연하게 여겨온 것들을 잠시 멈추어 생각해 봅니다.</div>
 
-<div style="border-left: 2px solid #475569; padding: 2px 0 2px 16px; margin-bottom: 15px;">
-<div style="font-size: 12px; color: #94A3B8; font-weight: 750; margin-bottom: 5px;">01</div>
-<div style="font-size: 15px; color: #E2E8F0; line-height: 1.7; word-break: keep-all;">'일을 하고 있는 것'과 '생계를 위해 반드시 일해야 하는 것'은 같은가?</div>
+<div style="display: flex; flex-direction: column; gap: 14px;">
+<div style="background: rgba(30, 41, 59, 0.35); border-left: 3.5px solid #64748B; border-radius: 4px; padding: 12px 16px; display: flex; align-items: baseline; gap: 12px;">
+<span style="font-size: 14px; font-weight: 800; color: #94A3B8; min-width: 24px;">01</span>
+<span style="font-size: 18.5px; font-weight: 800; color: #F8FAFC; line-height: 1.5; word-break: keep-all;">'일을 하고 있는 것'과 '생계를 위해 반드시 일해야 하는 것'은 같은가?</span>
 </div>
 
-<div style="border-left: 2px solid #475569; padding: 2px 0 2px 16px; margin-bottom: 15px;">
-<div style="font-size: 12px; color: #94A3B8; font-weight: 750; margin-bottom: 5px;">02</div>
-<div style="font-size: 15px; color: #E2E8F0; line-height: 1.7; word-break: keep-all;">'소득이 발생하는 것'과 '내가 직접 일해야 소득이 발생하는 것'은 같은가?</div>
+<div style="background: rgba(30, 41, 59, 0.35); border-left: 3.5px solid #64748B; border-radius: 4px; padding: 12px 16px; display: flex; align-items: baseline; gap: 12px;">
+<span style="font-size: 14px; font-weight: 800; color: #94A3B8; min-width: 24px;">02</span>
+<span style="font-size: 18.5px; font-weight: 800; color: #F8FAFC; line-height: 1.5; word-break: keep-all;">'소득이 발생하는 것'과 '내가 직접 일해야 소득이 발생하는 것'은 같은가?</span>
 </div>
 
-<div style="border-left: 2px solid #475569; padding: 2px 0 2px 16px; margin-bottom: 15px;">
-<div style="font-size: 12px; color: #94A3B8; font-weight: 750; margin-bottom: 5px;">03</div>
-<div style="font-size: 15px; color: #E2E8F0; line-height: 1.7; word-break: keep-all;">'직장을 그만두는 것'과 '은퇴'는 같은가?</div>
+<div style="background: rgba(30, 41, 59, 0.35); border-left: 3.5px solid #64748B; border-radius: 4px; padding: 12px 16px; display: flex; align-items: baseline; gap: 12px;">
+<span style="font-size: 14px; font-weight: 800; color: #94A3B8; min-width: 24px;">03</span>
+<span style="font-size: 18.5px; font-weight: 800; color: #F8FAFC; line-height: 1.5; word-break: keep-all;">'직장을 그만두는 것'과 '은퇴'는 같은가?</span>
 </div>
 
-<div style="border-left: 2px solid #EA580C; padding: 2px 0 2px 16px;">
-<div style="font-size: 12px; color: #FB923C; font-weight: 750; margin-bottom: 5px;">04</div>
-<div style="font-size: 15px; color: #F8FAFC; font-weight: 700; line-height: 1.7; word-break: keep-all;">'은퇴'란 무엇이며, '나'는 은퇴를 어떻게 바라볼 수 있을까?</div>
+<div style="background: rgba(30, 41, 59, 0.35); border-left: 3.5px solid #64748B; border-radius: 4px; padding: 12px 16px; display: flex; align-items: baseline; gap: 12px;">
+<span style="font-size: 14px; font-weight: 800; color: #94A3B8; min-width: 24px;">04</span>
+<span style="font-size: 18.5px; font-weight: 800; color: #F8FAFC; line-height: 1.5; word-break: keep-all;">'은퇴'란 무엇이며, '나'는 은퇴를 어떻게 바라볼 수 있을까?</span>
+</div>
 </div>
 </div>
 """, unsafe_allow_html=True)
 
-    # 내가 생각하는 은퇴 예상 나이 (들여쓰기 정상화)
+    # 내가 생각하는 은퇴 예상 나이
     st.markdown("""
 <div style="background: rgba(24, 32, 47, 0.65); border: 1.5px solid #3b4b66; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
 <div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">내가 생각하는 은퇴 예상 나이</div>
