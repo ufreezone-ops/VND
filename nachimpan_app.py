@@ -1372,46 +1372,43 @@ elif selected_page == "인생의 사계절":
     winter_years = max(0, life_expectancy - retire_age)
     winter_months = winter_years * 12
 
-# 6.03.01 | 가족 구성원 나이 및 형제자매 인라인 입력 폼 (실시간 반응형 2열 배치)
-    # 6.03.02 | (통합 완료: 자녀수·형제자매수 상단 실시간 연동)
+# 6.03.01 | 가족 구성원 나이 입력 폼 (3대 직계 가족 중심 슬림화)
+    # 6.03.02 | (형제자매 기능 전면 폐기 ➜ 직계 부양가족 집중 완료)
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
 
-    # 폼 바깥 상단: 자녀 수 & 형제자매 수 2열 실시간 선택 (변경 즉시 하단 입력창 동적 반응)
-    col_cnt1, col_cnt2 = st.columns(2)
-    with col_cnt1:
-        child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
-        prev_c_count = st.session_state.get("child_count", "입력 안 함")
-        if prev_c_count not in child_options:
-            prev_c_count = "입력 안 함"
-        child_count = st.selectbox(
-            "자녀 수", child_options,
-            index=child_options.index(prev_c_count),
-            key="child_count_select_live"
-        )
+    # 1. 자녀 수 선택 (1명, 2명, 3명, 4명 이상 선택 시 즉각 반응)
+    child_options = ["입력 안 함", "없음", "1명", "2명", "3명", "4명 이상"]
+    prev_c_count = st.session_state.get("child_count", "입력 안 함")
+    if prev_c_count not in child_options:
+        prev_c_count = "입력 안 함"
 
-    with col_cnt2:
-        sib_count_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
-        prev_s_count = st.session_state.get("sib_count", "입력 안 함")
-        if prev_s_count not in sib_count_options:
-            prev_s_count = "입력 안 함"
-        sib_count = st.selectbox(
-            "형제자매 수 (선택)", sib_count_options,
-            index=sib_count_options.index(prev_s_count),
-            key="sib_count_select_live"
-        )
+    child_count = st.selectbox(
+        "자녀 수", child_options,
+        index=child_options.index(prev_c_count),
+        key="child_count_select_direct"
+    )
 
     with st.form("family_form"):
-        # 1. 자녀 나이 (child_count에 따라 실시간 렌더링)
-        if child_count in ["1명", "2명", "3명 이상"]:
-            c_col1, c_col2 = st.columns(2)
-            with c_col1:
-                child_age = st.number_input(
+        # 2. 배우자 나이 (상처 주지 않는 중립적 질문)
+        spouse_age = st.number_input(
+            "배우자 나이 (없거나 미입력 시 0)",
+            min_value=0, max_value=120,
+            value=int(st.session_state.get("spouse_age", 0)),
+            step=1
+        )
+
+        # 3. 자녀 나이 (선택한 인원수만큼만 2열 그리드로 단정하게 노출)
+        child_age1, child_age2, child_age3, child_age4 = 0, 0, 0, 0
+
+        if child_count in ["1명", "2명", "3명", "4명 이상"]:
+            c1_col, c2_col = st.columns(2)
+            with c1_col:
+                child_age1 = st.number_input(
                     "첫째 자녀 나이", min_value=0, max_value=100,
                     value=int(st.session_state.get("child_age", 0)), step=1
                 )
-            with c_col2:
-                child_age2 = 0
-                if child_count in ["2명", "3명 이상"]:
+            with c2_col:
+                if child_count in ["2명", "3명", "4명 이상"]:
                     child_age2 = st.number_input(
                         "둘째 자녀 나이", min_value=0, max_value=100,
                         value=int(st.session_state.get("child_age2", 0)), step=1
@@ -1419,125 +1416,90 @@ elif selected_page == "인생의 사계절":
                 else:
                     st.write("")
 
-            child_age3 = 0
-            if child_count == "3명 이상":
+        if child_count in ["3명", "4명 이상"]:
+            c3_col, c4_col = st.columns(2)
+            with c3_col:
                 child_age3 = st.number_input(
                     "셋째 자녀 나이", min_value=0, max_value=100,
                     value=int(st.session_state.get("child_age3", 0)), step=1
                 )
-        else:
-            child_age = 0
-            child_age2 = 0
-            child_age3 = 0
-
-        st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
-
-        # 2. 배우자 및 부모님 나이 (2열)
-        r1_c1, r1_c2 = st.columns(2)
-        with r1_c1:
-            spouse_age = st.number_input("배우자 나이 (없거나 미입력 시 0)", min_value=0, max_value=120, value=int(st.session_state.get("spouse_age", 0)), step=1)
-        with r1_c2:
-            father_age = st.number_input("아버지 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("father_age", 0)), step=1)
-
-        r2_c1, r2_c2 = st.columns(2)
-        with r2_c1:
-            mother_age = st.number_input("어머니 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("mother_age", 0)), step=1)
-        with r2_c2:
-            st.write("")
-
-        # 3. 형제자매 관계 및 나이 (sib_count에 따라 실시간 동적 렌더링)
-        role_list = ["언니", "형", "여동생", "누나", "남동생", "오빠"]
-        sib_rel1, sib_age1 = "언니", 0
-        sib_rel2, sib_age2 = "형", 0
-        sib_rel3, sib_age3 = "여동생", 0
-
-        if sib_count in ["1명", "2명", "3명 이상"]:
-            st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
-            s1_c1, s1_c2 = st.columns(2)
-            with s1_c1:
-                p_r1 = st.session_state.get("sib_rel1", "언니")
-                sib_rel1 = st.selectbox("첫째 형제자매 관계", role_list, index=role_list.index(p_r1) if p_r1 in role_list else 0, key="sb_rel_1")
-            with s1_c2:
-                sib_age1 = st.number_input("첫째 형제자매 나이", min_value=0, max_value=120, value=int(st.session_state.get("sib_age1", 0)), step=1, key="sb_age_1")
-
-        if sib_count in ["2명", "3명 이상"]:
-            s2_c1, s2_c2 = st.columns(2)
-            with s2_c1:
-                p_r2 = st.session_state.get("sib_rel2", "형")
-                sib_rel2 = st.selectbox("둘째 형제자매 관계", role_list, index=role_list.index(p_r2) if p_r2 in role_list else 1, key="sb_rel_2")
-            with s2_c2:
-                sib_age2 = st.number_input("둘째 형제자매 나이", min_value=0, max_value=120, value=int(st.session_state.get("sib_age2", 0)), step=1, key="sb_age_2")
-
-        if sib_count == "3명 이상":
-            s3_c1, s3_c2 = st.columns(2)
-            with s3_c1:
-                p_r3 = st.session_state.get("sib_rel3", "여동생")
-                sib_rel3 = st.selectbox("셋째 형제자매 관계", role_list, index=role_list.index(p_r3) if p_r3 in role_list else 2, key="sb_rel_3")
-            with s3_c2:
-                sib_age3 = st.number_input("셋째 형제자매 나이", min_value=0, max_value=120, value=int(st.session_state.get("sib_age3", 0)), step=1, key="sb_age_3")
+            with c4_col:
+                if child_count == "4명 이상":
+                    child_age4 = st.number_input(
+                        "넷째 자녀 나이", min_value=0, max_value=100,
+                        value=int(st.session_state.get("child_age4", 0)), step=1
+                    )
+                else:
+                    st.write("")
 
         st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-        # 4. 앞으로의 가족 계획
+        # 4. 부모님 나이 (2열 나란히)
+        f_col, m_col = st.columns(2)
+        with f_col:
+            father_age = st.number_input(
+                "아버지 나이 (선택, 모르면 0)", min_value=0, max_value=120,
+                value=int(st.session_state.get("father_age", 0)), step=1
+            )
+        with m_col:
+            mother_age = st.number_input(
+                "어머니 나이 (선택, 모르면 0)", min_value=0, max_value=120,
+                value=int(st.session_state.get("mother_age", 0)), step=1
+            )
+
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+        # 5. 앞으로의 가족 계획 (3열 나란히 ➜ 생애주기 곡선 팩트 매핑용)
         st.markdown("#### 앞으로의 가족 계획 (선택)")
         p_c1, p_c2, p_c3 = st.columns(3)
         with p_c1:
             marriage_options = ["미정", "계획 없음", "1~3년 내 결혼 생각 있음", "3년 이후 결혼 생각 있음", "결혼 예정/준비 중"]
-            marriage_plan = st.selectbox("결혼 계획", marriage_options, index=marriage_options.index(st.session_state.get("marriage_plan", "미정")) if st.session_state.get("marriage_plan", "미정") in marriage_options else 0)
+            marriage_plan = st.selectbox(
+                "결혼 계획", marriage_options,
+                index=marriage_options.index(st.session_state.get("marriage_plan", "미정")) if st.session_state.get("marriage_plan", "미정") in marriage_options else 0
+            )
         with p_c2:
             child_plan_options = ["미정", "계획 없음", "자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"]
-            child_plan = st.selectbox("출산·자녀 계획", child_plan_options, index=child_plan_options.index(st.session_state.get("child_plan", "미정")) if st.session_state.get("child_plan", "미정") in child_plan_options else 0)
+            child_plan = st.selectbox(
+                "출산·자녀 계획", child_plan_options,
+                index=child_plan_options.index(st.session_state.get("child_plan", "미정")) if st.session_state.get("child_plan", "미정") in child_plan_options else 0
+            )
         with p_c3:
             housing_options = ["미정", "현재 주거 유지", "전세·월세 이동 고려", "주택 구입 고려", "주거 계획 확정"]
-            housing_plan = st.selectbox("주거 계획", housing_options, index=housing_options.index(st.session_state.get("housing_plan", "미정")) if st.session_state.get("housing_plan", "미정") in housing_options else 0)
+            housing_plan = st.selectbox(
+                "주거 계획", housing_options,
+                index=housing_options.index(st.session_state.get("housing_plan", "미정")) if st.session_state.get("housing_plan", "미정") in housing_options else 0
+            )
 
         save_family = st.form_submit_button("가족 정보 반영하기", use_container_width=True, type="primary")
 
     if save_family:
         st.session_state.spouse_age = spouse_age
         st.session_state.child_count = child_count
-        st.session_state.child_age = child_age
+        st.session_state.child_age = child_age1
         st.session_state.child_age2 = child_age2
         st.session_state.child_age3 = child_age3
+        st.session_state.child_age4 = child_age4
         st.session_state.father_age = father_age
         st.session_state.mother_age = mother_age
         st.session_state.marriage_plan = marriage_plan
         st.session_state.child_plan = child_plan
         st.session_state.housing_plan = housing_plan
         
-        # 형제자매 데이터 세션 저장 및 호환 리스트 자동 생성
-        st.session_state.sib_count = sib_count
-        st.session_state.sib_rel1 = sib_rel1
-        st.session_state.sib_age1 = sib_age1
-        st.session_state.sib_rel2 = sib_rel2
-        st.session_state.sib_age2 = sib_age2
-        st.session_state.sib_rel3 = sib_rel3
-        st.session_state.sib_age3 = sib_age3
-
-        new_sib_items = []
-        if sib_count in ["1명", "2명", "3명 이상"] and sib_age1 > 0:
-            new_sib_items.append({"label": sib_rel1, "age": sib_age1})
-        if sib_count in ["2명", "3명 이상"] and sib_age2 > 0:
-            lbl2 = f"{sib_rel2} 2" if sib_rel2 == sib_rel1 else sib_rel2
-            new_sib_items.append({"label": lbl2, "age": sib_age2})
-        if sib_count == "3명 이상" and sib_age3 > 0:
-            lbl3 = f"{sib_rel3} 3" if sib_rel3 in [sib_rel1, sib_rel2] else sib_rel3
-            new_sib_items.append({"label": lbl3, "age": sib_age3})
-        st.session_state.sibling_items = new_sib_items
-        
+        # 형제자매 잔재 데이터 완전 정리
+        st.session_state.pop("sibling_items", None)
+        st.session_state.pop("sib_count", None)
         st.rerun()
 
-    # 6.03.03 | 은퇴 시점 가족 미래 나이 2열 슬림 카드
+    # 6.03.03 | 은퇴 시점 가족 미래 나이 2열 슬림 카드 (직계 3대 집중)
     people = [(st.session_state.get("person_name", "나"), cur_age)]
     if getv("spouse_age", 0) > 0: people.append(("배우자", int(getv("spouse_age"))))
     if getv("child_age", 0) > 0: people.append(("첫째 자녀", int(getv("child_age"))))
     if getv("child_age2", 0) > 0: people.append(("둘째 자녀", int(getv("child_age2"))))
     if getv("child_age3", 0) > 0: people.append(("셋째 자녀", int(getv("child_age3"))))
+    if getv("child_age4", 0) > 0: people.append(("넷째 자녀", int(getv("child_age4"))))
     if getv("father_age", 0) > 0: people.append(("아버지", int(getv("father_age"))))
     if getv("mother_age", 0) > 0: people.append(("어머니", int(getv("mother_age"))))
-    for s_it in st.session_state.get("sibling_items", []):
-        if int(s_it.get("age", 0)) > 0:
-            people.append((s_it["label"], int(s_it["age"])))
 
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 18px; margin: 18px 0 10px 0; display:flex; justify-content:space-between; align-items:center;">
