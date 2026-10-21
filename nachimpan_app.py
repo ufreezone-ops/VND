@@ -1821,7 +1821,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (100% 복사 보장 동기화 버튼 & 클린 리포트)
+# 6.04.00 | Tab 4 — AI 시선 (독립 iframe 100% 클립보드 복사 엔진 탑재)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1893,7 +1893,7 @@ else:
         }
     }
 
-    if q_self in ["B", "I"]:
+    if has_pipeline:
         income_instruction = f"""[소득 개선 방향 - B/I 파이프라인 보유형 지침]
 인터뷰이는 현재 사분면상 '{q_self}'(사업가/투자자)로서 이미 시스템과 자산에서 발생하는 파이프라인과 상당한 자산 기반({summary['net_worth']/10000:,.1f}억 원)을 확보하고 계십니다.
 절대 억지로 노동 의존형 물통이라고 규정하지 마시고, 구축하신 파이프라인과 자산의 성취를 있는 그대로 존중하세요.
@@ -1903,7 +1903,7 @@ else:
 현재 부부의 소득은 일손을 멈추면 수입이 중단되는 노동 의존형(E/S) 성격임을 정중하게 짚으세요.
 본업을 충실히 유지하면서, 시간과 노동력에만 매이지 않고 시스템과 자산에서 흘러나오는 '파이프라인'을 장기적으로 준비해야 하는 이유를 객관적인 관점에서 정중히 제안하세요."""
 
-    # ⚙️ AI 프롬프트 (기본 '순한맛' 표출 & 리포트 생성 시 자동 접힘)
+    # ⚙️ AI 프롬프트 (맛 조절 · 원칙 선택 · 추가 입력)
     current_taste_val = st.session_state.get("pills_ai_taste", "☕ 순한맛 (위로/은유)")
     short_taste_tag = "☕ 순한맛" if "순한맛" in current_taste_val else ("🌶️ 매운맛" if "매운맛" in current_taste_val else "🧭 보통맛")
     
@@ -2091,49 +2091,84 @@ else:
         st.code(kakao_clean_report, language="markdown")
 
         # ----------------------------------------------------------------------
-        # 🔑 나침반 동기화 복원코드 단독 버튼 (어떤 브라우저든 100% 복사 보장)
+        # 🔑 나침반 동기화 복원코드 단독 버튼 (독립 iframe 100% 클립보드 복사 엔진)
         # ----------------------------------------------------------------------
         sync_code = export_diagnosis_code()
 
-        st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
-        st.markdown(f"""
-<div style="margin-top: 4px; margin-bottom: 12px;">
-<button onclick="
-(function() {{
-    var code = '{sync_code}';
-    function showOk() {{
-        alert('동기화 복원코드가 복사되었습니다!\\n인터뷰어에게 카톡으로 붙여넣기(Ctrl+V)해 주세요.');
-    }}
-    if (navigator.clipboard && window.isSecureContext) {{
-        navigator.clipboard.writeText(code).then(showOk).catch(function() {{
-            fallback(code);
-        }});
-    }} else {{
-        fallback(code);
-    }}
-    function fallback(txt) {{
-        var ta = document.createElement('textarea');
-        ta.value = txt;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        ta.style.top = '-9999px';
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        try {{
-            document.execCommand('copy');
-            showOk();
-        }} catch (e) {{
-            prompt('복원코드를 직접 복사(Ctrl+C)하세요:', txt);
-        }}
-        document.body.removeChild(ta);
-    }}
-}})();
-" style="background:#1E293B; border:1.5px solid #38BDF8; color:#38BDF8 !important; padding:10px 18px; border-radius:8px; font-weight:800; font-size:15px; cursor:pointer; display:flex; align-items:center; gap:8px;">
-<span>🔑</span><span>동기화 복원코드 복사</span>
+        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+        copy_btn_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body {{
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+}}
+#copyBtn {{
+    background: #1E293B;
+    border: 1.5px solid #38BDF8;
+    color: #38BDF8;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 800;
+    font-size: 15px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    transition: background 0.15s ease;
+}}
+#copyBtn:hover {{
+    background: #334155;
+    color: #FFFFFF;
+}}
+</style>
+</head>
+<body>
+<button id="copyBtn">
+    <span>🔑</span><span>동기화 복원코드 복사</span>
 </button>
-</div>
-""", unsafe_allow_html=True)
+<script>
+document.getElementById('copyBtn').addEventListener('click', function() {{
+    var code = '{sync_code}';
+    var ta = document.createElement('textarea');
+    ta.value = code;
+    ta.style.position = 'fixed';
+    ta.style.left = '-999999px';
+    ta.style.top = '-999999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    var success = false;
+    try {{
+        success = document.execCommand('copy');
+    }} catch (e) {{
+        success = false;
+    }}
+    document.body.removeChild(ta);
+    
+    if (!success && navigator.clipboard && window.isSecureContext) {{
+        navigator.clipboard.writeText(code).then(function() {{
+            alert('동기화 복원코드가 복사되었습니다!\\n인터뷰어에게 카톡으로 붙여넣기(Ctrl+V)해 주세요.');
+        }}).catch(function() {{
+            prompt('복원코드를 직접 복사(Ctrl+C)하세요:', code);
+        }});
+    }} else if (success) {{
+        alert('동기화 복원코드가 복사되었습니다!\\n인터뷰어에게 카톡으로 붙여넣기(Ctrl+V)해 주세요.');
+    }} else {{
+        prompt('복원코드를 직접 복사(Ctrl+C)하세요:', code);
+    }}
+}});
+</script>
+</body>
+</html>
+"""
+        st.components.v1.html(copy_btn_html, height=54)
 
     else:
         st.info("‘AI 리포트 생성’ 버튼을 누르면 Gemini 초고속 엔진이 삶과 재무의 성찰 리포트를 생성합니다.")
