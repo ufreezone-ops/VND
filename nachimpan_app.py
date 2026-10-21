@@ -1372,44 +1372,102 @@ elif selected_page == "인생의 사계절":
     winter_years = max(0, life_expectancy - retire_age)
     winter_months = winter_years * 12
 
-    # 6.03.01 | 가족 구성원 나이 입력 폼 (2열 배치)
+# 6.03.01 | 가족 구성원 나이 및 형제자매 인라인 입력 폼 (대안 A 통일형)
+    # 6.03.02 | (형제자매 6버튼 폐기 ➜ 6.03.01 단일 폼 인라인으로 통합 완료)
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
-    child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
-    child_count = st.selectbox(
-        "자녀 수", child_options,
-        index=child_options.index(st.session_state.get("child_count", "입력 안 함"))
-        if st.session_state.get("child_count", "입력 안 함") in child_options else 0,
-        key="child_count_live",
-    )
-
+    
     with st.form("family_form"):
-        r1_c1, r1_c2 = st.columns(2)
-        with r1_c1:
-            spouse_age = st.number_input("배우자 나이 (없거나 미입력 시 0)", min_value=0, max_value=120, value=int(st.session_state.get("spouse_age", 0)), step=1)
-        with r1_c2:
+        # 1. 자녀 수 및 나이
+        child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
+        prev_c_count = st.session_state.get("child_count", "입력 안 함")
+        if prev_c_count not in child_options:
+            prev_c_count = "입력 안 함"
+            
+        child_count = st.selectbox(
+            "자녀 수", child_options,
+            index=child_options.index(prev_c_count),
+            key="child_count_select"
+        )
+
+        c_col1, c_col2 = st.columns(2)
+        with c_col1:
             child_age = int(st.session_state.get("child_age", 0)) if child_count in ["1명", "2명", "3명 이상"] else 0
             if child_count in ["1명", "2명", "3명 이상"]:
                 child_age = st.number_input("첫째 자녀 나이", min_value=0, max_value=100, value=child_age, step=1)
             else:
                 st.write("")
-
-        child_age2 = int(st.session_state.get("child_age2", 0)) if child_count in ["2명", "3명 이상"] else 0
-        child_age3 = int(st.session_state.get("child_age3", 0)) if child_count == "3명 이상" else 0
-        if child_count in ["2명", "3명 이상"]:
-            r2_c1, r2_c2 = st.columns(2)
-            with r2_c1:
+        with c_col2:
+            child_age2 = int(st.session_state.get("child_age2", 0)) if child_count in ["2명", "3명 이상"] else 0
+            if child_count in ["2명", "3명 이상"]:
                 child_age2 = st.number_input("둘째 자녀 나이", min_value=0, max_value=100, value=child_age2, step=1)
-            with r2_c2:
-                if child_count == "3명 이상":
-                    child_age3 = st.number_input("셋째 자녀 나이", min_value=0, max_value=100, value=child_age3, step=1)
+            else:
+                st.write("")
 
-        col_f, col_m = st.columns(2)
-        with col_f:
+        child_age3 = int(st.session_state.get("child_age3", 0)) if child_count == "3명 이상" else 0
+        if child_count == "3명 이상":
+            child_age3 = st.number_input("셋째 자녀 나이", min_value=0, max_value=100, value=child_age3, step=1)
+
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+
+        # 2. 배우자 및 부모님 나이 (2열)
+        r1_c1, r1_c2 = st.columns(2)
+        with r1_c1:
+            spouse_age = st.number_input("배우자 나이 (없거나 미입력 시 0)", min_value=0, max_value=120, value=int(st.session_state.get("spouse_age", 0)), step=1)
+        with r1_c2:
             father_age = st.number_input("아버지 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("father_age", 0)), step=1)
-        with col_m:
+
+        r2_c1, r2_c2 = st.columns(2)
+        with r2_c1:
             mother_age = st.number_input("어머니 나이 (선택, 모르면 0)", min_value=0, max_value=120, value=int(st.session_state.get("mother_age", 0)), step=1)
-            
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        with r2_c2:
+            st.write("")
+
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+
+        # 3. [대안 A] 형제자매 수 선택 및 인라인 1줄 입력 (자녀와 완벽히 동일한 패턴)
+        sib_count_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
+        prev_s_count = st.session_state.get("sib_count", "입력 안 함")
+        if prev_s_count not in sib_count_options:
+            prev_s_count = "입력 안 함"
+
+        sib_count = st.selectbox(
+            "형제자매 수 (선택)", sib_count_options,
+            index=sib_count_options.index(prev_s_count),
+            key="sib_count_select"
+        )
+
+        role_list = ["언니", "형", "여동생", "누나", "남동생", "오빠"]
+        sib_rel1, sib_age1 = "언니", 0
+        sib_rel2, sib_age2 = "형", 0
+        sib_rel3, sib_age3 = "여동생", 0
+
+        if sib_count in ["1명", "2명", "3명 이상"]:
+            s1_c1, s1_c2 = st.columns(2)
+            with s1_c1:
+                p_r1 = st.session_state.get("sib_rel1", "언니")
+                sib_rel1 = st.selectbox("첫째 형제자매 관계", role_list, index=role_list.index(p_r1) if p_r1 in role_list else 0, key="sb_rel_1")
+            with s1_c2:
+                sib_age1 = st.number_input("첫째 형제자매 나이", min_value=0, max_value=120, value=int(st.session_state.get("sib_age1", 0)), step=1, key="sb_age_1")
+
+        if sib_count in ["2명", "3명 이상"]:
+            s2_c1, s2_c2 = st.columns(2)
+            with s2_c1:
+                p_r2 = st.session_state.get("sib_rel2", "형")
+                sib_rel2 = st.selectbox("둘째 형제자매 관계", role_list, index=role_list.index(p_r2) if p_r2 in role_list else 1, key="sb_rel_2")
+            with s2_c2:
+                sib_age2 = st.number_input("둘째 형제자매 나이", min_value=0, max_value=120, value=int(st.session_state.get("sib_age2", 0)), step=1, key="sb_age_2")
+
+        if sib_count == "3명 이상":
+            s3_c1, s3_c2 = st.columns(2)
+            with s3_c1:
+                p_r3 = st.session_state.get("sib_rel3", "여동생")
+                sib_rel3 = st.selectbox("셋째 형제자매 관계", role_list, index=role_list.index(p_r3) if p_r3 in role_list else 2, key="sb_rel_3")
+            with s3_c2:
+                sib_age3 = st.number_input("셋째 형제자매 나이", min_value=0, max_value=120, value=int(st.session_state.get("sib_age3", 0)), step=1, key="sb_age_3")
+
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+
+        # 4. 앞으로의 가족 계획
         st.markdown("#### 앞으로의 가족 계획 (선택)")
         p_c1, p_c2, p_c3 = st.columns(3)
         with p_c1:
@@ -1422,7 +1480,7 @@ elif selected_page == "인생의 사계절":
             housing_options = ["미정", "현재 주거 유지", "전세·월세 이동 고려", "주택 구입 고려", "주거 계획 확정"]
             housing_plan = st.selectbox("주거 계획", housing_options, index=housing_options.index(st.session_state.get("housing_plan", "미정")) if st.session_state.get("housing_plan", "미정") in housing_options else 0)
 
-        save_family = st.form_submit_button("가족 기본 정보 반영하기", use_container_width=True, type="primary")
+        save_family = st.form_submit_button("가족 정보 반영하기", use_container_width=True, type="primary")
 
     if save_family:
         st.session_state.spouse_age = spouse_age
@@ -1435,109 +1493,27 @@ elif selected_page == "인생의 사계절":
         st.session_state.marriage_plan = marriage_plan
         st.session_state.child_plan = child_plan
         st.session_state.housing_plan = housing_plan
-        st.rerun()
+        
+        # 형제자매 데이터 세션 저장 및 호환 리스트 자동 생성
+        st.session_state.sib_count = sib_count
+        st.session_state.sib_rel1 = sib_rel1
+        st.session_state.sib_age1 = sib_age1
+        st.session_state.sib_rel2 = sib_rel2
+        st.session_state.sib_age2 = sib_age2
+        st.session_state.sib_rel3 = sib_rel3
+        st.session_state.sib_age3 = sib_age3
 
-    # 6.03.02 | 👥 형제자매 3x2 중립 믹스 버튼 & 나이 관리 UI (아이폰 100% 핏 그리드)
-st.markdown("""
-<style>
-/* 버튼 6개에만 엄격히 격리 적용되는 3등분 그리드 (절대 화면 밖으로 터지지 않음) */
-.st-key-sib-btn-grid [data-testid="stHorizontalBlock"] {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr 1fr !important;
-    gap: 6px !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-}
-
-.st-key-sib-btn-grid [data-testid="column"] {
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    flex: 1 1 auto !important;
-}
-
-.st-key-sib-btn-grid button {
-    height: 38px !important;
-    padding: 0 2px !important;
-    font-size: 13.5px !important;
-    font-weight: 700 !important;
-    width: 100% !important;
-    white-space: nowrap !important;
-    box-sizing: border-box !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-if "sibling_items" not in st.session_state:
-    st.session_state.sibling_items = []
-
-st.markdown("""
-<div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 12px; padding: 14px 16px; margin-top: 14px;">
-<div style="font-size: 16px; font-weight: 800; color: #F8FAFC; margin-bottom: 4px;">👥 형제자매 추가 (누를 때마다 1, 2, 3... 자동 추가)</div>
-<div style="font-size: 13px; color: #94A3B8; margin-bottom: 10px;">해당하는 버튼을 누르면 순서대로 생성됩니다.</div>
-</div>
-""", unsafe_allow_html=True)
-
-# 6개 버튼 전용 격리 컨테이너
-with st.container(key="sib-btn-grid"):
-    # 1줄: 언니, 형, 여동생
-    r1_cols = st.columns(3)
-    r1_roles = ["언니", "형", "여동생"]
-    for idx, role in enumerate(r1_roles):
-        with r1_cols[idx]:
-            if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
-                count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
-                st.session_state.sibling_items.append({
-                    "id": f"{role}_{count+1}_{random.randint(100,999)}",
-                    "role": role,
-                    "label": f"{role} {count + 1}",
-                    "age": 0
-                })
-                st.rerun()
-
-    st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
-
-    # 2줄: 누나, 남동생, 오빠
-    r2_cols = st.columns(3)
-    r2_roles = ["누나", "남동생", "오빠"]
-    for idx, role in enumerate(r2_roles):
-        with r2_cols[idx]:
-            if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
-                count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
-                st.session_state.sibling_items.append({
-                    "id": f"{role}_{count+1}_{random.randint(100,999)}",
-                    "role": role,
-                    "label": f"{role} {count + 1}",
-                    "age": 0
-                })
-                st.rerun()
-
-# 생성된 형제자매 나이 입력 목록 (격리 컨테이너 바깥이므로 정상 너비 유지)
-if st.session_state.sibling_items:
-    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-    items_to_remove = []
-    sib_entry_cols = st.columns(2)
-    for idx, s_item in enumerate(st.session_state.sibling_items):
-        c = sib_entry_cols[idx % 2]
-        with c:
-            ic1, ic2 = st.columns([3, 1])
-            with ic1:
-                new_age = st.number_input(
-                    f"{s_item['label']} 나이",
-                    min_value=0, max_value=120,
-                    value=int(s_item.get("age", 0)),
-                    step=1, key=f"inp_age_{s_item['id']}"
-                )
-                s_item["age"] = new_age
-            with ic2:
-                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                if st.button("삭제", key=f"btn_del_{s_item['id']}", use_container_width=True):
-                    items_to_remove.append(s_item["id"])
-    if items_to_remove:
-        st.session_state.sibling_items = [
-            it for it in st.session_state.sibling_items if it["id"] not in items_to_remove
-        ]
+        new_sib_items = []
+        if sib_count in ["1명", "2명", "3명 이상"] and sib_age1 > 0:
+            new_sib_items.append({"label": sib_rel1, "age": sib_age1})
+        if sib_count in ["2명", "3명 이상"] and sib_age2 > 0:
+            lbl2 = f"{sib_rel2} 2" if sib_rel2 == sib_rel1 else sib_rel2
+            new_sib_items.append({"label": lbl2, "age": sib_age2})
+        if sib_count == "3명 이상" and sib_age3 > 0:
+            lbl3 = f"{sib_rel3} 3" if sib_rel3 in [sib_rel1, sib_rel2] else sib_rel3
+            new_sib_items.append({"label": lbl3, "age": sib_age3})
+        st.session_state.sibling_items = new_sib_items
+        
         st.rerun()
 
     # 6.03.03 | 은퇴 시점 가족 미래 나이 2열 슬림 카드
