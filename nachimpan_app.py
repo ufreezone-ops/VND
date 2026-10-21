@@ -1272,70 +1272,89 @@ if selected_page == "우리집 가계부":
 
 
 # ==============================================================================
-# 6.02.00 | Tab 2 — 삶과 생계수단 (물통/파이프라인 매핑 & 돌쇠와 똘똘이 우화)
+# 6.02.00 | Tab 2 — 삶과 생계수단 (ESBI 2x2 대칭 사분면: 구축B & 접속I 파이프라인)
 # ==============================================================================
 elif selected_page == "삶과 생계수단":
     st.markdown("## 삶과 생계수단")
     
+    # --------------------------------------------------------------------------
+    # 1. 소득이 만들어지는 모습 (Tab 1 대칭 2x2 사분면 그리드)
+    # --------------------------------------------------------------------------
     st.markdown("""
 <div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
-<div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 14px;">소득이 만들어지는 세 가지 모습</div>
+<div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">소득이 만들어지는 모습 (물통 vs 파이프라인)</div>
+<div style="font-size: 14px; color: #94A3B8; margin-bottom: 16px;">수입의 크기보다 중요한 것은 수입이 만들어지는 '소득의 성격'입니다.</div>
 """, unsafe_allow_html=True)
     
     q_self = active_quadrant(st.session_state.get("job_form", "직장인"))
     q_spouse = active_quadrant(st.session_state.get("job_spouse_form", ""))
     
-    def get_livelihood_badge(target_quads):
+    def get_quad_badge(target_code):
         badges = []
-        if q_self in target_quads:
-            badges.append("<span style='background:#EA580C; color:#FFFFFF; font-size:12px; font-weight:800; padding:3px 9px; border-radius:4px;'>나</span>")
-        if q_spouse in target_quads:
-            badges.append("<span style='background:#0284C7; color:#FFFFFF; font-size:12px; font-weight:800; padding:3px 9px; border-radius:4px;'>배우자</span>")
-        return f"<div style='min-height:26px; margin-bottom:8px; display:flex; justify-content:center; gap:6px;'>{' '.join(badges)}</div>" if badges else "<div style='min-height:26px; margin-bottom:8px;'></div>"
+        if q_self == target_code:
+            badges.append("<span style='background:#EA580C; color:#FFFFFF; font-size:12px; font-weight:800; padding:2px 8px; border-radius:4px;'>나</span>")
+        if q_spouse == target_code:
+            badges.append("<span style='background:#0284C7; color:#FFFFFF; font-size:12px; font-weight:800; padding:2px 8px; border-radius:4px;'>배우자</span>")
+        return f"<div style='min-height:22px; margin-bottom:4px; display:flex; justify-content:center; gap:6px;'>{' '.join(badges)}</div>" if badges else "<div style='min-height:22px; margin-bottom:4px;'></div>"
 
-    badge_small = get_livelihood_badge(["E"])
-    badge_big = get_livelihood_badge(["S"])
-    badge_pipe = get_livelihood_badge(["B", "I"])
+    def render_livelihood_quad(code, icon_html, title, sub_title, desc, is_right=False):
+        is_self = (q_self == code)
+        is_spouse = (q_spouse == code)
+        
+        if is_self and is_spouse:
+            border_style = "border: 2.5px solid #EA580C; outline: 2.5px dashed #38BDF8; outline-offset: -5px; background: rgba(234, 88, 12, 0.16);"
+        elif is_self:
+            border_style = "border: 2.5px solid #EA580C; background: rgba(234, 88, 12, 0.14);"
+        elif is_spouse:
+            border_style = "border: 2.5px dashed #38BDF8; background: rgba(56, 189, 248, 0.14);"
+        else:
+            border_color = "#38BDF8" if is_right else "#334155"
+            bg_color = "rgba(14, 165, 233, 0.06)" if is_right else "rgba(15, 23, 42, 0.7)"
+            border_style = f"border: 1px solid {border_color}; background: {bg_color};"
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"""
-<div class='soft-card' style='text-align:center; min-height:215px; margin:0;'>
-{badge_small}
-<div style='font-size:32px; letter-spacing:4px; margin-bottom:6px;'>🪣🪣🪣</div>
-<div style='font-size:18.5px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>작은 물통</div>
-<div style='font-size:14px; color:#CBD5E1; line-height:1.5; word-break:keep-all;'>
-직접 일한 시간과 돈을 1:1로 맞바꾸는 모습<br><span style='color:#F59E0B; font-weight:600;'>(노동을 멈추면 수입도 멈춤)</span>
-</div>
-</div>
-""", unsafe_allow_html=True)
+        badge_html = get_quad_badge(code)
+        accent_color = "#38BDF8" if is_right else "#F59E0B"
 
-    with col2:
-        st.markdown(f"""
-<div class='soft-card' style='text-align:center; min-height:215px; margin:0;'>
-{badge_big}
-<div style='font-size:40px; margin-bottom:6px;'>🛢️</div>
-<div style='font-size:18.5px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>큰 물통</div>
-<div style='font-size:14px; color:#CBD5E1; line-height:1.5; word-break:keep-all;'>
-전문성과 몸값을 높여 한 번에 담는 양을 키운 모습<br><span style='color:#F59E0B; font-weight:600;'>(큰 물통이지만 여전히 지고 다님)</span>
+        return f"""
+<div style="{border_style} border-radius: 12px; padding: 14px 12px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 175px; box-sizing: border-box; width: 100%;">
+{badge_html}
+<div style="font-size: 26px; margin-bottom: 2px;">{icon_html}</div>
+<div style="font-size: 18px; font-weight: 850; color: #F8FAFC; line-height: 1.2;">{title}</div>
+<div style="font-size: 13.5px; font-weight: 700; color: {accent_color}; margin: 3px 0 5px 0;">{sub_title}</div>
+<div style="font-size: 13px; color: #CBD5E1; line-height: 1.4; word-break: keep-all; text-align: center;">{desc}</div>
 </div>
-</div>
-""", unsafe_allow_html=True)
+"""
 
-    with col3:
-        st.markdown(f"""
-<div class='soft-card' style='text-align:center; min-height:215px; margin:0;'>
-{badge_pipe}
-<div style='font-size:32px; letter-spacing:2px; margin-bottom:6px;'>🚰➰⚙️</div>
-<div style='font-size:18.5px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>파이프라인</div>
-<div style='font-size:14px; color:#CBD5E1; line-height:1.5; word-break:keep-all;'>
-시스템과 자산이 나 대신 일하는 모습<br><span style='color:#38BDF8; font-weight:600;'>(시간으로부터 자유로운 소득)</span>
-</div>
-</div>
-""", unsafe_allow_html=True)
+    card_e = render_livelihood_quad("E", "🪣🪣🪣", "작은 물통 (E)", "나의 시간과 돈을 1:1 맞교환", "직접 일한 시간만큼 소득 창출<br><span style='color:#F59E0B; font-weight:600;'>(노동을 멈추면 수입도 멈춤)</span>", is_right=False)
+    card_s = render_livelihood_quad("S", "🛢️", "큰 물통 (S)", "전문성과 몸값으로 키운 물통", "한 번에 담는 물통의 양을 키운 모습<br><span style='color:#F59E0B; font-weight:600;'>(큰 물통이지만 여전히 지고 다님)</span>", is_right=False)
+    card_b = render_livelihood_quad("B", "⚙️", "구축 (B)", "파이프라인 구축", "스스로 굴러가는 비즈니스 시스템 소유<br><span style='color:#38BDF8; font-weight:600;'>(내가 멈추어도 시스템이 일함)</span>", is_right=True)
+    card_i = render_livelihood_quad("I", "🚰➰", "접속 (I)", "파이프라인 접속", "이미 구축된 플랫폼·자본에 접속 레버리지<br><span style='color:#38BDF8; font-weight:600;'>(자산과 네트워크가 소득을 만듦)</span>", is_right=True)
 
+    livelihood_2x2_html = f"""
+<div style="margin: 10px 0 16px 0;">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0px; align-items: stretch;">
+<div style="display: flex; flex-direction: column; gap: 12px; padding-right: 14px; border-right: 3.5px dashed #475569;">
+<div>{card_e}</div>
+<div>{card_s}</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px; padding-left: 14px;">
+<div>{card_b}</div>
+<div>{card_i}</div>
+</div>
+</div>
+<div style="text-align: center; margin-top: 14px;">
+<span style="font-size: 13.5px; color: #94A3B8;">
+🧱 좌측(물통 E·S)에서 우측(파이프라인 B·I)으로 넘어가는 것은 소득의 성격을 바꾸는 과정입니다.
+</span>
+</div>
+</div>
+"""
+    st.markdown(livelihood_2x2_html, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # --------------------------------------------------------------------------
+    # 2. 산책로의 우화: 돌쇠와 똘똘이
+    # --------------------------------------------------------------------------
     st.markdown("""
 <div style="background: rgba(45, 35, 20, 0.55); border: 1.5px solid #6d4a1a; border-radius: 14px; padding: 22px 24px; margin-bottom: 22px;">
 <div style="font-size: 20px; font-weight: 850; color: #FDE68A; margin-bottom: 12px;">🌾 지혜로운 산책: 돌쇠와 똘똘이</div>
@@ -1368,9 +1387,45 @@ elif selected_page == "삶과 생계수단":
 </div>
 """, unsafe_allow_html=True)
 
+    # --------------------------------------------------------------------------
+    # 3. 더 생각해보기 (은퇴를 바라보는 네 가지 질문)
+    # --------------------------------------------------------------------------
+    st.markdown("""
+<div style="margin: 28px 0 26px 0; padding: 4px 2px;">
+<div style="font-size: 21px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">더 생각해보기</div>
+<div style="font-size: 14px; color: #94A3B8; margin-bottom: 18px; line-height: 1.6;">우리가 당연하게 여겨온 것들을 잠시 멈추어 생각해 봅니다.</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px;">
+<div style="background: rgba(30, 41, 59, 0.35); border-left: 3.5px solid #64748B; border-radius: 4px; padding: 12px 16px; display: flex; align-items: baseline; gap: 12px;">
+<span style="font-size: 14px; font-weight: 800; color: #94A3B8; min-width: 24px;">01</span>
+<span style="font-size: 18.5px; font-weight: 800; color: #F8FAFC; line-height: 1.5; word-break: keep-all;">'일을 하고 있는 것'과 '생계를 위해 반드시 일해야 하는 것'은 같은가?</span>
+</div>
+
+<div style="background: rgba(30, 41, 59, 0.35); border-left: 3.5px solid #64748B; border-radius: 4px; padding: 12px 16px; display: flex; align-items: baseline; gap: 12px;">
+<span style="font-size: 14px; font-weight: 800; color: #94A3B8; min-width: 24px;">02</span>
+<span style="font-size: 18.5px; font-weight: 800; color: #F8FAFC; line-height: 1.5; word-break: keep-all;">'소득이 발생하는 것'과 '내가 직접 일해야 소득이 발생하는 것'은 같은가?</span>
+</div>
+
+<div style="background: rgba(30, 41, 59, 0.35); border-left: 3.5px solid #64748B; border-radius: 4px; padding: 12px 16px; display: flex; align-items: baseline; gap: 12px;">
+<span style="font-size: 14px; font-weight: 800; color: #94A3B8; min-width: 24px;">03</span>
+<span style="font-size: 18.5px; font-weight: 800; color: #F8FAFC; line-height: 1.5; word-break: keep-all;">'직장을 그만두는 것'과 '은퇴'는 같은가?</span>
+</div>
+
+<div style="background: rgba(30, 41, 59, 0.35); border-left: 3.5px solid #64748B; border-radius: 4px; padding: 12px 16px; display: flex; align-items: baseline; gap: 12px;">
+<span style="font-size: 14px; font-weight: 800; color: #94A3B8; min-width: 24px;">04</span>
+<span style="font-size: 18.5px; font-weight: 800; color: #F8FAFC; line-height: 1.5; word-break: keep-all;">'은퇴'란 무엇이며, '나'는 은퇴를 어떻게 바라볼 수 있을까?</span>
+</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 4. 내가 생각하는 은퇴 예상 나이
+    # --------------------------------------------------------------------------
     st.markdown("""
 <div style="background: rgba(24, 32, 47, 0.65); border: 1.5px solid #3b4b66; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
-<div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 12px;">내가 생각하는 은퇴 예상 나이</div>
+<div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">내가 생각하는 은퇴 예상 나이</div>
+<div style="font-size: 14.5px; color: #CBD5E1; line-height: 1.6; word-break: keep-all; margin-bottom: 14px;">나는 언제부터 생계를 위해 반드시 일해야 하는 삶에서 벗어날 수 있을까?</div>
 """, unsafe_allow_html=True)
 
     cur_user_age = int(st.session_state.person_age)
