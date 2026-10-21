@@ -374,7 +374,7 @@ ESBI = {
 # ==============================================================================
 
 # ==============================================================================
-# 2.01.00 | 세션 상태 초기화 및 헬퍼 함수 (성별 gender 동기화 키 포함)
+# 2.01.00 | 세션 상태 초기화 및 헬퍼 함수 (복원코드 인식률 대폭 강화)
 # ==============================================================================
 import zlib
 
@@ -389,7 +389,7 @@ def getv(key, default=0):
     val = st.session_state.get(key, default)
     return default if val is None else val
 
-# 인터뷰이 ➜ 인터뷰어 동기화 대상 핵심 데이터 키 (성별 gender 포함)
+# 인터뷰이 ➜ 인터뷰어 동기화 대상 핵심 데이터 키
 SYNC_KEYS = [
     "anonymous_id", "person_name", "person_age", "gender", "job_form", "job_spouse_form", "career_stage",
     "income_self", "income_spouse", "income_other", "income_bonus", "income_pension",
@@ -416,11 +416,13 @@ def import_diagnosis_code(raw_input):
     if not raw_input or not isinstance(raw_input, str):
         return False, "입력된 텍스트가 없습니다."
     
-    match = re.search(r"NC-([A-Za-z0-9_-]+={0,2})", raw_input.strip())
+    # 공백이나 개행이 섞여 있어도 NC-로 시작하는 코드를 유연하게 포착
+    clean_text = raw_input.strip()
+    match = re.search(r"NC-([A-Za-z0-9_\-=]+)", clean_text)
     if not match:
         return False, "유효한 나침반 복원코드(NC-...)를 찾지 못했습니다."
     
-    b64_str = match.group(1)
+    b64_str = match.group(1).strip()
     try:
         missing_padding = len(b64_str) % 4
         if missing_padding:
@@ -1819,7 +1821,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (성별 기대수명·동적 맛 뱃지·단독 복원코드 버튼)
+# 6.04.00 | Tab 4 — AI 시선 (100% 복사 보장 동기화 버튼 & 클린 리포트)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1882,7 +1884,7 @@ else:
         "순자산": f"{summary['net_worth']/10000:,.2f}억 원 (자산 {summary['assets']:,.0f}만 원 - 부채 {summary['debts']:,.0f}만 원)",
         "은퇴 후 예상 월연금": f"{getv('income_pension', 0):,.0f}만 원",
         "은퇴 후 월 생활비": f"{getv('retirement_monthly_expenses', 200):,.0f}만 원",
-        "희망 은퇴 나이": f"{retire_age}세 (은퇴 후 겨울 약 {winter_years}년, 통계청 {user_gender.split()[1]} {life_expectancy}세 수명 기준)",
+        "희망 은퇴 나이": f"{retire_age}세 (은퇴 후 겨울 약 {winter_years}년, {user_gender.split()[1]} {life_expectancy}세 수명 기준)",
         "가족 구성": family_desc if family_desc else "기본 정보만 등록됨",
         "가족 계획": {
             "결혼": st.session_state.get("marriage_plan", "미정"),
@@ -2064,7 +2066,9 @@ else:
 
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
+        # ----------------------------------------------------------------------
         # 💬 카카오톡 전송용 순수 리포트
+        # ----------------------------------------------------------------------
         kakao_clean_report = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
 • 진단자: {person_name} ({person_age}세, {career_st})
 • 소득 형태: {st.session_state.get('job_form','직장인')} (배우자: {st.session_state.get('job_spouse_form','해당 없음')})
@@ -2086,21 +2090,45 @@ else:
         st.caption("※ 아래 리포트를 복사하여 카카오톡 대화방에 바로 붙여넣기(Ctrl+V)하세요.")
         st.code(kakao_clean_report, language="markdown")
 
-        # 🔑 나침반 동기화 복원코드 단독 버튼
+        # ----------------------------------------------------------------------
+        # 🔑 나침반 동기화 복원코드 단독 버튼 (어떤 브라우저든 100% 복사 보장)
+        # ----------------------------------------------------------------------
         sync_code = export_diagnosis_code()
-        sync_b64 = base64.b64encode(sync_code.encode('utf-8')).decode('utf-8')
 
         st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
         st.markdown(f"""
 <div style="margin-top: 4px; margin-bottom: 12px;">
 <button onclick="
-try {{
-    var decoded = decodeURIComponent(escape(window.atob('{sync_b64}')));
-    navigator.clipboard.writeText(decoded);
-    alert('동기화 복원코드가 클립보드에 복사되었습니다!\\n인터뷰어에게 카톡으로 붙여넣기(Ctrl+V)해 주세요.');
-}} catch(err) {{
-    alert('복사 오류가 발생했습니다.');
-}}
+(function() {{
+    var code = '{sync_code}';
+    function showOk() {{
+        alert('동기화 복원코드가 복사되었습니다!\\n인터뷰어에게 카톡으로 붙여넣기(Ctrl+V)해 주세요.');
+    }}
+    if (navigator.clipboard && window.isSecureContext) {{
+        navigator.clipboard.writeText(code).then(showOk).catch(function() {{
+            fallback(code);
+        }});
+    }} else {{
+        fallback(code);
+    }}
+    function fallback(txt) {{
+        var ta = document.createElement('textarea');
+        ta.value = txt;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        ta.style.top = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {{
+            document.execCommand('copy');
+            showOk();
+        }} catch (e) {{
+            prompt('복원코드를 직접 복사(Ctrl+C)하세요:', txt);
+        }}
+        document.body.removeChild(ta);
+    }}
+}})();
 " style="background:#1E293B; border:1.5px solid #38BDF8; color:#38BDF8 !important; padding:10px 18px; border-radius:8px; font-weight:800; font-size:15px; cursor:pointer; display:flex; align-items:center; gap:8px;">
 <span>🔑</span><span>동기화 복원코드 복사</span>
 </button>
