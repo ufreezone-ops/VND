@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (카카오톡 톤다운 옐로우 리포트 보강)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (형제자매 3x2 모바일 가로고정 보강)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -261,8 +261,29 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
 }
 
 /* ==========================================================================
-   [수정] st.code 코드블록: 카카오톡 전용 톤다운 웜 옐로우 배색 (눈부심 박멸)
+   [신규] 모바일에서 형제자매 버튼 세로 붕괴 방지: 3개씩 2줄 가로 고정 & 38px 슬림화
    ========================================================================== */
+div[data-testid="stHorizontalBlock"]:has(button[key*="btn_add_sib_"]) {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(button[key*="btn_add_sib_"]) > div {
+    min-width: 0 !important;
+    flex: 1 1 0 !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(button[key*="btn_add_sib_"]) button {
+    height: 38px !important;
+    padding: 0 4px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+}
+
+/* st.code 코드블록: 카카오톡 전용 톤다운 웜 옐로우 배색 */
 [data-testid="stCodeBlock"] {
     background-color: #e9d362 !important;
     background: #e9d362 !important;
@@ -277,7 +298,7 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
 .stCode code {
     background-color: #e9d362 !important;
     background: #e9d362 !important;
-    color: #1a1a1a !important; /* 선명한 카카오 다크 차콜 텍스트 */
+    color: #1a1a1a !important;
     font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
     font-weight: 600 !important;
     font-size: 14.5px !important;
@@ -287,7 +308,6 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     overflow-x: hidden !important;
 }
 
-/* 코드블록 우측 상단 복사 버튼 톤 매칭 */
 [data-testid="stCodeBlock"] button {
     background-color: rgba(26, 26, 26, 0.12) !important;
     border: 1px solid rgba(26, 26, 26, 0.25) !important;
@@ -1458,7 +1478,7 @@ elif selected_page == "삶과 생계수단":
 
 
 # ==============================================================================
-# 6.03.00 | Tab 3 — 인생의 사계절 (U자형 스무딩·출산육아기 깃발·기대수명 연계)
+# 6.03.00 | Tab 3 — 인생의 사계절 (형제자매 3x2 중립 믹스 배치 & 2줄 가로 유지)
 # ==============================================================================
 elif selected_page == "인생의 사계절":
     if st.session_state.pop("_scroll_to_top_once", False):
@@ -1548,19 +1568,23 @@ elif selected_page == "인생의 사계절":
         st.session_state.housing_plan = housing_plan
         st.rerun()
 
+    # --------------------------------------------------------------------------
+    # 형제자매 3x2 중립 믹스 배치 (대표님 지정 순서: 언니/형/여동생 ➔ 누나/남동생/오빠)
+    # --------------------------------------------------------------------------
     if "sibling_items" not in st.session_state:
         st.session_state.sibling_items = []
 
     st.markdown("""
-<div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 12px; padding: 18px 20px; margin-top: 14px;">
-<div style="font-size: 16.5px; font-weight: 800; color: #F8FAFC; margin-bottom: 6px;">👥 형제자매 추가 (누를 때마다 1, 2, 3... 자동 추가)</div>
-<div style="font-size: 13.5px; color: #94A3B8; margin-bottom: 12px;">버튼을 누르면 해당 형제자매가 순서대로 생성됩니다.</div>
+<div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 12px; padding: 16px 18px; margin-top: 14px;">
+<div style="font-size: 16px; font-weight: 800; color: #F8FAFC; margin-bottom: 4px;">👥 형제자매 추가 (누를 때마다 1, 2, 3... 자동 추가)</div>
+<div style="font-size: 13px; color: #94A3B8; margin-bottom: 12px;">해당하는 버튼을 누르면 순서대로 생성됩니다.</div>
 """, unsafe_allow_html=True)
 
-    b_cols = st.columns(6)
-    role_types = ["형", "누나", "오빠", "언니", "남동생", "여동생"]
-    for idx, role in enumerate(role_types):
-        with b_cols[idx]:
+    # 1줄: 언니, 형, 여동생
+    r1_cols = st.columns(3)
+    r1_roles = ["언니", "형", "여동생"]
+    for idx, role in enumerate(r1_roles):
+        with r1_cols[idx]:
             if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
                 count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
                 st.session_state.sibling_items.append({
@@ -1571,6 +1595,24 @@ elif selected_page == "인생의 사계절":
                 })
                 st.rerun()
 
+    st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+
+    # 2줄: 누나, 남동생, 오빠
+    r2_cols = st.columns(3)
+    r2_roles = ["누나", "남동생", "오빠"]
+    for idx, role in enumerate(r2_roles):
+        with r2_cols[idx]:
+            if st.button(f"+ {role}", key=f"btn_add_sib_{role}", use_container_width=True):
+                count = sum(1 for item in st.session_state.sibling_items if item["role"] == role)
+                st.session_state.sibling_items.append({
+                    "id": f"{role}_{count+1}_{random.randint(100,999)}",
+                    "role": role,
+                    "label": f"{role} {count + 1}",
+                    "age": 0
+                })
+                st.rerun()
+
+    # 생성된 형제자매 나이 입력 목록
     if st.session_state.sibling_items:
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         items_to_remove = []
@@ -1688,9 +1730,7 @@ elif selected_page == "인생의 사계절":
             else:
                 w_inc = max(0.85, 1.0 + (0.02 * (45 - cur_age)) - (0.015 * (a - 45)))
             
-            # [수정] 30대 초중반 출산·육아기 부드러운 U자형 스무딩 (각진 톱니 제거)
             if has_m_curve and (31 <= a <= 37):
-                # 34세를 중심으로 부드럽게 감소했다 회복되는 포물선 스무딩 (최대 20% 완만 감속)
                 dist = abs(a - 34)
                 if dist <= 3:
                     smooth_dip = 1.0 - (0.20 * (1.0 - (dist / 3.0) ** 2))
@@ -1742,7 +1782,6 @@ elif selected_page == "인생의 사계절":
         ay=-30, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#38BDF8"
     )
 
-    # [신규] 여성 청년의 출산·육아기 U자형 골짜기 주석 깃발 표기
     if has_m_curve and cur_age <= 34:
         dip_val = my_income_curve[ages_sim.index(34)]
         fig_my_nta.add_annotation(
@@ -1795,7 +1834,7 @@ elif selected_page == "인생의 사계절":
         config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
     )
 
-    # 3. 인생의 사계절 (성별 기대수명 반영)
+    # 3. 인생의 사계절
     st.markdown("### 3. 인생의 사계절과 맞이할 겨울의 시간")
     
     if cur_age <= 27:
