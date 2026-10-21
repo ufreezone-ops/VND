@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (상단 헤더 다크 일체화 보강)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (상단 탭 패딩 복원 & expander 다크 보강)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -46,7 +46,7 @@ st.markdown("""
 }
 
 /* ==========================================================================
-   [신규] 최상단 Streamlit 헤더 바 딥 네이비 일체화 (빛샘·강한 대비 100% 박멸)
+   최상단 Streamlit 헤더 바 딥 네이비 일체화 (빛샘·강한 대비 100% 박멸)
    ========================================================================== */
 header[data-testid="stHeader"] {
     background-color: #0b1120 !important;
@@ -55,7 +55,6 @@ header[data-testid="stHeader"] {
     border-bottom: 1px solid rgba(51, 65, 85, 0.4) !important;
 }
 
-/* 헤더 우측 메뉴 버튼(Share, Star, 점 3개 등) 은은한 다크 톤다운 */
 header[data-testid="stHeader"] * {
     color: #94a3b8 !important;
 }
@@ -97,8 +96,10 @@ header[data-testid="stHeader"] button:hover {
     background-color: var(--nc-bg) !important;
     color: var(--nc-text) !important;
 }
+
+/* [핵심 수정] 4개 탭 윗머리가 고정 헤더에 잘리지 않도록 상단 패딩 2.8rem으로 정밀 복원 */
 .block-container {
-    padding-top: 1.2rem !important; /* 상단 여백 슬림화 */
+    padding-top: 2.8rem !important;
     padding-bottom: 2rem;
     max-width: 1180px;
 }
@@ -269,6 +270,44 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     overflow-x: hidden !important;
     line-height: 1.65 !important;
     font-size: 14.5px !important;
+}
+
+/* ==========================================================================
+   [신규] st.expander 헤더 다크 고대비 스타일 (화이트/화이트 눈부심 100% 박멸)
+   ========================================================================== */
+[data-testid="stExpander"] {
+    background-color: transparent !important;
+    border: 1px solid #334155 !important;
+    border-radius: 10px !important;
+}
+
+[data-testid="stExpander"] details {
+    border: none !important;
+    background-color: transparent !important;
+}
+
+[data-testid="stExpander"] summary {
+    background-color: #1E293B !important;
+    color: #F8FAFC !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    padding: 12px 16px !important;
+}
+
+[data-testid="stExpander"] summary:hover {
+    background-color: #334155 !important;
+    color: #FFFFFF !important;
+}
+
+[data-testid="stExpander"] summary svg {
+    fill: #F8FAFC !important;
+}
+
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+    background-color: rgba(15, 23, 42, 0.6) !important;
+    border-top: 1px solid #334155 !important;
+    border-radius: 0 0 10px 10px !important;
+    padding: 16px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1710,7 +1749,7 @@ elif selected_page == "인생의 사계절":
 
 
 # ==============================================================================
-# 6.04.00 | Tab 4 — AI 시선 (암호 분리·클린 카톡 리포트 & 원클릭 복원코드 버튼)
+# 6.04.00 | Tab 4 — AI 시선 (동적 맛 뱃지 헤더·자동접힘·단독 복원코드 버튼)
 # ==============================================================================
 else:
     st.markdown("## AI 시선")
@@ -1779,22 +1818,31 @@ else:
     }
 
     if has_pipeline:
-        income_instruction = f"""[소득 개선 방향 - 가구 소득 구조 및 파이프라인 관점]
-본인 또는 배우자의 소득 유형 중 사업가/투자자(B/I)가 포함되어 있습니다. 다만 유형만으로 실제 사업 시스템, 투자소득, 파이프라인 또는 상당한 자산을 확보했다고 단정하지 마세요.
-입력된 소득과 자산 데이터가 뒷받침하는 범위에서 노동소득과 비노동소득의 관계를 살펴보세요. 실제 파이프라인이 확인되면 그 역할과 지속 가능성을 존중하고, 확인되지 않으면 보유 여부를 추정하지 마세요.
-배우자 소득이 확인되면 가구 전체의 소득 구성도 함께 고려하세요. 소득 다변화는 의무적인 처방이 아니라 현재 상황에 맞춰 검토할 수 있는 선택지로 다루세요."""
+        income_instruction = f"""[소득 개선 방향 - B/I 파이프라인 보유형 지침]
+인터뷰이는 현재 사분면상 '{q_self}'(사업가/투자자)로서 이미 시스템과 자산에서 발생하는 파이프라인과 상당한 자산 기반({summary['net_worth']/10000:,.1f}억 원)을 확보하고 계십니다.
+절대 억지로 노동 의존형 물통이라고 규정하지 마시고, 구축하신 파이프라인과 자산의 성취를 있는 그대로 존중하세요.
+배우자의 노동 소득이 결합되어 있다면 가계 전체의 현금흐름 다변화 및 사업 시스템의 영속성을 점검하는 관점을 객관적으로 비춰주세요."""
     else:
-        income_instruction = f"""[소득 개선 방향 - 근로·자영업 및 소득 개선 관점]
-입력된 소득 유형과 재무 데이터를 바탕으로 근로소득 또는 자영업소득에 대한 의존 정도를 살펴보세요. 소득이 노동과 시간에 얼마나 연결되어 있는지는 확인 가능한 데이터의 범위에서만 설명하세요.
-현재 본업의 지속성, 소득 성장 가능성, 저축 여력과 부채 등 실제 상황에서 의미 있는 요소를 중심으로 서술하세요. 시스템이나 자산에서 발생하는 소득은 모든 사람에게 필요한 정답처럼 제시하지 말고, 여건에 따라 장기적으로 검토할 수 있는 선택지로 정중하게 다루세요."""
+        income_instruction = f"""[소득 개선 방향 - E/S 근로/자영업 지침]
+현재 부부의 소득은 일손을 멈추면 수입이 중단되는 노동 의존형(E/S) 성격임을 정중하게 짚으세요.
+본업을 충실히 유지하면서, 시간과 노동력에만 매이지 않고 시스템과 자산에서 흘러나오는 '파이프라인'을 장기적으로 준비해야 하는 이유를 객관적인 관점에서 정중히 제안하세요."""
 
-    # ⚙️ AI 프롬프트 (맛 조절 · 원칙 선택 · 추가 입력)
-    with st.expander("⚙️ AI 프롬프트 (맛 조절 · 원칙 선택 · 추가 입력)"):
+    # --------------------------------------------------------------------------
+    # ⚙️ AI 프롬프트 (기본 '순한맛' 뱃지 표출 & 리포트 생성 시 자동 접힘)
+    # --------------------------------------------------------------------------
+    current_taste_val = st.session_state.get("pills_ai_taste", "☕ 순한맛 (위로/은유)")
+    short_taste_tag = "☕ 순한맛" if "순한맛" in current_taste_val else ("🌶️ 매운맛" if "매운맛" in current_taste_val else "🧭 보통맛")
+    
+    # 리포트 생성 결과 유무에 따른 접힘/펼침 동적 제어
+    has_generated_report = bool(st.session_state.get("ai_summary") and st.session_state.get("ai_comment"))
+    expander_title = f"⚙️ AI 프롬프트 설정 [{short_taste_tag}]"
+
+    with st.expander(expander_title, expanded=(not has_generated_report)):
         st.markdown("<div style='font-size:16px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>1. 분석 강도(맛) 선택</div>", unsafe_allow_html=True)
         taste_mode = st.pills(
             "분석 강도 선택",
             ["☕ 순한맛 (위로/은유)", "🧭 보통맛 (정직한 거울)", "🌶️ 매운맛 (뼈아픈 직언)"],
-            default="🧭 보통맛 (정직한 거울)",
+            default="☕ 순한맛 (위로/은유)",
             key="pills_ai_taste",
             label_visibility="collapsed"
         )
@@ -1872,6 +1920,7 @@ else:
 은퇴 후 월 희망 생활비와 예상 월연금의 차이를 설명하되, 입력된 값의 성격과 산출 근거가 불분명하면 안정성이 확보되었다고 단정하지 마세요. 두 금액의 단순 차액과 실제 은퇴 안정성은 구분하세요.
 은퇴 후 약 {winter_years}년은 계산상 가정으로 취급하세요. 현재 경력 단계와 순자산을 연결해 설명하되, 실제 현금 보유액이나 유동성 자료가 없다면 유동성 준비 상태를 평가하지 마세요. 결혼, 자녀, 주거 계획 등 확인되지 않은 미래 사건을 전제로 삼지 말고, 정중하고 담백하게 서술하세요."""
 
+    # AI 리포트 생성 버튼
     if st.button("⚡ AI 리포트 생성", type="primary", use_container_width=True):
         st.session_state.ai_summary = summary
         st.session_state.ai_comment = None
@@ -1879,7 +1928,9 @@ else:
         with st.spinner(f"AI가 {taste_mode.split()[0]} 모드로 지표를 분석 중입니다 (약 15~20초 소요)..."):
             comment, error = call_gemini_text(full_prompt_text)
             st.session_state.ai_comment = comment if comment else error
+        st.rerun()
 
+    # 분석 결과 렌더링
     if st.session_state.get("ai_summary") and st.session_state.get("ai_comment"):
         s = st.session_state.ai_summary
         st.markdown("### 재무제표 요약")
@@ -1943,7 +1994,7 @@ else:
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
         # ----------------------------------------------------------------------
-        # 💬 카카오톡 전송용 순수 리포트 (암호 코드 완전 분리)
+        # 💬 카카오톡 전송용 순수 리포트
         # ----------------------------------------------------------------------
         kakao_clean_report = f"""[나침반 🧭 현실점검 & 재무 진단 리포트]
 • 진단자: {person_name} ({person_age}세, {career_st})
@@ -1967,19 +2018,14 @@ else:
         st.code(kakao_clean_report, language="markdown")
 
         # ----------------------------------------------------------------------
-        # 🔑 나침반 동기화 복원코드 단독 원클릭 복사 영역 (암호 비노출)
+        # 🔑 나침반 동기화 복원코드 단독 버튼 (설명글 완전 삭제)
         # ----------------------------------------------------------------------
         sync_code = export_diagnosis_code()
         sync_b64 = base64.b64encode(sync_code.encode('utf-8')).decode('utf-8')
 
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        st.markdown("""
-<div style="background: rgba(30, 41, 59, 0.45); border: 1px dashed #475569; border-radius: 12px; padding: 16px 18px;">
-<div style="font-size: 15px; font-weight: 800; color: #F8FAFC; margin-bottom: 4px;">🔑 인터뷰어 동기화 복원코드</div>
-<div style="font-size: 13.5px; color: #94A3B8; margin-bottom: 12px;">인터뷰어에게 전달할 세션 복원코드입니다. 아래 버튼을 누르면 코드를 보지 않고도 클립보드에 바로 복사됩니다.</div>
-""", unsafe_allow_html=True)
-
+        st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
         st.markdown(f"""
+<div style="margin-top: 4px; margin-bottom: 12px;">
 <button onclick="
 try {{
     var decoded = decodeURIComponent(escape(window.atob('{sync_b64}')));
