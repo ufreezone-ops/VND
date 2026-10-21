@@ -1368,10 +1368,61 @@ elif selected_page == "삶과 생계수단":
 </div>
 """, unsafe_allow_html=True)
 
+
+    # 더 생각해보기: 은퇴를 바라보는 네 가지 질문
     st.markdown("""
-<div style="background: rgba(24, 32, 47, 0.65); border: 1.5px solid #3b4b66; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
-<div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 12px;">내가 생각하는 은퇴 예상 나이</div>
+<div style="margin: 26px 0 24px 0; padding: 4px 2px;">
+    <div style="font-size: 19px; font-weight: 850; color: #F8FAFC; margin-bottom: 6px;">
+        더 생각해보기
+    </div>
+    <div style="font-size: 13px; color: #94A3B8; margin-bottom: 16px; line-height: 1.6;">
+        우리가 당연하게 여겨온 것들을 잠시 멈추어 생각해 봅니다.
+    </div>
+
+    <div style="border-left: 2px solid #475569; padding: 2px 0 2px 16px; margin-bottom: 15px;">
+        <div style="font-size: 12px; color: #94A3B8; font-weight: 750; margin-bottom: 5px;">01</div>
+        <div style="font-size: 15px; color: #E2E8F0; line-height: 1.7; word-break: keep-all;">
+            '일을 하고 있는 것'과 '생계를 위해 반드시 일해야 하는 것'은 같은가?
+        </div>
+    </div>
+
+    <div style="border-left: 2px solid #475569; padding: 2px 0 2px 16px; margin-bottom: 15px;">
+        <div style="font-size: 12px; color: #94A3B8; font-weight: 750; margin-bottom: 5px;">02</div>
+        <div style="font-size: 15px; color: #E2E8F0; line-height: 1.7; word-break: keep-all;">
+            '소득이 발생하는 것'과 '내가 직접 일해야 소득이 발생하는 것'은 같은가?
+        </div>
+    </div>
+
+    <div style="border-left: 2px solid #475569; padding: 2px 0 2px 16px; margin-bottom: 15px;">
+        <div style="font-size: 12px; color: #94A3B8; font-weight: 750; margin-bottom: 5px;">03</div>
+        <div style="font-size: 15px; color: #E2E8F0; line-height: 1.7; word-break: keep-all;">
+            '직장을 그만두는 것'과 '은퇴'는 같은가?
+        </div>
+    </div>
+
+    <div style="border-left: 2px solid #EA580C; padding: 2px 0 2px 16px;">
+        <div style="font-size: 12px; color: #FB923C; font-weight: 750; margin-bottom: 5px;">04</div>
+        <div style="font-size: 15px; color: #F8FAFC; font-weight: 700; line-height: 1.7; word-break: keep-all;">
+            '은퇴'란 무엇이며, '나'는 은퇴를 어떻게 바라볼 수 있을까?
+        </div>
+    </div>
+</div>
 """, unsafe_allow_html=True)
+
+
+
+
+    
+st.markdown("""
+<div style="background: rgba(24, 32, 47, 0.65); border: 1.5px solid #3b4b66; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
+    <div style="font-size: 20px; font-weight: 850; color: #F8FAFC; margin-bottom: 12px;">
+        내가 생각하는 은퇴 예상 나이
+    </div>
+    <div style="font-size: 15px; color: #CBD5E1; line-height: 1.7; word-break: keep-all;">
+        나는 언제부터 생계를 위해 반드시 일해야 하는 삶에서 벗어날 수 있을까?
+    </div>
+""", unsafe_allow_html=True)
+
 
     cur_user_age = int(st.session_state.person_age)
     default_retire = int(st.session_state.get("retirement_age") or 60)
