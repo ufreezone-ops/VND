@@ -1272,13 +1272,13 @@ if selected_page == "우리집 가계부":
 
 
 # ==============================================================================
-# 6.02.00 | Tab 2 — 삶과 생계수단 (ESBI 2x2 대칭 사분면: 구축B & 접속I 파이프라인)
+# 6.02.00 | Tab 2 — 삶과 생계수단 (모바일 수평 동기화 2x2 십자 좌표계 완성)
 # ==============================================================================
 elif selected_page == "삶과 생계수단":
     st.markdown("## 삶과 생계수단")
     
     # --------------------------------------------------------------------------
-    # 1. 소득이 만들어지는 모습 (Tab 1 대칭 2x2 사분면 그리드)
+    # 1. 소득이 만들어지는 모습 (True 2x2 Grid 대칭 십자 좌표계)
     # --------------------------------------------------------------------------
     st.markdown("""
 <div style="background: rgba(30, 41, 59, 0.45); border: 1.5px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;">
@@ -1316,31 +1316,28 @@ elif selected_page == "삶과 생계수단":
         accent_color = "#38BDF8" if is_right else "#F59E0B"
 
         return f"""
-<div style="{border_style} border-radius: 12px; padding: 14px 12px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 175px; box-sizing: border-box; width: 100%;">
+<div style="{border_style} border-radius: 12px; padding: 14px 10px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; min-height: 195px; box-sizing: border-box; width: 100%;">
 {badge_html}
 <div style="font-size: 26px; margin-bottom: 2px;">{icon_html}</div>
-<div style="font-size: 18px; font-weight: 850; color: #F8FAFC; line-height: 1.2;">{title}</div>
-<div style="font-size: 13.5px; font-weight: 700; color: {accent_color}; margin: 3px 0 5px 0;">{sub_title}</div>
-<div style="font-size: 13px; color: #CBD5E1; line-height: 1.4; word-break: keep-all; text-align: center;">{desc}</div>
+<div style="font-size: 17.5px; font-weight: 850; color: #F8FAFC; line-height: 1.2;">{title}</div>
+<div style="font-size: 13px; font-weight: 700; color: {accent_color}; margin: 3px 0 5px 0; line-height: 1.3;">{sub_title}</div>
+<div style="font-size: 12.5px; color: #CBD5E1; line-height: 1.4; word-break: keep-all; text-align: center;">{desc}</div>
 </div>
 """
 
     card_e = render_livelihood_quad("E", "🪣🪣🪣", "작은 물통 (E)", "나의 시간과 돈을 1:1 맞교환", "직접 일한 시간만큼 소득 창출<br><span style='color:#F59E0B; font-weight:600;'>(노동을 멈추면 수입도 멈춤)</span>", is_right=False)
     card_s = render_livelihood_quad("S", "🛢️", "큰 물통 (S)", "전문성과 몸값으로 키운 물통", "한 번에 담는 물통의 양을 키운 모습<br><span style='color:#F59E0B; font-weight:600;'>(큰 물통이지만 여전히 지고 다님)</span>", is_right=False)
-    card_b = render_livelihood_quad("B", "⚙️", "구축 (B)", "파이프라인 구축", "스스로 굴러가는 비즈니스 시스템 소유<br><span style='color:#38BDF8; font-weight:600;'>(내가 멈추어도 시스템이 일함)</span>", is_right=True)
-    card_i = render_livelihood_quad("I", "🚰➰", "접속 (I)", "파이프라인 접속", "이미 구축된 플랫폼·자본에 접속 레버리지<br><span style='color:#38BDF8; font-weight:600;'>(자산과 네트워크가 소득을 만듦)</span>", is_right=True)
+    card_b = render_livelihood_quad("B", "⚙️", "구축 (B)", "파이프라인 구축", "스스로 굴러가는 시스템 소유<br><span style='color:#38BDF8; font-weight:600;'>(내가 멈추어도 시스템이 일함)</span>", is_right=True)
+    card_i = render_livelihood_quad("I", "🚰➰", "접속 (I)", "파이프라인 접속", "이미 구축된 플랫폼·자본에 접속<br><span style='color:#38BDF8; font-weight:600;'>(자산과 네트워크가 소득을 만듦)</span>", is_right=True)
 
+    # 행 높이가 100% 동기화되는 True 2x2 CSS Grid 좌표계
     livelihood_2x2_html = f"""
 <div style="margin: 10px 0 16px 0;">
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0px; align-items: stretch;">
-<div style="display: flex; flex-direction: column; gap: 12px; padding-right: 14px; border-right: 3.5px dashed #475569;">
-<div>{card_e}</div>
-<div>{card_s}</div>
-</div>
-<div style="display: flex; flex-direction: column; gap: 12px; padding-left: 14px;">
-<div>{card_b}</div>
-<div>{card_i}</div>
-</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 0px; align-items: stretch;">
+<div style="padding-right: 12px; border-right: 3.5px dashed #475569; display: flex; box-sizing: border-box;">{card_e}</div>
+<div style="padding-left: 12px; display: flex; box-sizing: border-box;">{card_b}</div>
+<div style="padding-right: 12px; border-right: 3.5px dashed #475569; display: flex; box-sizing: border-box;">{card_s}</div>
+<div style="padding-left: 12px; display: flex; box-sizing: border-box;">{card_i}</div>
 </div>
 <div style="text-align: center; margin-top: 14px;">
 <span style="font-size: 13.5px; color: #94A3B8;">
