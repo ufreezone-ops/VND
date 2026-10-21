@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (상단 탭 패딩 복원 & expander 다크 보강)
+# 1.02.00 | 전역 통합 테마 디자인 시스템 CSS (카카오톡 톤다운 옐로우 리포트 보강)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -97,7 +97,7 @@ header[data-testid="stHeader"] button:hover {
     color: var(--nc-text) !important;
 }
 
-/* [핵심 수정] 4개 탭 윗머리가 고정 헤더에 잘리지 않도록 상단 패딩 2.8rem으로 정밀 복원 */
+/* 4개 탭 윗머리가 고정 헤더에 잘리지 않도록 상단 패딩 2.8rem 유지 */
 .block-container {
     padding-top: 2.8rem !important;
     padding-bottom: 2rem;
@@ -260,21 +260,48 @@ div[data-testid="stForm"]:has(input[id*="start_person"]) button {
     color: #FFFFFF !important;
 }
 
-/* st.code 코드블록 자동 줄바꿈 강제 (가로 늘어짐 원천 박멸) */
+/* ==========================================================================
+   [수정] st.code 코드블록: 카카오톡 전용 톤다운 웜 옐로우 배색 (눈부심 박멸)
+   ========================================================================== */
+[data-testid="stCodeBlock"] {
+    background-color: #e9d362 !important;
+    background: #e9d362 !important;
+    border: 1.5px solid #bda738 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
 [data-testid="stCodeBlock"] pre,
 [data-testid="stCodeBlock"] code,
 .stCode pre,
 .stCode code {
+    background-color: #e9d362 !important;
+    background: #e9d362 !important;
+    color: #1a1a1a !important; /* 선명한 카카오 다크 차콜 텍스트 */
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 14.5px !important;
+    line-height: 1.65 !important;
     white-space: pre-wrap !important;
     word-break: break-word !important;
     overflow-x: hidden !important;
-    line-height: 1.65 !important;
-    font-size: 14.5px !important;
 }
 
-/* ==========================================================================
-   [신규] st.expander 헤더 다크 고대비 스타일 (화이트/화이트 눈부심 100% 박멸)
-   ========================================================================== */
+/* 코드블록 우측 상단 복사 버튼 톤 매칭 */
+[data-testid="stCodeBlock"] button {
+    background-color: rgba(26, 26, 26, 0.12) !important;
+    border: 1px solid rgba(26, 26, 26, 0.25) !important;
+    color: #1a1a1a !important;
+    border-radius: 6px !important;
+}
+[data-testid="stCodeBlock"] button:hover {
+    background-color: rgba(26, 26, 26, 0.25) !important;
+}
+[data-testid="stCodeBlock"] button svg {
+    fill: #1a1a1a !important;
+}
+
+/* st.expander 헤더 다크 고대비 스타일 */
 [data-testid="stExpander"] {
     background-color: transparent !important;
     border: 1px solid #334155 !important;
