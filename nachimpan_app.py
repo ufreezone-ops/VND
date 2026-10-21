@@ -1372,42 +1372,65 @@ elif selected_page == "인생의 사계절":
     winter_years = max(0, life_expectancy - retire_age)
     winter_months = winter_years * 12
 
-# 6.03.01 | 가족 구성원 나이 및 형제자매 인라인 입력 폼 (대안 A 통일형)
-    # 6.03.02 | (형제자매 6버튼 폐기 ➜ 6.03.01 단일 폼 인라인으로 통합 완료)
+# 6.03.01 | 가족 구성원 나이 및 형제자매 인라인 입력 폼 (실시간 반응형 2열 배치)
+    # 6.03.02 | (통합 완료: 자녀수·형제자매수 상단 실시간 연동)
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
-    
-    with st.form("family_form"):
-        # 1. 자녀 수 및 나이
+
+    # 폼 바깥 상단: 자녀 수 & 형제자매 수 2열 실시간 선택 (변경 즉시 하단 입력창 동적 반응)
+    col_cnt1, col_cnt2 = st.columns(2)
+    with col_cnt1:
         child_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
         prev_c_count = st.session_state.get("child_count", "입력 안 함")
         if prev_c_count not in child_options:
             prev_c_count = "입력 안 함"
-            
         child_count = st.selectbox(
             "자녀 수", child_options,
             index=child_options.index(prev_c_count),
-            key="child_count_select"
+            key="child_count_select_live"
         )
 
-        c_col1, c_col2 = st.columns(2)
-        with c_col1:
-            child_age = int(st.session_state.get("child_age", 0)) if child_count in ["1명", "2명", "3명 이상"] else 0
-            if child_count in ["1명", "2명", "3명 이상"]:
-                child_age = st.number_input("첫째 자녀 나이", min_value=0, max_value=100, value=child_age, step=1)
-            else:
-                st.write("")
-        with c_col2:
-            child_age2 = int(st.session_state.get("child_age2", 0)) if child_count in ["2명", "3명 이상"] else 0
-            if child_count in ["2명", "3명 이상"]:
-                child_age2 = st.number_input("둘째 자녀 나이", min_value=0, max_value=100, value=child_age2, step=1)
-            else:
-                st.write("")
+    with col_cnt2:
+        sib_count_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
+        prev_s_count = st.session_state.get("sib_count", "입력 안 함")
+        if prev_s_count not in sib_count_options:
+            prev_s_count = "입력 안 함"
+        sib_count = st.selectbox(
+            "형제자매 수 (선택)", sib_count_options,
+            index=sib_count_options.index(prev_s_count),
+            key="sib_count_select_live"
+        )
 
-        child_age3 = int(st.session_state.get("child_age3", 0)) if child_count == "3명 이상" else 0
-        if child_count == "3명 이상":
-            child_age3 = st.number_input("셋째 자녀 나이", min_value=0, max_value=100, value=child_age3, step=1)
+    with st.form("family_form"):
+        # 1. 자녀 나이 (child_count에 따라 실시간 렌더링)
+        if child_count in ["1명", "2명", "3명 이상"]:
+            c_col1, c_col2 = st.columns(2)
+            with c_col1:
+                child_age = st.number_input(
+                    "첫째 자녀 나이", min_value=0, max_value=100,
+                    value=int(st.session_state.get("child_age", 0)), step=1
+                )
+            with c_col2:
+                child_age2 = 0
+                if child_count in ["2명", "3명 이상"]:
+                    child_age2 = st.number_input(
+                        "둘째 자녀 나이", min_value=0, max_value=100,
+                        value=int(st.session_state.get("child_age2", 0)), step=1
+                    )
+                else:
+                    st.write("")
 
-        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+            child_age3 = 0
+            if child_count == "3명 이상":
+                child_age3 = st.number_input(
+                    "셋째 자녀 나이", min_value=0, max_value=100,
+                    value=int(st.session_state.get("child_age3", 0)), step=1
+                )
+        else:
+            child_age = 0
+            child_age2 = 0
+            child_age3 = 0
+
+        st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
         # 2. 배우자 및 부모님 나이 (2열)
         r1_c1, r1_c2 = st.columns(2)
@@ -1422,26 +1445,14 @@ elif selected_page == "인생의 사계절":
         with r2_c2:
             st.write("")
 
-        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-
-        # 3. [대안 A] 형제자매 수 선택 및 인라인 1줄 입력 (자녀와 완벽히 동일한 패턴)
-        sib_count_options = ["입력 안 함", "없음", "1명", "2명", "3명 이상"]
-        prev_s_count = st.session_state.get("sib_count", "입력 안 함")
-        if prev_s_count not in sib_count_options:
-            prev_s_count = "입력 안 함"
-
-        sib_count = st.selectbox(
-            "형제자매 수 (선택)", sib_count_options,
-            index=sib_count_options.index(prev_s_count),
-            key="sib_count_select"
-        )
-
+        # 3. 형제자매 관계 및 나이 (sib_count에 따라 실시간 동적 렌더링)
         role_list = ["언니", "형", "여동생", "누나", "남동생", "오빠"]
         sib_rel1, sib_age1 = "언니", 0
         sib_rel2, sib_age2 = "형", 0
         sib_rel3, sib_age3 = "여동생", 0
 
         if sib_count in ["1명", "2명", "3명 이상"]:
+            st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
             s1_c1, s1_c2 = st.columns(2)
             with s1_c1:
                 p_r1 = st.session_state.get("sib_rel1", "언니")
