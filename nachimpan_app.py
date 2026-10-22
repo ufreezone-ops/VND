@@ -34,10 +34,11 @@ st.set_page_config(
 # 1.02.00 | 전역 통합 테마 디자인 시스템 CSS
 # ------------------------------------------------------------------------------
 
+
 # 1.02.01 | 전역 스크롤 안정화 및 상단 시스템 헤더 다크 일체화
 st.markdown("""
 <style>
-/* Streamlit 실제 스크롤 컨테이너에 스크롤바 상시 고정 (탭 전환 시 덜컹거림 박멸) */
+/* Streamlit 실제 스크롤 컨테이너의 스크롤 안정화 */
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"],
 .stMain {
@@ -45,8 +46,9 @@ st.markdown("""
     scrollbar-gutter: stable;
 }
 
-/* 최상단 Streamlit 헤더 바 딥 네이비 일체화 (빛샘·강한 대비 100% 박멸) */
+/* Streamlit 기본 헤더 유지: 딥 네이비 디자인 */
 header[data-testid="stHeader"] {
+    display: flex !important;
     background-color: #0b1120 !important;
     background: #0b1120 !important;
     height: 2.8rem !important;
@@ -56,25 +58,12 @@ header[data-testid="stHeader"] {
 header[data-testid="stHeader"] * {
     color: #94a3b8 !important;
 }
+
 header[data-testid="stHeader"] button:hover {
     color: #f8fafc !important;
 }
-</style>
-""", unsafe_allow_html=True)
 
-# CUSTOM HEADER | Streamlit 기본 헤더 숨기기
-st.markdown("""
-<style>
-/* Streamlit 기본 상단 헤더와 툴바 숨기기 */
-header[data-testid="stHeader"] {
-    display: none !important;
-}
-
-div[data-testid="stToolbar"] {
-    display: none !important;
-}
-
-/* 기본 헤더가 사라진 만큼 상단 여백 조정 */
+/* 메인 콘텐츠 상단 여백 */
 div[data-testid="stMainBlockContainer"] {
     padding-top: 0.8rem !important;
 }
@@ -724,37 +713,6 @@ if not st.session_state.started:
 # ------------------------------------------------------------------------------
 # 5.01.00 | 나침반 전용 헤더 및 상단 4대 탭 네비게이터
 # ------------------------------------------------------------------------------
-
-# 5.01.01 | 나침반 전용 헤더: 로고 및 새로고침 버튼
-header_left, header_right = st.columns(
-    [5, 1],
-    vertical_alignment="center"
-)
-
-with header_left:
-    st.markdown(
-        """
-        <div style="
-            font-size: 22px;
-            font-weight: 800;
-            color: #F8FAFC;
-            padding: 6px 0 10px 2px;
-            letter-spacing: -0.5px;
-        ">
-            🧭 나침반
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-with header_right:
-    if st.button(
-        "🔄 새로고침",
-        key="nachimpan_manual_refresh",
-        use_container_width=True,
-        help="현재 입력값을 유지하면서 화면과 계산을 다시 실행합니다.",
-    ):
-        st.rerun()
 
 
 # 5.01.02 | 네비게이션 옵션 및 streamlit_option_menu 렌더링
