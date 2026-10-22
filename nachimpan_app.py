@@ -1740,33 +1740,58 @@ elif selected_page == "인생의 사계절":
     fig_official_nta.add_annotation(x=45, y=-16, text="흑자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
     fig_official_nta.add_annotation(x=73, y=5, text="적자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
 
+
     fig_official_nta.update_layout(
-        title=dict(text="&lt; 생 애 주 기 적 자 (총 액) &gt;", x=0.5, font=dict(size=16, color="#F8FAFC")),
-        height=370,
-        margin=dict(l=20, r=20, t=45, b=35),
+        title=dict(
+            text="< 생 애 주 기 적 자 (총 액) >",
+            x=0.5,
+            xanchor="center",
+            font=dict(size=16, color="#F8FAFC")
+        ),
+        height=420,
+        margin=dict(l=20, r=20, t=45, b=125),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#E2E8F0", size=13),
+
         xaxis=dict(
-            title=dict(text="연령 (세)", font=dict(size=13, color="#94A3B8")),
+            title=dict(
+                text="연령 (세)",
+                font=dict(size=13, color="#94A3B8")
+            ),
             tickfont=dict(size=12, color="#94A3B8"),
             gridcolor="rgba(100, 116, 139, 0.2)",
-            tickmode="linear", tick0=0, dtick=5,
+            tickmode="linear",
+            tick0=0,
+            dtick=5,
             fixedrange=True
         ),
+
         yaxis=dict(
-            title=dict(text="규모 (조원)", font=dict(size=13, color="#94A3B8")),
+            title=dict(
+                text="규모 (조원)",
+                font=dict(size=13, color="#94A3B8")
+            ),
             tickfont=dict(size=12, color="#94A3B8"),
             gridcolor="rgba(100, 116, 139, 0.2)",
             range=[-22, 54],
             fixedrange=True
         ),
+
+        # 범례를 X축 아래에 세로로 분리
         legend=dict(
-            orientation="h", yanchor="bottom", y=-0.28, xanchor="center", x=0.5,
-            font=dict(size=12, color="#F1F5F9")
+            orientation="v",
+            yanchor="top",
+            y=-0.24,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11, color="#F1F5F9"),
+            tracegroupgap=4
         ),
+
         hovermode="x unified"
     )
+
 
     st.plotly_chart(
         fig_official_nta,
