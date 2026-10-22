@@ -131,6 +131,42 @@ st.markdown("""
     font-size: 17px !important;
     color: var(--nc-text);
 }
+/* 간편 새로고침 버튼: 내용 크기만 사용하고 오른쪽 정렬 */
+.st-key-compass_refresh_area {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    margin: 0 0 4px 0 !important;
+}
+
+.st-key-compass_quick_refresh {
+    width: auto !important;
+    flex: 0 0 auto !important;
+}
+
+.st-key-compass_quick_refresh button {
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 8px !important;
+    font-size: 21px !important;
+    line-height: 1 !important;
+}
+
+/* 앱 내부 헤더와 도구 영역의 반투명·블러 효과 제거 시도 */
+header[data-testid="stHeader"],
+header[data-testid="stHeader"] [data-testid="stToolbar"] {
+    background: #0b1120 !important;
+    background-color: #0b1120 !important;
+    opacity: 1 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -729,14 +765,12 @@ if not st.session_state.started:
 
 # 5.01.01 | 인터뷰 화면용 간편 새로고침 버튼
 
-_refresh_spacer, _refresh_button_col = st.columns([5.5, 1.0])
-
-with _refresh_button_col:
+with st.container(key="compass_refresh_area"):
     if st.button(
-        "↻ 새로고침",
+        "↻",
         key="compass_quick_refresh",
-        use_container_width=True,
-        help="현재 입력 상태를 유지하며 화면을 다시 실행합니다."
+        help="화면 새로고침",
+        type="secondary"
     ):
         st.rerun()
 
