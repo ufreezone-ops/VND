@@ -650,6 +650,10 @@ def call_gemini_text(prompt_text):
 
 # 4.01.01 | 사이드바 컴포넌트 렌더링 (익명 배지, 기본 정보, 복원 expander)
 with st.sidebar:
+    if st.button("↻ 새로고침", key="compass_sidebar_refresh",
+                 use_container_width=True):
+        st.rerun()
+
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; text-align: center; margin-bottom: 20px;">
 <div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: 0.04em;">익명 진단 고유번호</div>
