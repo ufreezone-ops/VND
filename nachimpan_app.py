@@ -492,6 +492,144 @@ def import_diagnosis_code(raw_input):
         return False, f"데이터 복원 실패: {e}"
 
 
+# 2.01.04 | 개발용 테스트 사례 및 Google Sheets 저장/불러오기
+from datetime import datetime
+
+DEV_CASES = {
+    "A. 30대 1인 가구": {
+        "person_name": "테스트 A",
+        "person_age": 32,
+        "gender": "🙋‍♂️ 남성",
+        "job_form": "직장인",
+        "job_spouse_form": "해당 없음",
+        "career_stage": "🌱 3년 이하 (초년생)",
+        "income_self": 320, "income_spouse": 0,
+        "income_other": 0, "income_bonus": 300, "income_pension": 0,
+        "expense_living": 150, "expense_loan": 0, "expense_other": 30,
+        "retirement_monthly_expenses": 180,
+        "asset_cash": 800, "asset_financial": 300,
+        "asset_home": 0, "asset_deposit": 3000, "asset_other": 0,
+        "debt_home": 0, "debt_other": 200,
+        "retirement_age": 60, "spouse_age": 0,
+        "child_count": "없음", "child_age": 0, "child_age2": 0,
+        "child_age3": 0, "child_age4": 0, "father_age": 0, "mother_age": 0,
+        "marriage_plan": "미정", "child_plan": "미정",
+        "housing_plan": "전세·월세 이동 고려",
+    },
+    "B. 40~50대 부부와 자녀 2명": {
+        "person_name": "테스트 B",
+        "person_age": 48,
+        "gender": "🙋‍♂️ 남성",
+        "job_form": "직장인",
+        "job_spouse_form": "직장인",
+        "career_stage": "🌳 10년 이상 (베테랑)",
+        "income_self": 450, "income_spouse": 300,
+        "income_other": 30, "income_bonus": 1200, "income_pension": 0,
+        "expense_living": 280, "expense_loan": 130, "expense_other": 80,
+        "retirement_monthly_expenses": 350,
+        "asset_cash": 3000, "asset_financial": 4000,
+        "asset_home": 50000, "asset_deposit": 0, "asset_other": 0,
+        "debt_home": 18000, "debt_other": 1000,
+        "retirement_age": 62, "spouse_age": 46,
+        "child_count": "2명", "child_age": 18, "child_age2": 14,
+        "child_age3": 0, "child_age4": 0, "father_age": 0, "mother_age": 0,
+        "marriage_plan": "미정", "child_plan": "미정",
+        "housing_plan": "현재 주거 유지",
+    },
+    "C. 50~60대 부부와 성인 자녀": {
+        "person_name": "테스트 C",
+        "person_age": 58,
+        "gender": "🙋‍♂️ 남성",
+        "job_form": "직장인",
+        "job_spouse_form": "직장인",
+        "career_stage": "🌳 10년 이상 (베테랑)",
+        "income_self": 500, "income_spouse": 200,
+        "income_other": 50, "income_bonus": 1000, "income_pension": 220,
+        "expense_living": 300, "expense_loan": 50, "expense_other": 100,
+        "retirement_monthly_expenses": 300,
+        "asset_cash": 5000, "asset_financial": 10000,
+        "asset_home": 65000, "asset_deposit": 0, "asset_other": 0,
+        "debt_home": 5000, "debt_other": 0,
+        "retirement_age": 62, "spouse_age": 56,
+        "child_count": "2명", "child_age": 28, "child_age2": 25,
+        "child_age3": 0, "child_age4": 0, "father_age": 0, "mother_age": 0,
+        "marriage_plan": "미정", "child_plan": "미정",
+        "housing_plan": "현재 주거 유지",
+    },
+    "D. 70~90대 노년기": {
+        "person_name": "테스트 D",
+        "person_age": 78,
+        "gender": "🙋‍♂️ 남성",
+        "job_form": "그외",
+        "job_spouse_form": "해당 없음",
+        "career_stage": "🌳 10년 이상 (베테랑)",
+        "income_self": 0, "income_spouse": 0,
+        "income_other": 40, "income_bonus": 0, "income_pension": 220,
+        "expense_living": 200, "expense_loan": 0, "expense_other": 40,
+        "retirement_monthly_expenses": 220,
+        "asset_cash": 4000, "asset_financial": 12000,
+        "asset_home": 45000, "asset_deposit": 0, "asset_other": 0,
+        "debt_home": 0, "debt_other": 0,
+        "retirement_age": 78, "spouse_age": 75,
+        "child_count": "2명", "child_age": 50, "child_age2": 47,
+        "child_age3": 0, "child_age4": 0, "father_age": 0, "mother_age": 0,
+        "marriage_plan": "미정", "child_plan": "미정",
+        "housing_plan": "현재 주거 유지",
+    },
+}
+
+def get_test_cases():
+    """기본 A~D 사례와 Google Sheets에 저장한 사례를 합쳐 반환."""
+    cases = dict(DEV_CASES)
+    try:
+        from streamlit_gsheets import GSheetsConnection
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(worksheet="Sheet1", ttl=0)
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                name = str(row.get("case_name", "")).strip()
+                payload = row.get("payload_json", "")
+                if name and isinstance(payload, str) and payload.strip():
+                    try:
+                        cases[f"저장 사례: {name}"] = json.loads(payload)
+                    except (ValueError, TypeError):
+                        pass
+    except Exception:
+        pass
+    return cases
+
+def save_test_case(case_name):
+    """현재 진단 데이터를 익명 사례로 Google Sheets에 저장."""
+    from streamlit_gsheets import GSheetsConnection
+
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        df = conn.read(worksheet="Sheet1", ttl=0)
+        if df is None:
+            df = pd.DataFrame()
+    except Exception:
+        df = pd.DataFrame()
+
+    if df.empty or not {"case_name", "payload_json"}.issubset(df.columns):
+        df = pd.DataFrame(columns=["case_name", "updated_at", "payload_json"])
+
+    payload = {
+        key: st.session_state[key]
+        for key in SYNC_KEYS
+        if key in st.session_state and key != "person_name"
+    }
+    payload["person_name"] = case_name
+
+    # 같은 별칭은 새 데이터로 갱신하고, 다른 별칭은 별도 사례로 보관
+    df = df[df["case_name"].astype(str) != case_name]
+    new_row = pd.DataFrame([{
+        "case_name": case_name,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "payload_json": json.dumps(payload, ensure_ascii=False, default=str),
+    }])
+    df = pd.concat([df, new_row], ignore_index=True)
+    conn.update(worksheet="Sheet1", data=df)
+
 # ------------------------------------------------------------------------------
 # 2.02.00 | 재무 포맷팅 및 집계 로직
 # ------------------------------------------------------------------------------
@@ -689,6 +827,66 @@ with st.sidebar:
     st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
     st.caption("※ 나침반은 외부 서버에 저장되지 않는 일회성 안전 세션입니다.")
 
+# 4.01.02 | 개발용 테스트 메뉴 (DEV_MODE + ?dev=1)
+_dev_enabled = (
+    st.secrets.get("DEV_MODE", False)
+    and st.query_params.get("dev") == "1"
+)
+
+if _dev_enabled:
+    with st.sidebar:
+        st.divider()
+        st.markdown("### 🧪 개발용 테스트")
+        st.caption("테스트 사례의 금액은 기능 검증을 위한 예시입니다.")
+
+        _cases = get_test_cases()
+        _case_names = list(_cases.keys())
+
+        _selected_case = st.selectbox(
+            "불러올 사례",
+            _case_names,
+            key="dev_case_selector",
+        )
+
+        if st.button("📂 사례 불러오기", use_container_width=True):
+            _data = dict(_cases[_selected_case])
+
+            # 기존 위젯 상태를 초기화해 새 사례가 입력 화면에 반영되게 함
+            st.session_state.clear()
+            st.session_state.update(_data)
+            st.session_state["started"] = True
+            st.session_state["answers"] = {}
+            st.session_state["anonymous_id"] = (
+                f"#DEV-{random.randint(100, 999)}"
+            )
+            st.session_state["active_navigation_default"] = "우리집\n가계부"
+            st.session_state["active_navigation_key"] = "main_navigation"
+            st.session_state["_dev_loaded_notice"] = _selected_case
+            st.rerun()
+
+        st.divider()
+        st.markdown("#### 💾 현재 사례 저장")
+        _save_name = st.text_input(
+            "저장할 별칭",
+            placeholder="예: 인터뷰 사례 01",
+            key="dev_save_case_name",
+        )
+
+        if st.button(
+            "☁️ Google Sheets에 저장",
+            use_container_width=True,
+            disabled=not st.session_state.get("started", False)
+            or not _save_name.strip(),
+        ):
+            try:
+                save_test_case(_save_name.strip())
+                st.success(f"'{_save_name.strip()}' 사례를 저장했습니다.")
+                st.rerun()
+            except Exception as e:
+                st.error(
+                    "저장에 실패했습니다. Google Sheets 연결과 "
+                    f"권한을 확인해 주세요. ({type(e).__name__}: {e})"
+                )
 
 # ------------------------------------------------------------------------------
 # 4.02.00 | 첫 진입 표지 및 인라인 시작 바
