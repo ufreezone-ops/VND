@@ -62,6 +62,30 @@ header[data-testid="stHeader"] button:hover {
 </style>
 """, unsafe_allow_html=True)
 
+# CUSTOM HEADER | Streamlit 기본 헤더 숨기기
+st.markdown("""
+<style>
+/* Streamlit 기본 상단 헤더와 툴바 숨기기 */
+header[data-testid="stHeader"] {
+    display: none !important;
+}
+
+div[data-testid="stToolbar"] {
+    display: none !important;
+}
+
+/* 기본 헤더가 사라진 만큼 상단 여백 조정 */
+div[data-testid="stMainBlockContainer"] {
+    padding-top: 0.8rem !important;
+}
+
+/* 하단 Streamlit 푸터 숨기기 */
+footer {
+    visibility: hidden !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # 1.02.02 | 전역 색상 디자인 토큰 및 17px 가독성 폰트 설정
 st.markdown("""
 <style>
@@ -698,12 +722,51 @@ if not st.session_state.started:
 # ================================================================================
 
 # ------------------------------------------------------------------------------
-# 5.01.00 | 상단 4대 탭 네비게이터
+# 5.01.00 | 나침반 전용 헤더 및 상단 4대 탭 네비게이터
 # ------------------------------------------------------------------------------
 
-# 5.01.01 | 네비게이션 옵션 및 streamlit_option_menu 렌더링
+# 5.01.01 | 나침반 전용 헤더: 로고 및 새로고침 버튼
+header_left, header_right = st.columns(
+    [5, 1],
+    vertical_alignment="center"
+)
+
+with header_left:
+    st.markdown(
+        """
+        <div style="
+            font-size: 22px;
+            font-weight: 800;
+            color: #F8FAFC;
+            padding: 6px 0 10px 2px;
+            letter-spacing: -0.5px;
+        ">
+            🧭 나침반
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with header_right:
+    if st.button(
+        "🔄 새로고침",
+        key="nachimpan_manual_refresh",
+        use_container_width=True,
+        help="현재 입력값을 유지하면서 화면과 계산을 다시 실행합니다.",
+    ):
+        st.rerun()
+
+
+# 5.01.02 | 네비게이션 옵션 및 streamlit_option_menu 렌더링
 _pending_nav = st.session_state.pop("_pending_nav", None)
-nav_options = ["우리집\n가계부", "삶과\n생계수단", "인생의\n사계절", "AI\n시선"]
+
+nav_options = [
+    "우리집\n가계부",
+    "삶과\n생계수단",
+    "인생의\n사계절",
+    "AI\n시선"
+]
+
 _nav_targets = {
     "우리집 가계부": nav_options[0],
     "삶과 생계수단": nav_options[1],
@@ -713,13 +776,24 @@ _nav_targets = {
 
 if "active_navigation_key" not in st.session_state:
     st.session_state.active_navigation_key = "main_navigation"
+
 if _pending_nav in _nav_targets:
-    st.session_state.active_navigation_key = "main_navigation_" + str(list(_nav_targets.keys()).index(_pending_nav))
+    st.session_state.active_navigation_key = (
+        "main_navigation_"
+        + str(list(_nav_targets.keys()).index(_pending_nav))
+    )
     st.session_state.active_navigation_default = _nav_targets[_pending_nav]
 
 _nav_widget_key = st.session_state.active_navigation_key
-_nav_default = st.session_state.get("active_navigation_default", nav_options[0])
-_nav_index = nav_options.index(_nav_default) if _nav_default in nav_options else 0
+_nav_default = st.session_state.get(
+    "active_navigation_default",
+    nav_options[0]
+)
+_nav_index = (
+    nav_options.index(_nav_default)
+    if _nav_default in nav_options
+    else 0
+)
 
 selected = option_menu(
     menu_title=None,
