@@ -763,15 +763,12 @@ if not st.session_state.started:
 # 5.01.00 | 나침반 전용 헤더 및 상단 4대 탭 네비게이터
 # ------------------------------------------------------------------------------
 
-# 5.01.01 | 인터뷰 화면용 간편 새로고침 버튼
+# 5.01.01 | 사이드바 새로고침 기능
 
-with st.container(key="compass_refresh_area"):
-    if st.button(
-        "↻",
-        key="compass_quick_refresh",
-        help="화면 새로고침",
-        type="secondary"
-    ):
+with st.sidebar:
+    st.markdown("### 나침반 메뉴")
+    if st.button("↻ 새로고침", key="compass_sidebar_refresh",
+                 use_container_width=True):
         st.rerun()
 
 # 5.01.02 | 네비게이션 옵션 및 streamlit_option_menu 렌더링
