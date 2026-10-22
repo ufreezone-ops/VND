@@ -46,15 +46,28 @@ st.markdown("""
     scrollbar-gutter: stable;
 }
 
-/* Streamlit 기본 헤더 유지: 딥 네이비 디자인 */
+/* Streamlit 상단 헤더: 불투명한 딥 네이비 배경 */
 header[data-testid="stHeader"] {
     display: flex !important;
-    background-color: #0b1120 !important;
     background: #0b1120 !important;
+    background-color: #0b1120 !important;
+    opacity: 1 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
     height: 2.8rem !important;
-    border-bottom: 1px solid rgba(51, 65, 85, 0.4) !important;
+    border-bottom: 1px solid #334155 !important;
 }
 
+/* 헤더 내부 도구 영역에도 배경 효과가 남지 않도록 처리 */
+header[data-testid="stHeader"] [data-testid="stToolbar"] {
+    background: #0b1120 !important;
+    background-color: #0b1120 !important;
+    opacity: 1 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+/* 헤더 내부 아이콘과 버튼 색상 유지 */
 header[data-testid="stHeader"] * {
     color: #94a3b8 !important;
 }
@@ -714,6 +727,18 @@ if not st.session_state.started:
 # 5.01.00 | 나침반 전용 헤더 및 상단 4대 탭 네비게이터
 # ------------------------------------------------------------------------------
 
+# 5.01.01 | 인터뷰 화면용 간편 새로고침 버튼
+
+_refresh_spacer, _refresh_button_col = st.columns([5.5, 1.0])
+
+with _refresh_button_col:
+    if st.button(
+        "↻ 새로고침",
+        key="compass_quick_refresh",
+        use_container_width=True,
+        help="현재 입력 상태를 유지하며 화면을 다시 실행합니다."
+    ):
+        st.rerun()
 
 # 5.01.02 | 네비게이션 옵션 및 streamlit_option_menu 렌더링
 _pending_nav = st.session_state.pop("_pending_nav", None)
