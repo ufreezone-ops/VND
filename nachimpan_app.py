@@ -1347,9 +1347,9 @@ elif selected_page == "삶과 생계수단":
             st.rerun()
 
 
-# ------------------------------------------------------------------------------
-# 6.03.00 | Tab 3 — 인생의 사계절
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 6.03.00 | Tab 3 — 인생의 사계절 (동선 최적화 & 공식 생애주기적자 차트 탑재)
+# ==============================================================================
 elif selected_page == "인생의 사계절":
     if st.session_state.pop("_scroll_to_top_once", False):
         st.components.v1.html(
@@ -1372,11 +1372,10 @@ elif selected_page == "인생의 사계절":
     winter_years = max(0, life_expectancy - retire_age)
     winter_months = winter_years * 12
 
-# 6.03.01 | 가족 구성원 나이 입력 폼 (3대 직계 가족 중심 슬림화)
+    # 6.03.01 | 가족 구성원 나이 입력 폼 (3대 직계 가족 슬림화)
     # 6.03.02 | (형제자매 기능 전면 폐기 ➜ 직계 부양가족 집중 완료)
     st.markdown("### 1. 가족 구성원과 은퇴 시점의 나이")
 
-    # 1. 자녀 수 선택 (1명, 2명, 3명, 4명 이상 선택 시 즉각 반응)
     child_options = ["입력 안 함", "없음", "1명", "2명", "3명", "4명 이상"]
     prev_c_count = st.session_state.get("child_count", "입력 안 함")
     if prev_c_count not in child_options:
@@ -1389,7 +1388,6 @@ elif selected_page == "인생의 사계절":
     )
 
     with st.form("family_form"):
-        # 2. 배우자 나이 (상처 주지 않는 중립적 질문)
         spouse_age = st.number_input(
             "배우자 나이 (없거나 미입력 시 0)",
             min_value=0, max_value=120,
@@ -1397,7 +1395,6 @@ elif selected_page == "인생의 사계절":
             step=1
         )
 
-        # 3. 자녀 나이 (선택한 인원수만큼만 2열 그리드로 단정하게 노출)
         child_age1, child_age2, child_age3, child_age4 = 0, 0, 0, 0
 
         if child_count in ["1명", "2명", "3명", "4명 이상"]:
@@ -1434,7 +1431,6 @@ elif selected_page == "인생의 사계절":
 
         st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-        # 4. 부모님 나이 (2열 나란히)
         f_col, m_col = st.columns(2)
         with f_col:
             father_age = st.number_input(
@@ -1449,7 +1445,6 @@ elif selected_page == "인생의 사계절":
 
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
-        # 5. 앞으로의 가족 계획 (3열 나란히 ➜ 생애주기 곡선 팩트 매핑용)
         st.markdown("#### 앞으로의 가족 계획 (선택)")
         p_c1, p_c2, p_c3 = st.columns(3)
         with p_c1:
@@ -1485,8 +1480,6 @@ elif selected_page == "인생의 사계절":
         st.session_state.marriage_plan = marriage_plan
         st.session_state.child_plan = child_plan
         st.session_state.housing_plan = housing_plan
-        
-        # 형제자매 잔재 데이터 완전 정리
         st.session_state.pop("sibling_items", None)
         st.session_state.pop("sib_count", None)
         st.rerun()
@@ -1671,7 +1664,7 @@ elif selected_page == "인생의 사계절":
         ),
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-            font=dict(size=12.5, color="#F1F5F9")
+            font=dict(size=12, color="#F1F5F9")
         ),
         hovermode="x unified"
     )
@@ -1682,8 +1675,123 @@ elif selected_page == "인생의 사계절":
         config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
     )
 
-    # 6.03.06 | 인생의 사계절 메타포 카드 & 성별 기대수명 겨울의 시간
-    st.markdown("### 3. 인생의 사계절과 맞이할 겨울의 시간")
+    st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 6.03.06 | [위치 이동] 국가데이터처 공식 생애 통계 지표 & 첨부 1 공식 차트
+    # --------------------------------------------------------------------------
+    st.markdown("### 3. 국가데이터처 공식 생애 통계 지표 (대한민국 평균 기준)")
+    st.caption("※ 통계청 국민이전계정(NTA) 공식 발표 자료 기준")
+    
+    col_m1, col_m2, col_m3 = st.columns(3)
+    col_m1.metric("한국인 평균 흑자 진입", "28세", help="노동소득이 소비를 추월하는 연령")
+    col_m2.metric("최대 흑자 정점", "45세", "연 1,932만 원")
+    col_m3.metric("평균 적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
+
+    # 첨부 1: 국가데이터처 공식 < 생애주기적자(총액) > 완벽 복원 차트
+    fig_official_nta = go.Figure()
+
+    official_ages = [0, 5, 10, 14, 17, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 61, 65, 70, 75, 80, 85]
+    official_income = [0, 0, 0, 0, 0, 3, 10, 18, 28, 27, 28, 38, 35, 39, 36, 26, 21, 14, 7, 2, 0.5, 0]
+    official_expense = [4, 5, 18, 20, 22, 15, 19, 18, 22, 20, 19, 23, 20, 24, 26, 23, 23, 25, 16, 11, 7, 5]
+    official_deficit = [e - i for e, i in zip(official_expense, official_income)]
+
+    # 1. 생애주기적자 음영 영역 (유년층 적자, 청장년층 흑자, 노년층 적자)
+    fig_official_nta.add_trace(go.Scatter(
+        x=official_ages, y=official_deficit,
+        mode="lines",
+        line=dict(color="rgba(147, 197, 253, 0.0)", width=0),
+        fill='tozeroy',
+        fillcolor='rgba(147, 197, 253, 0.45)',
+        name="생애주기적자 (소비 - 노동소득)",
+        hovertemplate="나이: %{x}세<br>생애주기적자: <b>%{y:.1f}조 원</b><extra></extra>"
+    ))
+
+    # 2. 소비 곡선 (녹색 대시선)
+    fig_official_nta.add_trace(go.Scatter(
+        x=official_ages, y=official_expense,
+        mode="lines",
+        line=dict(color="#65A30D", width=3, dash="dash"),
+        name="소비 (조원)",
+        hovertemplate="나이: %{x}세<br>소비: <b>%{y:.1f}조 원</b><extra></extra>"
+    ))
+
+    # 3. 노동소득 곡선 (남색 실선)
+    fig_official_nta.add_trace(go.Scatter(
+        x=official_ages, y=official_income,
+        mode="lines",
+        line=dict(color="#2563EB", width=3.5),
+        name="노동소득 (조원)",
+        hovertemplate="나이: %{x}세<br>노동소득: <b>%{y:.1f}조 원</b><extra></extra>"
+    ))
+
+    # 기준 0선 및 연령층 구분 세로선 (17세, 65세)
+    fig_official_nta.add_hline(y=0, line_dash="solid", line_color="#475569", line_width=1.5)
+    fig_official_nta.add_vline(x=17, line_dash="dash", line_color="#94A3B8", line_width=1.5)
+    fig_official_nta.add_vline(x=65, line_dash="dash", line_color="#94A3B8", line_width=1.5)
+
+    # 연령층 뱃지 어노테이션 (첨부 1 원본 동일)
+    fig_official_nta.add_annotation(x=8, y=50, text="유년층", showarrow=False, font=dict(size=12, color="#E2E8F0"), bgcolor="rgba(30, 41, 59, 0.8)", bordercolor="#475569")
+    fig_official_nta.add_annotation(x=41, y=50, text="노동연령층", showarrow=False, font=dict(size=12, color="#E2E8F0"), bgcolor="rgba(30, 41, 59, 0.8)", bordercolor="#475569")
+    fig_official_nta.add_annotation(x=75, y=50, text="노년층", showarrow=False, font=dict(size=12, color="#E2E8F0"), bgcolor="rgba(30, 41, 59, 0.8)", bordercolor="#475569")
+    
+    # 적자 / 흑자 텍스트 표기
+    fig_official_nta.add_annotation(x=12, y=10, text="적자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
+    fig_official_nta.add_annotation(x=45, y=-16, text="흑자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
+    fig_official_nta.add_annotation(x=73, y=5, text="적자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
+
+    fig_official_nta.update_layout(
+        title=dict(text="&lt; 생 애 주 기 적 자 (총 액) &gt;", x=0.5, font=dict(size=16, color="#F8FAFC")),
+        height=370,
+        margin=dict(l=20, r=20, t=45, b=35),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#E2E8F0", size=13),
+        xaxis=dict(
+            title=dict(text="연령 (세)", font=dict(size=13, color="#94A3B8")),
+            tickfont=dict(size=12, color="#94A3B8"),
+            gridcolor="rgba(100, 116, 139, 0.2)",
+            tickmode="linear", tick0=0, dtick=5,
+            fixedrange=True
+        ),
+        yaxis=dict(
+            title=dict(text="규모 (조원)", font=dict(size=13, color="#94A3B8")),
+            tickfont=dict(size=12, color="#94A3B8"),
+            gridcolor="rgba(100, 116, 139, 0.2)",
+            range=[-22, 54],
+            fixedrange=True
+        ),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=-0.28, xanchor="center", x=0.5,
+            font=dict(size=12, color="#F1F5F9")
+        ),
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(
+        fig_official_nta,
+        use_container_width=True,
+        config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
+    )
+
+    # 공식 보도자료 및 웹페이지 링크 버튼 (차트 바로 아래 위치)
+    st.markdown(f"""
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;">
+<a href="{OFFICIAL_PDF_URL}" target="_blank" style="background:#1E293B; border:1px solid #475569; border-radius:8px; padding:12px 14px; text-align:center; text-decoration:none; color:#38BDF8 !important; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+<span style="font-size:18px;">📄</span><span style="color:#38BDF8 !important;">2024년 국가데이터처 통계 보도자료</span>
+</a>
+<a href="{OFFICIAL_RELEASE_URL}" target="_blank" style="background:#1E293B; border:1px solid #475569; border-radius:8px; padding:12px 14px; text-align:center; text-decoration:none; color:#38BDF8 !important; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+<span style="font-size:18px;">🌐</span><span style="color:#38BDF8 !important;">국가데이터처 공식 발표 페이지</span>
+</a>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # 6.03.07 | [위치 이동] 인생의 사계절과 맞이할 겨울의 시간 (사계절 카드)
+    # --------------------------------------------------------------------------
+    st.markdown("### 4. 인생의 사계절과 맞이할 겨울의 시간")
     
     if cur_age <= 27:
         cur_season = "spring"
@@ -1707,7 +1815,7 @@ elif selected_page == "인생의 사계절":
 <div class='soft-card' style='text-align:center; min-height:205px; {card_border} padding:14px 10px; margin:0;'>
 {badge_html}
 <div style='font-size:28px;'>{icon}</div>
-<div style='font-size:16.5px; font-weight:800; color:#F8FAFC; margin-4px 0;'>{title}</div>
+<div style='font-size:16.5px; font-weight:800; color:#F8FAFC; margin:4px 0;'>{title}</div>
 <div style='font-size:13px; color:#94A3B8;'>{age_range}</div>
 <div style='font-size:13px; color:#CBD5E1; margin-top:8px; line-height:1.4;'>{desc}</div>
 </div>
@@ -1735,30 +1843,11 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
-    # 6.03.07 | 국가데이터처 공식 생애 통계 지표 및 보도자료 링크
-    st.markdown("### 국가데이터처 공식 생애 통계 지표 (대한민국 평균 기준)")
-    col_m1, col_m2, col_m3 = st.columns(3)
-    col_m1.metric("한국인 평균 흑자 진입", "28세", help="노동소득이 소비를 추월하는 연령")
-    col_m2.metric("최대 흑자 정점", "45세", "연 1,932만 원")
-    col_m3.metric("평균 적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
-
-    st.markdown(f"""
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;">
-<a href="{OFFICIAL_PDF_URL}" target="_blank" style="background:#1E293B; border:1px solid #475569; border-radius:8px; padding:12px 14px; text-align:center; text-decoration:none; color:#38BDF8 !important; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
-<span style="font-size:18px;">📄</span><span style="color:#38BDF8 !important;">2024년 국가데이터처 통계 보도자료</span>
-</a>
-<a href="{OFFICIAL_RELEASE_URL}" target="_blank" style="background:#1E293B; border:1px solid #475569; border-radius:8px; padding:12px 14px; text-align:center; text-decoration:none; color:#38BDF8 !important; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
-<span style="font-size:18px;">🌐</span><span style="color:#38BDF8 !important;">국가데이터처 공식 발표 페이지</span>
-</a>
-</div>
-""", unsafe_allow_html=True)
-
     _, next_col = st.columns([5, 1])
     with next_col:
         if st.button("다음 →", key="seasons_next", use_container_width=True, type="primary"):
             st.session_state["_pending_nav"] = "AI 시선"
             st.rerun()
-
 
 # ------------------------------------------------------------------------------
 # 6.04.00 | Tab 4 — AI 시선
@@ -1844,19 +1933,19 @@ else:
 현재 부부의 소득은 일손을 멈추면 수입이 중단되는 노동 의존형(E/S) 성격임을 정중하게 짚으세요.
 본업을 충실히 유지하면서, 시간과 노동력에만 매이지 않고 시스템과 자산에서 흘러나오는 '파이프라인'을 장기적으로 준비해야 하는 이유를 객관적인 관점에서 정중히 제안하세요."""
 
-    # 6.04.02 | ⚙️ AI 프롬프트 접이식 설정 (맛 3단계, 6대 원칙, 추가 요청)
-    current_taste_val = st.session_state.get("pills_ai_taste", "☕ 순한맛 (위로/은유)")
+    # 6.04.02 | ⚙️ AI 프롬프트 접이식 설정 (기본값 보통맛 & 기본 접힘 & 지시문 조립 완결)
+    current_taste_val = st.session_state.get("pills_ai_taste", "🧭 보통맛 (정직한 거울)")
     short_taste_tag = "☕ 순한맛" if "순한맛" in current_taste_val else ("🌶️ 매운맛" if "매운맛" in current_taste_val else "🧭 보통맛")
     
-    has_generated_report = bool(st.session_state.get("ai_summary") and st.session_state.get("ai_comment"))
     expander_title = f"⚙️ AI 프롬프트 설정 [{short_taste_tag}]"
 
-    with st.expander(expander_title, expanded=(not has_generated_report)):
+    # [핵심] 기본적으로 항상 얌전하게 접힌 상태(expanded=False) 유지
+    with st.expander(expander_title, expanded=False):
         st.markdown("<div style='font-size:16px; font-weight:800; color:#F8FAFC; margin-bottom:6px;'>1. 분석 강도(맛) 선택</div>", unsafe_allow_html=True)
         taste_mode = st.pills(
             "분석 강도 선택",
             ["☕ 순한맛 (위로/은유)", "🧭 보통맛 (정직한 거울)", "🌶️ 매운맛 (뼈아픈 직언)"],
-            default="☕ 순한맛 (위로/은유)",
+            default="🧭 보통맛 (정직한 거울)",
             key="pills_ai_taste",
             label_visibility="collapsed"
         )
@@ -1884,6 +1973,7 @@ else:
             label_visibility="collapsed"
         )
 
+    # 선택된 맛(강도)에 따른 지시문 생성
     if "순한맛" in taste_mode:
         taste_directive = """[분석 톤앤매너: ☕ 순한맛]
 - 직접적이거나 뼈아픈 표현을 지양하고, 은유적이고 다정하며 온기 있는 어조를 유지하세요.
@@ -1898,6 +1988,7 @@ else:
 - 힘을 빼고, 정직하되, 전문가답고, 정중한 태도를 견지하세요.
 - 과도한 낙관론과 과장된 위협을 모두 배제하고, 숫자를 있는 그대로 차분히 비춰주는 객관적 거울의 태도를 유지하세요."""
 
+    # 체크된 원칙들 동적 리스트 조립
     active_principles = []
     if chk_1: active_principles.append("당신은 인터뷰이를 평가하거나 가르치지 않는 '정직하고 따뜻한 객관적 거울'입니다.")
     if chk_2: active_principles.append("훈계, 잔소리, 공포를 유발하는 표현, 특정 행동이나 결론의 강요를 금지합니다.")
