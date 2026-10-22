@@ -769,12 +769,6 @@ if not st.session_state.started:
 
 # 5.01.01 | 사이드바 새로고침 기능
 
-with st.sidebar:
-    st.markdown("### 나침반 메뉴")
-    if st.button("↻ 새로고침", key="compass_sidebar_refresh",
-                 use_container_width=True):
-        st.rerun()
-
 # 5.01.02 | 네비게이션 옵션 및 streamlit_option_menu 렌더링
 _pending_nav = st.session_state.pop("_pending_nav", None)
 
