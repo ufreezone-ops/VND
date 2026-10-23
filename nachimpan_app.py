@@ -1860,7 +1860,7 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
-    # 6.03.05 | 나만의 생애주기 소득·소비 곡선 (파도 굴곡 박멸 & 평온한 생애 능선화)
+    # 6.03.05 | 나만의 생애주기 소득·소비 곡선 (출산육아기 35% 실질소득 급감 골짜기)
     st.markdown("### 2. 나만의 생애주기 소득·소비 곡선 (국민이전계정 개인화 번역)")
     st.caption("※ 통계청 국민이전계정(NTA) 공식 패턴을 인터뷰이 본인의 실제 소득·소비 및 은퇴 나이에 맞추어 번역한 개인 곡선입니다.")
     
@@ -1880,28 +1880,30 @@ elif selected_page == "인생의 사계절":
     my_income_curve = []
     my_expense_curve = []
 
-    # 요동을 유발하는 파편화된 if문을 배제하고 단일 생애 능선으로 계산
     for a in ages_sim:
-        # 1. 소득 곡선 (완만한 단일 능선)
+        # 1. 소득 곡선 (출산·육아기 실질 소득 급감 U자형 골짜기 반영)
         if a < cur_age:
-            # 과거: 사회초년생부터 현재까지 부드러운 오르막
+            # 과거 구간: 현재 소득까지 자연스러운 오르막
             ratio = max(0.28, 1.0 - (0.04 * (cur_age - a)))
             inc_val = cur_annual_income * ratio
         elif cur_age <= a < retire_age:
-            # 미래 은퇴 전: 45세 완만한 정점을 향해 흐르는 자연스러운 능선
+            # 여성 출산·육아 경력단절 시나리오 (실제 소득 35% 수직 강하 및 완만 복귀)
             if has_m_curve and cur_age <= 36:
-                # 여성 출산·육아 반영 시: 요동치는 파도가 아닌, 33~36세 구간 성장이 잔잔히 숨을 고르는 완만한 평지(Plateau) 능선
-                if a <= 33:
-                    w = 1.0 + (0.015 * (a - cur_age))
-                elif 34 <= a <= 36:
-                    w = 1.0 + (0.015 * (33 - cur_age))  # 숨고르기 평지 구간 (굴곡 박멸)
+                if a <= 32:
+                    w = 1.0 + (0.012 * (a - cur_age))
+                elif 33 <= a <= 36:
+                    # [핵심] 출산·육아 집중기: 육아휴직 및 경력단절로 소득 35% 실질 급감 (바닥 골짜기)
+                    dist = abs(a - 34.5)
+                    # 34~35세 바닥에서 약 0.65(35% 삭감)까지 확실하게 내려앉는 깊은 U자형 곡선
+                    w = 0.65 + (0.04 * (dist ** 2))
                 elif 37 <= a <= 45:
-                    w = 1.0 + (0.015 * (33 - cur_age)) + (0.012 * (a - 36))  # 완만한 2차 성장
+                    # 복귀기: 남성처럼 치솟지 않고 통계청 기준(약 80~85%)의 완만한 상승 궤적
+                    w = 0.80 + (0.012 * (a - 37))
                 else:
-                    peak_w = 1.0 + (0.015 * (33 - cur_age)) + (0.012 * (45 - 36))
-                    w = max(0.85, peak_w - (0.008 * (a - 45)))  # 은퇴 전 완만한 안정
+                    peak_w = 0.80 + (0.012 * (45 - 37))
+                    w = max(0.75, peak_w - (0.008 * (a - 45)))
             else:
-                # 일반 궤적: 흔들림 없는 단 하나의 우아한 산등성이
+                # 일반 궤적 (남성 또는 경력단절 미해당)
                 if a <= 45:
                     w = 1.0 + (0.018 * (a - cur_age))
                 else:
@@ -1910,12 +1912,12 @@ elif selected_page == "인생의 사계절":
                     
             inc_val = cur_annual_income * w
         else:
-            # 은퇴 후: 연금으로 수평 전환 (삶의 경계)
+            # 은퇴 후: 연금 수평선 전환 (삶의 경계)
             inc_val = ret_annual_pension
 
         my_income_curve.append(inc_val)
 
-        # 2. 소비 곡선 (가족 성장을 반영한 유연한 지출선)
+        # 2. 소비 곡선 (출산·육아기 지출 상승 팩트 반영)
         if a < cur_age:
             exp_val = cur_annual_expense * 0.78
         elif cur_age <= a < retire_age:
@@ -1925,8 +1927,9 @@ elif selected_page == "인생의 사계절":
             if is_single_young:
                 if m_plan in ["1~3년 내 결혼 생각 있음", "결혼 예정/준비 중"] and (cur_age <= a <= cur_age + 3):
                     exp_factor = max(exp_factor, 1.10)
+                # 출산·영유아기 지출 상승 (기저귀, 분유, 양육비 등으로 지출 15% 상승)
                 if c_plan in ["자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"] and (33 <= a <= 37):
-                    exp_factor = max(exp_factor, 1.12)
+                    exp_factor = max(exp_factor, 1.15)
             exp_val = cur_annual_expense * exp_factor
         else:
             exp_val = ret_annual_expense
@@ -1935,11 +1938,11 @@ elif selected_page == "인생의 사계절":
 
     fig_my_nta = go.Figure()
 
-    # 1. 소득 곡선 (물 흐르듯 평온한 스플라인 능선)
+    # 1. 소득 곡선 (35% 급감 골짜기가 담긴 부드러운 스플라인)
     fig_my_nta.add_trace(go.Scatter(
         x=ages_sim, y=my_income_curve,
         mode="lines",
-        line=dict(color="#10B981", width=3.5, shape='spline', smoothing=1.1),
+        line=dict(color="#10B981", width=3.5, shape='spline', smoothing=1.0),
         name="나의 소득 흐름 (근로·사업소득 ➔ 은퇴 후 연금)",
         hovertemplate="나이: %{x}세<br>연 소득: <b>%{y:,.0f}만 원</b><extra></extra>"
     ))
@@ -1948,7 +1951,7 @@ elif selected_page == "인생의 사계절":
     fig_my_nta.add_trace(go.Scatter(
         x=ages_sim, y=my_expense_curve,
         mode="lines",
-        line=dict(color="#F97316", width=2.8, dash="dash", shape='spline', smoothing=1.1),
+        line=dict(color="#F97316", width=2.8, dash="dash", shape='spline', smoothing=1.0),
         name="나의 생애 소비 흐름",
         hovertemplate="나이: %{x}세<br>연 소비: <b>%{y:,.0f}만 원</b><extra></extra>"
     ))
@@ -1963,12 +1966,12 @@ elif selected_page == "인생의 사계절":
         ay=-30, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#38BDF8"
     )
 
-    # 잔잔한 출산·육아기 깃발 (35세 지점)
+    # 깊은 골짜기 바닥에 꽂히는 출산·육아기 주석 깃발
     if has_m_curve and cur_age <= 35:
-        dip_val = my_income_curve[ages_sim.index(35)]
+        dip_val = my_income_curve[ages_sim.index(34)]
         fig_my_nta.add_annotation(
-            x=35, y=dip_val,
-            text="👶 출산·육아기 (소득 숨고르기)",
+            x=34, y=dip_val,
+            text="👶 출산·육아기 (소득 급감)",
             showarrow=True, arrowhead=2, arrowcolor="#FB923C",
             font=dict(size=11.5, color="#FDBA74"),
             ay=36, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#FB923C", borderpad=3
