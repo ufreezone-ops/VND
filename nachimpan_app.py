@@ -579,12 +579,12 @@ DEV_CASES = {
 }
 
 def get_test_cases():
-    """기본 A~D 사례와 Google Sheets에 저장한 사례를 합쳐 반환."""
+    """기본 A~D 사례와 Google Sheets에 저장한 사례를 합쳐 반환 (시트명 무관 자동 읽기)"""
     cases = dict(DEV_CASES)
     try:
         from streamlit_gsheets import GSheetsConnection
         conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(worksheet="Sheet1", ttl=0)
+        df = conn.read(ttl=0)
         if df is not None and not df.empty:
             for _, row in df.iterrows():
                 name = str(row.get("case_name", "")).strip()
@@ -599,12 +599,12 @@ def get_test_cases():
     return cases
 
 def save_test_case(case_name):
-    """현재 진단 데이터를 익명 사례로 Google Sheets에 저장."""
+    """현재 진단 데이터를 익명 사례로 Google Sheets에 저장 (시트명 무관 자동 갱신)"""
     from streamlit_gsheets import GSheetsConnection
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     try:
-        df = conn.read(worksheet="Sheet1", ttl=0)
+        df = conn.read(ttl=0)
         if df is None:
             df = pd.DataFrame()
     except Exception:
@@ -620,7 +620,6 @@ def save_test_case(case_name):
     }
     payload["person_name"] = case_name
 
-    # 같은 별칭은 새 데이터로 갱신하고, 다른 별칭은 별도 사례로 보관
     df = df[df["case_name"].astype(str) != case_name]
     new_row = pd.DataFrame([{
         "case_name": case_name,
@@ -628,7 +627,7 @@ def save_test_case(case_name):
         "payload_json": json.dumps(payload, ensure_ascii=False, default=str),
     }])
     df = pd.concat([df, new_row], ignore_index=True)
-    conn.update(worksheet="Sheet1", data=df)
+    conn.update(data=df)
 
 # ------------------------------------------------------------------------------
 # 2.02.00 | 재무 포맷팅 및 집계 로직
@@ -827,7 +826,7 @@ with st.sidebar:
     st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
     st.caption("※ 나침반은 외부 서버에 저장되지 않는 일회성 안전 세션입니다.")
 
-# 4.01.02 | 개발용 테스트 메뉴 (DEV_MODE + ?dev=1)
+# 4.01.02 | 개발용 테스트 메뉴 (DEV_MODE + ?dev=1, 100% 안전 동기화)
 _dev_enabled = (
     st.secrets.get("DEV_MODE", False)
     and st.query_params.get("dev") == "1"
@@ -851,16 +850,26 @@ if _dev_enabled:
         if st.button("📂 사례 불러오기", use_container_width=True):
             _data = dict(_cases[_selected_case])
 
-            # 기존 위젯 상태를 초기화해 새 사례가 입력 화면에 반영되게 함
-            st.session_state.clear()
-            st.session_state.update(_data)
+            # [수정] 위젯 키 폭발을 일으키던 clear() 삭제 ➜ 데이터 1:1 안전 주입
+            for k, v in _data.items():
+                st.session_state[k] = v
+
+            # 가계부(Tab 1)의 st.pills 버튼들도 불러온 사례로 즉시 하이라이트 동기화
+            if "gender" in _data:
+                st.session_state["pills_gender"] = _data["gender"]
+            if "job_form" in _data:
+                st.session_state["pills_job_self"] = _data["job_form"]
+            if "career_stage" in _data:
+                st.session_state["pills_career_stage"] = _data["career_stage"]
+            if "job_spouse_form" in _data:
+                st.session_state["pills_job_spouse"] = _data["job_spouse_form"]
+
             st.session_state["started"] = True
             st.session_state["answers"] = {}
-            st.session_state["anonymous_id"] = (
-                f"#DEV-{random.randint(100, 999)}"
-            )
+            st.session_state["anonymous_id"] = f"#DEV-{random.randint(100, 999)}"
             st.session_state["active_navigation_default"] = "우리집\n가계부"
             st.session_state["active_navigation_key"] = "main_navigation"
+            st.session_state["_pending_nav"] = "우리집 가계부"
             st.session_state["_dev_loaded_notice"] = _selected_case
             st.rerun()
 
