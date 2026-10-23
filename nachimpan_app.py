@@ -496,10 +496,10 @@ def import_diagnosis_code(raw_input):
 from datetime import datetime
 
 DEV_CASES = {
-    "A. 30대 1인 가구": {
-        "person_name": "테스트 A",
+    "A. 30대 1인 가구 (여성, 초년생 M자 검증)": {
+        "person_name": "테스트 A (여성)",
         "person_age": 32,
-        "gender": "🙋‍♂️ 남성",
+        "gender": "🙋‍♀️ 여성",
         "job_form": "직장인",
         "job_spouse_form": "해당 없음",
         "career_stage": "🌱 3년 이하 (초년생)",
@@ -512,12 +512,14 @@ DEV_CASES = {
         "debt_home": 0, "debt_other": 200,
         "retirement_age": 60, "spouse_age": 0,
         "child_count": "없음", "child_age": 0, "child_age2": 0,
-        "child_age3": 0, "child_age4": 0, "father_age": 0, "mother_age": 0,
-        "marriage_plan": "미정", "child_plan": "미정",
+        "child_age3": 0, "child_age4": 0,
+        "father_age": 67, "mother_age": 65,  # 아버지(+35세), 어머니(+33세)
+        "marriage_plan": "1~3년 내 결혼 생각 있음",
+        "child_plan": "자녀 계획 있음",
         "housing_plan": "전세·월세 이동 고려",
     },
-    "B. 40~50대 부부와 자녀 2명": {
-        "person_name": "테스트 B",
+    "B. 40~50대 부부와 자녀 2명 (남성 가장)": {
+        "person_name": "테스트 B (남성)",
         "person_age": 48,
         "gender": "🙋‍♂️ 남성",
         "job_form": "직장인",
@@ -532,14 +534,15 @@ DEV_CASES = {
         "debt_home": 18000, "debt_other": 1000,
         "retirement_age": 62, "spouse_age": 46,
         "child_count": "2명", "child_age": 18, "child_age2": 14,
-        "child_age3": 0, "child_age4": 0, "father_age": 0, "mother_age": 0,
+        "child_age3": 0, "child_age4": 0,
+        "father_age": 83, "mother_age": 81,  # 아버지(+35세), 어머니(+33세)
         "marriage_plan": "미정", "child_plan": "미정",
         "housing_plan": "현재 주거 유지",
     },
-    "C. 50~60대 부부와 성인 자녀": {
-        "person_name": "테스트 C",
+    "C. 50~60대 부부와 성인 자녀 (여성 워킹맘)": {
+        "person_name": "테스트 C (여성)",
         "person_age": 58,
-        "gender": "🙋‍♂️ 남성",
+        "gender": "🙋‍♀️ 여성",
         "job_form": "직장인",
         "job_spouse_form": "직장인",
         "career_stage": "🌳 10년 이상 (베테랑)",
@@ -552,11 +555,12 @@ DEV_CASES = {
         "debt_home": 5000, "debt_other": 0,
         "retirement_age": 62, "spouse_age": 56,
         "child_count": "2명", "child_age": 28, "child_age2": 25,
-        "child_age3": 0, "child_age4": 0, "father_age": 0, "mother_age": 0,
+        "child_age3": 0, "child_age4": 0,
+        "father_age": 93, "mother_age": 91,  # 아버지(+35세), 어머니(+33세)
         "marriage_plan": "미정", "child_plan": "미정",
         "housing_plan": "현재 주거 유지",
     },
-    "D. 70~90대 노년기": {
+    "D. 70~90대 노년기 부부": {
         "person_name": "테스트 D",
         "person_age": 78,
         "gender": "🙋‍♂️ 남성",
@@ -572,34 +576,39 @@ DEV_CASES = {
         "debt_home": 0, "debt_other": 0,
         "retirement_age": 78, "spouse_age": 75,
         "child_count": "2명", "child_age": 50, "child_age2": 47,
-        "child_age3": 0, "child_age4": 0, "father_age": 0, "mother_age": 0,
+        "child_age3": 0, "child_age4": 0,
+        "father_age": 0, "mother_age": 0,
         "marriage_plan": "미정", "child_plan": "미정",
         "housing_plan": "현재 주거 유지",
     },
 }
 
 def get_test_cases():
-    """기본 A~D 사례와 Google Sheets에 저장한 사례를 합쳐 반환 (시트명 무관 자동 읽기)"""
+    """기본 A~D 사례 + Google Sheets 저장 사례(최신순 정렬) 통합 반환"""
     cases = dict(DEV_CASES)
     try:
         from streamlit_gsheets import GSheetsConnection
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(ttl=0)
         if df is not None and not df.empty:
-            for _, row in df.iterrows():
+            # 가장 최근에 저장된 사례가 위로 오도록 최신순(역순) 정렬
+            saved_dict = {}
+            for _, row in df.iloc[::-1].iterrows():
                 name = str(row.get("case_name", "")).strip()
                 payload = row.get("payload_json", "")
                 if name and isinstance(payload, str) and payload.strip():
                     try:
-                        cases[f"저장 사례: {name}"] = json.loads(payload)
+                        saved_dict[f"📁 저장 사례: {name}"] = json.loads(payload)
                     except (ValueError, TypeError):
                         pass
+            # 기본 표준 사례 아래에 최신 저장 사례 결합
+            cases.update(saved_dict)
     except Exception:
         pass
     return cases
 
 def save_test_case(case_name):
-    """현재 진단 데이터를 익명 사례로 Google Sheets에 저장 (시트명 무관 자동 갱신)"""
+    """현재 진단 데이터를 익명 사례로 Google Sheets에 저장"""
     from streamlit_gsheets import GSheetsConnection
 
     conn = st.connection("gsheets", type=GSheetsConnection)
@@ -785,12 +794,8 @@ def call_gemini_text(prompt_text):
 # 4.01.00 | 사이드바 프로필 요약 및 복원
 # ------------------------------------------------------------------------------
 
-# 4.01.01 | 사이드바 컴포넌트 렌더링 (익명 배지, 기본 정보, 복원 expander)
+# 4.01.01 | 사이드바 컴포넌트 렌더링 (일반 새로고침 삭제 ➜ 익명 배지부터 단정하게 시작)
 with st.sidebar:
-    if st.button("↻ 새로고침", key="compass_sidebar_refresh",
-                 use_container_width=True):
-        st.rerun()
-
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; text-align: center; margin-bottom: 20px;">
 <div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: 0.04em;">익명 진단 고유번호</div>
@@ -826,7 +831,7 @@ with st.sidebar:
     st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
     st.caption("※ 나침반은 외부 서버에 저장되지 않는 일회성 안전 세션입니다.")
 
-# 4.01.02 | 개발용 테스트 메뉴 (DEV_MODE + ?dev=1, 100% 안전 동기화)
+# 4.01.02 | 개발용 테스트 메뉴 (새로고침 버튼 통합 & 100개 대비 실시간 검색창 신설)
 _dev_enabled = (
     st.secrets.get("DEV_MODE", False)
     and st.query_params.get("dev") == "1"
@@ -836,25 +841,46 @@ if _dev_enabled:
     with st.sidebar:
         st.divider()
         st.markdown("### 🧪 개발용 테스트")
+        
+        # 1. 사이드바 꼭대기에 있던 새로고침 버튼을 개발자 전용 메뉴 최상단으로 이전
+        if st.button("↻ 개발용 새로고침", key="dev_menu_refresh", use_container_width=True):
+            st.rerun()
+
         st.caption("테스트 사례의 금액은 기능 검증을 위한 예시입니다.")
 
         _cases = get_test_cases()
-        _case_names = list(_cases.keys())
+        _all_names = list(_cases.keys())
+
+        # 2. 사례가 50개, 100개 쌓여도 0.1초 만에 찾아내는 실시간 검색 필터창
+        _search_kw = st.text_input(
+            "🔍 사례 검색 (이름 또는 키워드)",
+            placeholder="예: 여성, 소림, 30대...",
+            key="dev_search_keyword",
+            label_visibility="visible"
+        ).strip()
+
+        # 검색어가 있으면 필터링, 없으면 전체 목록 표출
+        if _search_kw:
+            _filtered_names = [n for n in _all_names if _search_kw.lower() in n.lower()]
+            if not _filtered_names:
+                st.caption("검색 결과가 없습니다.")
+                _filtered_names = _all_names
+        else:
+            _filtered_names = _all_names
 
         _selected_case = st.selectbox(
-            "불러올 사례",
-            _case_names,
+            f"불러올 사례 (총 {len(_all_names)}개 중 {len(_filtered_names)}개)",
+            _filtered_names,
             key="dev_case_selector",
         )
 
         if st.button("📂 사례 불러오기", use_container_width=True):
             _data = dict(_cases[_selected_case])
 
-            # [수정] 위젯 키 폭발을 일으키던 clear() 삭제 ➜ 데이터 1:1 안전 주입
             for k, v in _data.items():
                 st.session_state[k] = v
 
-            # 가계부(Tab 1)의 st.pills 버튼들도 불러온 사례로 즉시 하이라이트 동기화
+            # 불러온 사례의 성별, 직업, 경력, 배우자 pills 하이라이트 동기화
             if "gender" in _data:
                 st.session_state["pills_gender"] = _data["gender"]
             if "job_form" in _data:
