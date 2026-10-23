@@ -34,10 +34,11 @@ st.set_page_config(
 # 1.02.00 | 전역 통합 테마 디자인 시스템 CSS
 # ------------------------------------------------------------------------------
 
+
 # 1.02.01 | 전역 스크롤 안정화 및 상단 시스템 헤더 다크 일체화
 st.markdown("""
 <style>
-/* Streamlit 실제 스크롤 컨테이너에 스크롤바 상시 고정 (탭 전환 시 덜컹거림 박멸) */
+/* Streamlit 실제 스크롤 컨테이너의 스크롤 안정화 */
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"],
 .stMain {
@@ -45,19 +46,44 @@ st.markdown("""
     scrollbar-gutter: stable;
 }
 
-/* 최상단 Streamlit 헤더 바 딥 네이비 일체화 (빛샘·강한 대비 100% 박멸) */
+/* Streamlit 상단 헤더: 불투명한 딥 네이비 배경 */
 header[data-testid="stHeader"] {
-    background-color: #0b1120 !important;
+    display: flex !important;
     background: #0b1120 !important;
+    background-color: #0b1120 !important;
+    opacity: 1 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
     height: 2.8rem !important;
-    border-bottom: 1px solid rgba(51, 65, 85, 0.4) !important;
+    border-bottom: 1px solid #334155 !important;
 }
 
+/* 헤더 내부 도구 영역에도 배경 효과가 남지 않도록 처리 */
+header[data-testid="stHeader"] [data-testid="stToolbar"] {
+    background: #0b1120 !important;
+    background-color: #0b1120 !important;
+    opacity: 1 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+/* 헤더 내부 아이콘과 버튼 색상 유지 */
 header[data-testid="stHeader"] * {
     color: #94a3b8 !important;
 }
+
 header[data-testid="stHeader"] button:hover {
     color: #f8fafc !important;
+}
+
+/* 메인 콘텐츠 상단 여백 */
+div[data-testid="stMainBlockContainer"] {
+    padding-top: 0.8rem !important;
+}
+
+/* 하단 Streamlit 푸터 숨기기 */
+footer {
+    visibility: hidden !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -104,6 +130,42 @@ st.markdown("""
 .stApp, .stApp p, .stApp label, .stApp [data-testid="stMarkdownContainer"] {
     font-size: 17px !important;
     color: var(--nc-text);
+}
+/* 간편 새로고침 버튼: 내용 크기만 사용하고 오른쪽 정렬 */
+.st-key-compass_refresh_area {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    margin: 0 0 4px 0 !important;
+}
+
+.st-key-compass_quick_refresh {
+    width: auto !important;
+    flex: 0 0 auto !important;
+}
+
+.st-key-compass_quick_refresh button {
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 8px !important;
+    font-size: 21px !important;
+    line-height: 1 !important;
+}
+
+/* 앱 내부 헤더와 도구 영역의 반투명·블러 효과 제거 시도 */
+header[data-testid="stHeader"],
+header[data-testid="stHeader"] [data-testid="stToolbar"] {
+    background: #0b1120 !important;
+    background-color: #0b1120 !important;
+    opacity: 1 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -430,6 +492,152 @@ def import_diagnosis_code(raw_input):
         return False, f"데이터 복원 실패: {e}"
 
 
+# 2.01.04 | 개발용 테스트 사례 및 Google Sheets 저장/불러오기
+from datetime import datetime
+
+DEV_CASES = {
+    "A. 30대 1인 가구 (여성, 초년생 M자 검증)": {
+        "person_name": "테스트 A (여성)",
+        "person_age": 32,
+        "gender": "🙋‍♀️ 여성",
+        "job_form": "직장인",
+        "job_spouse_form": "해당 없음",
+        "career_stage": "🌱 3년 이하 (초년생)",
+        "income_self": 320, "income_spouse": 0,
+        "income_other": 0, "income_bonus": 300, "income_pension": 0,
+        "expense_living": 150, "expense_loan": 0, "expense_other": 30,
+        "retirement_monthly_expenses": 180,
+        "asset_cash": 800, "asset_financial": 300,
+        "asset_home": 0, "asset_deposit": 3000, "asset_other": 0,
+        "debt_home": 0, "debt_other": 200,
+        "retirement_age": 60, "spouse_age": 0,
+        "child_count": "없음", "child_age": 0, "child_age2": 0,
+        "child_age3": 0, "child_age4": 0,
+        "father_age": 67, "mother_age": 65,  # 아버지(+35세), 어머니(+33세)
+        "marriage_plan": "1~3년 내 결혼 생각 있음",
+        "child_plan": "자녀 계획 있음",
+        "housing_plan": "전세·월세 이동 고려",
+    },
+    "B. 40~50대 부부와 자녀 2명 (남성 가장)": {
+        "person_name": "테스트 B (남성)",
+        "person_age": 48,
+        "gender": "🙋‍♂️ 남성",
+        "job_form": "직장인",
+        "job_spouse_form": "직장인",
+        "career_stage": "🌳 10년 이상 (베테랑)",
+        "income_self": 450, "income_spouse": 300,
+        "income_other": 30, "income_bonus": 1200, "income_pension": 0,
+        "expense_living": 280, "expense_loan": 130, "expense_other": 80,
+        "retirement_monthly_expenses": 350,
+        "asset_cash": 3000, "asset_financial": 4000,
+        "asset_home": 50000, "asset_deposit": 0, "asset_other": 0,
+        "debt_home": 18000, "debt_other": 1000,
+        "retirement_age": 62, "spouse_age": 46,
+        "child_count": "2명", "child_age": 18, "child_age2": 14,
+        "child_age3": 0, "child_age4": 0,
+        "father_age": 83, "mother_age": 81,  # 아버지(+35세), 어머니(+33세)
+        "marriage_plan": "미정", "child_plan": "미정",
+        "housing_plan": "현재 주거 유지",
+    },
+    "C. 50~60대 부부와 성인 자녀 (여성 워킹맘)": {
+        "person_name": "테스트 C (여성)",
+        "person_age": 58,
+        "gender": "🙋‍♀️ 여성",
+        "job_form": "직장인",
+        "job_spouse_form": "직장인",
+        "career_stage": "🌳 10년 이상 (베테랑)",
+        "income_self": 500, "income_spouse": 200,
+        "income_other": 50, "income_bonus": 1000, "income_pension": 220,
+        "expense_living": 300, "expense_loan": 50, "expense_other": 100,
+        "retirement_monthly_expenses": 300,
+        "asset_cash": 5000, "asset_financial": 10000,
+        "asset_home": 65000, "asset_deposit": 0, "asset_other": 0,
+        "debt_home": 5000, "debt_other": 0,
+        "retirement_age": 62, "spouse_age": 56,
+        "child_count": "2명", "child_age": 28, "child_age2": 25,
+        "child_age3": 0, "child_age4": 0,
+        "father_age": 93, "mother_age": 91,  # 아버지(+35세), 어머니(+33세)
+        "marriage_plan": "미정", "child_plan": "미정",
+        "housing_plan": "현재 주거 유지",
+    },
+    "D. 70~90대 노년기 부부": {
+        "person_name": "테스트 D",
+        "person_age": 78,
+        "gender": "🙋‍♂️ 남성",
+        "job_form": "그외",
+        "job_spouse_form": "해당 없음",
+        "career_stage": "🌳 10년 이상 (베테랑)",
+        "income_self": 0, "income_spouse": 0,
+        "income_other": 40, "income_bonus": 0, "income_pension": 220,
+        "expense_living": 200, "expense_loan": 0, "expense_other": 40,
+        "retirement_monthly_expenses": 220,
+        "asset_cash": 4000, "asset_financial": 12000,
+        "asset_home": 45000, "asset_deposit": 0, "asset_other": 0,
+        "debt_home": 0, "debt_other": 0,
+        "retirement_age": 78, "spouse_age": 75,
+        "child_count": "2명", "child_age": 50, "child_age2": 47,
+        "child_age3": 0, "child_age4": 0,
+        "father_age": 0, "mother_age": 0,
+        "marriage_plan": "미정", "child_plan": "미정",
+        "housing_plan": "현재 주거 유지",
+    },
+}
+
+def get_test_cases():
+    """기본 A~D 사례 + Google Sheets 저장 사례(최신순 정렬) 통합 반환"""
+    cases = dict(DEV_CASES)
+    try:
+        from streamlit_gsheets import GSheetsConnection
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(ttl=0)
+        if df is not None and not df.empty:
+            # 가장 최근에 저장된 사례가 위로 오도록 최신순(역순) 정렬
+            saved_dict = {}
+            for _, row in df.iloc[::-1].iterrows():
+                name = str(row.get("case_name", "")).strip()
+                payload = row.get("payload_json", "")
+                if name and isinstance(payload, str) and payload.strip():
+                    try:
+                        saved_dict[f"📁 저장 사례: {name}"] = json.loads(payload)
+                    except (ValueError, TypeError):
+                        pass
+            # 기본 표준 사례 아래에 최신 저장 사례 결합
+            cases.update(saved_dict)
+    except Exception:
+        pass
+    return cases
+
+def save_test_case(case_name):
+    """현재 진단 데이터를 익명 사례로 Google Sheets에 저장"""
+    from streamlit_gsheets import GSheetsConnection
+
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        df = conn.read(ttl=0)
+        if df is None:
+            df = pd.DataFrame()
+    except Exception:
+        df = pd.DataFrame()
+
+    if df.empty or not {"case_name", "payload_json"}.issubset(df.columns):
+        df = pd.DataFrame(columns=["case_name", "updated_at", "payload_json"])
+
+    payload = {
+        key: st.session_state[key]
+        for key in SYNC_KEYS
+        if key in st.session_state and key != "person_name"
+    }
+    payload["person_name"] = case_name
+
+    df = df[df["case_name"].astype(str) != case_name]
+    new_row = pd.DataFrame([{
+        "case_name": case_name,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "payload_json": json.dumps(payload, ensure_ascii=False, default=str),
+    }])
+    df = pd.concat([df, new_row], ignore_index=True)
+    conn.update(data=df)
+
 # ------------------------------------------------------------------------------
 # 2.02.00 | 재무 포맷팅 및 집계 로직
 # ------------------------------------------------------------------------------
@@ -586,7 +794,7 @@ def call_gemini_text(prompt_text):
 # 4.01.00 | 사이드바 프로필 요약 및 복원
 # ------------------------------------------------------------------------------
 
-# 4.01.01 | 사이드바 컴포넌트 렌더링 (익명 배지, 기본 정보, 복원 expander)
+# 4.01.01 | 사이드바 컴포넌트 렌더링 (일반 새로고침 삭제 ➜ 익명 배지부터 단정하게 시작)
 with st.sidebar:
     st.markdown(f"""
 <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; text-align: center; margin-bottom: 20px;">
@@ -623,6 +831,97 @@ with st.sidebar:
     st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
     st.caption("※ 나침반은 외부 서버에 저장되지 않는 일회성 안전 세션입니다.")
 
+# 4.01.02 | 개발용 테스트 메뉴 (새로고침 버튼 통합 & 100개 대비 실시간 검색창 신설)
+_dev_enabled = (
+    st.secrets.get("DEV_MODE", False)
+    and st.query_params.get("dev") == "1"
+)
+
+if _dev_enabled:
+    with st.sidebar:
+        st.divider()
+        st.markdown("### 🧪 개발용 테스트")
+        
+        # 1. 사이드바 꼭대기에 있던 새로고침 버튼을 개발자 전용 메뉴 최상단으로 이전
+        if st.button("↻ 개발용 새로고침", key="dev_menu_refresh", use_container_width=True):
+            st.rerun()
+
+        st.caption("테스트 사례의 금액은 기능 검증을 위한 예시입니다.")
+
+        _cases = get_test_cases()
+        _all_names = list(_cases.keys())
+
+        # 2. 사례가 50개, 100개 쌓여도 0.1초 만에 찾아내는 실시간 검색 필터창
+        _search_kw = st.text_input(
+            "🔍 사례 검색 (이름 또는 키워드)",
+            placeholder="예: 여성, 소림, 30대...",
+            key="dev_search_keyword",
+            label_visibility="visible"
+        ).strip()
+
+        # 검색어가 있으면 필터링, 없으면 전체 목록 표출
+        if _search_kw:
+            _filtered_names = [n for n in _all_names if _search_kw.lower() in n.lower()]
+            if not _filtered_names:
+                st.caption("검색 결과가 없습니다.")
+                _filtered_names = _all_names
+        else:
+            _filtered_names = _all_names
+
+        _selected_case = st.selectbox(
+            f"불러올 사례 (총 {len(_all_names)}개 중 {len(_filtered_names)}개)",
+            _filtered_names,
+            key="dev_case_selector",
+        )
+
+        if st.button("📂 사례 불러오기", use_container_width=True):
+            _data = dict(_cases[_selected_case])
+
+            for k, v in _data.items():
+                st.session_state[k] = v
+
+            # 불러온 사례의 성별, 직업, 경력, 배우자 pills 하이라이트 동기화
+            if "gender" in _data:
+                st.session_state["pills_gender"] = _data["gender"]
+            if "job_form" in _data:
+                st.session_state["pills_job_self"] = _data["job_form"]
+            if "career_stage" in _data:
+                st.session_state["pills_career_stage"] = _data["career_stage"]
+            if "job_spouse_form" in _data:
+                st.session_state["pills_job_spouse"] = _data["job_spouse_form"]
+
+            st.session_state["started"] = True
+            st.session_state["answers"] = {}
+            st.session_state["anonymous_id"] = f"#DEV-{random.randint(100, 999)}"
+            st.session_state["active_navigation_default"] = "우리집\n가계부"
+            st.session_state["active_navigation_key"] = "main_navigation"
+            st.session_state["_pending_nav"] = "우리집 가계부"
+            st.session_state["_dev_loaded_notice"] = _selected_case
+            st.rerun()
+
+        st.divider()
+        st.markdown("#### 💾 현재 사례 저장")
+        _save_name = st.text_input(
+            "저장할 별칭",
+            placeholder="예: 인터뷰 사례 01",
+            key="dev_save_case_name",
+        )
+
+        if st.button(
+            "☁️ Google Sheets에 저장",
+            use_container_width=True,
+            disabled=not st.session_state.get("started", False)
+            or not _save_name.strip(),
+        ):
+            try:
+                save_test_case(_save_name.strip())
+                st.success(f"'{_save_name.strip()}' 사례를 저장했습니다.")
+                st.rerun()
+            except Exception as e:
+                st.error(
+                    "저장에 실패했습니다. Google Sheets 연결과 "
+                    f"권한을 확인해 주세요. ({type(e).__name__}: {e})"
+                )
 
 # ------------------------------------------------------------------------------
 # 4.02.00 | 첫 진입 표지 및 인라인 시작 바
@@ -698,12 +997,21 @@ if not st.session_state.started:
 # ================================================================================
 
 # ------------------------------------------------------------------------------
-# 5.01.00 | 상단 4대 탭 네비게이터
+# 5.01.00 | 나침반 전용 헤더 및 상단 4대 탭 네비게이터
 # ------------------------------------------------------------------------------
 
-# 5.01.01 | 네비게이션 옵션 및 streamlit_option_menu 렌더링
+# 5.01.01 | 사이드바 새로고침 기능
+
+# 5.01.02 | 네비게이션 옵션 및 streamlit_option_menu 렌더링
 _pending_nav = st.session_state.pop("_pending_nav", None)
-nav_options = ["우리집\n가계부", "삶과\n생계수단", "인생의\n사계절", "AI\n시선"]
+
+nav_options = [
+    "우리집\n가계부",
+    "삶과\n생계수단",
+    "인생의\n사계절",
+    "AI\n시선"
+]
+
 _nav_targets = {
     "우리집 가계부": nav_options[0],
     "삶과 생계수단": nav_options[1],
@@ -713,13 +1021,24 @@ _nav_targets = {
 
 if "active_navigation_key" not in st.session_state:
     st.session_state.active_navigation_key = "main_navigation"
+
 if _pending_nav in _nav_targets:
-    st.session_state.active_navigation_key = "main_navigation_" + str(list(_nav_targets.keys()).index(_pending_nav))
+    st.session_state.active_navigation_key = (
+        "main_navigation_"
+        + str(list(_nav_targets.keys()).index(_pending_nav))
+    )
     st.session_state.active_navigation_default = _nav_targets[_pending_nav]
 
 _nav_widget_key = st.session_state.active_navigation_key
-_nav_default = st.session_state.get("active_navigation_default", nav_options[0])
-_nav_index = nav_options.index(_nav_default) if _nav_default in nav_options else 0
+_nav_default = st.session_state.get(
+    "active_navigation_default",
+    nav_options[0]
+)
+_nav_index = (
+    nav_options.index(_nav_default)
+    if _nav_default in nav_options
+    else 0
+)
 
 selected = option_menu(
     menu_title=None,
@@ -1518,6 +1837,7 @@ elif selected_page == "인생의 사계절":
 """, unsafe_allow_html=True)
 
     # 6.03.04 | 가족 생애 지출 피크(성인/미성년 자녀) 안내 카드
+    
     c_age1 = int(getv("child_age", 0))
     if 0 < c_age1 < 20:
         college_my_age = cur_age + (20 - c_age1)
@@ -1540,9 +1860,9 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
-    # 6.03.05 | 나만의 생애주기 소득·소비 곡선 (U자 스무딩, M자 깃발)
+    # 6.03.05 | 나만의 생애주기 소득·소비 곡선 (출산육아기 35% 실질소득 급감 골짜기)
     st.markdown("### 2. 나만의 생애주기 소득·소비 곡선 (국민이전계정 개인화 번역)")
-    st.caption("※ 통계청 공식 NTA 패턴을 인터뷰이 본인의 실제 소득·소비 및 은퇴 나이에 맞추어 번역한 개인 곡선입니다.")
+    st.caption("※ 통계청 국민이전계정(NTA) 공식 패턴을 인터뷰이 본인의 실제 소득·소비 및 은퇴 나이에 맞추어 번역한 개인 곡선입니다.")
     
     s = current_financial_summary()
     cur_annual_income = s["annual_total_income"]
@@ -1554,66 +1874,89 @@ elif selected_page == "인생의 사계절":
     m_plan = st.session_state.get("marriage_plan", "미정")
     c_plan = st.session_state.get("child_plan", "미정")
     is_single_young = (int(getv("spouse_age", 0)) == 0 and cur_age < 40)
-    has_m_curve = is_female and is_single_young and (c_plan in ["자녀 계획 있음", "출산 예정/준비 중"])
+    has_m_curve = is_female and (c_plan in ["자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"])
 
     ages_sim = list(range(20, 86))
     my_income_curve = []
     my_expense_curve = []
 
     for a in ages_sim:
+        # 1. 소득 곡선 (출산·육아기 실질 소득 급감 U자형 골짜기 반영)
         if a < cur_age:
-            ratio = max(0.2, (a - 20) / max(1, (cur_age - 20)))
-            my_income_curve.append(cur_annual_income * ratio)
+            # 과거 구간: 현재 소득까지 자연스러운 오르막
+            ratio = max(0.28, 1.0 - (0.04 * (cur_age - a)))
+            inc_val = cur_annual_income * ratio
         elif cur_age <= a < retire_age:
-            growth_step = 0.025 if "초년생" in career_st else 0.018
-            if a <= 45:
-                w_inc = 1.0 + (growth_step * (a - cur_age))
+            # 여성 출산·육아 경력단절 시나리오 (실제 소득 35% 수직 강하 및 완만 복귀)
+            if has_m_curve and cur_age <= 36:
+                if a <= 32:
+                    w = 1.0 + (0.012 * (a - cur_age))
+                elif 33 <= a <= 36:
+                    # [핵심] 출산·육아 집중기: 육아휴직 및 경력단절로 소득 35% 실질 급감 (바닥 골짜기)
+                    dist = abs(a - 34.5)
+                    # 34~35세 바닥에서 약 0.65(35% 삭감)까지 확실하게 내려앉는 깊은 U자형 곡선
+                    w = 0.65 + (0.04 * (dist ** 2))
+                elif 37 <= a <= 45:
+                    # 복귀기: 남성처럼 치솟지 않고 통계청 기준(약 80~85%)의 완만한 상승 궤적
+                    w = 0.80 + (0.012 * (a - 37))
+                else:
+                    peak_w = 0.80 + (0.012 * (45 - 37))
+                    w = max(0.75, peak_w - (0.008 * (a - 45)))
             else:
-                w_inc = max(0.85, 1.0 + (0.02 * (45 - cur_age)) - (0.015 * (a - 45)))
-            
-            if has_m_curve and (31 <= a <= 37):
-                dist = abs(a - 34)
-                if dist <= 3:
-                    smooth_dip = 1.0 - (0.20 * (1.0 - (dist / 3.0) ** 2))
-                    w_inc *= smooth_dip
-                
-            my_income_curve.append(cur_annual_income * w_inc)
+                # 일반 궤적 (남성 또는 경력단절 미해당)
+                if a <= 45:
+                    w = 1.0 + (0.018 * (a - cur_age))
+                else:
+                    peak_w = 1.0 + (0.018 * max(0, 45 - cur_age))
+                    w = max(0.85, peak_w - (0.008 * (a - 45)))
+                    
+            inc_val = cur_annual_income * w
         else:
-            my_income_curve.append(ret_annual_pension)
+            # 은퇴 후: 연금 수평선 전환 (삶의 경계)
+            inc_val = ret_annual_pension
 
+        my_income_curve.append(inc_val)
+
+        # 2. 소비 곡선 (출산·육아기 지출 상승 팩트 반영)
         if a < cur_age:
-            my_expense_curve.append(cur_annual_expense * 0.75)
+            exp_val = cur_annual_expense * 0.78
         elif cur_age <= a < retire_age:
-            w_exp = 1.0
-            if 46 <= a <= 53 and c_age1 < 20:
-                w_exp = 1.15
+            exp_factor = 1.0
+            if 44 <= a <= 53 and c_age1 < 20:
+                exp_factor = 1.14
             if is_single_young:
-                if m_plan in ["1~3년 내 결혼 생각 있음", "결혼 예정/준비 중"] and (cur_age + 1 <= a <= cur_age + 3):
-                    w_exp = max(w_exp, 1.12)
-                if c_plan in ["자녀 계획 있음", "출산 예정/준비 중"] and (33 <= a <= 37):
-                    w_exp = max(w_exp, 1.15)
-            my_expense_curve.append(cur_annual_expense * w_exp)
+                if m_plan in ["1~3년 내 결혼 생각 있음", "결혼 예정/준비 중"] and (cur_age <= a <= cur_age + 3):
+                    exp_factor = max(exp_factor, 1.10)
+                # 출산·영유아기 지출 상승 (기저귀, 분유, 양육비 등으로 지출 15% 상승)
+                if c_plan in ["자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"] and (33 <= a <= 37):
+                    exp_factor = max(exp_factor, 1.15)
+            exp_val = cur_annual_expense * exp_factor
         else:
-            my_expense_curve.append(ret_annual_expense)
+            exp_val = ret_annual_expense
+
+        my_expense_curve.append(exp_val)
 
     fig_my_nta = go.Figure()
 
+    # 1. 소득 곡선 (35% 급감 골짜기가 담긴 부드러운 스플라인)
     fig_my_nta.add_trace(go.Scatter(
         x=ages_sim, y=my_income_curve,
         mode="lines",
-        line=dict(color="#10B981", width=3.5),
+        line=dict(color="#10B981", width=3.5, shape='spline', smoothing=1.0),
         name="나의 소득 흐름 (근로·사업소득 ➔ 은퇴 후 연금)",
         hovertemplate="나이: %{x}세<br>연 소득: <b>%{y:,.0f}만 원</b><extra></extra>"
     ))
 
+    # 2. 소비 곡선
     fig_my_nta.add_trace(go.Scatter(
         x=ages_sim, y=my_expense_curve,
         mode="lines",
-        line=dict(color="#F97316", width=3, dash="dash"),
+        line=dict(color="#F97316", width=2.8, dash="dash", shape='spline', smoothing=1.0),
         name="나의 생애 소비 흐름",
         hovertemplate="나이: %{x}세<br>연 소비: <b>%{y:,.0f}만 원</b><extra></extra>"
     ))
 
+    # 현재 나이 기준선
     fig_my_nta.add_vline(x=cur_age, line_dash="solid", line_color="#38BDF8", line_width=2)
     fig_my_nta.add_annotation(
         x=cur_age, y=max(my_income_curve) * 0.95,
@@ -1623,16 +1966,18 @@ elif selected_page == "인생의 사계절":
         ay=-30, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#38BDF8"
     )
 
-    if has_m_curve and cur_age <= 34:
+    # 깊은 골짜기 바닥에 꽂히는 출산·육아기 주석 깃발
+    if has_m_curve and cur_age <= 35:
         dip_val = my_income_curve[ages_sim.index(34)]
         fig_my_nta.add_annotation(
             x=34, y=dip_val,
-            text="👶 출산·육아기 (소득 변동)",
+            text="👶 출산·육아기 (소득 급감)",
             showarrow=True, arrowhead=2, arrowcolor="#FB923C",
-            font=dict(size=12, color="#FDBA74"),
+            font=dict(size=11.5, color="#FDBA74"),
             ay=36, bgcolor="rgba(15, 23, 42, 0.85)", bordercolor="#FB923C", borderpad=3
         )
 
+    # 은퇴 시점 기준선 (삶의 진짜 경계)
     fig_my_nta.add_vline(x=retire_age, line_dash="dash", line_color="#EF4444", line_width=2)
     fig_my_nta.add_annotation(
         x=retire_age, y=my_income_curve[ages_sim.index(retire_age)],
@@ -1678,7 +2023,7 @@ elif selected_page == "인생의 사계절":
     st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.03.06 | [위치 이동] 국가데이터처 공식 생애 통계 지표 & 첨부 1 공식 차트
+    # 6.03.06 | 국가데이터처 공식 생애 통계 지표 (여성 경단 팩트 탑재 & 공식 NTA 차트)
     # --------------------------------------------------------------------------
     st.markdown("### 3. 국가데이터처 공식 생애 통계 지표 (대한민국 평균 기준)")
     st.caption("※ 통계청 국민이전계정(NTA) 공식 발표 자료 기준")
@@ -1688,6 +2033,17 @@ elif selected_page == "인생의 사계절":
     col_m2.metric("최대 흑자 정점", "45세", "연 1,932만 원")
     col_m3.metric("평균 적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
 
+    # [신규] 대한민국 여성 경제활동 실태 공식 팩트 카드 (대표님 요청 명칭 반영 및 초슬림 정제)
+    st.markdown("""
+<div style="background: rgba(30, 41, 59, 0.55); border-left: 4px solid #F59E0B; border-radius: 6px; padding: 12px 18px; margin: 12px 0 16px 0;">
+<div style="font-size: 15px; font-weight: 800; color: #FDE68A; margin-bottom: 6px;">👩‍👧 여성 출산·육아 경력단절의 현실 지표 (여성가족부·국가데이터처 조사)</div>
+<div style="font-size: 13.5px; color: #CBD5E1; line-height: 1.6;">
+• <b>재취업까지 소요 기간</b>: 평균 <b>7.5년</b> (단기 공백이 아닌 장기화)<br>
+• <b>복귀 후 실질 임금</b>: 단절 이전의 약 <b>80% 수준</b>으로 하락
+</div>
+</div>
+""", unsafe_allow_html=True)
+
     # 첨부 1: 국가데이터처 공식 < 생애주기적자(총액) > 완벽 복원 차트
     fig_official_nta = go.Figure()
 
@@ -1696,7 +2052,6 @@ elif selected_page == "인생의 사계절":
     official_expense = [4, 5, 18, 20, 22, 15, 19, 18, 22, 20, 19, 23, 20, 24, 26, 23, 23, 25, 16, 11, 7, 5]
     official_deficit = [e - i for e, i in zip(official_expense, official_income)]
 
-    # 1. 생애주기적자 음영 영역 (유년층 적자, 청장년층 흑자, 노년층 적자)
     fig_official_nta.add_trace(go.Scatter(
         x=official_ages, y=official_deficit,
         mode="lines",
@@ -1707,7 +2062,6 @@ elif selected_page == "인생의 사계절":
         hovertemplate="나이: %{x}세<br>생애주기적자: <b>%{y:.1f}조 원</b><extra></extra>"
     ))
 
-    # 2. 소비 곡선 (녹색 대시선)
     fig_official_nta.add_trace(go.Scatter(
         x=official_ages, y=official_expense,
         mode="lines",
@@ -1716,7 +2070,6 @@ elif selected_page == "인생의 사계절":
         hovertemplate="나이: %{x}세<br>소비: <b>%{y:.1f}조 원</b><extra></extra>"
     ))
 
-    # 3. 노동소득 곡선 (남색 실선)
     fig_official_nta.add_trace(go.Scatter(
         x=official_ages, y=official_income,
         mode="lines",
@@ -1725,25 +2078,27 @@ elif selected_page == "인생의 사계절":
         hovertemplate="나이: %{x}세<br>노동소득: <b>%{y:.1f}조 원</b><extra></extra>"
     ))
 
-    # 기준 0선 및 연령층 구분 세로선 (17세, 65세)
     fig_official_nta.add_hline(y=0, line_dash="solid", line_color="#475569", line_width=1.5)
     fig_official_nta.add_vline(x=17, line_dash="dash", line_color="#94A3B8", line_width=1.5)
     fig_official_nta.add_vline(x=65, line_dash="dash", line_color="#94A3B8", line_width=1.5)
 
-    # 연령층 뱃지 어노테이션 (첨부 1 원본 동일)
     fig_official_nta.add_annotation(x=8, y=50, text="유년층", showarrow=False, font=dict(size=12, color="#E2E8F0"), bgcolor="rgba(30, 41, 59, 0.8)", bordercolor="#475569")
     fig_official_nta.add_annotation(x=41, y=50, text="노동연령층", showarrow=False, font=dict(size=12, color="#E2E8F0"), bgcolor="rgba(30, 41, 59, 0.8)", bordercolor="#475569")
     fig_official_nta.add_annotation(x=75, y=50, text="노년층", showarrow=False, font=dict(size=12, color="#E2E8F0"), bgcolor="rgba(30, 41, 59, 0.8)", bordercolor="#475569")
     
-    # 적자 / 흑자 텍스트 표기
     fig_official_nta.add_annotation(x=12, y=10, text="적자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
     fig_official_nta.add_annotation(x=45, y=-16, text="흑자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
     fig_official_nta.add_annotation(x=73, y=5, text="적자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
 
     fig_official_nta.update_layout(
-        title=dict(text="&lt; 생 애 주 기 적 자 (총 액) &gt;", x=0.5, font=dict(size=16, color="#F8FAFC")),
-        height=370,
-        margin=dict(l=20, r=20, t=45, b=35),
+        title=dict(
+            text="&lt; 생 애 주 기 적 자 (총 액) &gt;",
+            x=0.5,
+            xanchor="center",
+            font=dict(size=16, color="#F8FAFC")
+        ),
+        height=390,
+        margin=dict(l=20, r=20, t=45, b=80),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#E2E8F0", size=13),
@@ -1762,7 +2117,11 @@ elif selected_page == "인생의 사계절":
             fixedrange=True
         ),
         legend=dict(
-            orientation="h", yanchor="bottom", y=-0.28, xanchor="center", x=0.5,
+            orientation="h",
+            yanchor="top",
+            y=-0.28,
+            xanchor="center",
+            x=0.5,
             font=dict(size=12, color="#F1F5F9")
         ),
         hovermode="x unified"
@@ -1774,7 +2133,6 @@ elif selected_page == "인생의 사계절":
         config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
     )
 
-    # 공식 보도자료 및 웹페이지 링크 버튼 (차트 바로 아래 위치)
     st.markdown(f"""
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;">
 <a href="{OFFICIAL_PDF_URL}" target="_blank" style="background:#1E293B; border:1px solid #475569; border-radius:8px; padding:12px 14px; text-align:center; text-decoration:none; color:#38BDF8 !important; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
