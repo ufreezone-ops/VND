@@ -1837,6 +1837,7 @@ elif selected_page == "인생의 사계절":
 """, unsafe_allow_html=True)
 
     # 6.03.04 | 가족 생애 지출 피크(성인/미성년 자녀) 안내 카드
+    
     c_age1 = int(getv("child_age", 0))
     if 0 < c_age1 < 20:
         college_my_age = cur_age + (20 - c_age1)
@@ -1859,9 +1860,10 @@ elif selected_page == "인생의 사계절":
 </div>
 """, unsafe_allow_html=True)
 
-    # 6.03.05 | 나만의 생애주기 소득·소비 곡선 (U자 스무딩, M자 깃발)
+    # 6.03.05 | 나만의 생애주기 소득·소비 곡선 (연속형 스무딩 & 7.5년 경단 팩트)
+    
     st.markdown("### 2. 나만의 생애주기 소득·소비 곡선 (국민이전계정 개인화 번역)")
-    st.caption("※ 통계청 공식 NTA 패턴을 인터뷰이 본인의 실제 소득·소비 및 은퇴 나이에 맞추어 번역한 개인 곡선입니다.")
+    st.caption("※ 통계청 국민이전계정(NTA) 공식 패턴을 인터뷰이 본인의 실제 소득·소비 및 은퇴 나이에 맞추어 번역한 개인 곡선입니다.")
     
     s = current_financial_summary()
     cur_annual_income = s["annual_total_income"]
@@ -1873,28 +1875,37 @@ elif selected_page == "인생의 사계절":
     m_plan = st.session_state.get("marriage_plan", "미정")
     c_plan = st.session_state.get("child_plan", "미정")
     is_single_young = (int(getv("spouse_age", 0)) == 0 and cur_age < 40)
-    has_m_curve = is_female and is_single_young and (c_plan in ["자녀 계획 있음", "출산 예정/준비 중"])
+    has_m_curve = is_female and (c_plan in ["자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"])
 
     ages_sim = list(range(20, 86))
     my_income_curve = []
     my_expense_curve = []
+
+    # 45세 기준 피크 가중치를 연속형으로 사전 산출 (45세 절벽 꺾임 버그 박멸)
+    growth_step = 0.025 if "초년생" in career_st else 0.018
+    peak_base_w = 1.0 + (growth_step * max(0, 45 - cur_age))
 
     for a in ages_sim:
         if a < cur_age:
             ratio = max(0.2, (a - 20) / max(1, (cur_age - 20)))
             my_income_curve.append(cur_annual_income * ratio)
         elif cur_age <= a < retire_age:
-            growth_step = 0.025 if "초년생" in career_st else 0.018
             if a <= 45:
                 w_inc = 1.0 + (growth_step * (a - cur_age))
             else:
-                w_inc = max(0.85, 1.0 + (0.02 * (45 - cur_age)) - (0.015 * (a - 45)))
+                # 45세 피크(peak_base_w)에서 연속적으로 완만하게 감속
+                w_inc = max(0.85, peak_base_w - (0.012 * (a - 45)))
             
-            if has_m_curve and (31 <= a <= 37):
-                dist = abs(a - 34)
-                if dist <= 3:
-                    smooth_dip = 1.0 - (0.20 * (1.0 - (dist / 3.0) ** 2))
-                    w_inc *= smooth_dip
+            # 여성 출산·육아 현실 통계 반영 (평균 7.5년 복귀 및 80% 수준 반영)
+            if has_m_curve:
+                if 32 <= a <= 35:
+                    dist = abs(a - 33.5)
+                    dip_factor = 1.0 - (0.22 * max(0.0, 1.0 - (dist / 2.5) ** 2))
+                    w_inc *= dip_factor
+                elif 36 <= a <= 43:
+                    w_inc *= 0.82
+                elif a > 43:
+                    w_inc *= 0.85
                 
             my_income_curve.append(cur_annual_income * w_inc)
         else:
@@ -1909,7 +1920,7 @@ elif selected_page == "인생의 사계절":
             if is_single_young:
                 if m_plan in ["1~3년 내 결혼 생각 있음", "결혼 예정/준비 중"] and (cur_age + 1 <= a <= cur_age + 3):
                     w_exp = max(w_exp, 1.12)
-                if c_plan in ["자녀 계획 있음", "출산 예정/준비 중"] and (33 <= a <= 37):
+                if c_plan in ["자녀 계획 있음", "출산 예정/준비 중", "추가 자녀 계획 있음"] and (33 <= a <= 37):
                     w_exp = max(w_exp, 1.15)
             my_expense_curve.append(cur_annual_expense * w_exp)
         else:
@@ -1997,7 +2008,7 @@ elif selected_page == "인생의 사계절":
     st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
 
     # --------------------------------------------------------------------------
-    # 6.03.06 | [위치 이동] 국가데이터처 공식 생애 통계 지표 & 첨부 1 공식 차트
+    # 6.03.06 | 국가데이터처 공식 생애 통계 지표 (여성 경단 팩트 탑재 & 공식 NTA 차트)
     # --------------------------------------------------------------------------
     st.markdown("### 3. 국가데이터처 공식 생애 통계 지표 (대한민국 평균 기준)")
     st.caption("※ 통계청 국민이전계정(NTA) 공식 발표 자료 기준")
@@ -2007,6 +2018,17 @@ elif selected_page == "인생의 사계절":
     col_m2.metric("최대 흑자 정점", "45세", "연 1,932만 원")
     col_m3.metric("평균 적자 재전환", "61세", help="은퇴 후 소비가 노동소득을 다시 초과")
 
+    # [신규] 대한민국 여성 경제활동 실태 공식 팩트 카드 (대표님 요청 명칭 반영 및 초슬림 정제)
+    st.markdown("""
+<div style="background: rgba(30, 41, 59, 0.55); border-left: 4px solid #F59E0B; border-radius: 6px; padding: 12px 18px; margin: 12px 0 16px 0;">
+<div style="font-size: 15px; font-weight: 800; color: #FDE68A; margin-bottom: 6px;">👩‍👧 여성 출산·육아 경력단절의 현실 지표 (여성가족부·국가데이터처 조사)</div>
+<div style="font-size: 13.5px; color: #CBD5E1; line-height: 1.6;">
+• <b>재취업까지 소요 기간</b>: 평균 <b>7.5년</b> (단기 공백이 아닌 장기화)<br>
+• <b>복귀 후 실질 임금</b>: 단절 이전의 약 <b>80% 수준</b>으로 하락
+</div>
+</div>
+""", unsafe_allow_html=True)
+
     # 첨부 1: 국가데이터처 공식 < 생애주기적자(총액) > 완벽 복원 차트
     fig_official_nta = go.Figure()
 
@@ -2015,7 +2037,6 @@ elif selected_page == "인생의 사계절":
     official_expense = [4, 5, 18, 20, 22, 15, 19, 18, 22, 20, 19, 23, 20, 24, 26, 23, 23, 25, 16, 11, 7, 5]
     official_deficit = [e - i for e, i in zip(official_expense, official_income)]
 
-    # 1. 생애주기적자 음영 영역 (유년층 적자, 청장년층 흑자, 노년층 적자)
     fig_official_nta.add_trace(go.Scatter(
         x=official_ages, y=official_deficit,
         mode="lines",
@@ -2026,7 +2047,6 @@ elif selected_page == "인생의 사계절":
         hovertemplate="나이: %{x}세<br>생애주기적자: <b>%{y:.1f}조 원</b><extra></extra>"
     ))
 
-    # 2. 소비 곡선 (녹색 대시선)
     fig_official_nta.add_trace(go.Scatter(
         x=official_ages, y=official_expense,
         mode="lines",
@@ -2035,7 +2055,6 @@ elif selected_page == "인생의 사계절":
         hovertemplate="나이: %{x}세<br>소비: <b>%{y:.1f}조 원</b><extra></extra>"
     ))
 
-    # 3. 노동소득 곡선 (남색 실선)
     fig_official_nta.add_trace(go.Scatter(
         x=official_ages, y=official_income,
         mode="lines",
@@ -2044,73 +2063,54 @@ elif selected_page == "인생의 사계절":
         hovertemplate="나이: %{x}세<br>노동소득: <b>%{y:.1f}조 원</b><extra></extra>"
     ))
 
-    # 기준 0선 및 연령층 구분 세로선 (17세, 65세)
     fig_official_nta.add_hline(y=0, line_dash="solid", line_color="#475569", line_width=1.5)
     fig_official_nta.add_vline(x=17, line_dash="dash", line_color="#94A3B8", line_width=1.5)
     fig_official_nta.add_vline(x=65, line_dash="dash", line_color="#94A3B8", line_width=1.5)
 
-    # 연령층 뱃지 어노테이션 (첨부 1 원본 동일)
     fig_official_nta.add_annotation(x=8, y=50, text="유년층", showarrow=False, font=dict(size=12, color="#E2E8F0"), bgcolor="rgba(30, 41, 59, 0.8)", bordercolor="#475569")
     fig_official_nta.add_annotation(x=41, y=50, text="노동연령층", showarrow=False, font=dict(size=12, color="#E2E8F0"), bgcolor="rgba(30, 41, 59, 0.8)", bordercolor="#475569")
     fig_official_nta.add_annotation(x=75, y=50, text="노년층", showarrow=False, font=dict(size=12, color="#E2E8F0"), bgcolor="rgba(30, 41, 59, 0.8)", bordercolor="#475569")
     
-    # 적자 / 흑자 텍스트 표기
     fig_official_nta.add_annotation(x=12, y=10, text="적자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
     fig_official_nta.add_annotation(x=45, y=-16, text="흑자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
     fig_official_nta.add_annotation(x=73, y=5, text="적자", showarrow=False, font=dict(size=13, color="#93C5FD", weight="bold"))
 
-
     fig_official_nta.update_layout(
         title=dict(
-            text="< 생 애 주 기 적 자 (총 액) >",
+            text="&lt; 생 애 주 기 적 자 (총 액) &gt;",
             x=0.5,
             xanchor="center",
             font=dict(size=16, color="#F8FAFC")
         ),
-        height=420,
-        margin=dict(l=20, r=20, t=45, b=125),
+        height=390,
+        margin=dict(l=20, r=20, t=45, b=80),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#E2E8F0", size=13),
-
         xaxis=dict(
-            title=dict(
-                text="연령 (세)",
-                font=dict(size=13, color="#94A3B8")
-            ),
+            title=dict(text="연령 (세)", font=dict(size=13, color="#94A3B8")),
             tickfont=dict(size=12, color="#94A3B8"),
             gridcolor="rgba(100, 116, 139, 0.2)",
-            tickmode="linear",
-            tick0=0,
-            dtick=5,
+            tickmode="linear", tick0=0, dtick=5,
             fixedrange=True
         ),
-
         yaxis=dict(
-            title=dict(
-                text="규모 (조원)",
-                font=dict(size=13, color="#94A3B8")
-            ),
+            title=dict(text="규모 (조원)", font=dict(size=13, color="#94A3B8")),
             tickfont=dict(size=12, color="#94A3B8"),
             gridcolor="rgba(100, 116, 139, 0.2)",
             range=[-22, 54],
             fixedrange=True
         ),
-
-        # 범례를 X축 아래에 세로로 분리
         legend=dict(
-            orientation="v",
+            orientation="h",
             yanchor="top",
-            y=-0.24,
+            y=-0.28,
             xanchor="center",
             x=0.5,
-            font=dict(size=11, color="#F1F5F9"),
-            tracegroupgap=4
+            font=dict(size=12, color="#F1F5F9")
         ),
-
         hovermode="x unified"
     )
-
 
     st.plotly_chart(
         fig_official_nta,
@@ -2118,7 +2118,6 @@ elif selected_page == "인생의 사계절":
         config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False, "showAxisDragHandles": False}
     )
 
-    # 공식 보도자료 및 웹페이지 링크 버튼 (차트 바로 아래 위치)
     st.markdown(f"""
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;">
 <a href="{OFFICIAL_PDF_URL}" target="_blank" style="background:#1E293B; border:1px solid #475569; border-radius:8px; padding:12px 14px; text-align:center; text-decoration:none; color:#38BDF8 !important; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
